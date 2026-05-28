@@ -31,6 +31,22 @@ The `analytic-aa-convex` row remains visible with:
 
 No tracked gap or expected unsupported row was removed from the registry.
 
+## GRA-222 Resolution
+
+GRA-222 regenerated the `analytic-aa-convex` CPU oracle as composited `SrcOver`
+AA edge pixels over the opaque scene background. The row is now `pass` with
+adapter-backed WebGPU evidence on Apple M2 Max:
+
+- GPU similarity: `100.0%`
+- Matching pixels: `256 / 256`
+- Max channel delta: `0`
+- GPU route: `webgpu.coverage.path-convex-fan`
+- Fallback reason: `none`
+- Edge budget reason: `not coverage.edge-count-exceeded`
+
+Resolution report:
+`reports/wgsl-pipeline/2026-05-28-m42-analytic-aa-convex-aa-edge-oracle-reconciliation.md`.
+
 ## Validation
 
 ```bash

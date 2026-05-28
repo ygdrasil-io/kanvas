@@ -37,13 +37,9 @@ class AnalyticAaConvexSceneCaptureTest {
             }
 
             assertTrue(
-                cmp.similarity >= TRACKED_GAP_CAPTURE_FLOOR,
-                "analytic-aa-convex WebGPU capture changed unexpectedly: " +
-                    "${cmp.similarity}% < $TRACKED_GAP_CAPTURE_FLOOR%",
-            )
-            assertTrue(
-                cmp.similarity < SUPPORT_THRESHOLD,
-                "remove tracked-gap blocker once analytic-aa-convex reaches the support floor",
+                cmp.similarity >= SUPPORT_THRESHOLD,
+                "analytic-aa-convex WebGPU capture must match the composited CPU AA oracle: " +
+                    "${cmp.similarity}% < $SUPPORT_THRESHOLD%",
             )
         }
     }
@@ -90,8 +86,8 @@ class AnalyticAaConvexSceneCaptureTest {
             13 to 7..8,
         )
         for ((y, range) in rows) {
-            bitmap.setPixel(range.first, y, FILL_AA)
-            bitmap.setPixel(range.last, y, FILL_AA)
+            bitmap.setPixel(range.first, y, FILL_AA_COMPOSITED)
+            bitmap.setPixel(range.last, y, FILL_AA_COMPOSITED)
             for (x in (range.first + 1) until range.last) {
                 bitmap.setPixel(x, y, FILL_OPAQUE)
             }
@@ -122,8 +118,12 @@ class AnalyticAaConvexSceneCaptureTest {
         adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex").apply { mkdirs() }
+        writePng(File(dir, "skia.png"), reference)
+        writePng(File(dir, "cpu.png"), reference)
+        writePng(File(dir, "cpu-diff.png"), pixelDiff(reference, reference))
         writePng(File(dir, "gpu.png"), gpuBitmap)
         writePng(File(dir, "gpu-diff.png"), pixelDiff(reference, gpuBitmap))
+        File(dir, "route-cpu.json").writeText(cpuRouteJson())
         File(dir, "route-gpu.json").writeText(routeJson(adapter))
         File(dir, "stats.json").writeText(statsJson(cmp, adapter))
     }
@@ -166,21 +166,35 @@ class AnalyticAaConvexSceneCaptureTest {
         return if (local.exists() || !File("../$path").exists()) local else File("../$path")
     }
 
+    private fun cpuRouteJson(): String = """
+        {
+          "sceneId": "analytic-aa-convex",
+          "backend": "CPU",
+          "drawKind": "single-contour-convex-aa-path",
+          "status": "pass",
+          "selectedRoute": "cpu.path-coverage.analytic-aa-convex-composited-oracle",
+          "coveragePlan": "PathCoverage(singleContour=true,convex=true,aa=true,edgeCountWithinBudget=true)",
+          "fallbackReason": "none",
+          "edgeBudgetReason": "not coverage.edge-count-exceeded",
+          "compositing": "src-over-opaque-background",
+          "sourceReport": "reports/wgsl-pipeline/2026-05-28-m42-analytic-aa-convex-aa-edge-oracle-reconciliation.md"
+        }
+    """.trimIndent() + "\n"
+
     private fun routeJson(adapter: String): String = """
         {
           "sceneId": "analytic-aa-convex",
           "backend": "WebGPU",
           "adapter": ${adapter.jsonString()},
           "drawKind": "single-contour-convex-aa-path",
-          "status": "tracked-gap",
+          "status": "pass",
           "coverageStrategy": "webgpu.coverage.path-convex-fan",
           "pipelineKey": "coverageKind=pathConvexFan",
           "fallbackReason": "none",
-          "blockerReason": "gpu.analytic-aa-convex-edge-alpha-oracle-mismatch",
           "edgeBudgetReason": "not coverage.edge-count-exceeded",
-          "followUp": "GRA-222",
+          "compositing": "src-over-opaque-background",
           "test": "org.skia.gpu.webgpu.AnalyticAaConvexSceneCaptureTest#analytic AA convex scene renders from adapter backed WebGPU capture",
-          "sourceReport": "reports/wgsl-pipeline/2026-05-28-m42-analytic-aa-convex-adapter-capture.md"
+          "sourceReport": "reports/wgsl-pipeline/2026-05-28-m42-analytic-aa-convex-aa-edge-oracle-reconciliation.md"
         }
     """.trimIndent() + "\n"
 
@@ -196,10 +210,9 @@ class AnalyticAaConvexSceneCaptureTest {
           "gpuSimilarity": ${String.format(Locale.US, "%.1f", cmp.similarity)},
           "gpuMatchingPixels": ${cmp.matchingPixels},
           "gpuMaxChannelDelta": ${cmp.maxChannelDiff.max()},
-          "gpuStatus": "tracked-gap",
-          "blockerReason": "gpu.analytic-aa-convex-edge-alpha-oracle-mismatch",
+          "gpuStatus": "pass",
           "edgeBudgetReason": "not coverage.edge-count-exceeded",
-          "followUp": "GRA-222",
+          "compositing": "src-over-opaque-background",
           "backend": "WebGPU",
           "adapter": ${adapter.jsonString()},
           "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.AnalyticAaConvexSceneCaptureTest"
@@ -225,10 +238,9 @@ class AnalyticAaConvexSceneCaptureTest {
         private const val WIDTH = 16
         private const val HEIGHT = 16
         private const val SUPPORT_THRESHOLD = 99.85
-        private const val TRACKED_GAP_CAPTURE_FLOOR = 90.0
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
         private val BACKGROUND = SkColorSetARGB(255, 245, 239, 229)
         private val FILL_OPAQUE = SkColorSetARGB(255, 31, 122, 76)
-        private val FILL_AA = SkColorSetARGB(128, 31, 122, 76)
+        private val FILL_AA_COMPOSITED = SkColorSetARGB(255, 138, 180, 152)
     }
 }

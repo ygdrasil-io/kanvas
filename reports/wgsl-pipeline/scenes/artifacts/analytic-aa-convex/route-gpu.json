@@ -3,13 +3,12 @@
   "backend": "WebGPU",
   "adapter": "Apple M2 Max",
   "drawKind": "single-contour-convex-aa-path",
-  "status": "tracked-gap",
+  "status": "pass",
   "coverageStrategy": "webgpu.coverage.path-convex-fan",
   "pipelineKey": "coverageKind=pathConvexFan",
   "fallbackReason": "none",
-  "blockerReason": "gpu.analytic-aa-convex-edge-alpha-oracle-mismatch",
   "edgeBudgetReason": "not coverage.edge-count-exceeded",
-  "followUp": "GRA-222",
+  "compositing": "src-over-opaque-background",
   "test": "org.skia.gpu.webgpu.AnalyticAaConvexSceneCaptureTest#analytic AA convex scene renders from adapter backed WebGPU capture",
-  "sourceReport": "reports/wgsl-pipeline/2026-05-28-m42-analytic-aa-convex-adapter-capture.md"
+  "sourceReport": "reports/wgsl-pipeline/2026-05-28-m42-analytic-aa-convex-aa-edge-oracle-reconciliation.md"
 }
