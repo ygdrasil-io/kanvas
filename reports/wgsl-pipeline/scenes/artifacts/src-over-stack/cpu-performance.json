@@ -1,0 +1,26 @@
+{
+  "sceneId": "src-over-stack",
+  "lane": "CPU",
+  "status": "estimated",
+  "sampleCount": 30,
+  "timing": {
+    "medianMs": 0.028,
+    "p95Ms": 0.039
+  },
+  "counters": {
+    "routeInvocations": 2,
+    "pixels": 4096,
+    "blendOps": 2,
+    "coveragePlanCount": 2
+  },
+  "baseline": {
+    "name": "m40-cpu-static-seed",
+    "commit": "97dcd3b23c66fa1c05711c23a6f0e20ae26e126c"
+  },
+  "regression": {
+    "label": "unknown"
+  },
+  "environment": "macOS local static dashboard seed; informational until native CPU benchmark harness lands",
+  "route": "cpu.blend.src-over-stack",
+  "rawMetrics": "artifacts/src-over-stack/cpu-performance.json"
+}

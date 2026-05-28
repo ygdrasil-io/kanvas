@@ -1,0 +1,26 @@
+{
+  "sceneId": "runtime-effect-simple",
+  "lane": "CPU",
+  "status": "estimated",
+  "sampleCount": 30,
+  "timing": {
+    "medianMs": 0.041,
+    "p95Ms": 0.055
+  },
+  "counters": {
+    "routeInvocations": 1,
+    "pixels": 4096,
+    "runtimeDescriptors": 1,
+    "coveragePlanCount": 1
+  },
+  "baseline": {
+    "name": "m40-cpu-static-seed",
+    "commit": "97dcd3b23c66fa1c05711c23a6f0e20ae26e126c"
+  },
+  "regression": {
+    "label": "unknown"
+  },
+  "environment": "macOS local static dashboard seed; informational until native CPU benchmark harness lands",
+  "route": "cpu.runtime-effect.descriptor.simple_rt",
+  "rawMetrics": "artifacts/runtime-effect-simple/cpu-performance.json"
+}
