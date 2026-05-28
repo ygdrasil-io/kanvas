@@ -1,0 +1,9 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "path-aa-edge-budget-boundary",
+  "coverageStrategy": "webgpu.coverage.refuse",
+  "pipelineKey": "coverageKind=pathCoverageUnsupported,pathFillRule=winding,topology=triangleList",
+  "fallbackReason": "coverage.edge-count-exceeded",
+  "inventoryRows": 46,
+  "evidence": "GRA-178 preserves generic edge-budget fallback for out-of-scope broad Path AA rows."
+}

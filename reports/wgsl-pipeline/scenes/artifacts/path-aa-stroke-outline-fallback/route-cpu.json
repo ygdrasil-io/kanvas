@@ -1,0 +1,9 @@
+{
+  "backend": "CPU",
+  "sceneId": "path-aa-stroke-outline-fallback",
+  "coveragePlan": "PathCoverage(strokeOutline=true,aa=true,edgeCountOverBudget=true)",
+  "selectedRoute": "cpu.path-coverage.stroke-outline-oracle",
+  "compatibilityFallbackRoute": "kanvas-skia.current.stroke-outline",
+  "fallbackReason": "none",
+  "evidence": "CPU/raster oracle remains the reference for StrokeRectGM and StrokeCircleGM while WebGPU reports the bounded fallback diagnostic."
+}
