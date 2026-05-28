@@ -156,3 +156,10 @@ All M43 measured metrics remain `reporting-only`; no required CI performance
 gate was added. Future gate activation requires explicit CI budget,
 host/JDK/backend/adapter eligibility, variance threshold, flake/quarantine
 handling, rollback rules, and a baseline owner.
+
+## M44 Selection Note
+
+GRA-211 selects `StrokeRectGM` and `StrokeCircleGM` as the first real Path AA
+family promotion target. Expected inventory effect is four rows removed from
+`coverage.edge-count-exceeded` if the bounded primitive-stroke route succeeds;
+all broad Path AA suites remain expected unsupported until separately scoped.
