@@ -1,0 +1,15 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "image-filter-compose-cf-matrix-transform",
+  "drawKind": "SaveLayerImageFilterTest Compose(ColorFilter, MatrixTransform)",
+  "status": "pass",
+  "coverageStrategy": "webgpu.image-filter.compose.cf-matrix-transform",
+  "selectedRoute": "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite",
+  "prepassRoute": "webgpu.image-filter.compose.cf-matrix-transform.materialize-matrix",
+  "scratchOwner": "LayerCompositeDraw.materializeTargetTexture",
+  "scratchLifetime": "per-composite-dispatch",
+  "materialiseStages": 1,
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.SaveLayerImageFilterTest#saveLayer with Compose ColorFilter MatrixTransform exposes M45 route diagnostics()",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-28-m45-image-filter-dag-route-implementation.md"
+}
