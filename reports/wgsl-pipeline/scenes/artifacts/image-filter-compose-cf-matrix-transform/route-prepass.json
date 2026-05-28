@@ -1,0 +1,11 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "image-filter-compose-cf-matrix-transform",
+  "stage": "matrix-materialise-pre-pass",
+  "materializeRoute": "webgpu.image-filter.compose.cf-matrix-transform.materialize-matrix",
+  "source": "gpuSrc.intermediateView",
+  "destination": "LayerCompositeDraw.materializeTargetTexture",
+  "sampleRemap": "scratchPixel(p) samples MatrixTransform affine inverse from layer source",
+  "finalComposite": "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite",
+  "fallbackReason": "none"
+}
