@@ -109,6 +109,12 @@ Closed post-MVP milestones:
 - GRA-221: added scene tags, exact-tag filtering, tag search, and
   feature/maturity/risk aggregates.
 
+Next sprint:
+
+- M46: convert at least five additional static dashboard rows to generated
+  evidence, targeting `maturity.generated-evidence >= 8`,
+  `maturity.static-evidence <= 5`, `tracked-gap = 0`, and `fail = 0`.
+
 Sprint review:
 [reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md](reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md)
 
