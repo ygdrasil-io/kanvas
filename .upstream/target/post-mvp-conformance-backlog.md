@@ -163,3 +163,12 @@ GRA-211 selects `StrokeRectGM` and `StrokeCircleGM` as the first real Path AA
 family promotion target. Expected inventory effect is four rows removed from
 `coverage.edge-count-exceeded` if the bounded primitive-stroke route succeeds;
 all broad Path AA suites remain expected unsupported until separately scoped.
+
+## M44 Inventory Note
+
+GRA-214 confirms the M44 primitive-stroke promotion reduced Path AA expected
+unsupported inventory from 50 to 46 rows. The selected `StrokeRectGM` and
+`StrokeCircleGM` WebGPU/cross-backend rows now render through
+`webgpu.coverage.path-aa-stroke-primitive`; broad Path AA suites remain visible
+as `coverage.edge-count-exceeded` with zero unexpected exceptions and zero
+similarity regressions.
