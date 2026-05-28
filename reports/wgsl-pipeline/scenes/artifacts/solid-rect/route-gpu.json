@@ -1,11 +1,12 @@
 {
   "sceneId": "solid-rect",
   "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
   "drawKind": "axis-aligned-filled-rect",
-  "status": "expected-unsupported",
+  "status": "pass",
   "coverageStrategy": "webgpu.coverage.analytic-rect",
   "pipelineKey": "coverageKind=analyticRect",
-  "fallbackReason": "gpu.adapter-backed-solid-rect-capture-not-produced-in-m36-c-local-run",
-  "test": "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest#analytic rect selection adds only coverage kind code axis",
-  "note": "The route selector supports analytic rect coverage; this scene row keeps GPU render artifacts absent until an adapter-backed capture is attached."
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.SolidRectSceneCaptureTest#solid rect scene renders from adapter backed WebGPU capture",
+  "note": "Adapter-backed WebGPU render capture produced from SkWebGpuDevice.flush(); CPU artifacts were not reused as GPU evidence."
 }
