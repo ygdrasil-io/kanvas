@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "title": "Kanvas WGSL pipeline scene evidence",
-  "milestone": "M37",
-  "status": "m37-path-aa-dashboard-updated",
+  "milestone": "M38",
+  "status": "m38-image-filter-dashboard-updated",
   "generatedBy": "pipelineSceneDashboard",
   "sceneContract": {
     "requiredFields": [
@@ -207,6 +207,78 @@
         "reports/wgsl-pipeline/2026-05-27-m33-path-aa-smoke-promotion.md",
         "reports/wgsl-pipeline/2026-05-27-m33-path-aa-closeout.md",
         "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/stats.json"
+      ]
+    },
+    {
+      "id": "crop-image-filter-nonnull-prepass",
+      "title": "Crop non-null image-filter child pre-pass",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-28-m38-image-filter-dashboard-scene.md",
+      "referenceKind": "skia-upstream",
+      "reference": "artifacts/crop-image-filter-nonnull-prepass/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+        "diff": "artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+        "similarity": 84.88,
+        "route": {
+          "selectedRoute": "cpu.image-filter.crop-nonnull.offset-oracle",
+          "imageFilterGraph": "Crop(kDecal, input=Offset(input=null))",
+          "compatibilityFallbackRoute": "kanvas-skia.current.image-filter-raster",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 128000,
+          "matchingPixels": 108644,
+          "maxChannelDelta": 110,
+          "threshold": 50.0,
+          "backend": "CPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests '*SimpleOffsetImageFilterCrossBackendTest'"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+        "diff": "artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+        "similarity": 98.13,
+        "route": {
+          "coverageStrategy": "webgpu.image-filter.crop-nonnull-offset-prepass",
+          "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+          "pipelineKey": "layerComposite.materializeChildPrePass + imageFilterCropUvRemap",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 128000,
+          "matchingPixels": 125600,
+          "maxChannelDelta": 110,
+          "threshold": 50.0,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests '*SimpleOffsetImageFilterWebGpuTest'"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+        "gpu": "artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/crop-image-filter-nonnull-prepass/route-cpu.json",
+        "gpu": "artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+        "prepass": "artifacts/crop-image-filter-nonnull-prepass/route-prepass.json"
+      },
+      "stats": {
+        "pixels": 128000,
+        "matchingPixels": 125600,
+        "maxChannelDelta": 110,
+        "threshold": 50.0
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m38-image-filter-dashboard-scene.md",
+        "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
+        "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
+        "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleOffsetImageFilterWebGpuTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/SimpleOffsetImageFilterCrossBackendTest.kt"
       ]
     },
     {
