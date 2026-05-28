@@ -162,18 +162,33 @@ Evidence:
 
 ## M39 Backlog Seed
 
-- Add integration scenes that prove more `skia-integration-tests` and focused
-  WebGPU tests emit CoveragePlan/PipelineIR/route diagnostics.
-- Selected GRA-175 scene set:
+Status: Done through GRA-187.
+
+Delivered:
+
+- Selected five P1 route-convergence scenes:
   `linear-gradient-rect`, `src-over-stack`, `runtime-effect-simple`,
   `clip-rect-difference`, and `bitmap-shader-local-matrix`.
-- GRA-185 owns gradient and `SrcOver` stack dashboard rows.
-- GRA-186 owns runtime-effect, clip, and local-matrix route rows.
-- GRA-187 closes route convergence evidence across P0, M37/M38 rows, and the
-  new M39 P1 rows.
-- Keep text/glyph scenes dependency-gated unless font infrastructure has landed.
+- Added dashboard artifacts, diffs, stats, and route diagnostics for gradient
+  and `SrcOver` stack rows in GRA-185.
+- Added dashboard artifacts, diffs, stats, and route diagnostics for registered
+  runtime-effect, clip difference, and bitmap shader local-matrix rows in
+  GRA-186.
+- Closed M39 with an 11-row route matrix across P0, M37, M38, and M39 selected
+  P1 scenes.
+- Kept text/glyph scenes dependency-gated until real font infrastructure lands.
+
+Evidence:
+
+- `reports/wgsl-pipeline/2026-05-28-m39-p1-scene-selection.md`
+- `reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md`
+- `reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md`
+- `reports/wgsl-pipeline/2026-05-28-m39-route-convergence-closeout.md`
+- `reports/wgsl-pipeline/scenes/data/scenes.json`
 
 ## M40 Backlog Seed
+
+Status: Next after M39.
 
 - Add trendable benchmark outputs for promoted CPU/GPU routes.
 - Track warm/cold GPU pipeline cache behavior.
