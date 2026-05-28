@@ -129,3 +129,19 @@ Non-selected DAG shapes, including perspective MatrixTransform, non-null child
 filters outside the selected shape, duplicate ColorFilter or Blur chains, Crop
 beyond the M38 shape, and arbitrary nested image-filter graphs, remain out of
 scope with stable diagnostics.
+
+### M45 Intermediate Ownership Contract
+
+GRA-217 ties the selected M45 DAG subset to the existing WebGPU layer-composite
+resource model. The MatrixTransform stage owns one layer-sized materialise
+scratch through `LayerCompositeDraw.materializeTargetTexture` /
+`materializeTargetView`; the final ColorFilter composite samples that scratch and
+applies the color-filter uniform in the existing layer composite shader. The
+scratch is per-composite-dispatch, uses render-attachment plus texture-binding
+usage, starts transparent, stays in layer-local coordinates, and is released by
+existing draw-resource cleanup after command submission.
+
+M45 must not add a second image-filter resource lifecycle or any CPU readback
+fallback. Route evidence for the selected scene must name both
+`webgpu.image-filter.compose.cf-matrix-transform.materialize-matrix` and
+`webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite`.
