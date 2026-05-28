@@ -183,3 +183,11 @@ adapter-backed rendered evidence and dashboard scene `path-aa-stroke-primitive`.
 The expected unsupported Path AA inventory moved from 50 to 46 rows with zero
 unexpected exceptions and zero similarity regressions. Remaining broad Path AA
 families stay explicitly expected unsupported until separately scoped.
+
+## M45 Selection Note
+
+GRA-216 selects `Compose(ColorFilter(Matrix|Blend), MatrixTransform(affine))` as
+M45's bounded image-filter DAG subset. The planned dashboard scene is
+`image-filter-compose-cf-matrix-transform`; it requires one MatrixTransform
+materialise scratch followed by a final ColorFilter composite. Broader DAG
+shapes remain explicitly out of scope until separately scoped.
