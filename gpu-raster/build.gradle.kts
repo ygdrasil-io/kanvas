@@ -37,12 +37,6 @@ data class ImageRectSimilarityGuard(
     val resolutionEvidencePath: String,
 )
 
-data class UnsupportedImageFilterSmokeGuard(
-    val testClass: String,
-    val issue: String,
-    val reason: String,
-)
-
 fun testPatternMayIncludeClass(pattern: String, testClass: String): Boolean =
     pattern == testClass ||
         pattern == "$testClass.*" ||
@@ -207,6 +201,14 @@ val gpuSmokePatternSpecs = listOf(
         pattern = "org.skia.gpu.webgpu.AnalyticAntialiasConvexWebGpuTest",
         evidencePath = "../reports/wgsl-pipeline/2026-05-27-m33-path-aa-smoke-promotion.md",
     ),
+    // M38 image-filter promotion: selected Crop(kDecal, input = Offset(null))
+    // child pre-pass fixture now has adapter-backed WebGPU evidence. Keep the
+    // cross-backend fixture in full inventory to avoid expanding required smoke
+    // cost while still preserving raster/GPU parity evidence.
+    GpuSmokePatternSpec(
+        pattern = "org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest",
+        evidencePath = "../reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
+    ),
 )
 
 val gpuSmokePatterns = gpuSmokePatternSpecs.map { it.pattern }
@@ -234,25 +236,11 @@ val imageRectSimilarityGuards = listOf(
     ),
 )
 
-val unsupportedImageFilterSmokeGuards = listOf(
-    UnsupportedImageFilterSmokeGuard(
-        testClass = "org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest",
-        issue = "GRA-111",
-        reason = "image-filter.crop-input-nonnull-prepass-required",
-    ),
-    UnsupportedImageFilterSmokeGuard(
-        testClass = "org.skia.gpu.webgpu.crossbackend.SimpleOffsetImageFilterCrossBackendTest",
-        issue = "GRA-111",
-        reason = "image-filter.crop-input-nonnull-prepass-required",
-    ),
-)
-
 tasks.register("validateGpuSmokePromotionPolicy") {
     group = "verification"
     description = "Fails when required GPU smoke includes unresolved inventory-only diagnostics."
 
     inputs.property("gpuSmokePatterns", gpuSmokePatterns)
-    inputs.property("unsupportedImageFilterSmokeGuards", unsupportedImageFilterSmokeGuards)
     inputs.files(gpuSmokePatternSpecs.map { file(it.evidencePath) })
     inputs.files(imageRectSimilarityGuards.map { file(it.resolutionEvidencePath) })
 
@@ -292,20 +280,6 @@ tasks.register("validateGpuSmokePromotionPolicy") {
             )
         }
 
-        val unsupportedImageFilterPromotions = unsupportedImageFilterSmokeGuards.filter { guard ->
-            gpuSmokePatterns.any { pattern -> testPatternMayIncludeClass(pattern, guard.testClass) }
-        }
-        if (unsupportedImageFilterPromotions.isNotEmpty()) {
-            val details = unsupportedImageFilterPromotions.joinToString(separator = "\n") { guard ->
-                "- ${guard.testClass}: ${guard.issue} keeps ${guard.reason} inventory-only"
-            }
-            throw GradleException(
-                "gpuSmokeTest promotion blocked: expected unsupported image-filter fixtures " +
-                    "are not smoke-eligible until render-to-texture pre-pass implementation " +
-                    "evidence lands.\n" +
-                    details,
-            )
-        }
     }
 }
 

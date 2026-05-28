@@ -133,7 +133,7 @@ class GpuInventoryFailureReportTest {
     }
 
     @Test
-    fun `lists exact crop non null failing tests in expected unsupported inventory section`() {
+    fun `lists out of scope crop non null rows in expected unsupported inventory section`() {
         val testRoot = Files.createTempDirectory("gpu-inventory-crop-tests")
         val xml = testRoot.resolve("TEST-org.skia.gpu.webgpu.InventoryCrop.xml")
         Files.writeString(
@@ -141,10 +141,10 @@ class GpuInventoryFailureReportTest {
             """
             |<?xml version="1.0" encoding="UTF-8"?>
             |<testsuite name="org.skia.gpu.webgpu.InventoryCrop" tests="2" failures="2" skipped="0" errors="0">
-            |  <testcase classname="org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest" name="SimpleOffsetImageFilterGM renders close to reference PNG on the GPU backend()">
+            |  <testcase classname="org.skia.gpu.webgpu.UnsupportedCropImageFilterWebGpuTest" name="unsupported nested crop graph is refused on the GPU backend()">
             |    <failure message="crop">reason=image-filter.crop-input-nonnull-prepass-required: SkImageFilters.Crop(input = nonNull) with a non-null child filter needs a pre-pass.</failure>
             |  </testcase>
-            |  <testcase classname="org.skia.gpu.webgpu.crossbackend.SimpleOffsetImageFilterCrossBackendTest" name="SimpleOffsetImageFilterGM matches reference on raster and GPU backends()">
+            |  <testcase classname="org.skia.gpu.webgpu.crossbackend.UnsupportedCropImageFilterCrossBackendTest" name="unsupported nested crop graph is refused on GPU and raster remains reference()">
             |    <failure message="crop">reason=image-filter.crop-input-nonnull-prepass-required: SkImageFilters.Crop(input = nonNull) with a non-null child filter needs a pre-pass.</failure>
             |  </testcase>
             |</testsuite>
@@ -157,12 +157,12 @@ class GpuInventoryFailureReportTest {
         assertTrue(markdown.contains("Crop(input = nonNull) Expected Unsupported Inventory Tests"))
         assertTrue(
             markdown.contains(
-                "org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest#SimpleOffsetImageFilterGM renders close to reference PNG on the GPU backend()",
+                "org.skia.gpu.webgpu.UnsupportedCropImageFilterWebGpuTest#unsupported nested crop graph is refused on the GPU backend()",
             ),
         )
         assertTrue(
             markdown.contains(
-                "org.skia.gpu.webgpu.crossbackend.SimpleOffsetImageFilterCrossBackendTest#SimpleOffsetImageFilterGM matches reference on raster and GPU backends()",
+                "org.skia.gpu.webgpu.crossbackend.UnsupportedCropImageFilterCrossBackendTest#unsupported nested crop graph is refused on GPU and raster remains reference()",
             ),
         )
     }
