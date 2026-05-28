@@ -1,0 +1,18 @@
+{
+  "sceneId": "path-aa-stroke-primitive",
+  "representative": "StrokeCircleGM",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.path-aa-stroke-primitive",
+  "pipelineKey": "coverageKind=pathAaStrokePrimitive pathFillRule=winding topology=triangleList",
+  "fallbackReason": "none",
+  "edgeBudgetReason": "not coverage.edge-count-exceeded",
+  "sourceTests": [
+    "org.skia.gpu.webgpu.StrokeRectWebGpuTest",
+    "org.skia.gpu.webgpu.StrokeCircleWebGpuTest",
+    "org.skia.gpu.webgpu.crossbackend.StrokeRectCrossBackendTest",
+    "org.skia.gpu.webgpu.crossbackend.StrokeCircleCrossBackendTest"
+  ],
+  "sourceReport": "reports/wgsl-pipeline/2026-05-28-m44-path-aa-stroke-route.md"
+}
