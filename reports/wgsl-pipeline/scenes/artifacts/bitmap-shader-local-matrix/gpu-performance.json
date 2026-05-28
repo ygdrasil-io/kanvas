@@ -1,29 +1,74 @@
 {
-  "sceneId": "bitmap-shader-local-matrix",
-  "lane": "GPU",
-  "status": "estimated",
-  "sampleCount": 30,
-  "timing": {
-    "medianMs": 0.066,
-    "p95Ms": 0.092
-  },
-  "counters": {
-    "routeInvocations": 1,
-    "pipelineCacheHits": 29,
-    "pipelineCacheMisses": 1,
-    "bindGroupCount": 1,
-    "resourceBytes": 1024
-  },
-  "baseline": {
-    "name": "m40-gpu-cache-static-seed",
-    "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
-  },
-  "regression": {
-    "label": "unknown"
-  },
-  "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
-  "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
-  "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
-  "route": "webgpu.shader.bitmap.local-matrix",
-  "rawMetrics": "artifacts/bitmap-shader-local-matrix/gpu-performance.json"
+    "sceneId": "bitmap-shader-local-matrix",
+    "lane": "GPU",
+    "status": "measured",
+    "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+    "phase": "webgpu-cache-dashboard-row",
+    "sampleCount": 30,
+    "timing": {
+        "medianMs": 0.005666,
+        "p95Ms": 0.009875
+    },
+    "environment": {
+        "host": "Omega",
+        "os": "Mac OS X 26.5 aarch64",
+        "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+        "backend": "WebGPU cache/timing dashboard benchmark",
+        "adapter": "Apple M2 Max"
+    },
+    "adapter": "Apple M2 Max",
+    "counters": {
+        "routeInvocations": 1,
+        "pipelineCacheHits": 29,
+        "pipelineCacheMisses": 1,
+        "bindGroupCount": 1,
+        "resourceBytes": 1024
+    },
+    "baseline": {
+        "name": "m43-gpu-cache-measured-local",
+        "commit": "2da0d497dba3b908b6a7b517157c583a963a1b52"
+    },
+    "regression": {
+        "label": "unknown"
+    },
+    "gate": {
+        "mode": "reporting-only",
+        "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
+    },
+    "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
+    "route": "webgpu.shader.bitmap.local-matrix",
+    "rawMetrics": "artifacts/bitmap-shader-local-matrix/gpu-performance.json",
+    "rawSamples": [
+        0.007791,
+        0.005417,
+        0.011166,
+        0.005125,
+        0.005584,
+        0.007,
+        0.006,
+        0.006458,
+        0.00725,
+        0.005292,
+        0.006,
+        0.007292,
+        0.005166,
+        0.009875,
+        0.005167,
+        0.005,
+        0.006875,
+        0.005083,
+        0.005083,
+        0.006625,
+        0.005125,
+        0.006541,
+        0.005125,
+        0.005208,
+        0.007167,
+        0.005083,
+        0.005666,
+        0.006458,
+        0.005083,
+        0.006375
+    ],
+    "checksum": 2118653005
 }

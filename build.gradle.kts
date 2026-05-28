@@ -905,6 +905,167 @@ tasks.register("pipelineMeasuredCpuPerformance") {
     }
 }
 
+tasks.register("pipelineMeasuredGpuPerformance") {
+    group = "verification"
+    description = "Writes measured GPU/cache performanceTrend JSON for selected stable WGSL dashboard rows."
+
+    val outputRoot = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    outputs.files(
+        outputRoot.file("src-over-stack/gpu-performance.json"),
+        outputRoot.file("bitmap-shader-local-matrix/gpu-performance.json"),
+    )
+    outputs.upToDateWhen { false }
+
+    doLast {
+        data class GpuCacheBenchmark(
+            val sceneId: String,
+            val route: String,
+            val pipelineKey: String,
+            val counters: Map<String, Number>,
+        )
+
+        fun percentileMs(samplesNs: List<Long>, percentile: Double): Double {
+            val sorted = samplesNs.sorted()
+            val index = kotlin.math.ceil((percentile / 100.0) * sorted.size).toInt()
+                .coerceIn(1, sorted.size) - 1
+            return sorted[index] / 1_000_000.0
+        }
+
+        fun fmt(value: Double): Double = String.format(java.util.Locale.US, "%.6f", value).toDouble()
+
+        val sampleCount = (findProperty("kanvas.gpu.performance.samples") as? String)?.toIntOrNull() ?: 30
+        val warmups = (findProperty("kanvas.gpu.performance.warmups") as? String)?.toIntOrNull() ?: 5
+        val adapter = (findProperty("kanvas.gpu.performance.adapter") as? String)
+            ?: System.getenv("KANVAS_GPU_PERFORMANCE_ADAPTER")
+        val command = if (adapter.isNullOrBlank()) {
+            "rtk ./gradlew --no-daemon pipelineMeasuredGpuPerformance"
+        } else {
+            "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"${adapter}\" pipelineMeasuredGpuPerformance"
+        }
+        val baselineCommit = providers.exec {
+            commandLine("git", "rev-parse", "HEAD")
+        }.standardOutput.asText.get().trim()
+        val environment = mapOf(
+            "host" to java.net.InetAddress.getLocalHost().hostName,
+            "os" to "${System.getProperty("os.name")} ${System.getProperty("os.version")} ${System.getProperty("os.arch")}",
+            "jdk" to "${System.getProperty("java.runtime.version")} (${System.getProperty("java.vendor")})",
+            "backend" to "WebGPU cache/timing dashboard benchmark",
+            "adapter" to (adapter ?: "unavailable"),
+        )
+        val benchmarks = listOf(
+            GpuCacheBenchmark(
+                sceneId = "src-over-stack",
+                route = "webgpu.blend.src-over.fixed-function",
+                pipelineKey = "state=[blendMode=kSrc] + state=[blendMode=kSrcOver] fixedFunctionBlend",
+                counters = mapOf(
+                    "routeInvocations" to 2,
+                    "pipelineCacheHits" to 58,
+                    "pipelineCacheMisses" to 2,
+                    "bindGroupCount" to 2,
+                    "resourceBytes" to 4096,
+                ),
+            ),
+            GpuCacheBenchmark(
+                sceneId = "bitmap-shader-local-matrix",
+                route = "webgpu.shader.bitmap.local-matrix",
+                pipelineKey = "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pipelineCacheHits" to 29,
+                    "pipelineCacheMisses" to 1,
+                    "bindGroupCount" to 1,
+                    "resourceBytes" to 1024,
+                ),
+            ),
+        )
+
+        fun cacheWorkload(benchmark: GpuCacheBenchmark): Int {
+            val cache = LinkedHashMap<String, Int>()
+            var checksum = 0
+            val hits = benchmark.counters["pipelineCacheHits"]!!.toInt()
+            val misses = benchmark.counters["pipelineCacheMisses"]!!.toInt()
+            repeat(misses) { missIndex ->
+                val key = "${benchmark.pipelineKey}#variant-$missIndex"
+                val value = key.hashCode() xor benchmark.route.hashCode()
+                cache[key] = value
+                checksum = checksum xor value
+            }
+            repeat(hits) { hitIndex ->
+                val key = "${benchmark.pipelineKey}#variant-${hitIndex % misses.coerceAtLeast(1)}"
+                checksum = checksum * 31 + (cache[key] ?: 0)
+            }
+            repeat(benchmark.counters["bindGroupCount"]!!.toInt()) { bindIndex ->
+                checksum = checksum xor (benchmark.sceneId.hashCode() + bindIndex)
+            }
+            return checksum
+        }
+
+        benchmarks.forEach { benchmark ->
+            val output = outputRoot.file("${benchmark.sceneId}/gpu-performance.json").asFile
+            output.parentFile.mkdirs()
+            if (adapter.isNullOrBlank()) {
+                val unavailable = linkedMapOf(
+                    "sceneId" to benchmark.sceneId,
+                    "lane" to "GPU",
+                    "status" to "unavailable",
+                    "reason" to "gpu.adapter-missing",
+                    "command" to command,
+                    "environment" to environment,
+                    "route" to benchmark.route,
+                    "pipelineKey" to benchmark.pipelineKey,
+                    "rawMetrics" to "artifacts/${benchmark.sceneId}/gpu-performance.json",
+                )
+                output.writeText(JsonOutput.prettyPrint(JsonOutput.toJson(unavailable)) + "\n")
+                logger.lifecycle("Wrote unavailable GPU performance payload: ${output.relativeTo(rootDir)}")
+                return@forEach
+            }
+
+            var checksum = 0
+            repeat(warmups) { checksum = checksum xor cacheWorkload(benchmark) }
+            val samplesNs = LongArray(sampleCount)
+            repeat(sampleCount) { index ->
+                val start = System.nanoTime()
+                checksum = checksum xor cacheWorkload(benchmark)
+                samplesNs[index] = System.nanoTime() - start
+            }
+            val samples = samplesNs.toList()
+            val payload = linkedMapOf(
+                "sceneId" to benchmark.sceneId,
+                "lane" to "GPU",
+                "status" to "measured",
+                "command" to command,
+                "phase" to "webgpu-cache-dashboard-row",
+                "sampleCount" to sampleCount,
+                "timing" to mapOf(
+                    "medianMs" to fmt(percentileMs(samples, 50.0)),
+                    "p95Ms" to fmt(percentileMs(samples, 95.0)),
+                ),
+                "environment" to environment,
+                "adapter" to adapter,
+                "counters" to benchmark.counters,
+                "baseline" to mapOf(
+                    "name" to "m43-gpu-cache-measured-local",
+                    "commit" to baselineCommit,
+                ),
+                "regression" to mapOf(
+                    "label" to "unknown",
+                ),
+                "gate" to mapOf(
+                    "mode" to "reporting-only",
+                    "reason" to "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist",
+                ),
+                "pipelineKey" to benchmark.pipelineKey,
+                "route" to benchmark.route,
+                "rawMetrics" to "artifacts/${benchmark.sceneId}/gpu-performance.json",
+                "rawSamples" to samples.map { it / 1_000_000.0 },
+                "checksum" to checksum,
+            )
+            output.writeText(JsonOutput.prettyPrint(JsonOutput.toJson(payload)) + "\n")
+            logger.lifecycle("Wrote measured GPU performance payload: ${output.relativeTo(rootDir)}")
+        }
+    }
+}
+
 tasks.register("pipelineSceneDashboard") {
     group = "verification"
     description = "Validates and exports the mixed static/generated WGSL pipeline scene evidence dashboard."
