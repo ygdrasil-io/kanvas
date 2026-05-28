@@ -1,0 +1,13 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "src-over-stack",
+  "drawKind": "BlendModeTest.partialAlphaSrcOver",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.analytic-rect-stack",
+  "selectedRoute": "webgpu.blend.src-over.fixed-function",
+  "pipelineKey": "state=[blendMode=kSrc] + state=[blendMode=kSrcOver] fixedFunctionBlend",
+  "blendPlan": "Fixed-function WebGPU blend allowlist accepts kSrc and kSrcOver",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.BlendModeTest#kSrcOver matches CPU for partial alpha over non opaque destination",
+  "secondaryTest": "org.skia.gpu.webgpu.TranslucentSrcOverTest#50 percent blue rect over opaque red blends to expected premul bytes"
+}

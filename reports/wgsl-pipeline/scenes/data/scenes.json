@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "title": "Kanvas WGSL pipeline scene evidence",
-  "milestone": "M38",
-  "status": "m38-image-filter-dashboard-updated",
+  "milestone": "M39",
+  "status": "m39-route-convergence-p1-gradient-blend",
   "generatedBy": "pipelineSceneDashboard",
   "sceneContract": {
     "requiredFields": [
@@ -207,6 +207,143 @@
         "reports/wgsl-pipeline/2026-05-27-m33-path-aa-smoke-promotion.md",
         "reports/wgsl-pipeline/2026-05-27-m33-path-aa-closeout.md",
         "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/stats.json"
+      ]
+    },
+    {
+      "id": "linear-gradient-rect",
+      "title": "Linear gradient rect generated WGSL route",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md",
+      "referenceKind": "test-oracle",
+      "reference": "artifacts/linear-gradient-rect/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/linear-gradient-rect/cpu.png",
+        "diff": "artifacts/linear-gradient-rect/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "AnalyticRect(2.0,10.0,62.0,50.0,aa=false)",
+          "selectedRoute": "cpu.shader.linear-gradient.rect",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "Static oracle aligned to LinearGradientRectTest plus GeneratedLinearGradientWgslTest"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/linear-gradient-rect/gpu.png",
+        "diff": "artifacts/linear-gradient-rect/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.analytic-rect",
+          "selectedRoute": "webgpu.generated.linear-gradient.rect",
+          "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.LinearGradientRectTest --tests '*GeneratedLinearGradientWgslTest'"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/linear-gradient-rect/cpu-diff.png",
+        "gpu": "artifacts/linear-gradient-rect/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/linear-gradient-rect/route-cpu.json",
+        "gpu": "artifacts/linear-gradient-rect/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 4096,
+        "matchingPixels": 4096,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m39-p1-scene-selection.md",
+        "reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md",
+        "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/LinearGradientRectTest.kt"
+      ]
+    },
+    {
+      "id": "src-over-stack",
+      "title": "Partial alpha SrcOver blend stack",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md",
+      "referenceKind": "test-oracle",
+      "reference": "artifacts/src-over-stack/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/src-over-stack/cpu.png",
+        "diff": "artifacts/src-over-stack/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "AnalyticRect stack: red kSrc [8,8,40,40], blue kSrcOver [16,16,48,48]",
+          "selectedRoute": "cpu.blend.src-over-stack",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "Static premul byte oracle aligned to BlendModeTest partial-alpha stack"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/src-over-stack/gpu.png",
+        "diff": "artifacts/src-over-stack/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.analytic-rect-stack",
+          "selectedRoute": "webgpu.blend.src-over.fixed-function",
+          "pipelineKey": "state=[blendMode=kSrc] + state=[blendMode=kSrcOver] fixedFunctionBlend",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BlendModeTest --tests org.skia.gpu.webgpu.TranslucentSrcOverTest"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/src-over-stack/cpu-diff.png",
+        "gpu": "artifacts/src-over-stack/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/src-over-stack/route-cpu.json",
+        "gpu": "artifacts/src-over-stack/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 4096,
+        "matchingPixels": 4096,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m39-p1-scene-selection.md",
+        "reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md",
+        "reports/wgsl-pipeline/scenes/artifacts/src-over-stack/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BlendModeTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TranslucentSrcOverTest.kt"
       ]
     },
     {
