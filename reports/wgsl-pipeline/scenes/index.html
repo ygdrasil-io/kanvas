@@ -89,6 +89,10 @@
       margin-top: 24px;
     }
 
+    .scene-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .card, .scene-card {
       border: 1px solid var(--line);
       background: rgba(255, 250, 240, 0.78);
@@ -132,6 +136,165 @@
       overflow-wrap: anywhere;
     }
 
+    .reference-notice,
+    .route-notice {
+      margin-top: 24px;
+      border: 1px solid var(--line);
+      background: rgba(255, 250, 240, 0.86);
+      padding: 22px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .reference-notice h2,
+    .route-notice h2 {
+      margin: 0 0 12px;
+      color: var(--ink);
+      font-size: 1.25rem;
+    }
+
+    .reference-notice dl,
+    .route-notice dl {
+      display: grid;
+      grid-template-columns: minmax(140px, 220px) 1fr;
+      gap: 10px 16px;
+      margin: 0;
+    }
+
+    .reference-notice dt,
+    .route-notice dt {
+      color: var(--accent);
+      font: 700 0.78rem/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .reference-notice dd,
+    .route-notice dd {
+      margin: 0;
+    }
+
+    .visual-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .visual-panel {
+      border: 1px solid var(--line);
+      background: #f8f1e2;
+      min-height: 132px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .visual-panel strong {
+      display: block;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--accent);
+      font: 700 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .visual-panel img {
+      width: 100%;
+      height: 118px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      background:
+        linear-gradient(45deg, rgba(23, 33, 28, 0.06) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(23, 33, 28, 0.06) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(23, 33, 28, 0.06) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(23, 33, 28, 0.06) 75%);
+      background-size: 18px 18px;
+      background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+    }
+
+    .visual-panel span {
+      padding: 8px 10px;
+      color: var(--muted);
+      font: 0.72rem/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .visual-panel.missing {
+      min-height: 132px;
+    }
+
+    .visual-panel.missing em {
+      display: grid;
+      place-items: center;
+      min-height: 118px;
+      padding: 16px;
+      color: var(--gap);
+      font-style: normal;
+      text-align: center;
+    }
+
+    .visual-panel.reference {
+      grid-column: 1 / -1;
+    }
+
+    .artifact-details {
+      margin-top: 16px;
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+
+    .artifact-details summary {
+      cursor: pointer;
+      color: var(--accent);
+      font: 700 0.78rem/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .filters {
+      margin-top: 24px;
+      border: 1px solid var(--line);
+      background: rgba(255, 250, 240, 0.9);
+      padding: 18px;
+    }
+
+    .filters h2 {
+      margin: 0 0 14px;
+      font-size: 1.25rem;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+    }
+
+    .filter-grid label {
+      display: grid;
+      gap: 6px;
+      color: var(--accent);
+      font: 700 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .filter-grid select,
+    .filter-grid input {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fffaf0;
+      color: var(--ink);
+      padding: 9px 10px;
+      font: 0.92rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .filter-summary {
+      margin: 14px 0 0;
+      color: var(--muted);
+      font: 0.88rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
     .empty {
       margin-top: 24px;
       border: 1px dashed var(--line);
@@ -144,6 +307,15 @@
     code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 0.92em;
+    }
+
+    @media (max-width: 760px) {
+      .scene-grid,
+      .visual-grid,
+      .reference-notice dl,
+      .route-notice dl {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -185,6 +357,61 @@
       </article>
     </section>
 
+    <section class="reference-notice" aria-label="Reference image notice">
+      <h2>Reference panels</h2>
+      <dl>
+        <dt>Skia/upstream</dt>
+        <dd>The preferred reference. It represents the expected visual output from an upstream-like fixture or imported Skia evidence.</dd>
+        <dt>CPU oracle</dt>
+        <dd>Used when no upstream image is available. It is a controlled CPU render or oracle path used to compare the GPU lane.</dd>
+        <dt>Diff panels</dt>
+        <dd>Diff images compare CPU and GPU outputs against the reference when the artifact exists. Missing GPU diffs stay visible as tracked gaps.</dd>
+        <dt>Not parity</dt>
+        <dd>A reference panel proves the selected scene contract only. It does not imply full Skia compatibility for neighboring APIs.</dd>
+      </dl>
+    </section>
+
+    <section class="route-notice" aria-label="Route diagnostics notice">
+      <h2>Route diagnostics</h2>
+      <dl>
+        <dt>CPU route</dt>
+        <dd>The reference execution path used by the CPU lane. It proves which coverage, shader, image, or blend path produced the oracle artifact.</dd>
+        <dt>GPU route</dt>
+        <dd>The selected WebGPU pipeline route or coverage strategy. A passing scene should expose the same semantic route family as the CPU evidence.</dd>
+        <dt>Fallback</dt>
+        <dd><code>none</code> means the GPU lane rendered normally. Any other value is a stable diagnostic and must stay visible, especially for tracked gaps and expected unsupported rows.</dd>
+        <dt>Tracked gap</dt>
+        <dd>The route is documented, but at least one required visual capture is missing. This is not counted as a pass.</dd>
+        <dt>Expected unsupported</dt>
+        <dd>The scene is intentionally refused by the current GPU policy. It remains in the dashboard so breadth limits are visible instead of hidden.</dd>
+      </dl>
+    </section>
+
+    <section class="filters" aria-label="Scene filters">
+      <h2>Scene filters</h2>
+      <div class="filter-grid">
+        <label>Status
+          <select id="status-filter"></select>
+        </label>
+        <label>Priority
+          <select id="priority-filter"></select>
+        </label>
+        <label>Reference
+          <select id="reference-filter"></select>
+        </label>
+        <label>GPU fallback
+          <select id="fallback-filter"></select>
+        </label>
+        <label>Performance
+          <select id="performance-filter"></select>
+        </label>
+        <label>Search
+          <input id="search-filter" type="search" placeholder="scene, route, fallback">
+        </label>
+      </div>
+      <p id="filter-summary" class="filter-summary"></p>
+    </section>
+
     <section id="scenes" class="scene-grid" aria-live="polite"></section>
     <section id="empty" class="empty" hidden>
       The shell is ready and the scene registry is empty. M36-B will enforce the
@@ -197,6 +424,16 @@
   <script>
     const scenesRoot = document.getElementById('scenes');
     const emptyState = document.getElementById('empty');
+    const filterControls = {
+      status: document.getElementById('status-filter'),
+      priority: document.getElementById('priority-filter'),
+      reference: document.getElementById('reference-filter'),
+      fallback: document.getElementById('fallback-filter'),
+      performance: document.getElementById('performance-filter'),
+      search: document.getElementById('search-filter'),
+    };
+    const filterSummary = document.getElementById('filter-summary');
+    let allScenes = [];
 
     function text(value, fallback = 'unavailable') {
       return value === undefined || value === null || value === '' ? fallback : String(value);
@@ -221,6 +458,120 @@
       return paths.filter(Boolean).map((path) => `<li><code>${path}</code></li>`).join('');
     }
 
+    function imagePanel(label, path, note = '', extraClass = '') {
+      if (!path) {
+        return `
+          <div class="visual-panel missing ${extraClass}">
+            <strong>${label}</strong>
+            <em>not produced</em>
+            <span>${text(note, 'missing artifact')}</span>
+          </div>
+        `;
+      }
+      return `
+        <a class="visual-panel ${extraClass}" href="${path}">
+          <strong>${label}</strong>
+          <img src="${path}" alt="${label}">
+          <span>${path}</span>
+        </a>
+      `;
+    }
+
+    function visualPanels(scene) {
+      const fallback = scene.gpu && scene.gpu.route ? scene.gpu.route.fallbackReason : undefined;
+      return `
+        <div class="visual-grid">
+          ${imagePanel('Reference', scene.reference, scene.referenceKind, 'reference')}
+          ${imagePanel('CPU', scene.cpu && scene.cpu.image)}
+          ${imagePanel('GPU', scene.gpu && scene.gpu.image, fallback)}
+          ${imagePanel('CPU diff', scene.cpu && scene.cpu.diff)}
+          ${imagePanel('GPU diff', scene.gpu && scene.gpu.diff, fallback)}
+        </div>
+      `;
+    }
+
+    function gpuFallback(scene) {
+      return scene.gpu && scene.gpu.route ? text(scene.gpu.route.fallbackReason, 'none') : 'none';
+    }
+
+    function performanceStatus(scene) {
+      const cpu = scene.cpu && scene.cpu.performanceTrend ? scene.cpu.performanceTrend.status : 'unavailable';
+      const gpu = scene.gpu && scene.gpu.performanceTrend ? scene.gpu.performanceTrend.status : 'unavailable';
+      if (cpu === 'estimated' || gpu === 'estimated') return 'estimated';
+      if (cpu === 'measured' || gpu === 'measured') return 'measured';
+      return 'unavailable';
+    }
+
+    function optionLabel(value) {
+      return value === 'all' ? 'All' : value;
+    }
+
+    function fillSelect(select, values, allLabel = 'All') {
+      select.innerHTML = [
+        `<option value="all">${allLabel}</option>`,
+        ...values.map((value) => `<option value="${value}">${optionLabel(value)}</option>`)
+      ].join('');
+    }
+
+    function uniqueValues(scenes, getter) {
+      return [...new Set(scenes.map(getter).filter(Boolean))].sort();
+    }
+
+    function setupFilters(scenes) {
+      fillSelect(filterControls.status, uniqueValues(scenes, (scene) => scene.status), 'All statuses');
+      fillSelect(filterControls.priority, uniqueValues(scenes, (scene) => scene.priority), 'All priorities');
+      fillSelect(filterControls.reference, uniqueValues(scenes, (scene) => scene.referenceKind), 'All references');
+      fillSelect(filterControls.fallback, uniqueValues(scenes, gpuFallback), 'All fallbacks');
+      fillSelect(filterControls.performance, uniqueValues(scenes, performanceStatus), 'All performance');
+      Object.values(filterControls).forEach((control) => control.addEventListener('input', applyFilters));
+    }
+
+    function matchesSearch(scene, query) {
+      if (!query) return true;
+      const cpuRoute = scene.cpu && scene.cpu.route ? scene.cpu.route.selectedRoute : '';
+      const gpuRoute = scene.gpu && scene.gpu.route ? (scene.gpu.route.coverageStrategy || scene.gpu.route.selectedRoute) : '';
+      const haystack = [
+        scene.id,
+        scene.title,
+        scene.status,
+        scene.priority,
+        scene.referenceKind,
+        cpuRoute,
+        gpuRoute,
+        gpuFallback(scene),
+      ].join(' ').toLowerCase();
+      return haystack.includes(query.toLowerCase());
+    }
+
+    function applyFilters() {
+      const filters = {
+        status: filterControls.status.value,
+        priority: filterControls.priority.value,
+        reference: filterControls.reference.value,
+        fallback: filterControls.fallback.value,
+        performance: filterControls.performance.value,
+        search: filterControls.search.value.trim(),
+      };
+      const filtered = allScenes.filter((scene) => (
+        (filters.status === 'all' || scene.status === filters.status) &&
+        (filters.priority === 'all' || scene.priority === filters.priority) &&
+        (filters.reference === 'all' || scene.referenceKind === filters.reference) &&
+        (filters.fallback === 'all' || gpuFallback(scene) === filters.fallback) &&
+        (filters.performance === 'all' || performanceStatus(scene) === filters.performance) &&
+        matchesSearch(scene, filters.search)
+      ));
+      scenesRoot.innerHTML = filtered.map(renderScene).join('');
+      emptyState.hidden = filtered.length !== 0;
+      if (filtered.length === 0) {
+        emptyState.textContent = 'No scene matches the active filters.';
+      }
+      const counts = filtered.reduce((acc, scene) => {
+        acc[scene.status] = (acc[scene.status] || 0) + 1;
+        return acc;
+      }, {});
+      filterSummary.textContent = `${filtered.length}/${allScenes.length} scenes shown -- pass=${counts.pass || 0}, tracked-gap=${counts['tracked-gap'] || 0}, expected-unsupported=${counts['expected-unsupported'] || 0}, fail=${counts.fail || 0}`;
+    }
+
     function renderScene(scene) {
       const status = text(scene.status, 'gap');
       const cpuRoute = scene.cpu && scene.cpu.route ? scene.cpu.route.selectedRoute : undefined;
@@ -239,7 +590,11 @@
           <p>GPU fallback: <code>${text(fallback, 'none')}</code></p>
           <p>CPU perf: <code>${performanceText(scene.cpu)}</code></p>
           <p>GPU perf: <code>${performanceText(scene.gpu)}</code></p>
-          <ul class="artifact-list">${artifactItems(scene) || '<li>No artifacts declared</li>'}</ul>
+          ${visualPanels(scene)}
+          <details class="artifact-details">
+            <summary>Artifacts and raw diagnostics</summary>
+            <ul class="artifact-list">${artifactItems(scene) || '<li>No artifacts declared</li>'}</ul>
+          </details>
         </article>
       `;
     }
@@ -250,12 +605,13 @@
         return response.json();
       })
       .then((data) => {
-        const scenes = Array.isArray(data.scenes) ? data.scenes : [];
-        if (scenes.length === 0) {
+        allScenes = Array.isArray(data.scenes) ? data.scenes : [];
+        if (allScenes.length === 0) {
           emptyState.hidden = false;
           return;
         }
-        scenesRoot.innerHTML = scenes.map(renderScene).join('');
+        setupFilters(allScenes);
+        applyFilters();
       })
       .catch((error) => {
         emptyState.hidden = false;
