@@ -1,4 +1,5 @@
 import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.testing.Test
@@ -565,19 +566,176 @@ tasks.register("pipelineConformanceReport") {
     }
 }
 
-tasks.register("pipelineSceneDashboard") {
+tasks.register("pipelineGeneratedSceneExport") {
     group = "verification"
-    description = "Validates and exports the static WGSL pipeline scene evidence dashboard."
+    description = "Materializes generated WGSL scene result artifacts into the dashboard export layout."
 
     val sourceDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes")
+    val manifestFile = sourceDir.file("generated/results.json")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
+    inputs.file(manifestFile)
+    inputs.dir(sourceDir.dir("generated/artifacts"))
+    inputs.dir(sourceDir.dir("artifacts"))
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val sourceRoot = sourceDir.asFile
+        val generatedSourceRoot = sourceRoot.resolve("generated")
+        val manifest = manifestFile.asFile
+        val targetRoot = outputDir.get().asFile
+        val validationErrors = mutableListOf<String>()
+        if (targetRoot.exists()) {
+            targetRoot.deleteRecursively()
+        }
+
+        fun missing(sceneId: String, field: String) {
+            validationErrors += "$sceneId: missing generated artifact for `$field`"
+        }
+
+        fun requireString(sceneId: String, owner: Map<*, *>, field: String, displayField: String = field): String? {
+            val value = owner[field]
+            if (value !is String || value.isBlank()) {
+                missing(sceneId, displayField)
+                return null
+            }
+            return value
+        }
+
+        fun collectGeneratedPaths(sceneId: String, value: Any?, fieldPath: String, out: MutableList<Pair<String, String>>) {
+            when (value) {
+                is Map<*, *> -> value.forEach { (key, child) ->
+                    val nextPath = if (fieldPath.isBlank()) key.toString() else "$fieldPath.${key}"
+                    collectGeneratedPaths(sceneId, child, nextPath, out)
+                }
+                is Iterable<*> -> value.forEachIndexed { index, child ->
+                    collectGeneratedPaths(sceneId, child, "$fieldPath[$index]", out)
+                }
+                is String -> {
+                    val normalized = value.replace('\\', '/')
+                    if (normalized.startsWith("artifacts/") || normalized.startsWith("reports/") || normalized.startsWith("data/")) {
+                        out += fieldPath to normalized
+                    }
+                }
+            }
+        }
+
+        fun generatedArtifactSource(relativePath: String, allowDirectory: Boolean = false): File? {
+            val normalized = relativePath.replace('\\', '/')
+            return listOf(
+                generatedSourceRoot.resolve(normalized),
+                sourceRoot.resolve(normalized),
+            ).firstOrNull { it.isFile || (allowDirectory && it.isDirectory) }
+        }
+
+        val root = if (manifest.isFile) {
+            JsonSlurper().parse(manifest) as? Map<*, *>
+                ?: throw GradleException("Generated scene manifest root must be a JSON object: ${manifest.relativeTo(rootDir)}")
+        } else {
+            mapOf("schemaVersion" to 1, "scenes" to emptyList<Any>())
+        }
+        val scenes = root["scenes"] as? List<*>
+            ?: throw GradleException("Generated scene manifest must contain a `scenes` array: ${manifest.relativeTo(rootDir)}")
+        val normalizedScenes = mutableListOf<Any?>()
+
+        scenes.forEachIndexed { index, rawScene ->
+            if (rawScene !is Map<*, *>) {
+                validationErrors += "generated.scenes[$index]: generated scene record must be an object"
+                return@forEachIndexed
+            }
+            val sceneId = requireString("generated.scenes[$index]", rawScene, "id") ?: "generated.scenes[$index]"
+            val generation = rawScene["generation"] as? Map<*, *>
+            if (generation == null) {
+                validationErrors += "$sceneId: missing generated artifact for `generation`"
+            } else {
+                val mode = requireString(sceneId, generation, "mode", "generation.mode")
+                if (mode != "generated" && mode != "mixed") {
+                    validationErrors += "$sceneId: generated export rows require `generation.mode` generated or mixed"
+                }
+                requireString(sceneId, generation, "producer", "generation.producer")
+                requireString(sceneId, generation, "commit", "generation.commit")
+                val artifactRoot = requireString(sceneId, generation, "artifactRoot", "generation.artifactRoot")
+                if (artifactRoot != null && artifactRoot != "artifacts/$sceneId") {
+                    validationErrors += "$sceneId: `generation.artifactRoot` must be `artifacts/$sceneId`"
+                }
+                requireString(sceneId, generation, "schema", "generation.schema")
+            }
+
+            val evidence = rawScene["evidence"]
+            if (evidence !is List<*> || evidence.none { it is String && it.isNotBlank() }) {
+                validationErrors += "$sceneId: generated export rows require non-empty raw `evidence` links"
+            }
+
+            val paths = mutableListOf<Pair<String, String>>()
+            collectGeneratedPaths(sceneId, rawScene, "", paths)
+            paths.forEach { (field, relativePath) ->
+                when {
+                    relativePath.startsWith("artifacts/") -> {
+                        val allowDirectory = field == "generation.artifactRoot"
+                        val sourceFile = generatedArtifactSource(relativePath, allowDirectory)
+                        if (sourceFile == null) {
+                            missing(sceneId, field)
+                        } else if (sourceFile.isFile) {
+                            val targetFile = targetRoot.resolve(relativePath)
+                            targetFile.parentFile.mkdirs()
+                            sourceFile.copyTo(targetFile, overwrite = true)
+                        }
+                    }
+                    relativePath.startsWith("reports/") -> {
+                        if (!rootDir.resolve(relativePath).isFile) {
+                            missing(sceneId, field)
+                        }
+                    }
+                    relativePath.startsWith("data/") -> {
+                        if (!sourceRoot.resolve(relativePath).isFile && !targetRoot.resolve(relativePath).isFile) {
+                            missing(sceneId, field)
+                        }
+                    }
+                }
+            }
+            normalizedScenes += rawScene
+        }
+
+        if (validationErrors.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("Generated scene export validation failed:")
+                    validationErrors.sorted().forEach { appendLine("- $it") }
+                }
+            )
+        }
+
+        targetRoot.resolve("data").mkdirs()
+        val exported = linkedMapOf(
+            "schemaVersion" to 1,
+            "generatedBy" to "pipelineGeneratedSceneExport",
+            "source" to "reports/wgsl-pipeline/scenes/generated/results.json",
+            "scenes" to normalizedScenes,
+        )
+        targetRoot.resolve("data/generated-scenes.json")
+            .writeText(JsonOutput.prettyPrint(JsonOutput.toJson(exported)) + "\n")
+        logger.lifecycle("Wrote generated WGSL scene export: ${targetRoot.relativeTo(rootDir)}")
+    }
+}
+
+tasks.register("pipelineSceneDashboard") {
+    group = "verification"
+    description = "Validates and exports the mixed static/generated WGSL pipeline scene evidence dashboard."
+
+    val sourceDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes")
+    val generatedExportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
+    dependsOn("pipelineGeneratedSceneExport")
     inputs.dir(sourceDir)
+    inputs.dir(generatedExportDir)
     outputs.dir(outputDir)
     outputs.upToDateWhen { false }
 
     doLast {
         val sourceRoot = sourceDir.asFile
         val targetRoot = outputDir.get().asFile
+        val generatedRoot = generatedExportDir.get().asFile
+        val generatedData = generatedRoot.resolve("data/generated-scenes.json")
         val sourceIndex = sourceRoot.resolve("index.html")
         val sourceData = sourceRoot.resolve("data/scenes.json")
 
@@ -613,8 +771,12 @@ tasks.register("pipelineSceneDashboard") {
         fun pathExists(relativePath: String): Boolean {
             val normalized = relativePath.replace('\\', '/')
             return when {
-                normalized.startsWith("artifacts/") -> sourceRoot.resolve(normalized).isFile
-                normalized.startsWith("data/") -> sourceRoot.resolve(normalized).isFile
+                normalized.startsWith("artifacts/") ->
+                    sourceRoot.resolve(normalized).let { it.isFile || it.isDirectory } ||
+                        generatedRoot.resolve(normalized).let { it.isFile || it.isDirectory }
+                normalized.startsWith("data/") ->
+                    sourceRoot.resolve(normalized).isFile ||
+                        generatedRoot.resolve(normalized).isFile
                 normalized.startsWith("reports/") -> rootDir.resolve(normalized).isFile
                 else -> false
             }
@@ -706,6 +868,40 @@ tasks.register("pipelineSceneDashboard") {
             requireString(sceneId, route, "fallbackReason", "$fieldPrefix.route.fallbackReason")
         }
 
+        fun validateGeneration(sceneId: String, rawScene: Map<*, *>, status: String?) {
+            val generationValue = rawScene["generation"] ?: return
+            val generation = generationValue as? Map<*, *>
+            if (generation == null) {
+                missingField(sceneId, "generation")
+                return
+            }
+            val mode = requireString(sceneId, generation, "mode", "generation.mode")
+            if (mode != null && mode !in setOf("static", "generated", "mixed")) {
+                validationErrors += "$sceneId: unknown `generation.mode` '$mode'"
+            }
+            if (mode == "generated" || mode == "mixed") {
+                requireString(sceneId, generation, "producer", "generation.producer")
+                requireString(sceneId, generation, "commit", "generation.commit")
+                requireString(sceneId, generation, "artifactRoot", "generation.artifactRoot")
+                requireString(sceneId, generation, "schema", "generation.schema")
+                val hasSourceTrace = listOf("sourceTask", "sourceTest", "sourceReport")
+                    .any { field -> (generation[field] as? String)?.isNotBlank() == true }
+                if (!hasSourceTrace) {
+                    validationErrors += "$sceneId: generated rows require one of `generation.sourceTask`, `generation.sourceTest`, or `generation.sourceReport`"
+                }
+                val evidence = rawScene["evidence"]
+                if (evidence !is List<*> || evidence.none { it is String && it.isNotBlank() }) {
+                    validationErrors += "$sceneId: generated rows require non-empty raw `evidence` links"
+                }
+                if (status == "tracked-gap") {
+                    val missing = generation["missing"]
+                    if (missing !is List<*> || missing.none { it is String && it.isNotBlank() }) {
+                        validationErrors += "$sceneId: `status=tracked-gap` generated rows require `generation.missing[]`"
+                    }
+                }
+            }
+        }
+
         fun validateScene(rawScene: Any?, index: Int, seenIds: MutableSet<String>) {
             if (rawScene !is Map<*, *>) {
                 validationErrors += "scenes[$index]: scene record must be an object"
@@ -729,6 +925,7 @@ tasks.register("pipelineSceneDashboard") {
             if (status != null && status !in allowedSceneStatuses) {
                 validationErrors += "$sceneId: unknown `status` '$status'; expected ${allowedSceneStatuses.sorted().joinToString()}"
             }
+            validateGeneration(sceneId, rawScene, status)
 
             val cpu = requireMap(sceneId, rawScene, "cpu")
             val gpu = requireMap(sceneId, rawScene, "gpu")
@@ -783,10 +980,28 @@ tasks.register("pipelineSceneDashboard") {
             ?: throw GradleException("Scene dashboard data root must be a JSON object: ${sourceData.relativeTo(rootDir)}")
         val scenes = root["scenes"] as? List<*>
             ?: throw GradleException("Scene dashboard data must contain a `scenes` array: ${sourceData.relativeTo(rootDir)}")
+        val generatedScenes = if (generatedData.isFile) {
+            val generatedSceneData = JsonSlurper().parse(generatedData)
+            val generatedRootData = generatedSceneData as? Map<*, *>
+                ?: throw GradleException("Generated scene export data root must be a JSON object: ${generatedData.relativeTo(rootDir)}")
+            generatedRootData["scenes"] as? List<*>
+                ?: throw GradleException("Generated scene export data must contain a `scenes` array: ${generatedData.relativeTo(rootDir)}")
+        } else {
+            emptyList<Any?>()
+        }
+        val mergedRoot = LinkedHashMap<Any?, Any?>()
+        root.forEach { (key, value) -> mergedRoot[key] = value }
+        mergedRoot["scenes"] = scenes + generatedScenes
+        mergedRoot["generatedExport"] = mapOf(
+            "producer" to "pipelineGeneratedSceneExport",
+            "source" to "reports/wgsl-pipeline/scenes/generated/results.json",
+            "output" to "build/reports/wgsl-pipeline-generated-scenes/data/generated-scenes.json",
+            "sceneCount" to generatedScenes.size,
+        )
         val seenIds = mutableSetOf<String>()
-        scenes.forEachIndexed { index, rawScene -> validateScene(rawScene, index, seenIds) }
+        (scenes + generatedScenes).forEachIndexed { index, rawScene -> validateScene(rawScene, index, seenIds) }
 
-        collectReferencedPaths(sceneData)
+        collectReferencedPaths(mergedRoot)
 
         val missing = referencedPaths
             .filterNot(::pathExists)
@@ -810,6 +1025,11 @@ tasks.register("pipelineSceneDashboard") {
             targetRoot.deleteRecursively()
         }
         sourceRoot.copyRecursively(targetRoot, overwrite = true)
+        if (generatedRoot.resolve("artifacts").isDirectory) {
+            generatedRoot.resolve("artifacts").copyRecursively(targetRoot.resolve("artifacts"), overwrite = true)
+        }
+        targetRoot.resolve("data").mkdirs()
+        targetRoot.resolve("data/scenes.json").writeText(JsonOutput.prettyPrint(JsonOutput.toJson(mergedRoot)) + "\n")
         logger.lifecycle("Wrote WGSL scene dashboard: ${targetRoot.resolve("index.html").relativeTo(rootDir)}")
     }
 }
