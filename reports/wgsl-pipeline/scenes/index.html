@@ -179,6 +179,10 @@
         <b>Status</b>
         <span><code>pass</code> means artifacts are attached. <code>tracked-gap</code> means at least one backend is visible but missing a render capture. <code>expected-unsupported</code> must include a stable reason.</span>
       </article>
+      <article class="card">
+        <b>Performance</b>
+        <span>CPU/GPU performance trend fields are optional in M40-A. Missing trend data is shown as <code>unavailable</code> until measured CPU/GPU runs populate timings, counters, baselines, and regression labels.</span>
+      </article>
     </section>
 
     <section id="scenes" class="scene-grid" aria-live="polite"></section>
@@ -196,6 +200,15 @@
 
     function text(value, fallback = 'unavailable') {
       return value === undefined || value === null || value === '' ? fallback : String(value);
+    }
+
+    function performanceText(lane) {
+      if (!lane || !lane.performanceTrend) return 'unavailable';
+      const trend = lane.performanceTrend;
+      if (trend.status === 'unavailable') return `unavailable (${text(trend.reason)})`;
+      const timing = trend.timing || {};
+      const regression = trend.regression || {};
+      return `${text(trend.status)} median=${text(timing.medianMs)}ms p95=${text(timing.p95Ms)}ms samples=${text(trend.sampleCount)} regression=${text(regression.label, 'unknown')}`;
     }
 
     function artifactItems(scene) {
@@ -224,6 +237,8 @@
           <p>CPU route: <code>${text(cpuRoute)}</code></p>
           <p>GPU route: <code>${text(gpuRoute)}</code></p>
           <p>GPU fallback: <code>${text(fallback, 'none')}</code></p>
+          <p>CPU perf: <code>${performanceText(scene.cpu)}</code></p>
+          <p>GPU perf: <code>${performanceText(scene.gpu)}</code></p>
           <ul class="artifact-list">${artifactItems(scene) || '<li>No artifacts declared</li>'}</ul>
         </article>
       `;
