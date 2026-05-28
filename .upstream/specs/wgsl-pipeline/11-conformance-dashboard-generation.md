@@ -176,6 +176,58 @@ build/reports/wgsl-pipeline-scenes/
 Additional raw files may be linked from `evidence`, but the dashboard must keep
 the canonical artifact names stable when a file exists.
 
+## Generated Exporter Contract
+
+`pipelineGeneratedSceneExport` materializes generated scene result rows before
+the dashboard is rendered. The task reads:
+
+```text
+reports/wgsl-pipeline/scenes/generated/results.json
+```
+
+and writes:
+
+```text
+build/reports/wgsl-pipeline-generated-scenes/
+  data/generated-scenes.json
+  artifacts/<scene-id>/...
+```
+
+The manifest uses this shape:
+
+```json
+{
+  "schemaVersion": 1,
+  "generatedBy": "pipelineGeneratedSceneExport",
+  "scenes": [
+    { "...": "normalized dashboard scene row" }
+  ]
+}
+```
+
+Each generated scene row must:
+
+- use `generation.mode=generated` or `generation.mode=mixed`;
+- set `generation.artifactRoot` to `artifacts/<scene-id>`;
+- include producer, commit, schema, and source task/test/report traceability;
+- expose non-empty raw `evidence` links;
+- reference canonical artifact paths under `artifacts/<scene-id>/`.
+
+The exporter fails before dashboard rendering when a generated row references a
+missing artifact, report, or data file. The error must include both the scene id
+and the JSON field path, for example:
+
+```text
+bitmap-rect-nearest: missing generated artifact for `cpu.image`
+```
+
+`pipelineSceneDashboard` depends on the exporter, merges generated rows with the
+static `data/scenes.json` rows, validates the combined set, copies generated
+artifacts into `build/reports/wgsl-pipeline-scenes/`, and writes the final merged
+`data/scenes.json`. Duplicate scene ids are rejected, so converting a static row
+to generated evidence must remove or replace the static row in the source
+registry.
+
 ## Reference Policy
 
 References must be explicit:

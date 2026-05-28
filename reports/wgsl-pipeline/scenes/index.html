@@ -454,6 +454,7 @@
       if (scene.gpu) paths.push(scene.gpu.image, scene.gpu.diff, scene.gpu.performanceTrend && scene.gpu.performanceTrend.rawMetrics);
       if (scene.diffs) paths.push(scene.diffs.cpu, scene.diffs.gpu);
       if (scene.routeDiagnostics) paths.push(scene.routeDiagnostics.cpu, scene.routeDiagnostics.gpu);
+      if (scene.generation) paths.push(scene.generation.sourceReport);
       if (Array.isArray(scene.evidence)) paths.push(...scene.evidence);
       return paths.filter(Boolean).map((path) => `<li><code>${path}</code></li>`).join('');
     }
@@ -577,6 +578,10 @@
       const cpuRoute = scene.cpu && scene.cpu.route ? scene.cpu.route.selectedRoute : undefined;
       const gpuRoute = scene.gpu && scene.gpu.route ? (scene.gpu.route.coverageStrategy || scene.gpu.route.selectedRoute) : undefined;
       const fallback = scene.gpu && scene.gpu.route ? scene.gpu.route.fallbackReason : undefined;
+      const generation = scene.generation || {};
+      const generationText = generation.mode
+        ? `${text(generation.mode)} via ${text(generation.producer)}`
+        : 'static';
       return `
         <article class="scene-card">
           <b>${text(scene.id)}</b>
@@ -588,6 +593,8 @@
           <p>CPU route: <code>${text(cpuRoute)}</code></p>
           <p>GPU route: <code>${text(gpuRoute)}</code></p>
           <p>GPU fallback: <code>${text(fallback, 'none')}</code></p>
+          <p>Generation: <code>${generationText}</code></p>
+          <p>Raw source: <code>${text(generation.sourceTest || generation.sourceTask || generation.sourceReport)}</code></p>
           <p>CPU perf: <code>${performanceText(scene.cpu)}</code></p>
           <p>GPU perf: <code>${performanceText(scene.gpu)}</code></p>
           ${visualPanels(scene)}
