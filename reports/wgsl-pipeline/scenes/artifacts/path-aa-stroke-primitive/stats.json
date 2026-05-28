@@ -1,0 +1,32 @@
+{
+  "sceneId": "path-aa-stroke-primitive",
+  "representative": "StrokeCircleGM",
+  "status": "pass",
+  "pixels": 270400,
+  "gpu": {
+    "similarity": 91.81,
+    "matchingPixels": 248258,
+    "maxChannelDelta": 169,
+    "threshold": 91.76
+  },
+  "cpu": {
+    "similarity": 90.21,
+    "matchingPixels": 243919,
+    "maxChannelDelta": 75,
+    "threshold": 90.00
+  },
+  "family": {
+    "StrokeRectGM": {
+      "gpuSimilarity": 95.96,
+      "gpuThreshold": 95.91,
+      "rasterSimilarity": 93.64,
+      "rasterThreshold": 93.50
+    },
+    "StrokeCircleGM": {
+      "gpuSimilarity": 91.81,
+      "gpuThreshold": 91.76,
+      "rasterSimilarity": 90.21,
+      "rasterThreshold": 90.00
+    }
+  }
+}
