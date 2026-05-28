@@ -1,0 +1,29 @@
+{
+  "sceneId": "bitmap-shader-local-matrix",
+  "lane": "GPU",
+  "status": "estimated",
+  "sampleCount": 30,
+  "timing": {
+    "medianMs": 0.066,
+    "p95Ms": 0.092
+  },
+  "counters": {
+    "routeInvocations": 1,
+    "pipelineCacheHits": 29,
+    "pipelineCacheMisses": 1,
+    "bindGroupCount": 1,
+    "resourceBytes": 1024
+  },
+  "baseline": {
+    "name": "m40-gpu-cache-static-seed",
+    "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+  },
+  "regression": {
+    "label": "unknown"
+  },
+  "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
+  "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+  "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
+  "route": "webgpu.shader.bitmap.local-matrix",
+  "rawMetrics": "artifacts/bitmap-shader-local-matrix/gpu-performance.json"
+}

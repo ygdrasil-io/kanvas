@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "title": "Kanvas WGSL pipeline scene evidence",
   "milestone": "M39",
-  "status": "m40-cpu-performance-metrics-seeded",
+  "status": "m40-gpu-performance-cache-metrics-seeded",
   "generatedBy": "pipelineSceneDashboard",
   "sceneContract": {
     "requiredFields": [
@@ -306,6 +306,33 @@
           "threshold": 99.95,
           "backend": "WebGPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.LinearGradientRectTest --tests '*GeneratedLinearGradientWgslTest'"
+        },
+        "performanceTrend": {
+          "status": "estimated",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.09,
+            "p95Ms": 0.128
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pipelineCacheHits": 29,
+            "pipelineCacheMisses": 1,
+            "bindGroupCount": 1,
+            "resourceBytes": 4096
+          },
+          "baseline": {
+            "name": "m40-gpu-cache-static-seed",
+            "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
+          "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+          "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
+          "route": "webgpu.generated.linear-gradient.rect",
+          "rawMetrics": "artifacts/linear-gradient-rect/gpu-performance.json"
         }
       },
       "diffs": {
@@ -398,6 +425,33 @@
           "threshold": 99.95,
           "backend": "WebGPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BlendModeTest --tests org.skia.gpu.webgpu.TranslucentSrcOverTest"
+        },
+        "performanceTrend": {
+          "status": "estimated",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.075,
+            "p95Ms": 0.111
+          },
+          "counters": {
+            "routeInvocations": 2,
+            "pipelineCacheHits": 58,
+            "pipelineCacheMisses": 2,
+            "bindGroupCount": 2,
+            "resourceBytes": 4096
+          },
+          "baseline": {
+            "name": "m40-gpu-cache-static-seed",
+            "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
+          "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+          "pipelineKey": "state=[blendMode=kSrc] + state=[blendMode=kSrcOver] fixedFunctionBlend",
+          "route": "webgpu.blend.src-over.fixed-function",
+          "rawMetrics": "artifacts/src-over-stack/gpu-performance.json"
         }
       },
       "diffs": {
@@ -490,6 +544,33 @@
           "threshold": 99.95,
           "backend": "WebGPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"
+        },
+        "performanceTrend": {
+          "status": "estimated",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.105,
+            "p95Ms": 0.15
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pipelineCacheHits": 29,
+            "pipelineCacheMisses": 1,
+            "bindGroupCount": 1,
+            "resourceBytes": 4096
+          },
+          "baseline": {
+            "name": "m40-gpu-cache-static-seed",
+            "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
+          "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+          "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+          "route": "webgpu.runtime-effect.descriptor.simple_rt",
+          "rawMetrics": "artifacts/runtime-effect-simple/gpu-performance.json"
         }
       },
       "diffs": {
@@ -582,6 +663,33 @@
           "threshold": 80.0,
           "backend": "WebGPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest"
+        },
+        "performanceTrend": {
+          "status": "estimated",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 1.72,
+            "p95Ms": 2.24
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pipelineCacheHits": 29,
+            "pipelineCacheMisses": 1,
+            "bindGroupCount": 2,
+            "resourceBytes": 131072
+          },
+          "baseline": {
+            "name": "m40-gpu-cache-static-seed",
+            "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
+          "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+          "pipelineKey": "clipOp=kDifference shape=rect+rrect maskFilter=blur",
+          "route": "webgpu.coverage.clip-difference.analytic-rrect-mask",
+          "rawMetrics": "artifacts/clip-rect-difference/gpu-performance.json"
         }
       },
       "diffs": {
@@ -674,6 +782,33 @@
           "threshold": 99.95,
           "backend": "WebGPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderRotatedTest"
+        },
+        "performanceTrend": {
+          "status": "estimated",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.066,
+            "p95Ms": 0.092
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pipelineCacheHits": 29,
+            "pipelineCacheMisses": 1,
+            "bindGroupCount": 1,
+            "resourceBytes": 1024
+          },
+          "baseline": {
+            "name": "m40-gpu-cache-static-seed",
+            "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
+          "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+          "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
+          "route": "webgpu.shader.bitmap.local-matrix",
+          "rawMetrics": "artifacts/bitmap-shader-local-matrix/gpu-performance.json"
         }
       },
       "diffs": {
