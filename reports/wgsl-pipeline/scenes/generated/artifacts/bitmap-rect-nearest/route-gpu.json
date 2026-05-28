@@ -1,0 +1,11 @@
+{
+  "sceneId": "bitmap-rect-nearest",
+  "backend": "WebGPU",
+  "drawKind": "DrawBitmapRectSkbug4734WebGpuTest",
+  "status": "pass",
+  "coverageStrategy": "webgpu.image-rect.strict-nearest",
+  "pipelineKey": "imageRect.strictNearest.promotedSmoke",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-27-m32-image-rect-smoke-promotion.md"
+}

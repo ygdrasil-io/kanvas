@@ -1,6 +1,88 @@
 {
   "schemaVersion": 1,
   "generatedBy": "pipelineGeneratedSceneExport",
-  "description": "Generated scene rows land here before pipelineSceneDashboard merges them with static rows. Empty in GRA-197; M41-C and later tickets populate concrete generated evidence rows.",
-  "scenes": []
+  "description": "Generated scene rows materialized before pipelineSceneDashboard merges them with static dashboard rows.",
+  "scenes": [
+    {
+      "id": "bitmap-rect-nearest",
+      "title": "Bitmap rect nearest sampling",
+      "priority": "P0",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-28-m41-bitmap-rect-nearest-generated-evidence.md",
+      "referenceKind": "skia-upstream",
+      "reference": "artifacts/bitmap-rect-nearest/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/bitmap-rect-nearest/cpu.png",
+        "diff": "artifacts/bitmap-rect-nearest/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "AnalyticRect(image-rect-destination,aa=false)",
+          "selectedRoute": "cpu.image-rect.strict-nearest",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "M32 accepted artifact reuse from DrawBitmapRectSkbug4734 raster oracle"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/bitmap-rect-nearest/gpu.png",
+        "diff": "artifacts/bitmap-rect-nearest/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.image-rect.strict-nearest",
+          "pipelineKey": "imageRect.strictNearest.promotedSmoke",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuSmokeTest --tests org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/bitmap-rect-nearest/cpu-diff.png",
+        "gpu": "artifacts/bitmap-rect-nearest/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/bitmap-rect-nearest/route-cpu.json",
+        "gpu": "artifacts/bitmap-rect-nearest/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 4096,
+        "matchingPixels": 4096,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m41-bitmap-rect-nearest-generated-evidence.md",
+        "reports/wgsl-pipeline/2026-05-28-m36-bitmap-rect-nearest-scene.md",
+        "reports/wgsl-pipeline/2026-05-27-m32-drawbitmaprect-skbug4734-resolution.md",
+        "reports/wgsl-pipeline/2026-05-27-m32-image-rect-smoke-promotion.md",
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/DrawBitmapRectSkbug4734WebGpuTest.kt"
+      ],
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:gpuSmokeTest",
+        "sourceTest": "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-27-m32-drawbitmaprect-skbug4734-resolution.md",
+        "commit": "5608f99c0526e3a934f66a2fda67b14a0ea99add",
+        "artifactRoot": "artifacts/bitmap-rect-nearest",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-198"
+      }
+    }
+  ]
 }
