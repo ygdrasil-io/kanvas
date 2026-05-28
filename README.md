@@ -22,6 +22,8 @@ Active execution source:
 - Linear project: [Kanvas - WGSL Pipeline Target](https://linear.app/forge-yg/project/kanvas-wgsl-pipeline-target-ef9e97757caa)
 - Sprint closeout: [reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md](reports/wgsl-pipeline/2026-05-28-m33-m35-sprint-report.md)
 - Architecture target: [.upstream/target/high-performance-wgsl-pipeline-target.md](.upstream/target/high-performance-wgsl-pipeline-target.md)
+- Post-MVP big target: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
+- Post-MVP conformance backlog: [.upstream/target/post-mvp-conformance-backlog.md](.upstream/target/post-mvp-conformance-backlog.md)
 - Linear/agent methodology: [.upstream/target/linear-agent-methodology.md](.upstream/target/linear-agent-methodology.md)
 
 | Block | Scope | Status | Weight | Progress | MVP evidence gate |
@@ -69,6 +71,42 @@ Non-goals for the MVP:
 - rebuilding Skia's SkSL compiler, IR, or VM;
 - hiding GPU inventory failures by lowering floors in bulk;
 - adding short-lived font or codec substitutes for dependency-gated gaps.
+
+## Post-MVP Big Target
+
+The MVP is complete. The next target is the Kanvas Rendering Conformance &
+Performance Platform: a generated evidence system that turns CPU/GPU rendering
+tests into PM-readable and engineering-actionable proof.
+
+Current scene dashboard:
+
+- source: [reports/wgsl-pipeline/scenes/](reports/wgsl-pipeline/scenes/)
+- export task: `rtk ./gradlew --no-daemon pipelineSceneDashboard`
+- generated output: `build/reports/wgsl-pipeline-scenes/index.html`
+- target doc: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
+
+Current dashboard evidence after M40:
+
+| Signal | Count | Meaning |
+|---|---:|---|
+| Scene rows | 11 | P0, Path AA boundary, image-filter pre-pass, and selected P1 route-convergence scenes. |
+| `pass` | 7 | Reference, CPU, GPU, diff, stats, and route evidence exist for the selected scene. |
+| `tracked-gap` | 2 | Route evidence exists, but required adapter-backed GPU capture is missing. |
+| `expected-unsupported` | 2 | GPU intentionally refuses the scene with a stable fallback reason. |
+| `fail` | 0 | No dashboard row is currently a failing support claim. |
+| CPU/GPU perf `estimated` | 5 each | Static performance seeds only; not benchmark gates. |
+
+Post-MVP milestones should focus on:
+
+- M41: generate dashboard rows from test outputs;
+- M42: close adapter-backed P0 GPU capture gaps;
+- M43: replace estimated metrics with measured CPU/GPU benchmarks;
+- M44: promote one narrow Path AA family to rendered GPU support;
+- M45: extend image-filter support to a bounded DAG subset.
+
+Support claims after the MVP require visible evidence: reference, CPU/GPU
+render or explicit refusal, diffs, stats, route diagnostics, and stable fallback
+policy. Static or estimated evidence must be labelled as such.
 
 ## Development Commands
 

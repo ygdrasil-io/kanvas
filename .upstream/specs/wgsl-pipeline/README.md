@@ -19,6 +19,10 @@ produces coverage, the paint pipeline consumes coverage.
   `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - Execution method:
   `.upstream/target/linear-agent-methodology.md`
+- Post-MVP conformance target:
+  `.upstream/target/rendering-conformance-performance-target.md`
+- Post-MVP conformance backlog:
+  `.upstream/target/post-mvp-conformance-backlog.md`
 - Linear project:
   `Kanvas - WGSL Pipeline Target`, milestones M0-M11
 - Geometry handoff:
@@ -90,6 +94,8 @@ Evidence:
 | `08-bitmap-image-rect-sampling.md` | M32 bitmap/image-rect strict sampling, smoke promotion, and closeout evidence. |
 | `09-image-filter-mvp-lane.md` | M34 image-filter MVP boundary plus M38 selected `Crop(kDecal, input = Offset(null))` child pre-pass promotion and remaining out-of-scope `Crop(input = nonNull)` limitations. |
 | `10-scene-evidence-dashboard.md` | M36 post-MVP scene dashboard with CPU/GPU renders, Skia/reference diffs, route diagnostics, and stats. |
+| `11-conformance-dashboard-generation.md` | M41 generated conformance dashboard contract for test-produced scene evidence. |
+| `12-benchmark-harness-and-performance-gates.md` | M43 benchmark harness and performance gate policy for measured CPU/GPU metrics. |
 
 Decision records live under `adr/`.
 
@@ -153,7 +159,9 @@ C4Container
 | M11 Migration batch 1 | GRA-29 | `07-validation-performance-and-migration.md` |
 | M32 Bitmap/ImageRect remediation | GRA-93 | `08-bitmap-image-rect-sampling.md` |
 | M34 Image-filter MVP lane | GRA-102 | `09-image-filter-mvp-lane.md` |
-| M36 Scene evidence dashboard | Proposed | `10-scene-evidence-dashboard.md` |
+| M36 Scene evidence dashboard | GRA-162 | `10-scene-evidence-dashboard.md` |
+| M41 Generated conformance dashboard | Proposed | `11-conformance-dashboard-generation.md` |
+| M43 Real benchmark harness | Proposed | `12-benchmark-harness-and-performance-gates.md` |
 
 ## Spec Acceptance Rules
 
