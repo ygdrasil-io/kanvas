@@ -85,24 +85,32 @@ Current scene dashboard:
 - generated output: `build/reports/wgsl-pipeline-scenes/index.html`
 - target doc: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
 
-Current dashboard evidence after M40:
+Current dashboard evidence after M45 and GRA-221:
 
 | Signal | Count | Meaning |
 |---|---:|---|
-| Scene rows | 11 | P0, Path AA boundary, image-filter pre-pass, and selected P1 route-convergence scenes. |
-| `pass` | 7 | Reference, CPU, GPU, diff, stats, and route evidence exist for the selected scene. |
-| `tracked-gap` | 2 | Route evidence exists, but required adapter-backed GPU capture is missing. |
+| Scene rows | 13 | Static and generated rows merged by `pipelineSceneDashboard`. |
+| `pass` | 11 | Reference, CPU, GPU, diff, stats, and route evidence exist for the selected scene. |
+| `tracked-gap` | 0 | P0 adapter-backed capture gaps were closed by M42 and GRA-222. |
 | `expected-unsupported` | 2 | GPU intentionally refuses the scene with a stable fallback reason. |
 | `fail` | 0 | No dashboard row is currently a failing support claim. |
-| CPU/GPU perf `estimated` | 5 each | Static performance seeds only; not benchmark gates. |
+| `maturity.generated-evidence` | 3 | M41 generated rows: bitmap rect, crop image-filter pre-pass, linear gradient. |
+| `maturity.static-evidence` | 10 | Reviewable static rows retained for families not yet generated. |
+| `maturity.adapter-backed` | 2 | P0 GPU captures on named adapter. |
+| CPU/GPU perf `measured` | 2 each | M43 benchmark payloads, reporting-only until CI gate policy is approved. |
 
-Post-MVP milestones should focus on:
+Closed post-MVP milestones:
 
-- M41: generate dashboard rows from test outputs;
-- M42: close adapter-backed P0 GPU capture gaps;
-- M43: replace estimated metrics with measured CPU/GPU benchmarks;
-- M44: promote one narrow Path AA family to rendered GPU support;
-- M45: extend image-filter support to a bounded DAG subset.
+- M41: generated dashboard rows from test outputs;
+- M42: closed adapter-backed P0 GPU capture gaps;
+- M43: replaced selected estimated metrics with measured CPU/GPU benchmarks;
+- M44: promoted one narrow Path AA family to rendered GPU support;
+- M45: extended image-filter support to a bounded DAG subset;
+- GRA-221: added scene tags, exact-tag filtering, tag search, and
+  feature/maturity/risk aggregates.
+
+Sprint review:
+[reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md](reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md)
 
 Support claims after the MVP require visible evidence: reference, CPU/GPU
 render or explicit refusal, diffs, stats, route diagnostics, and stable fallback
