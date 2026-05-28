@@ -339,6 +339,31 @@ class WebGpuCoveragePlanSelectorTest {
     }
 
     @Test
+    fun `stroke outline edge overflow emits narrower stable gpu diagnostic`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "stroke-outline-overflow",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 2,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET + 1,
+                strokeOutlineFallbackEnabled = true,
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
+        assertEquals(StandardCoverageReason.StrokeOutlineEdgeCountExceeded, selection.diagnostic?.reason)
+        assertEquals("coverage.stroke-outline-edge-count-exceeded", selection.diagnostic?.reason?.code)
+        assertEquals("webgpu.coverage.refuse", selection.routeIdentifier)
+        assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
+        assertTrue(
+            selection.diagnostic?.dump()
+                ?.contains("action=RefuseDiagnostic(coverage.stroke-outline-edge-count-exceeded)") == true,
+        )
+        assertTrue(selection.pipelineKeyDump().contains("code=[coverageKind=pathStrokeOutlineOverflow]"))
+    }
+
+    @Test
     fun `edge overflow can select explicit mask or atlas fallback when enabled`() {
         val selection = WebGpuCoveragePlanSelector.select(
             drawKind = "path-edge-overflow-mask",

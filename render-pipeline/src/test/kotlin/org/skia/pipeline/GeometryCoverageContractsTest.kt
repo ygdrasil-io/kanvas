@@ -25,6 +25,10 @@ class GeometryCoverageContractsTest {
         )
         assertEquals("coverage.stencil-cover-unavailable", StandardCoverageReason.StencilCoverUnavailable.code)
         assertEquals("coverage.edge-count-exceeded", StandardCoverageReason.EdgeCountExceeded.code)
+        assertEquals(
+            "coverage.stroke-outline-edge-count-exceeded",
+            StandardCoverageReason.StrokeOutlineEdgeCountExceeded.code,
+        )
         assertEquals("coverage.atlas-policy-unavailable", StandardCoverageReason.AtlasPolicyUnavailable.code)
         assertEquals(
             "coverage.arbitrary-aa-clip-unsupported",

@@ -62,6 +62,7 @@ public object GpuInventoryFailureReport {
 
     private val expectedUnsupportedReasonCatalog: LinkedHashMap<String, String?> = linkedMapOf(
         "coverage.edge-count-exceeded" to "GRA-70 (WebGPU coverage strategy promotion/fallback scope)",
+        "coverage.stroke-outline-edge-count-exceeded" to "GRA-178 (M37 stroke primitive overflow fallback scope)",
         "coverage.arbitrary-aa-clip-unsupported" to null,
         "coverage.alpha-mask-unsupported" to null,
         "coverage.span-runs-unsupported" to null,
