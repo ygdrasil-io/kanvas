@@ -349,7 +349,7 @@
       </article>
       <article class="card">
         <b>Status</b>
-        <span><code>pass</code> means artifacts are attached. <code>tracked-gap</code> means at least one backend is visible but missing a render capture. <code>expected-unsupported</code> must include a stable reason.</span>
+        <span><code>pass</code> means required artifacts meet the support threshold. <code>tracked-gap</code> means a backend route is visible but a capture, diff, threshold, or policy requirement is still unresolved. <code>expected-unsupported</code> must include a stable reason.</span>
       </article>
       <article class="card">
         <b>Performance</b>
@@ -381,7 +381,7 @@
         <dt>Fallback</dt>
         <dd><code>none</code> means the GPU lane rendered normally. Any other value is a stable diagnostic and must stay visible, especially for tracked gaps and expected unsupported rows.</dd>
         <dt>Tracked gap</dt>
-        <dd>The route is documented, but at least one required visual capture is missing. This is not counted as a pass.</dd>
+        <dd>The route is documented, but at least one required capture, diff, threshold, or policy condition is not satisfied. A blocker or follow-up should stay visible.</dd>
         <dt>Expected unsupported</dt>
         <dd>The scene is intentionally refused by the current GPU policy. It remains in the dashboard so breadth limits are visible instead of hidden.</dd>
       </dl>
@@ -495,6 +495,14 @@
       return scene.gpu && scene.gpu.route ? text(scene.gpu.route.fallbackReason, 'none') : 'none';
     }
 
+    function gpuBlocker(scene) {
+      return scene.gpu && scene.gpu.route ? text(scene.gpu.route.blockerReason, 'none') : 'none';
+    }
+
+    function gpuFollowUp(scene) {
+      return scene.gpu && scene.gpu.route ? text(scene.gpu.route.followUp, 'none') : 'none';
+    }
+
     function performanceStatus(scene) {
       const cpu = scene.cpu && scene.cpu.performanceTrend ? scene.cpu.performanceTrend.status : 'unavailable';
       const gpu = scene.gpu && scene.gpu.performanceTrend ? scene.gpu.performanceTrend.status : 'unavailable';
@@ -540,6 +548,8 @@
         cpuRoute,
         gpuRoute,
         gpuFallback(scene),
+        gpuBlocker(scene),
+        gpuFollowUp(scene),
       ].join(' ').toLowerCase();
       return haystack.includes(query.toLowerCase());
     }
@@ -578,6 +588,8 @@
       const cpuRoute = scene.cpu && scene.cpu.route ? scene.cpu.route.selectedRoute : undefined;
       const gpuRoute = scene.gpu && scene.gpu.route ? (scene.gpu.route.coverageStrategy || scene.gpu.route.selectedRoute) : undefined;
       const fallback = scene.gpu && scene.gpu.route ? scene.gpu.route.fallbackReason : undefined;
+      const blocker = scene.gpu && scene.gpu.route ? scene.gpu.route.blockerReason : undefined;
+      const followUp = scene.gpu && scene.gpu.route ? scene.gpu.route.followUp : undefined;
       const generation = scene.generation || {};
       const generationText = generation.mode
         ? `${text(generation.mode)} via ${text(generation.producer)}`
@@ -593,6 +605,8 @@
           <p>CPU route: <code>${text(cpuRoute)}</code></p>
           <p>GPU route: <code>${text(gpuRoute)}</code></p>
           <p>GPU fallback: <code>${text(fallback, 'none')}</code></p>
+          <p>GPU blocker: <code>${text(blocker, 'none')}</code></p>
+          <p>Follow-up: <code>${text(followUp, 'none')}</code></p>
           <p>Generation: <code>${generationText}</code></p>
           <p>Raw source: <code>${text(generation.sourceTest || generation.sourceTask || generation.sourceReport)}</code></p>
           <p>CPU perf: <code>${performanceText(scene.cpu)}</code></p>
