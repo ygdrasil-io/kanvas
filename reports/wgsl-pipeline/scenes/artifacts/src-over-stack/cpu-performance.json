@@ -1,26 +1,71 @@
 {
-  "sceneId": "src-over-stack",
-  "lane": "CPU",
-  "status": "estimated",
-  "sampleCount": 30,
-  "timing": {
-    "medianMs": 0.028,
-    "p95Ms": 0.039
-  },
-  "counters": {
-    "routeInvocations": 2,
-    "pixels": 4096,
-    "blendOps": 2,
-    "coveragePlanCount": 2
-  },
-  "baseline": {
-    "name": "m40-cpu-static-seed",
-    "commit": "97dcd3b23c66fa1c05711c23a6f0e20ae26e126c"
-  },
-  "regression": {
-    "label": "unknown"
-  },
-  "environment": "macOS local static dashboard seed; informational until native CPU benchmark harness lands",
-  "route": "cpu.blend.src-over-stack",
-  "rawMetrics": "artifacts/src-over-stack/cpu-performance.json"
+    "sceneId": "src-over-stack",
+    "lane": "CPU",
+    "status": "measured",
+    "command": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
+    "phase": "cpu-dashboard-row",
+    "sampleCount": 30,
+    "timing": {
+        "medianMs": 0.016708,
+        "p95Ms": 0.10075
+    },
+    "environment": {
+        "host": "Omega",
+        "os": "Mac OS X 26.5 aarch64",
+        "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+        "backend": "CPU scalar Kotlin dashboard benchmark",
+        "vector": "not used"
+    },
+    "counters": {
+        "routeInvocations": 2,
+        "pixels": 4096,
+        "blendOps": 2,
+        "coveragePlanCount": 2
+    },
+    "baseline": {
+        "name": "m43-cpu-measured-local",
+        "commit": "40eed32e0cbc5d3e0fac1f040fd14c4b8770a0b4"
+    },
+    "regression": {
+        "label": "unknown"
+    },
+    "gate": {
+        "mode": "reporting-only",
+        "reason": "M43 measured CPU metrics do not gate CI until budget and rollback policy exist"
+    },
+    "route": "cpu.blend.src-over-stack",
+    "rawMetrics": "artifacts/src-over-stack/cpu-performance.json",
+    "rawSamples": [
+        0.120833,
+        0.088375,
+        0.088583,
+        0.094375,
+        0.10075,
+        0.088375,
+        0.095625,
+        0.09075,
+        0.049541,
+        0.051417,
+        0.052833,
+        0.056916,
+        0.019208,
+        0.016667,
+        0.016708,
+        0.016334,
+        0.016208,
+        0.016166,
+        0.016375,
+        0.016083,
+        0.015875,
+        0.015833,
+        0.016084,
+        0.016083,
+        0.016416,
+        0.016167,
+        0.016375,
+        0.020875,
+        0.01625,
+        0.017875
+    ],
+    "checksum": -1665679360
 }

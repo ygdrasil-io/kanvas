@@ -718,6 +718,193 @@ tasks.register("pipelineGeneratedSceneExport") {
     }
 }
 
+tasks.register("pipelineMeasuredCpuPerformance") {
+    group = "verification"
+    description = "Writes measured CPU performanceTrend JSON for selected stable WGSL dashboard rows."
+
+    val outputRoot = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    outputs.files(
+        outputRoot.file("src-over-stack/cpu-performance.json"),
+        outputRoot.file("bitmap-shader-local-matrix/cpu-performance.json"),
+    )
+    outputs.upToDateWhen { false }
+
+    doLast {
+        data class CpuSceneBenchmark(
+            val sceneId: String,
+            val route: String,
+            val lane: String = "CPU",
+            val counters: Map<String, Number>,
+            val workload: () -> Int,
+        )
+
+        data class CpuMeasurement(
+            val samplesNs: List<Long>,
+            val checksum: Int,
+        ) {
+            val medianMs: Double = percentileMs(50.0)
+            val p95Ms: Double = percentileMs(95.0)
+
+            private fun percentileMs(percentile: Double): Double {
+                val sorted = samplesNs.sorted()
+                val index = kotlin.math.ceil((percentile / 100.0) * sorted.size).toInt()
+                    .coerceIn(1, sorted.size) - 1
+                return sorted[index] / 1_000_000.0
+            }
+        }
+
+        fun srcOver(src: Int, dst: Int): Int {
+            val sa = src ushr 24
+            val invSa = 255 - sa
+            val sr = (src ushr 16) and 0xff
+            val sg = (src ushr 8) and 0xff
+            val sb = src and 0xff
+            val da = dst ushr 24
+            val dr = (dst ushr 16) and 0xff
+            val dg = (dst ushr 8) and 0xff
+            val db = dst and 0xff
+            val a = sa + ((da * invSa + 127) / 255)
+            val r = sr + ((dr * invSa + 127) / 255)
+            val g = sg + ((dg * invSa + 127) / 255)
+            val b = sb + ((db * invSa + 127) / 255)
+            return (a.coerceAtMost(255) shl 24) or
+                (r.coerceAtMost(255) shl 16) or
+                (g.coerceAtMost(255) shl 8) or
+                b.coerceAtMost(255)
+        }
+
+        fun srcOverStackWorkload(): Int {
+            val width = 64
+            val pixels = IntArray(width * width)
+            val redSrc = 0x80ff0000.toInt()
+            val blueSrcOver = 0x800000ff.toInt()
+            for (y in 8 until 40) {
+                for (x in 8 until 40) {
+                    pixels[y * width + x] = redSrc
+                }
+            }
+            for (y in 16 until 48) {
+                for (x in 16 until 48) {
+                    val offset = y * width + x
+                    pixels[offset] = srcOver(blueSrcOver, pixels[offset])
+                }
+            }
+            return pixels.fold(0) { acc, value -> acc * 31 + value }
+        }
+
+        fun bitmapLocalMatrixWorkload(): Int {
+            val width = 32
+            val pixels = IntArray(width * width)
+            val bitmap = intArrayOf(
+                0xffff0000.toInt(), 0xff00ff00.toInt(), 0xff0000ff.toInt(), 0xffffffff.toInt(),
+                0xff00ff00.toInt(), 0xff0000ff.toInt(), 0xffffffff.toInt(), 0xffff0000.toInt(),
+                0xff0000ff.toInt(), 0xffffffff.toInt(), 0xffff0000.toInt(), 0xff00ff00.toInt(),
+                0xffffffff.toInt(), 0xffff0000.toInt(), 0xff00ff00.toInt(), 0xff0000ff.toInt(),
+            )
+            for (y in 10 until 14) {
+                for (x in 10 until 14) {
+                    val localX = x - 12
+                    val localY = y - 12
+                    val sampleX = ((localX - localY + 8) and 3)
+                    val sampleY = ((localX + localY + 8) and 3)
+                    val offset = y * width + x
+                    pixels[offset] = srcOver(bitmap[sampleY * 4 + sampleX], pixels[offset])
+                }
+            }
+            return pixels.fold(0) { acc, value -> acc * 31 + value }
+        }
+
+        fun measure(samples: Int, warmups: Int, workload: () -> Int): CpuMeasurement {
+            var checksum = 0
+            repeat(warmups) { checksum = checksum xor workload() }
+            val timings = LongArray(samples)
+            repeat(samples) { index ->
+                val start = System.nanoTime()
+                checksum = checksum xor workload()
+                timings[index] = System.nanoTime() - start
+            }
+            return CpuMeasurement(timings.toList(), checksum)
+        }
+
+        fun fmt(value: Double): Double = String.format(java.util.Locale.US, "%.6f", value).toDouble()
+
+        val sampleCount = (findProperty("kanvas.cpu.performance.samples") as? String)?.toIntOrNull() ?: 30
+        val warmups = (findProperty("kanvas.cpu.performance.warmups") as? String)?.toIntOrNull() ?: 5
+        val command = "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance"
+        val baselineCommit = providers.exec {
+            commandLine("git", "rev-parse", "HEAD")
+        }.standardOutput.asText.get().trim()
+        val environment = mapOf(
+            "host" to java.net.InetAddress.getLocalHost().hostName,
+            "os" to "${System.getProperty("os.name")} ${System.getProperty("os.version")} ${System.getProperty("os.arch")}",
+            "jdk" to "${System.getProperty("java.runtime.version")} (${System.getProperty("java.vendor")})",
+            "backend" to "CPU scalar Kotlin dashboard benchmark",
+            "vector" to "not used",
+        )
+        val benchmarks = listOf(
+            CpuSceneBenchmark(
+                sceneId = "src-over-stack",
+                route = "cpu.blend.src-over-stack",
+                counters = mapOf(
+                    "routeInvocations" to 2,
+                    "pixels" to 4096,
+                    "blendOps" to 2,
+                    "coveragePlanCount" to 2,
+                ),
+                workload = ::srcOverStackWorkload,
+            ),
+            CpuSceneBenchmark(
+                sceneId = "bitmap-shader-local-matrix",
+                route = "cpu.shader.bitmap.local-matrix",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pixels" to 1024,
+                    "bitmapSamples" to 16,
+                    "coveragePlanCount" to 1,
+                ),
+                workload = ::bitmapLocalMatrixWorkload,
+            ),
+        )
+
+        benchmarks.forEach { benchmark ->
+            val measurement = measure(sampleCount, warmups, benchmark.workload)
+            val payload = linkedMapOf(
+                "sceneId" to benchmark.sceneId,
+                "lane" to benchmark.lane,
+                "status" to "measured",
+                "command" to command,
+                "phase" to "cpu-dashboard-row",
+                "sampleCount" to sampleCount,
+                "timing" to mapOf(
+                    "medianMs" to fmt(measurement.medianMs),
+                    "p95Ms" to fmt(measurement.p95Ms),
+                ),
+                "environment" to environment,
+                "counters" to benchmark.counters,
+                "baseline" to mapOf(
+                    "name" to "m43-cpu-measured-local",
+                    "commit" to baselineCommit,
+                ),
+                "regression" to mapOf(
+                    "label" to "unknown",
+                ),
+                "gate" to mapOf(
+                    "mode" to "reporting-only",
+                    "reason" to "M43 measured CPU metrics do not gate CI until budget and rollback policy exist",
+                ),
+                "route" to benchmark.route,
+                "rawMetrics" to "artifacts/${benchmark.sceneId}/cpu-performance.json",
+                "rawSamples" to measurement.samplesNs.map { it / 1_000_000.0 },
+                "checksum" to measurement.checksum,
+            )
+            val output = outputRoot.file("${benchmark.sceneId}/cpu-performance.json").asFile
+            output.parentFile.mkdirs()
+            output.writeText(JsonOutput.prettyPrint(JsonOutput.toJson(payload)) + "\n")
+            logger.lifecycle("Wrote measured CPU performance payload: ${output.relativeTo(rootDir)}")
+        }
+    }
+}
+
 tasks.register("pipelineSceneDashboard") {
     group = "verification"
     description = "Validates and exports the mixed static/generated WGSL pipeline scene evidence dashboard."
