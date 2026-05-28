@@ -1,0 +1,28 @@
+{
+  "sceneId": "linear-gradient-rect",
+  "dimensions": {
+    "width": 64,
+    "height": 64
+  },
+  "pixels": 4096,
+  "cpuMatchingPixels": 4096,
+  "gpuMatchingPixels": 4096,
+  "matchingPixels": 4096,
+  "cpuSimilarity": 100.0,
+  "gpuSimilarity": 100.0,
+  "maxChannelDelta": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "cpuMaxChannelDelta": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "threshold": 99.95,
+  "backend": "WebGPU",
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.LinearGradientRectTest --tests '*GeneratedLinearGradientWgslTest'"
+}
