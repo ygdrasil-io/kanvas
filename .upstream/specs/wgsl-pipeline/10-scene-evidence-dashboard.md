@@ -181,6 +181,14 @@ At minimum each rendered backend records:
 Render time may be absent in M36. If present, it must include host, JDK, backend,
 and warm/cold run context.
 
+M40 adds optional `performanceTrend` fields for CPU/GPU scene lanes. Missing
+fields render as `unavailable`. Static seed metrics use `status=estimated` and
+`regression.label=unknown`; they are dashboard evidence, not regression gates,
+until a native benchmark exporter writes measured host/JDK/adapter baselines.
+
+M40 closeout evidence lives in
+`reports/wgsl-pipeline/2026-05-28-m40-performance-regression-closeout.md`.
+
 ## Validation
 
 M36 is complete when:

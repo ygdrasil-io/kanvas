@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "title": "Kanvas WGSL pipeline scene evidence",
-  "milestone": "M39",
-  "status": "m40-gpu-performance-cache-metrics-seeded",
+  "milestone": "M40",
+  "status": "m40-performance-regression-dashboard-closeout",
   "generatedBy": "pipelineSceneDashboard",
   "sceneContract": {
     "requiredFields": [
