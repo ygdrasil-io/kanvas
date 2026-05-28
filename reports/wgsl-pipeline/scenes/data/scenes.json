@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "title": "Kanvas WGSL pipeline scene evidence",
   "milestone": "M39",
-  "status": "m39-route-convergence-p1-runtime-clip-localmatrix",
+  "status": "m40-performance-trend-schema-ready",
   "generatedBy": "pipelineSceneDashboard",
   "sceneContract": {
     "requiredFields": [
@@ -28,7 +28,35 @@
       "P1",
       "P2"
     ],
-    "gpuUnsupportedPolicy": "A GPU row with status=expected-unsupported must keep the gpu section and provide a stable non-none gpu.route.fallbackReason."
+    "gpuUnsupportedPolicy": "A GPU row with status=expected-unsupported must keep the gpu section and provide a stable non-none gpu.route.fallbackReason.",
+    "performanceTrendPolicy": "CPU/GPU performanceTrend is optional in M40-A. Missing fields render as unavailable; when present, status=unavailable requires reason, and measured/estimated entries require sampleCount, timing medianMs/p95Ms, counters, baseline metadata, and regression label.",
+    "optionalPerformanceTrendFields": {
+      "status": [
+        "unavailable",
+        "measured",
+        "estimated"
+      ],
+      "requiredWhenUnavailable": [
+        "reason"
+      ],
+      "requiredWhenMeasured": [
+        "sampleCount",
+        "timing.medianMs",
+        "timing.p95Ms",
+        "counters",
+        "baseline.name",
+        "baseline.commit",
+        "regression.label"
+      ],
+      "counterExamples": [
+        "routeInvocations",
+        "coveragePlanCount",
+        "pipelineCacheHits",
+        "pipelineCacheMisses",
+        "bindGroupCount",
+        "resourceBytes"
+      ]
+    }
   },
   "scenes": [
     {

@@ -657,6 +657,45 @@ tasks.register("pipelineSceneDashboard") {
             requireString(sceneId, stats, "command", "$fieldPrefix.stats.command")
         }
 
+        fun validatePerformanceTrend(sceneId: String, owner: Map<*, *>, fieldPrefix: String) {
+            val trendValue = owner["performanceTrend"] ?: return
+            if (trendValue !is Map<*, *>) {
+                missingField(sceneId, "$fieldPrefix.performanceTrend")
+                return
+            }
+            val status = requireString(sceneId, trendValue, "status", "$fieldPrefix.performanceTrend.status")
+            if (status != null && status !in setOf("unavailable", "measured", "estimated")) {
+                validationErrors += "$sceneId: unknown `$fieldPrefix.performanceTrend.status` '$status'"
+            }
+            if (status == "unavailable") {
+                requireString(sceneId, trendValue, "reason", "$fieldPrefix.performanceTrend.reason")
+                return
+            }
+
+            requireNumber(sceneId, trendValue, "sampleCount", "$fieldPrefix.performanceTrend.sampleCount")
+            val timing = requireMap(sceneId, trendValue, "timing", "$fieldPrefix.performanceTrend.timing")
+            if (timing != null) {
+                requireNumber(sceneId, timing, "medianMs", "$fieldPrefix.performanceTrend.timing.medianMs")
+                requireNumber(sceneId, timing, "p95Ms", "$fieldPrefix.performanceTrend.timing.p95Ms")
+            }
+            val counters = requireMap(sceneId, trendValue, "counters", "$fieldPrefix.performanceTrend.counters")
+            if (counters != null && counters.isEmpty()) {
+                validationErrors += "$sceneId: `$fieldPrefix.performanceTrend.counters` must not be empty when performance data is measured"
+            }
+            val baseline = requireMap(sceneId, trendValue, "baseline", "$fieldPrefix.performanceTrend.baseline")
+            if (baseline != null) {
+                requireString(sceneId, baseline, "name", "$fieldPrefix.performanceTrend.baseline.name")
+                requireString(sceneId, baseline, "commit", "$fieldPrefix.performanceTrend.baseline.commit")
+            }
+            val regression = requireMap(sceneId, trendValue, "regression", "$fieldPrefix.performanceTrend.regression")
+            if (regression != null) {
+                val label = requireString(sceneId, regression, "label", "$fieldPrefix.performanceTrend.regression.label")
+                if (label != null && label !in setOf("none", "improved", "regressed", "unknown")) {
+                    validationErrors += "$sceneId: unknown `$fieldPrefix.performanceTrend.regression.label` '$label'"
+                }
+            }
+        }
+
         fun requireRoute(sceneId: String, owner: Map<*, *>, fieldPrefix: String) {
             val route = requireMap(sceneId, owner, "route") ?: return
             val hasSelectedRoute = route["selectedRoute"] is String && (route["selectedRoute"] as String).isNotBlank()
@@ -702,6 +741,7 @@ tasks.register("pipelineSceneDashboard") {
                 requireString(sceneId, cpu, "diff", "cpu.diff")
                 requireRoute(sceneId, cpu, "cpu")
                 requireStats(sceneId, cpu, "cpu")
+                validatePerformanceTrend(sceneId, cpu, "cpu")
             }
 
             if (gpu != null) {
@@ -719,6 +759,7 @@ tasks.register("pipelineSceneDashboard") {
                     requireString(sceneId, gpu, "image", "gpu.image")
                     requireString(sceneId, gpu, "diff", "gpu.diff")
                     requireStats(sceneId, gpu, "gpu")
+                    validatePerformanceTrend(sceneId, gpu, "gpu")
                 }
                 if (route != null) {
                     requireRoute(sceneId, gpu, "gpu")
