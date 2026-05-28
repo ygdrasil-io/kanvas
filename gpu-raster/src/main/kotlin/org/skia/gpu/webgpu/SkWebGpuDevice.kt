@@ -7917,6 +7917,7 @@ public class SkWebGpuDevice(
      * solid-color rect fills, the most common case.
      */
     private var activeClipShape: SkClipShape? = null
+    private var strokeOutlineOverflowFallbackDepth: Int = 0
 
     override fun setActiveClipShape(shape: SkClipShape?) {
         activeClipShape = shape
@@ -9618,6 +9619,20 @@ public class SkWebGpuDevice(
         drawFillRect(SkRect.MakeLTRB(r,     t + 1, r + 1, b),     clip, paint) // right
     }
 
+    private fun SkPath.isRectStrokeOutlineForFallback(): Boolean {
+        var moveCount = 0
+        var closeCount = 0
+        for (verb in verbs) {
+            when (verb) {
+                SkPath.Verb.kMove -> moveCount++
+                SkPath.Verb.kClose -> closeCount++
+                SkPath.Verb.kLine -> Unit
+                else -> return false
+            }
+        }
+        return moveCount == 2 && closeCount == 2
+    }
+
     override fun drawPaint(ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
         // G3.2 — drawPaint = fill the entire clip with the paint. Route
         // through drawRect so all of G2.1/G2.2/G2.3a/G3.1 logic (alpha,
@@ -10039,7 +10054,19 @@ public class SkWebGpuDevice(
             }
             val outline = SkStroker.fromPaint(strokerPaint, resScale).stroke(path)
             if (outline.isEmpty()) return
-            drawPath(outline, ctm, clip, fillPaint)
+            val deviceStrokeWidth = if (paint.strokeWidth <= 0f) 1f else paint.strokeWidth * resScale
+            val strokeOutlineOverflowFallback =
+                paint.isAntiAlias &&
+                    (
+                        (path.isOval() != null && deviceStrokeWidth >= 8f) ||
+                            (paint.strokeWidth <= 0f && path.isRectStrokeOutlineForFallback())
+                    )
+            if (strokeOutlineOverflowFallback) strokeOutlineOverflowFallbackDepth++
+            try {
+                drawPath(outline, ctm, clip, fillPaint)
+            } finally {
+                if (strokeOutlineOverflowFallback) strokeOutlineOverflowFallbackDepth--
+            }
             return
         }
 
@@ -10372,6 +10399,7 @@ public class SkWebGpuDevice(
                     isConvex = isSingleContourConvex,
                     contourCount = contourStarts.size,
                     edgeCount = n,
+                    strokeOutlineFallbackEnabled = strokeOutlineOverflowFallbackDepth > 0,
                 ),
             )
         }
