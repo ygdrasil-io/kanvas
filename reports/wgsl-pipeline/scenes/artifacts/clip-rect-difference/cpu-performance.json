@@ -1,0 +1,26 @@
+{
+  "sceneId": "clip-rect-difference",
+  "lane": "CPU",
+  "status": "estimated",
+  "sampleCount": 30,
+  "timing": {
+    "medianMs": 1.42,
+    "p95Ms": 1.87
+  },
+  "counters": {
+    "routeInvocations": 1,
+    "pixels": 131072,
+    "clipOps": 2,
+    "coveragePlanCount": 2
+  },
+  "baseline": {
+    "name": "m40-cpu-static-seed",
+    "commit": "97dcd3b23c66fa1c05711c23a6f0e20ae26e126c"
+  },
+  "regression": {
+    "label": "unknown"
+  },
+  "environment": "macOS local static dashboard seed; informational until native CPU benchmark harness lands",
+  "route": "cpu.coverage.clip-rect-difference",
+  "rawMetrics": "artifacts/clip-rect-difference/cpu-performance.json"
+}
