@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "pipelineGeneratedSceneExport",
+  "description": "Generated scene rows land here before pipelineSceneDashboard merges them with static rows. Empty in GRA-197; M41-C and later tickets populate concrete generated evidence rows.",
+  "scenes": []
+}
