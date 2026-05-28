@@ -90,10 +90,11 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | M43 | Real Benchmark Harness | CPU/GPU `performanceTrend` fields are written by benchmark runs with host/JDK/adapter metadata. |
 | M44 | First Real Path AA Family Promotion | One narrow Path AA family moves from expected unsupported to rendered GPU support with CPU/GPU/reference evidence. |
 | M45 | Image-Filter DAG Subset V1 | A bounded image-filter DAG subset renders through explicit pre-pass/layer contracts and dashboard evidence. |
+| M46 | Generated Evidence Expansion | Convert the next high-value static dashboard rows to generated evidence while keeping zero tracked gaps and zero failing support claims. |
 
 ## Current Baseline
 
-The M40 static dashboard has:
+The M40 static dashboard started with:
 
 - 11 scene rows;
 - 7 pass;
@@ -111,7 +112,23 @@ The two current `tracked-gap` P0 rows are:
 Both have route evidence but are missing adapter-backed GPU render captures in
 the current dashboard evidence.
 
-The two current expected unsupported rows are:
+After M45 and GRA-221, the merged dashboard export has:
+
+- 13 scene rows;
+- 11 pass;
+- 0 tracked-gap;
+- 2 expected-unsupported;
+- 0 fail;
+- 3 generated evidence rows;
+- 10 static evidence rows;
+- 2 adapter-backed P0 rows;
+- tag aggregates for `feature.*`, `maturity.*`, and `risk.*`.
+
+M46 starts from this post-M45 baseline. The target is to reduce
+`maturity.static-evidence` by converting already-supported rows to generated
+evidence, not by hiding static rows or weakening support rules.
+
+The two remaining expected unsupported rows are:
 
 - `path-aa-stroke-outline-fallback` with
   `coverage.stroke-outline-edge-count-exceeded`;

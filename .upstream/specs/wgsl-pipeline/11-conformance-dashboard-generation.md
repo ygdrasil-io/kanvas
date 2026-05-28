@@ -239,6 +239,32 @@ artifacts into `build/reports/wgsl-pipeline-scenes/`, and writes the final merge
 to generated evidence must remove or replace the static row in the source
 registry.
 
+## Static-To-Generated Promotion Policy
+
+Converting a static row to generated evidence is a support-evidence migration,
+not a feature promotion by itself. The generated row must preserve the selected
+scene contract before the static row is removed:
+
+- same scene id unless a deliberate rename is documented;
+- same or stricter `status`;
+- same `priority` and `referenceKind` unless the closeout explains why the
+  oracle changed;
+- same CPU and GPU selected route families, or a documented route improvement
+  with equivalent rendered evidence;
+- same threshold or stricter threshold;
+- same fallback reason semantics for unsupported rows;
+- all existing raw evidence that remains relevant linked from `evidence[]`;
+- tags updated from `source.static` / `maturity.static-evidence` to
+  `source.generated` / `maturity.generated-evidence`.
+
+Rows with measured performance payloads must keep links to the measured raw
+metrics when converted. Rows with adapter-backed GPU evidence must keep
+`maturity.adapter-backed` only when the generated GPU stats include a concrete
+adapter name.
+
+Every conversion closeout must state which static row was removed, which task
+now produces the row, and what command regenerates the artifacts.
+
 ## Reference Policy
 
 References must be explicit:
