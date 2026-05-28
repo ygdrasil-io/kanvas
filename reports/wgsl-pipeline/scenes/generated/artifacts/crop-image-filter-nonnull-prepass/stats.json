@@ -1,0 +1,17 @@
+{
+  "sceneId": "crop-image-filter-nonnull-prepass",
+  "dimensions": { "width": 640, "height": 200 },
+  "pixels": 128000,
+  "cpuMatchingPixels": 108644,
+  "gpuMatchingPixels": 125600,
+  "matchingPixels": 125600,
+  "cpuSimilarity": 84.88,
+  "gpuSimilarity": 98.13,
+  "maxChannelDelta": { "a": 0, "r": 38, "g": 107, "b": 110 },
+  "cpuMaxChannelDelta": { "a": 0, "r": 60, "g": 107, "b": 110 },
+  "threshold": 50.0,
+  "backend": "WebGPU",
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests '*SimpleOffsetImageFilterWebGpuTest' --tests '*SimpleOffsetImageFilterCrossBackendTest'",
+  "unsupportedImageFilterBefore": 2,
+  "unsupportedImageFilterAfter": 0
+}

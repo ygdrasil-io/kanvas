@@ -1,0 +1,13 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "crop-image-filter-nonnull-prepass",
+  "drawKind": "SimpleOffsetImageFilterGM",
+  "status": "pass",
+  "coverageStrategy": "webgpu.image-filter.crop-nonnull-offset-prepass",
+  "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+  "pipelineKey": "layerComposite.materializeChildPrePass + imageFilterCropUvRemap",
+  "fallbackReason": "none",
+  "intermediateTexture": "SkWebGpuDevice.cropNonNullOffsetChildPrePassScratch",
+  "test": "org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md"
+}
