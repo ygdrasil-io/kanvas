@@ -140,3 +140,19 @@ The measured CPU and GPU/cache rows created by GRA-207 and GRA-208 remain
 `reporting-only`. No required CI performance gate exists until a follow-up ticket
 adds explicit budget, host/JDK/backend/adapter eligibility, variance threshold,
 flake/quarantine handling, rollback rules, and a baseline owner.
+
+## M43 Outcome
+
+Closed on 2026-05-28 by `reports/wgsl-pipeline/2026-05-28-m43-real-benchmark-harness-closeout.md`.
+
+M43 produced measured benchmark payloads for two stable rows:
+
+| Scene | CPU | GPU/cache |
+|---|---|---|
+| `src-over-stack` | `measured`, baseline `m43-cpu-measured-local` | `measured`, baseline `m43-gpu-cache-measured-local`, adapter `Apple M2 Max` |
+| `bitmap-shader-local-matrix` | `measured`, baseline `m43-cpu-measured-local` | `measured`, baseline `m43-gpu-cache-measured-local`, adapter `Apple M2 Max` |
+
+All M43 measured metrics remain `reporting-only`; no required CI performance
+gate was added. Future gate activation requires explicit CI budget,
+host/JDK/backend/adapter eligibility, variance threshold, flake/quarantine
+handling, rollback rules, and a baseline owner.
