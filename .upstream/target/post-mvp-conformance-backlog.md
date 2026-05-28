@@ -107,3 +107,25 @@ Generated rows:
 - `linear-gradient-rect`
 
 M42 starts from two explicit P0 tracked gaps: `solid-rect` and `analytic-aa-convex`.
+
+## M42 Outcome
+
+Closed on 2026-05-28 by `reports/wgsl-pipeline/2026-05-28-m42-adapter-backed-p0-capture-closeout.md`.
+
+M42 attempted both P0 adapter-backed captures:
+
+| Scene | M41/M42 start | M42 result | Follow-up |
+|---|---|---|---|
+| `solid-rect` | `tracked-gap` | `pass` with adapter-backed WebGPU capture on Apple M2 Max, 100.0% similarity, `fallbackReason=none`. | None. |
+| `analytic-aa-convex` | `tracked-gap` | `tracked-gap` with adapter-backed WebGPU capture on Apple M2 Max, 90.6% similarity, `fallbackReason=none`, `edgeBudgetReason=not coverage.edge-count-exceeded`. | `GRA-222` owns the AA edge alpha oracle/render contract mismatch. |
+
+Final M42 dashboard state:
+
+| Signal | Count |
+|---|---:|
+| `pass` | 5 static rows, plus generated rows merged at export time |
+| `tracked-gap` | 1 static P0 row: `analytic-aa-convex` |
+| `expected-unsupported` | 2 |
+| `fail` | 0 |
+
+M43 can start measured benchmark work with `solid-rect` no longer blocked on an adapter-backed GPU capture. M44 must treat `analytic-aa-convex` as a tracked P0 oracle/policy gap until `GRA-222` resolves whether to regenerate the CPU oracle or adjust GPU AA compositing semantics.
