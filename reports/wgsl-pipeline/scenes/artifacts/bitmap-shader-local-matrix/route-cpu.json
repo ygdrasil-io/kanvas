@@ -1,0 +1,13 @@
+{
+  "backend": "CPU",
+  "sceneId": "bitmap-shader-local-matrix",
+  "drawKind": "BitmapShaderRotatedTest.rotatedLocalMatrixRect",
+  "status": "pass",
+  "selectedRoute": "cpu.shader.bitmap.local-matrix",
+  "coveragePlan": "AnalyticRect(10.0,10.0,14.0,14.0,aa=false)",
+  "sampling": "nearest",
+  "tileMode": "kClamp",
+  "localMatrix": "rotate(90deg, pivot=(2,2))",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.BitmapShaderRotatedTest#rotated localMatrix on axis-aligned rect rotates the bitmap pattern"
+}
