@@ -1,0 +1,13 @@
+{
+  "sceneId": "path-aa-stroke-primitive",
+  "representative": "StrokeCircleGM",
+  "backend": "CPU",
+  "status": "pass",
+  "coverageStrategy": "raster.reference-stroke-oracle",
+  "selectedRoute": "cpu.raster.path-aa-stroke-primitive-oracle",
+  "fallbackReason": "none",
+  "sourceTests": [
+    "org.skia.gpu.webgpu.crossbackend.StrokeRectCrossBackendTest",
+    "org.skia.gpu.webgpu.crossbackend.StrokeCircleCrossBackendTest"
+  ]
+}
