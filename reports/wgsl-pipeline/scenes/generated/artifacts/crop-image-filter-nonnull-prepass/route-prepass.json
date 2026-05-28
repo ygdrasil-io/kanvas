@@ -1,0 +1,12 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "crop-image-filter-nonnull-prepass",
+  "stage": "child-pre-pass",
+  "materializeRoute": "LayerCompositeDraw.materializeToIntermediate",
+  "source": "gpuSrc.intermediateView",
+  "destination": "SkWebGpuDevice.cropNonNullOffsetChildPrePassScratch",
+  "sampleRemap": "scratchPixel(p) samples childSource(p - offset)",
+  "finalComposite": "Crop(kDecal) UV remap against scratch texture",
+  "unsupportedReasonRemoved": "image-filter.crop-input-nonnull-prepass-required",
+  "fallbackReason": "none"
+}
