@@ -1,0 +1,29 @@
+{
+  "sceneId": "runtime-effect-simple",
+  "lane": "GPU",
+  "status": "estimated",
+  "sampleCount": 30,
+  "timing": {
+    "medianMs": 0.105,
+    "p95Ms": 0.15
+  },
+  "counters": {
+    "routeInvocations": 1,
+    "pipelineCacheHits": 29,
+    "pipelineCacheMisses": 1,
+    "bindGroupCount": 1,
+    "resourceBytes": 4096
+  },
+  "baseline": {
+    "name": "m40-gpu-cache-static-seed",
+    "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+  },
+  "regression": {
+    "label": "unknown"
+  },
+  "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
+  "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+  "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+  "route": "webgpu.runtime-effect.descriptor.simple_rt",
+  "rawMetrics": "artifacts/runtime-effect-simple/gpu-performance.json"
+}
