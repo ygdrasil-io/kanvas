@@ -62,13 +62,31 @@ The static count excludes generated rows merged into the dashboard export by `pi
 
 ## Residual Risk
 
-`analytic-aa-convex` remains tracked because the current static CPU oracle stores AA edge pixels as non-composited alpha values while WebGPU renders the AA edge through `SrcOver` over the scene background. This is not an edge-budget refusal: `edgeBudgetReason=not coverage.edge-count-exceeded`.
+At initial M42 closeout, `analytic-aa-convex` remained tracked because the
+static CPU oracle stored AA edge pixels as non-composited alpha values while
+WebGPU rendered the AA edge through `SrcOver` over the scene background. This
+was not an edge-budget refusal: `edgeBudgetReason=not
+coverage.edge-count-exceeded`.
+
+## GRA-222 Resolution
+
+GRA-222 resolved the follow-up by regenerating the dashboard CPU oracle as
+composited `SrcOver` AA edge pixels over the opaque scene background. The
+adapter-backed WebGPU route was retained unchanged:
+`webgpu.coverage.path-convex-fan`, `fallbackReason=none`, and
+`edgeBudgetReason=not coverage.edge-count-exceeded`.
+
+Resolution evidence:
+
+- `reports/wgsl-pipeline/2026-05-28-m42-analytic-aa-convex-aa-edge-oracle-reconciliation.md`
+- `reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/stats.json`
+- `reports/wgsl-pipeline/scenes/data/scenes.json#analytic-aa-convex`
 
 ## M43 / M44 Readiness
 
 - M43 benchmark harness work can use `solid-rect` as an adapter-backed pass scene.
 - M43 should keep performance fields non-gating until measured host/JDK/backend/adapter metadata replaces estimated values.
-- M44 Path AA promotion should not treat `analytic-aa-convex` as a broad edge-budget failure; it is a narrow oracle/render-contract follow-up now owned by `GRA-222`.
+- M44 Path AA promotion should not treat `analytic-aa-convex` as a broad edge-budget failure; after GRA-222 it is an adapter-backed pass row with `edgeBudgetReason=not coverage.edge-count-exceeded`.
 
 ## Validation
 

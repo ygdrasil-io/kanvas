@@ -2,9 +2,11 @@
   "sceneId": "analytic-aa-convex",
   "backend": "CPU",
   "drawKind": "single-contour-convex-aa-path",
-  "selectedRoute": "cpu.path-coverage.analytic-aa-convex-oracle",
+  "status": "pass",
+  "selectedRoute": "cpu.path-coverage.analytic-aa-convex-composited-oracle",
   "coveragePlan": "PathCoverage(singleContour=true,convex=true,aa=true,edgeCountWithinBudget=true)",
   "fallbackReason": "none",
   "edgeBudgetReason": "not coverage.edge-count-exceeded",
-  "sourceReport": "reports/wgsl-pipeline/2026-05-27-m33-path-aa-smoke-promotion.md"
+  "compositing": "src-over-opaque-background",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-28-m42-analytic-aa-convex-aa-edge-oracle-reconciliation.md"
 }

@@ -117,18 +117,21 @@ M42 attempted both P0 adapter-backed captures:
 | Scene | M41/M42 start | M42 result | Follow-up |
 |---|---|---|---|
 | `solid-rect` | `tracked-gap` | `pass` with adapter-backed WebGPU capture on Apple M2 Max, 100.0% similarity, `fallbackReason=none`. | None. |
-| `analytic-aa-convex` | `tracked-gap` | `tracked-gap` with adapter-backed WebGPU capture on Apple M2 Max, 90.6% similarity, `fallbackReason=none`, `edgeBudgetReason=not coverage.edge-count-exceeded`. | `GRA-222` owns the AA edge alpha oracle/render contract mismatch. |
+| `analytic-aa-convex` | `tracked-gap` | Initially `tracked-gap` with adapter-backed WebGPU capture on Apple M2 Max, 90.6% similarity, `fallbackReason=none`, `edgeBudgetReason=not coverage.edge-count-exceeded`; resolved by GRA-222 to `pass` after regenerating the CPU oracle as composited `SrcOver` AA edge pixels with 100.0% similarity. | None. |
 
-Final M42 dashboard state:
+Final M42 dashboard state after GRA-222 follow-up resolution:
 
 | Signal | Count |
 |---|---:|
-| `pass` | 5 static rows, plus generated rows merged at export time |
-| `tracked-gap` | 1 static P0 row: `analytic-aa-convex` |
+| `pass` | 6 static rows, plus generated rows merged at export time |
+| `tracked-gap` | 0 |
 | `expected-unsupported` | 2 |
 | `fail` | 0 |
 
-M43 can start measured benchmark work with `solid-rect` no longer blocked on an adapter-backed GPU capture. M44 must treat `analytic-aa-convex` as a tracked P0 oracle/policy gap until `GRA-222` resolves whether to regenerate the CPU oracle or adjust GPU AA compositing semantics.
+GRA-222 resolved the `analytic-aa-convex` oracle/policy gap by regenerating the
+CPU oracle as composited `SrcOver` AA edge pixels. The row remains distinct from
+broad Path AA edge-budget refusals: `edgeBudgetReason=not
+coverage.edge-count-exceeded`.
 
 ## M43 Policy Note
 
