@@ -166,6 +166,9 @@ tasks.withType<Test> {
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
         "--enable-native-access=ALL-UNNAMED",
     )
+    System.getProperty("kanvas.sceneEvidence.write")?.let {
+        systemProperty("kanvas.sceneEvidence.write", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }

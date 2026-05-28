@@ -6,7 +6,12 @@
   "maxChannelDelta": 0,
   "threshold": 99.95,
   "cpuSimilarity": 100.0,
-  "gpuSimilarity": null,
+  "gpuSimilarity": 100.0,
+  "gpuMatchingPixels": 64,
+  "gpuMaxChannelDelta": 0,
   "touchedPixels": 25,
-  "gpuStatus": "expected-unsupported"
+  "gpuStatus": "pass",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.SolidRectSceneCaptureTest"
 }
