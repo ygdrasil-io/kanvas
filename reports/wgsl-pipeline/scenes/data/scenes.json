@@ -156,6 +156,17 @@
         "reports/wgsl-pipeline/scenes/artifacts/solid-rect/stats.json",
         "kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SolidRectSceneCaptureTest.kt"
+      ],
+      "tags": [
+        "source.static",
+        "feature.shape.solid",
+        "feature.coverage.analytic-rect",
+        "route.cpu.descriptor",
+        "route.gpu.webgpu",
+        "reference.cpu-oracle",
+        "maturity.static-evidence",
+        "maturity.adapter-backed",
+        "risk.none"
       ]
     },
     {
@@ -239,6 +250,18 @@
         "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/stats.json",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/AnalyticAaConvexSceneCaptureTest.kt",
         "GRA-222"
+      ],
+      "tags": [
+        "source.static",
+        "feature.coverage.aa",
+        "feature.path-aa",
+        "route.cpu.oracle",
+        "route.gpu.webgpu",
+        "reference.cpu-oracle",
+        "maturity.static-evidence",
+        "maturity.adapter-backed",
+        "risk.tracked-gap",
+        "risk.oracle-mismatch"
       ]
     },
     {
@@ -455,6 +478,16 @@
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TranslucentSrcOverTest.kt",
         "reports/wgsl-pipeline/2026-05-28-m43-cpu-measured-metrics.md",
         "reports/wgsl-pipeline/2026-05-28-m43-gpu-measured-cache-metrics.md"
+      ],
+      "tags": [
+        "source.static",
+        "feature.blend.src-over",
+        "feature.coverage.analytic-rect",
+        "route.cpu.oracle",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.static-evidence",
+        "risk.none"
       ]
     },
     {
@@ -573,6 +606,16 @@
         "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
         "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RuntimeEffectDescriptorWebGpuTest.kt"
+      ],
+      "tags": [
+        "source.static",
+        "feature.runtime-effect",
+        "feature.coverage.analytic-rect",
+        "route.cpu.descriptor",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.static-evidence",
+        "risk.none"
       ]
     },
     {
@@ -692,6 +735,16 @@
         "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
         "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/stats.json",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ClipDifferenceCrossTest.kt"
+      ],
+      "tags": [
+        "source.static",
+        "feature.clip",
+        "feature.coverage.clip",
+        "route.cpu.coverage",
+        "route.gpu.webgpu",
+        "reference.skia-upstream",
+        "maturity.static-evidence",
+        "risk.none"
       ]
     },
     {
@@ -907,6 +960,16 @@
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BitmapShaderRotatedTest.kt",
         "reports/wgsl-pipeline/2026-05-28-m43-cpu-measured-metrics.md",
         "reports/wgsl-pipeline/2026-05-28-m43-gpu-measured-cache-metrics.md"
+      ],
+      "tags": [
+        "source.static",
+        "feature.image.bitmap",
+        "feature.shader.local-matrix",
+        "route.cpu.shader",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.static-evidence",
+        "risk.none"
       ]
     },
     {
@@ -963,6 +1026,17 @@
         "reports/wgsl-pipeline/2026-05-28-m37-path-aa-stroke-fallback.md",
         "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-outline-fallback/stats.json",
         "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"
+      ],
+      "tags": [
+        "source.static",
+        "feature.path-aa",
+        "feature.stroke",
+        "route.cpu.oracle",
+        "route.gpu.expected-unsupported",
+        "reference.cpu-oracle",
+        "maturity.static-evidence",
+        "risk.expected-unsupported",
+        "risk.edge-budget"
       ]
     },
     {
@@ -1019,6 +1093,17 @@
         "reports/wgsl-pipeline/2026-05-28-m37-path-aa-breadth-audit.md",
         "reports/wgsl-pipeline/2026-05-28-m37-path-aa-stroke-fallback.md",
         "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/stats.json"
+      ],
+      "tags": [
+        "source.static",
+        "feature.path-aa",
+        "feature.coverage.aa",
+        "route.cpu.oracle",
+        "route.gpu.expected-unsupported",
+        "reference.cpu-oracle",
+        "maturity.static-evidence",
+        "risk.expected-unsupported",
+        "risk.edge-budget"
       ]
     },
     {
@@ -1097,7 +1182,17 @@
         "representative": "StrokeCircleGM",
         "inventoryEffect": "coverage.edge-count-exceeded 50 -> 46 after GRA-212 targeted promotion",
         "remainingUnsupported": "Broad Path AA suites remain expected unsupported with coverage.edge-count-exceeded"
-      }
+      },
+      "tags": [
+        "source.static",
+        "feature.path-aa",
+        "feature.stroke",
+        "route.cpu.oracle",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.static-evidence",
+        "risk.none"
+      ]
     },
     {
       "id": "image-filter-compose-cf-matrix-transform",
@@ -1186,7 +1281,18 @@
         "representative": "SaveLayerImageFilterTest Compose(ColorFilter, MatrixTransform)",
         "intermediateTexture": "LayerCompositeDraw.materializeTargetTexture",
         "remainingUnsupported": "Broad image-filter DAG shapes remain scoped by stable diagnostics"
-      }
+      },
+      "tags": [
+        "source.static",
+        "feature.image-filter",
+        "feature.color-filter",
+        "feature.matrix-transform",
+        "route.cpu.oracle",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.static-evidence",
+        "risk.none"
+      ]
     }
   ]
 }
