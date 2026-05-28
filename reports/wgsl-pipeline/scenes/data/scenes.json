@@ -163,7 +163,7 @@
       "title": "Analytic AA convex path",
       "priority": "P0",
       "status": "tracked-gap",
-      "source": "reports/wgsl-pipeline/2026-05-28-m36-analytic-aa-convex-scene.md",
+      "source": "reports/wgsl-pipeline/2026-05-28-m42-analytic-aa-convex-adapter-capture.md",
       "referenceKind": "cpu-oracle",
       "reference": "artifacts/analytic-aa-convex/skia.png",
       "cpu": {
@@ -186,15 +186,31 @@
         }
       },
       "gpu": {
-        "status": "expected-unsupported",
+        "status": "tracked-gap",
+        "image": "artifacts/analytic-aa-convex/gpu.png",
+        "diff": "artifacts/analytic-aa-convex/gpu-diff.png",
+        "similarity": 90.6,
         "route": {
           "coverageStrategy": "webgpu.coverage.path-convex-fan",
           "pipelineKey": "coverageKind=pathConvexFan",
-          "fallbackReason": "gpu.adapter-backed-analytic-aa-convex-capture-not-produced-in-m36-e-local-run"
+          "fallbackReason": "none",
+          "blockerReason": "gpu.analytic-aa-convex-edge-alpha-oracle-mismatch",
+          "edgeBudgetReason": "not coverage.edge-count-exceeded",
+          "followUp": "GRA-222"
+        },
+        "stats": {
+          "pixels": 256,
+          "matchingPixels": 232,
+          "maxChannelDelta": 127,
+          "threshold": 99.85,
+          "backend": "WebGPU",
+          "adapter": "Apple M2 Max",
+          "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.AnalyticAaConvexSceneCaptureTest"
         }
       },
       "diffs": {
-        "cpu": "artifacts/analytic-aa-convex/cpu-diff.png"
+        "cpu": "artifacts/analytic-aa-convex/cpu-diff.png",
+        "gpu": "artifacts/analytic-aa-convex/gpu-diff.png"
       },
       "routeDiagnostics": {
         "cpu": "artifacts/analytic-aa-convex/route-cpu.json",
@@ -202,15 +218,27 @@
       },
       "stats": {
         "pixels": 256,
-        "matchingPixels": 256,
-        "maxChannelDelta": 0,
-        "threshold": 99.85
+        "matchingPixels": 232,
+        "maxChannelDelta": 127,
+        "threshold": 99.85,
+        "gpuMatchingPixels": 232,
+        "gpuMaxChannelDelta": 127,
+        "adapter": "Apple M2 Max",
+        "backend": "WebGPU",
+        "blockerReason": "gpu.analytic-aa-convex-edge-alpha-oracle-mismatch",
+        "followUp": "GRA-222"
       },
       "evidence": [
         "reports/wgsl-pipeline/2026-05-28-m36-analytic-aa-convex-scene.md",
         "reports/wgsl-pipeline/2026-05-27-m33-path-aa-smoke-promotion.md",
         "reports/wgsl-pipeline/2026-05-27-m33-path-aa-closeout.md",
-        "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/stats.json"
+        "reports/wgsl-pipeline/2026-05-28-m42-analytic-aa-convex-adapter-capture.md",
+        "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/AnalyticAaConvexSceneCaptureTest.kt",
+        "GRA-222"
       ]
     },
     {
