@@ -1,0 +1,28 @@
+{
+  "sceneId": "clip-rect-difference",
+  "dimensions": {
+    "width": 256,
+    "height": 512
+  },
+  "pixels": 131072,
+  "cpuMatchingPixels": 131072,
+  "gpuMatchingPixels": 110672,
+  "matchingPixels": 110672,
+  "cpuSimilarity": 100.0,
+  "gpuSimilarity": 84.44,
+  "maxChannelDelta": {
+    "a": 0,
+    "r": 255,
+    "g": 255,
+    "b": 255
+  },
+  "cpuMaxChannelDelta": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "threshold": 80.0,
+  "backend": "WebGPU",
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest"
+}

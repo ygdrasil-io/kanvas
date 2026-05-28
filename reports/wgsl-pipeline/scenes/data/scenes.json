@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "title": "Kanvas WGSL pipeline scene evidence",
   "milestone": "M39",
-  "status": "m39-route-convergence-p1-gradient-blend",
+  "status": "m39-route-convergence-p1-runtime-clip-localmatrix",
   "generatedBy": "pipelineSceneDashboard",
   "sceneContract": {
     "requiredFields": [
@@ -344,6 +344,209 @@
         "reports/wgsl-pipeline/scenes/artifacts/src-over-stack/stats.json",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BlendModeTest.kt",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TranslucentSrcOverTest.kt"
+      ]
+    },
+    {
+      "id": "runtime-effect-simple",
+      "title": "Registered SimpleRT runtime-effect route",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
+      "referenceKind": "test-oracle",
+      "reference": "artifacts/runtime-effect-simple/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/runtime-effect-simple/cpu.png",
+        "diff": "artifacts/runtime-effect-simple/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "selectedRoute": "cpu.runtime-effect.descriptor.simple_rt",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "Static oracle aligned to RuntimeEffectDescriptorWebGpuTest SimpleRT"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/runtime-effect-simple/gpu.png",
+        "diff": "artifacts/runtime-effect-simple/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.analytic-rect",
+          "selectedRoute": "webgpu.runtime-effect.descriptor.simple_rt",
+          "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/runtime-effect-simple/cpu-diff.png",
+        "gpu": "artifacts/runtime-effect-simple/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/runtime-effect-simple/route-cpu.json",
+        "gpu": "artifacts/runtime-effect-simple/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 4096,
+        "matchingPixels": 4096,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m39-p1-scene-selection.md",
+        "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RuntimeEffectDescriptorWebGpuTest.kt"
+      ]
+    },
+    {
+      "id": "clip-rect-difference",
+      "title": "Clip rect difference route diagnostics",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
+      "referenceKind": "skia-upstream",
+      "reference": "artifacts/clip-rect-difference/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/clip-rect-difference/cpu.png",
+        "diff": "artifacts/clip-rect-difference/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "clipRect(kDifference) + clipRRect(kDifference) CPU coverage oracle",
+          "selectedRoute": "cpu.coverage.clip-rect-difference",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 131072,
+          "matchingPixels": 131072,
+          "maxChannelDelta": 0,
+          "threshold": 80.0,
+          "backend": "CPU",
+          "command": "Skia upstream reference skbug_9319.png"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/clip-rect-difference/gpu.png",
+        "diff": "artifacts/clip-rect-difference/gpu-diff.png",
+        "similarity": 84.44,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.clip-rect-difference",
+          "selectedRoute": "webgpu.coverage.clip-difference.analytic-rrect-mask",
+          "pipelineKey": "clipOp=kDifference shape=rect+rrect maskFilter=blur",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 131072,
+          "matchingPixels": 110672,
+          "maxChannelDelta": 255,
+          "threshold": 80.0,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/clip-rect-difference/cpu-diff.png",
+        "gpu": "artifacts/clip-rect-difference/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/clip-rect-difference/route-cpu.json",
+        "gpu": "artifacts/clip-rect-difference/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 131072,
+        "matchingPixels": 110672,
+        "maxChannelDelta": 255,
+        "threshold": 80.0
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m39-p1-scene-selection.md",
+        "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
+        "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ClipDifferenceCrossTest.kt"
+      ]
+    },
+    {
+      "id": "bitmap-shader-local-matrix",
+      "title": "Bitmap shader rotated local-matrix rect",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
+      "referenceKind": "test-oracle",
+      "reference": "artifacts/bitmap-shader-local-matrix/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/bitmap-shader-local-matrix/cpu.png",
+        "diff": "artifacts/bitmap-shader-local-matrix/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "AnalyticRect(10.0,10.0,14.0,14.0,aa=false)",
+          "selectedRoute": "cpu.shader.bitmap.local-matrix",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 1024,
+          "matchingPixels": 1024,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "Static oracle aligned to BitmapShaderRotatedTest rotated localMatrix rect"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/bitmap-shader-local-matrix/gpu.png",
+        "diff": "artifacts/bitmap-shader-local-matrix/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.analytic-rect",
+          "selectedRoute": "webgpu.shader.bitmap.local-matrix",
+          "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 1024,
+          "matchingPixels": 1024,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderRotatedTest"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/bitmap-shader-local-matrix/cpu-diff.png",
+        "gpu": "artifacts/bitmap-shader-local-matrix/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/bitmap-shader-local-matrix/route-cpu.json",
+        "gpu": "artifacts/bitmap-shader-local-matrix/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 1024,
+        "matchingPixels": 1024,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m39-p1-scene-selection.md",
+        "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-local-matrix/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BitmapShaderRotatedTest.kt"
       ]
     },
     {

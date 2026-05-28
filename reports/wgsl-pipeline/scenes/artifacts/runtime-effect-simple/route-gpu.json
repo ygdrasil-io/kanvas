@@ -1,0 +1,20 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "runtime-effect-simple",
+  "drawKind": "SimpleRT runtime shader rect",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.analytic-rect",
+  "selectedRoute": "webgpu.runtime-effect.descriptor.simple_rt",
+  "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+  "runtimeEffect": {
+    "implementationId": "simple_rt",
+    "wgsl": "src/main/resources/shaders/runtime_simple_rt.wgsl",
+    "uniformLayout": {
+      "gColor": 0
+    }
+  },
+  "parserEvidence": "RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms",
+  "fallbackReason": "none",
+  "missingDescriptorPolicy": "registered runtime shader without WGSL descriptor fails with stable diagnostic",
+  "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest#SimpleRT runtime shader renders through descriptor-backed WGSL path"
+}
