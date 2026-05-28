@@ -1,0 +1,10 @@
+{
+  "backend": "CPU",
+  "sceneId": "clip-rect-difference",
+  "drawKind": "Skbug9319GM",
+  "status": "pass",
+  "selectedRoute": "cpu.coverage.clip-rect-difference",
+  "coveragePlan": "clipRect(kDifference) + clipRRect(kDifference) CPU coverage oracle",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.ClipDifferenceCrossTest#Skbug9319GM survives clipRect_kDifference and clipRRect_kDifference on GPU"
+}
