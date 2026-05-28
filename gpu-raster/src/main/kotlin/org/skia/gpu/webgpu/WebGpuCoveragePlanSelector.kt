@@ -224,6 +224,7 @@ public data class WebGpuPathCoverageFacts(
     val contourCount: Int,
     val edgeCount: Int,
     val maskOrAtlasFallbackEnabled: Boolean = false,
+    val strokeOutlineFallbackEnabled: Boolean = false,
 )
 
 public data class WebGpuCoverageDiagnostic(
@@ -394,6 +395,16 @@ public object WebGpuCoveragePlanSelector {
             return unsupported(drawKind, plan, clipInteraction, lowering, StandardCoverageReason.StencilCoverUnavailable)
         }
         if (plan.aa && facts.edgeCount > WEBGPU_PATH_AA_EDGE_BUDGET) {
+            if (facts.strokeOutlineFallbackEnabled) {
+                return unsupported(
+                    drawKind = drawKind,
+                    plan = plan,
+                    clipInteraction = clipInteraction,
+                    lowering = lowering,
+                    reason = StandardCoverageReason.StrokeOutlineEdgeCountExceeded,
+                    pipelineAxes = pathPipelineAxes("pathStrokeOutlineOverflow", plan),
+                )
+            }
             return if (facts.maskOrAtlasFallbackEnabled) {
                 supportedPath(
                     drawKind = drawKind,

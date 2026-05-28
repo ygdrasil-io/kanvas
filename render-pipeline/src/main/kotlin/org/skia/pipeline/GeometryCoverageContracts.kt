@@ -23,6 +23,7 @@ enum class StandardCoverageReason(override val code: String) : CoverageReason {
     GlyphMaskDependencyUnavailable("coverage.glyph-mask-dependency-unavailable"),
     StencilCoverUnavailable("coverage.stencil-cover-unavailable"),
     EdgeCountExceeded("coverage.edge-count-exceeded"),
+    StrokeOutlineEdgeCountExceeded("coverage.stroke-outline-edge-count-exceeded"),
     AtlasPolicyUnavailable("coverage.atlas-policy-unavailable"),
     ArbitraryAaClipUnsupported("coverage.arbitrary-aa-clip-unsupported"),
 }
