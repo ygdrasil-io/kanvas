@@ -187,3 +187,49 @@ the raw metric JSON files.
 - Do not compare GPU numbers across unnamed adapters.
 - Do not make Java 25 Vector a correctness dependency.
 - Do not add slow benchmark tasks to required CI without explicit budget.
+
+## Baseline And Regression Policy
+
+M43 measured payloads use explicit baseline names so reviewers can distinguish
+local milestone evidence from future CI-owned gates:
+
+- `m43-cpu-measured-local`: first local measured CPU dashboard payloads written
+  by `pipelineMeasuredCpuPerformance`.
+- `m43-gpu-cache-measured-local`: first local measured GPU/cache dashboard
+  payloads written by `pipelineMeasuredGpuPerformance` on a named adapter.
+- Future CI-owned baselines must use a new name, for example
+  `ci-macos-m2max-webgpu-v1`, and must not silently overwrite M43 local
+  evidence.
+
+Regression labels are dashboard evidence labels, not release decisions by
+themselves:
+
+| Label | Meaning | Gate effect in M43 |
+| --- | --- | --- |
+| `unknown` | No approved comparable baseline exists, or the metric was collected under a different host/JDK/adapter eligibility set. | Reporting-only. |
+| `none` | Comparable measured value is within the approved threshold. | Candidate only after CI gate criteria are met. |
+| `improved` | Comparable measured value is better than the approved threshold. | Candidate only after CI gate criteria are met. |
+| `regressed` | Comparable measured value exceeds the approved threshold. | Reporting-only in M43; future gates may fail once criteria below are satisfied. |
+
+A measured row is informational when any of these is true:
+
+- `gate.mode` is `reporting-only`;
+- baseline name starts with `m43-` and was produced by a local/manual run;
+- GPU adapter identity is absent or differs from the baseline eligibility;
+- sample count, host class, JDK, or backend differ from the approved baseline;
+- no owner exists for baseline updates and quarantine decisions.
+
+A measured row may become a required CI gate only after a follow-up ticket adds
+all of the following:
+
+- explicit per-task time budget and timeout;
+- host/JDK/backend/adapter eligibility matrix;
+- minimum sample count and allowed variance threshold;
+- flake retry, quarantine, and escalation rules;
+- rollback rule for removing or relaxing a noisy gate;
+- named owner for baseline update review;
+- PM-facing evidence showing at least three consecutive stable runs on the
+  intended CI lane.
+
+Until those criteria are implemented, M43 measured rows remain PM/engineering
+trend evidence and must not block required CI.
