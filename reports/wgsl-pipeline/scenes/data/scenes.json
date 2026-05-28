@@ -359,12 +359,24 @@
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BlendModeTest --tests org.skia.gpu.webgpu.TranslucentSrcOverTest"
         },
         "performanceTrend": {
-          "status": "estimated",
+          "sceneId": "src-over-stack",
+          "lane": "GPU",
+          "status": "measured",
+          "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+          "phase": "webgpu-cache-dashboard-row",
           "sampleCount": 30,
           "timing": {
-            "medianMs": 0.075,
-            "p95Ms": 0.111
+            "medianMs": 0.024375,
+            "p95Ms": 0.038625
           },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "WebGPU cache/timing dashboard benchmark",
+            "adapter": "Apple M2 Max"
+          },
+          "adapter": "Apple M2 Max",
           "counters": {
             "routeInvocations": 2,
             "pipelineCacheHits": 58,
@@ -373,17 +385,52 @@
             "resourceBytes": 4096
           },
           "baseline": {
-            "name": "m40-gpu-cache-static-seed",
-            "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+            "name": "m43-gpu-cache-measured-local",
+            "commit": "2da0d497dba3b908b6a7b517157c583a963a1b52"
           },
           "regression": {
             "label": "unknown"
           },
-          "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
-          "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+          "gate": {
+            "mode": "reporting-only",
+            "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
+          },
           "pipelineKey": "state=[blendMode=kSrc] + state=[blendMode=kSrcOver] fixedFunctionBlend",
           "route": "webgpu.blend.src-over.fixed-function",
-          "rawMetrics": "artifacts/src-over-stack/gpu-performance.json"
+          "rawMetrics": "artifacts/src-over-stack/gpu-performance.json",
+          "rawSamples": [
+            0.028167,
+            0.031834,
+            0.030125,
+            0.038625,
+            0.027375,
+            0.027459,
+            0.025708,
+            0.032083,
+            0.037084,
+            0.033208,
+            0.112458,
+            0.031875,
+            0.023833,
+            0.023875,
+            0.024334,
+            0.0225,
+            0.02825,
+            0.023042,
+            0.024458,
+            0.022417,
+            0.024125,
+            0.022334,
+            0.024375,
+            0.022292,
+            0.023833,
+            0.023125,
+            0.022833,
+            0.027542,
+            0.0105,
+            0.010959
+          ],
+          "checksum": 13481319
         }
       },
       "diffs": {
@@ -406,7 +453,8 @@
         "reports/wgsl-pipeline/scenes/artifacts/src-over-stack/stats.json",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BlendModeTest.kt",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/TranslucentSrcOverTest.kt",
-        "reports/wgsl-pipeline/2026-05-28-m43-cpu-measured-metrics.md"
+        "reports/wgsl-pipeline/2026-05-28-m43-cpu-measured-metrics.md",
+        "reports/wgsl-pipeline/2026-05-28-m43-gpu-measured-cache-metrics.md"
       ]
     },
     {
@@ -764,12 +812,24 @@
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderRotatedTest"
         },
         "performanceTrend": {
-          "status": "estimated",
+          "sceneId": "bitmap-shader-local-matrix",
+          "lane": "GPU",
+          "status": "measured",
+          "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+          "phase": "webgpu-cache-dashboard-row",
           "sampleCount": 30,
           "timing": {
-            "medianMs": 0.066,
-            "p95Ms": 0.092
+            "medianMs": 0.005666,
+            "p95Ms": 0.009875
           },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "WebGPU cache/timing dashboard benchmark",
+            "adapter": "Apple M2 Max"
+          },
+          "adapter": "Apple M2 Max",
           "counters": {
             "routeInvocations": 1,
             "pipelineCacheHits": 29,
@@ -778,17 +838,52 @@
             "resourceBytes": 1024
           },
           "baseline": {
-            "name": "m40-gpu-cache-static-seed",
-            "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+            "name": "m43-gpu-cache-measured-local",
+            "commit": "2da0d497dba3b908b6a7b517157c583a963a1b52"
           },
           "regression": {
             "label": "unknown"
           },
-          "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
-          "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+          "gate": {
+            "mode": "reporting-only",
+            "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
+          },
           "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
           "route": "webgpu.shader.bitmap.local-matrix",
-          "rawMetrics": "artifacts/bitmap-shader-local-matrix/gpu-performance.json"
+          "rawMetrics": "artifacts/bitmap-shader-local-matrix/gpu-performance.json",
+          "rawSamples": [
+            0.007791,
+            0.005417,
+            0.011166,
+            0.005125,
+            0.005584,
+            0.007,
+            0.006,
+            0.006458,
+            0.00725,
+            0.005292,
+            0.006,
+            0.007292,
+            0.005166,
+            0.009875,
+            0.005167,
+            0.005,
+            0.006875,
+            0.005083,
+            0.005083,
+            0.006625,
+            0.005125,
+            0.006541,
+            0.005125,
+            0.005208,
+            0.007167,
+            0.005083,
+            0.005666,
+            0.006458,
+            0.005083,
+            0.006375
+          ],
+          "checksum": 2118653005
         }
       },
       "diffs": {
@@ -810,7 +905,8 @@
         "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
         "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-local-matrix/stats.json",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BitmapShaderRotatedTest.kt",
-        "reports/wgsl-pipeline/2026-05-28-m43-cpu-measured-metrics.md"
+        "reports/wgsl-pipeline/2026-05-28-m43-cpu-measured-metrics.md",
+        "reports/wgsl-pipeline/2026-05-28-m43-gpu-measured-cache-metrics.md"
       ]
     },
     {
