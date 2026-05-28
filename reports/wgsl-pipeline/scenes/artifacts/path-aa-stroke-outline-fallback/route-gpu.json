@@ -1,0 +1,9 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "path-aa-stroke-outline-fallback",
+  "coverageStrategy": "webgpu.coverage.refuse",
+  "pipelineKey": "coverageKind=pathStrokeOutlineOverflow,pathFillRule=winding,topology=triangleList",
+  "fallbackReason": "coverage.stroke-outline-edge-count-exceeded",
+  "inventoryRows": 4,
+  "evidence": "GRA-178 full GPU inventory moves exactly StrokeRectGM/StrokeCircleGM WebGPU and cross-backend rows from coverage.edge-count-exceeded to this stable diagnostic."
+}

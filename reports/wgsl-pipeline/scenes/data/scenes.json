@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "title": "Kanvas WGSL pipeline scene evidence",
-  "milestone": "M36",
-  "status": "m36-p0-complete",
+  "milestone": "M37",
+  "status": "m37-path-aa-dashboard-updated",
   "generatedBy": "pipelineSceneDashboard",
   "sceneContract": {
     "requiredFields": [
@@ -207,6 +207,118 @@
         "reports/wgsl-pipeline/2026-05-27-m33-path-aa-smoke-promotion.md",
         "reports/wgsl-pipeline/2026-05-27-m33-path-aa-closeout.md",
         "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/stats.json"
+      ]
+    },
+    {
+      "id": "path-aa-stroke-outline-fallback",
+      "title": "Path AA stroke-outline fallback",
+      "priority": "P1",
+      "status": "expected-unsupported",
+      "source": "reports/wgsl-pipeline/2026-05-28-m37-path-aa-dashboard-scenes.md",
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/path-aa-stroke-outline-fallback/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/path-aa-stroke-outline-fallback/cpu.png",
+        "diff": "artifacts/path-aa-stroke-outline-fallback/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "PathCoverage(strokeOutline=true,aa=true,edgeCountOverBudget=true)",
+          "selectedRoute": "cpu.path-coverage.stroke-outline-oracle",
+          "compatibilityFallbackRoute": "kanvas-skia.current.stroke-outline",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 1036000,
+          "matchingPixels": 0,
+          "maxChannelDelta": 0,
+          "threshold": 95.91,
+          "backend": "inventory",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuInventoryTest"
+        }
+      },
+      "gpu": {
+        "status": "expected-unsupported",
+        "route": {
+          "coverageStrategy": "webgpu.coverage.refuse",
+          "pipelineKey": "coverageKind=pathStrokeOutlineOverflow,pathFillRule=winding,topology=triangleList",
+          "fallbackReason": "coverage.stroke-outline-edge-count-exceeded"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/path-aa-stroke-outline-fallback/cpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/path-aa-stroke-outline-fallback/route-cpu.json",
+        "gpu": "artifacts/path-aa-stroke-outline-fallback/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 1036000,
+        "matchingPixels": 0,
+        "maxChannelDelta": 0,
+        "threshold": 95.91
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m37-path-aa-dashboard-scenes.md",
+        "reports/wgsl-pipeline/2026-05-28-m37-path-aa-stroke-fallback.md",
+        "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-outline-fallback/stats.json",
+        "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"
+      ]
+    },
+    {
+      "id": "path-aa-edge-budget-boundary",
+      "title": "Path AA edge-budget boundary",
+      "priority": "P1",
+      "status": "expected-unsupported",
+      "source": "reports/wgsl-pipeline/2026-05-28-m37-path-aa-dashboard-scenes.md",
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/path-aa-edge-budget-boundary/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/path-aa-edge-budget-boundary/cpu.png",
+        "diff": "artifacts/path-aa-edge-budget-boundary/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "PathCoverage(aa=true,edgeCountOverBudget=true,broadPathSuite=true)",
+          "selectedRoute": "cpu.path-coverage.raster-oracle",
+          "compatibilityFallbackRoute": "kanvas-skia.current.path-raster",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 0,
+          "matchingPixels": 0,
+          "maxChannelDelta": 0,
+          "threshold": 99.85,
+          "backend": "inventory",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuInventoryTest"
+        }
+      },
+      "gpu": {
+        "status": "expected-unsupported",
+        "route": {
+          "coverageStrategy": "webgpu.coverage.refuse",
+          "pipelineKey": "coverageKind=pathCoverageUnsupported,pathFillRule=winding,topology=triangleList",
+          "fallbackReason": "coverage.edge-count-exceeded"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/path-aa-edge-budget-boundary/cpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/path-aa-edge-budget-boundary/route-cpu.json",
+        "gpu": "artifacts/path-aa-edge-budget-boundary/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 0,
+        "matchingPixels": 0,
+        "maxChannelDelta": 0,
+        "threshold": 99.85
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m37-path-aa-dashboard-scenes.md",
+        "reports/wgsl-pipeline/2026-05-28-m37-path-aa-breadth-audit.md",
+        "reports/wgsl-pipeline/2026-05-28-m37-path-aa-stroke-fallback.md",
+        "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/stats.json"
       ]
     }
   ]

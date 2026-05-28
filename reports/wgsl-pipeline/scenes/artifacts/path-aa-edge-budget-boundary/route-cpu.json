@@ -1,0 +1,9 @@
+{
+  "backend": "CPU",
+  "sceneId": "path-aa-edge-budget-boundary",
+  "coveragePlan": "PathCoverage(aa=true,edgeCountOverBudget=true,broadPathSuite=true)",
+  "selectedRoute": "cpu.path-coverage.raster-oracle",
+  "compatibilityFallbackRoute": "kanvas-skia.current.path-raster",
+  "fallbackReason": "none",
+  "evidence": "CPU/raster remains the oracle for broad Path AA suites that intentionally exceed the WebGPU AA edge budget."
+}
