@@ -52,6 +52,107 @@ Each generated scene result must provide:
 `fail` is reserved for scenes that are claimed supported but miss thresholds,
 artifacts, or route invariants.
 
+
+## Generated Scene Result Schema
+
+Generated scene results are normalized into the existing `scenes.json` row
+shape. Static rows remain valid, but generated rows must identify their origin
+so support claims can distinguish hand-authored registry evidence from test or
+report output.
+
+A generated row adds this optional top-level block:
+
+```json
+"generation": {
+  "mode": "generated",
+  "producer": "pipelineSceneExport",
+  "sourceTask": ":gpu-raster:test",
+  "sourceTest": "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
+  "generatedAt": "2026-05-28T10:00:00Z",
+  "commit": "<git-sha>",
+  "artifactRoot": "artifacts/bitmap-rect-nearest",
+  "schema": "generated-scene-result.v1"
+}
+```
+
+Allowed `generation.mode` values:
+
+- `static`: hand-authored registry row or historical checked-in artifact row.
+- `generated`: row materialized from a test or report task output.
+- `mixed`: row with generated artifacts plus retained static notes or legacy
+  evidence links.
+
+Generated result fields map to the dashboard row as follows:
+
+| Generated field | Dashboard field | Required for generated `pass` |
+|---|---|---|
+| `scene.id` | `id` | yes |
+| `scene.title` | `title` | yes |
+| `scene.priority` | `priority` | yes |
+| `scene.status` | `status` | yes |
+| `reference.kind` | `referenceKind` | yes |
+| `reference.path` | `reference` | yes |
+| `cpu.image` | `cpu.image` | yes |
+| `cpu.diff` | `cpu.diff` | yes |
+| `cpu.route` | `cpu.route` and `routeDiagnostics.cpu` | yes |
+| `cpu.stats` | `cpu.stats` and scene `stats` | yes |
+| `gpu.image` | `gpu.image` | yes when GPU status is not `expected-unsupported` |
+| `gpu.diff` | `gpu.diff` | yes when GPU status is not `expected-unsupported` |
+| `gpu.route` | `gpu.route` and `routeDiagnostics.gpu` | yes |
+| `gpu.stats` | `gpu.stats` | yes when GPU status is not `expected-unsupported` |
+| `performanceTrend` | `cpu.performanceTrend` / `gpu.performanceTrend` | optional passthrough |
+| `evidence[]` | `evidence[]` | yes for source task/report traceability |
+
+For `expected-unsupported`, generated rows must keep a GPU lane with route
+identity and a stable non-`none` `fallbackReason`. GPU image and GPU diff may be
+absent only in that status.
+
+For `tracked-gap`, generated rows must name the missing artifact or environment
+reason in `generation.missing[]` or in the GPU/CPU fallback diagnostics. A row
+cannot use `tracked-gap` as a generic placeholder.
+
+For `fail`, generated rows must still preserve the produced artifacts and stats
+so the failure is reviewable.
+
+### Sample Generated Row
+
+```json
+{
+  "id": "bitmap-rect-nearest",
+  "title": "Bitmap rect nearest sampling",
+  "priority": "P0",
+  "status": "pass",
+  "generation": {
+    "mode": "generated",
+    "producer": "pipelineSceneExport",
+    "sourceTask": ":gpu-raster:gpuSmokeTest",
+    "sourceTest": "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
+    "commit": "<git-sha>",
+    "artifactRoot": "artifacts/bitmap-rect-nearest",
+    "schema": "generated-scene-result.v1"
+  },
+  "referenceKind": "skia-upstream",
+  "reference": "artifacts/bitmap-rect-nearest/skia.png",
+  "cpu": {
+    "status": "pass",
+    "image": "artifacts/bitmap-rect-nearest/cpu.png",
+    "diff": "artifacts/bitmap-rect-nearest/cpu-diff.png",
+    "route": { "selectedRoute": "cpu.image-rect.strict-nearest", "fallbackReason": "none" },
+    "stats": { "pixels": 4096, "matchingPixels": 4096, "maxChannelDelta": 0, "threshold": 99.95, "backend": "CPU", "command": ":gpu-raster:gpuSmokeTest" }
+  },
+  "gpu": {
+    "status": "pass",
+    "image": "artifacts/bitmap-rect-nearest/gpu.png",
+    "diff": "artifacts/bitmap-rect-nearest/gpu-diff.png",
+    "route": { "selectedRoute": "webgpu.image-rect.strict-nearest", "pipelineKey": "imageRect.strictNearest.promotedSmoke", "fallbackReason": "none" },
+    "stats": { "pixels": 4096, "matchingPixels": 4096, "maxChannelDelta": 0, "threshold": 99.95, "backend": "WebGPU", "command": ":gpu-raster:gpuSmokeTest" }
+  },
+  "diffs": { "cpu": "artifacts/bitmap-rect-nearest/cpu-diff.png", "gpu": "artifacts/bitmap-rect-nearest/gpu-diff.png" },
+  "routeDiagnostics": { "cpu": "artifacts/bitmap-rect-nearest/route-cpu.json", "gpu": "artifacts/bitmap-rect-nearest/route-gpu.json" },
+  "stats": { "pixels": 4096, "matchingPixels": 4096, "maxChannelDelta": 0, "threshold": 99.95 }
+}
+```
+
 ## Generated Artifact Layout
 
 Generated outputs should keep the existing static shape:
