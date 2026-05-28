@@ -1,0 +1,13 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "linear-gradient-rect",
+  "drawKind": "LinearGradientRectTest.horizontalRedToBlue",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.analytic-rect",
+  "selectedRoute": "webgpu.generated.linear-gradient.rect",
+  "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
+  "shaderFamily": "linearGradient",
+  "parserEvidence": "GeneratedLinearGradientWgslTest",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.LinearGradientRectTest#horizontal red-to-blue gradient interpolates across the rect"
+}

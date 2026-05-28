@@ -1,0 +1,26 @@
+{
+  "sceneId": "linear-gradient-rect",
+  "lane": "CPU",
+  "status": "estimated",
+  "sampleCount": 30,
+  "timing": {
+    "medianMs": 0.035,
+    "p95Ms": 0.046
+  },
+  "counters": {
+    "routeInvocations": 1,
+    "pixels": 4096,
+    "shaderStages": 1,
+    "coveragePlanCount": 1
+  },
+  "baseline": {
+    "name": "m40-cpu-static-seed",
+    "commit": "97dcd3b23c66fa1c05711c23a6f0e20ae26e126c"
+  },
+  "regression": {
+    "label": "unknown"
+  },
+  "environment": "macOS local static dashboard seed; informational until native CPU benchmark harness lands",
+  "route": "cpu.shader.linear-gradient.rect",
+  "rawMetrics": "artifacts/linear-gradient-rect/cpu-performance.json"
+}
