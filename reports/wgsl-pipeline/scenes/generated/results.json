@@ -82,7 +82,17 @@
         "artifactRoot": "artifacts/bitmap-rect-nearest",
         "schema": "generated-scene-result.v1",
         "linearIssue": "GRA-198"
-      }
+      },
+      "tags": [
+        "source.generated",
+        "feature.image.bitmap",
+        "feature.sampling.nearest",
+        "route.cpu.image-rect",
+        "route.gpu.webgpu",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.none"
+      ]
     },
     {
       "id": "crop-image-filter-nonnull-prepass",
@@ -169,7 +179,17 @@
         "artifactRoot": "artifacts/crop-image-filter-nonnull-prepass",
         "schema": "generated-scene-result.v1",
         "linearIssue": "GRA-199"
-      }
+      },
+      "tags": [
+        "source.generated",
+        "feature.image-filter",
+        "feature.crop",
+        "route.cpu.oracle",
+        "route.gpu.webgpu",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.none"
+      ]
     },
     {
       "id": "linear-gradient-rect",
@@ -304,7 +324,17 @@
         "artifactRoot": "artifacts/linear-gradient-rect",
         "schema": "generated-scene-result.v1",
         "linearIssue": "GRA-200"
-      }
+      },
+      "tags": [
+        "source.generated",
+        "feature.gradient.linear",
+        "feature.coverage.analytic-rect",
+        "route.cpu.shader",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.generated-evidence",
+        "risk.none"
+      ]
     }
   ]
 }

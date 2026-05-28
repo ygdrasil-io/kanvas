@@ -1206,6 +1206,57 @@ tasks.register("pipelineSceneDashboard") {
             }
         }
 
+        fun validateTags(sceneId: String, rawScene: Map<*, *>, generationMode: String?) {
+            val tagsValue = rawScene["tags"]
+            if (tagsValue !is List<*> || tagsValue.isEmpty()) {
+                validationErrors += "$sceneId: missing or empty `tags`"
+                return
+            }
+            val tags = mutableListOf<String>()
+            tagsValue.forEachIndexed { tagIndex, rawTag ->
+                val tag = rawTag as? String
+                if (tag.isNullOrBlank()) {
+                    validationErrors += "$sceneId: `tags[$tagIndex]` must be a non-empty string"
+                    return@forEachIndexed
+                }
+                if (!Regex("[a-z0-9][a-z0-9.-]*").matches(tag)) {
+                    validationErrors += "$sceneId: invalid tag `$tag`; tags must be lowercase and must not contain whitespace or slash"
+                }
+                tags += tag
+            }
+            tags.groupingBy { it }.eachCount()
+                .filterValues { it > 1 }
+                .keys
+                .forEach { duplicate -> validationErrors += "$sceneId: duplicate tag `$duplicate`" }
+
+            val tagSet = tags.toSet()
+            if (generationMode == "generated" || generationMode == "mixed") {
+                listOf("source.", "feature.", "route.", "reference.", "maturity.").forEach { namespace ->
+                    if (tagSet.none { it.startsWith(namespace) }) {
+                        validationErrors += "$sceneId: generated rows require a `$namespace*` tag"
+                    }
+                }
+            }
+
+            if ("maturity.adapter-backed" in tagSet) {
+                val gpu = rawScene["gpu"] as? Map<*, *>
+                val gpuStats = gpu?.get("stats") as? Map<*, *>
+                val adapter = gpuStats?.get("adapter") as? String
+                if (adapter.isNullOrBlank()) {
+                    validationErrors += "$sceneId: `maturity.adapter-backed` requires `gpu.stats.adapter` metadata"
+                }
+            }
+
+            if ("route.gpu.expected-unsupported" in tagSet) {
+                val gpu = rawScene["gpu"] as? Map<*, *>
+                val route = gpu?.get("route") as? Map<*, *>
+                val fallbackReason = route?.get("fallbackReason") as? String
+                if (fallbackReason.isNullOrBlank() || fallbackReason == "none") {
+                    validationErrors += "$sceneId: `route.gpu.expected-unsupported` requires stable non-`none` `gpu.route.fallbackReason`"
+                }
+            }
+        }
+
         fun requireRoute(sceneId: String, owner: Map<*, *>, fieldPrefix: String) {
             val route = requireMap(sceneId, owner, "route") ?: return
             val hasSelectedRoute = route["selectedRoute"] is String && (route["selectedRoute"] as String).isNotBlank()
@@ -1216,12 +1267,12 @@ tasks.register("pipelineSceneDashboard") {
             requireString(sceneId, route, "fallbackReason", "$fieldPrefix.route.fallbackReason")
         }
 
-        fun validateGeneration(sceneId: String, rawScene: Map<*, *>, status: String?) {
-            val generationValue = rawScene["generation"] ?: return
+        fun validateGeneration(sceneId: String, rawScene: Map<*, *>, status: String?): String? {
+            val generationValue = rawScene["generation"] ?: return null
             val generation = generationValue as? Map<*, *>
             if (generation == null) {
                 missingField(sceneId, "generation")
-                return
+                return null
             }
             val mode = requireString(sceneId, generation, "mode", "generation.mode")
             if (mode != null && mode !in setOf("static", "generated", "mixed")) {
@@ -1248,6 +1299,7 @@ tasks.register("pipelineSceneDashboard") {
                     }
                 }
             }
+            return mode
         }
 
         fun validateScene(rawScene: Any?, index: Int, seenIds: MutableSet<String>) {
@@ -1273,7 +1325,8 @@ tasks.register("pipelineSceneDashboard") {
             if (status != null && status !in allowedSceneStatuses) {
                 validationErrors += "$sceneId: unknown `status` '$status'; expected ${allowedSceneStatuses.sorted().joinToString()}"
             }
-            validateGeneration(sceneId, rawScene, status)
+            val generationMode = validateGeneration(sceneId, rawScene, status)
+            validateTags(sceneId, rawScene, generationMode)
 
             val cpu = requireMap(sceneId, rawScene, "cpu")
             val gpu = requireMap(sceneId, rawScene, "gpu")
@@ -1299,6 +1352,10 @@ tasks.register("pipelineSceneDashboard") {
                 if (gpuStatus == "expected-unsupported") {
                     if (fallbackReason.isNullOrBlank() || fallbackReason == "none") {
                         validationErrors += "$sceneId: `gpu.status=expected-unsupported` requires stable non-empty `gpu.route.fallbackReason`"
+                    }
+                    val tags = rawScene["tags"] as? List<*>
+                    if (tags?.contains("route.gpu.expected-unsupported") != true) {
+                        validationErrors += "$sceneId: `gpu.status=expected-unsupported` requires `route.gpu.expected-unsupported` tag"
                     }
                 } else {
                     requireString(sceneId, gpu, "image", "gpu.image")
@@ -1348,6 +1405,23 @@ tasks.register("pipelineSceneDashboard") {
         )
         val seenIds = mutableSetOf<String>()
         (scenes + generatedScenes).forEachIndexed { index, rawScene -> validateScene(rawScene, index, seenIds) }
+
+        fun tagAggregates(prefix: String, sceneList: List<Any?>): Map<String, Int> =
+            sceneList
+                .asSequence()
+                .filterIsInstance<Map<*, *>>()
+                .flatMap { scene -> (scene["tags"] as? List<*>)?.asSequence() ?: emptySequence() }
+                .filterIsInstance<String>()
+                .filter { it.startsWith(prefix) }
+                .groupingBy { it }
+                .eachCount()
+                .toSortedMap()
+
+        mergedRoot["tagAggregates"] = mapOf(
+            "feature" to tagAggregates("feature.", scenes + generatedScenes),
+            "maturity" to tagAggregates("maturity.", scenes + generatedScenes),
+            "risk" to tagAggregates("risk.", scenes + generatedScenes),
+        )
 
         collectReferencedPaths(mergedRoot)
 
