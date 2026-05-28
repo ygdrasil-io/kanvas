@@ -127,14 +127,20 @@ CPU reference behavior, GPU route evidence, and dashboard generation.
 
 After P0 is stable, add breadth scenes:
 
-| Scene | Purpose |
-|---|---|
-| `linear-gradient-rect` | Paint shader lowering and generated WGSL gradient route. |
-| `src-over-stack` | Destination load, blending, and store semantics. |
-| `runtime-effect-simple` | Registered runtime-effect descriptor with CPU/GPU implementations. |
-| `clip-rect-difference` | Clip interaction and stable fallback/route diagnostics. |
-| `crop-image-filter-nonnull` | M34 expected unsupported limitation row. |
-| `path-aa-edge-budget` | M33 expected unsupported breadth row. |
+| Scene | Purpose | M39 source test | CPU route expectation | GPU route expectation | Owner |
+|---|---|---|---|---|---|
+| `linear-gradient-rect` | Paint shader lowering and generated WGSL gradient route. | `LinearGradientRectTest#horizontal red-to-blue gradient interpolates across the rect()` plus `GeneratedLinearGradientWgslTest`. | `cpu.shader.linear-gradient.rect` with scalar reference samples and no fallback. | `webgpu.generated.linear-gradient.rect` with generated WGSL/parser evidence and `fallbackReason=none`. | GRA-185 |
+| `src-over-stack` | Destination load, blending, and store semantics. | `BlendModeTest#kSrcOver matches CPU for partial alpha over non opaque destination()` plus `TranslucentSrcOverTest`. | `cpu.blend.src-over-stack` byte oracle with tolerance `<=1`. | `webgpu.blend.src-over.fixed-function` / layer-composite route with `fallbackReason=none`. | GRA-185 |
+| `runtime-effect-simple` | Registered runtime-effect descriptor with CPU/GPU implementations. | `RuntimeEffectDescriptorWebGpuTest#SimpleRT runtime shader renders through descriptor-backed WGSL path()`. | `cpu.runtime-effect.descriptor.simple_rt`. | `webgpu.runtime-effect.descriptor.simple_rt` with registered WGSL descriptor and parser validation. | GRA-186 |
+| `clip-rect-difference` | Clip interaction and stable fallback/route diagnostics. | `ClipDifferenceCrossTest#Skbug9319GM survives clipRect_kDifference and clipRRect_kDifference on GPU()`. | `cpu.coverage.clip-rect-difference` through descriptor coverage fallback oracle. | `webgpu.coverage.clip-rect-difference` or stable unsupported reason for any non-selected AA clip variant. | GRA-186 |
+| `bitmap-shader-local-matrix` | Local-matrix image/shader transform route without duplicating P0 bitmap-rect nearest. | `BitmapShaderRotatedTest#rotated localMatrix on axis-aligned rect rotates the bitmap pattern()`. | `cpu.shader.bitmap.local-matrix` with opaque sampling payload handoff. | `webgpu.shader.bitmap.local-matrix` with route JSON showing local-matrix inverse/remap state. | GRA-186 |
+| `crop-image-filter-nonnull-prepass` | M38 selected child pre-pass now supported. | `SimpleOffsetImageFilterWebGpuTest` / `SimpleOffsetImageFilterCrossBackendTest`. | `cpu.image-filter.crop-nonnull.offset-oracle`. | `webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite`. | Done in GRA-183 |
+| `path-aa-edge-budget-boundary` | M33/M37 expected unsupported breadth row. | `gpuInventoryTest` classified Path AA rows. | CPU path coverage oracle. | `webgpu.coverage.refuse` with `coverage.edge-count-exceeded`. | Done in GRA-179 |
+
+M39 implementation tickets must not duplicate P0/P1 rows unless the new row adds
+a distinct route diagnostic. Each new row must include a source test, CPU route
+expectation, GPU route expectation, diff/similarity policy, and fallback policy
+before artifacts are added.
 
 ## Diagnostics
 
