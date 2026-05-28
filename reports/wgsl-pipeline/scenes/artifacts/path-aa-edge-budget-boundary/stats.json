@@ -1,0 +1,11 @@
+{
+  "pixels": 0,
+  "matchingPixels": 0,
+  "maxChannelDelta": 0,
+  "threshold": 99.85,
+  "backend": "inventory",
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuInventoryTest",
+  "edgeCountExceededRows": 46,
+  "expectedUnsupportedRows": 50,
+  "unexpectedExceptions": 0
+}
