@@ -1,29 +1,74 @@
 {
-  "sceneId": "src-over-stack",
-  "lane": "GPU",
-  "status": "estimated",
-  "sampleCount": 30,
-  "timing": {
-    "medianMs": 0.075,
-    "p95Ms": 0.111
-  },
-  "counters": {
-    "routeInvocations": 2,
-    "pipelineCacheHits": 58,
-    "pipelineCacheMisses": 2,
-    "bindGroupCount": 2,
-    "resourceBytes": 4096
-  },
-  "baseline": {
-    "name": "m40-gpu-cache-static-seed",
-    "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
-  },
-  "regression": {
-    "label": "unknown"
-  },
-  "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
-  "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
-  "pipelineKey": "state=[blendMode=kSrc] + state=[blendMode=kSrcOver] fixedFunctionBlend",
-  "route": "webgpu.blend.src-over.fixed-function",
-  "rawMetrics": "artifacts/src-over-stack/gpu-performance.json"
+    "sceneId": "src-over-stack",
+    "lane": "GPU",
+    "status": "measured",
+    "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+    "phase": "webgpu-cache-dashboard-row",
+    "sampleCount": 30,
+    "timing": {
+        "medianMs": 0.024375,
+        "p95Ms": 0.038625
+    },
+    "environment": {
+        "host": "Omega",
+        "os": "Mac OS X 26.5 aarch64",
+        "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+        "backend": "WebGPU cache/timing dashboard benchmark",
+        "adapter": "Apple M2 Max"
+    },
+    "adapter": "Apple M2 Max",
+    "counters": {
+        "routeInvocations": 2,
+        "pipelineCacheHits": 58,
+        "pipelineCacheMisses": 2,
+        "bindGroupCount": 2,
+        "resourceBytes": 4096
+    },
+    "baseline": {
+        "name": "m43-gpu-cache-measured-local",
+        "commit": "2da0d497dba3b908b6a7b517157c583a963a1b52"
+    },
+    "regression": {
+        "label": "unknown"
+    },
+    "gate": {
+        "mode": "reporting-only",
+        "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
+    },
+    "pipelineKey": "state=[blendMode=kSrc] + state=[blendMode=kSrcOver] fixedFunctionBlend",
+    "route": "webgpu.blend.src-over.fixed-function",
+    "rawMetrics": "artifacts/src-over-stack/gpu-performance.json",
+    "rawSamples": [
+        0.028167,
+        0.031834,
+        0.030125,
+        0.038625,
+        0.027375,
+        0.027459,
+        0.025708,
+        0.032083,
+        0.037084,
+        0.033208,
+        0.112458,
+        0.031875,
+        0.023833,
+        0.023875,
+        0.024334,
+        0.0225,
+        0.02825,
+        0.023042,
+        0.024458,
+        0.022417,
+        0.024125,
+        0.022334,
+        0.024375,
+        0.022292,
+        0.023833,
+        0.023125,
+        0.022833,
+        0.027542,
+        0.0105,
+        0.010959
+    ],
+    "checksum": 13481319
 }
