@@ -129,3 +129,14 @@ Final M42 dashboard state:
 | `fail` | 0 |
 
 M43 can start measured benchmark work with `solid-rect` no longer blocked on an adapter-backed GPU capture. M44 must treat `analytic-aa-convex` as a tracked P0 oracle/policy gap until `GRA-222` resolves whether to regenerate the CPU oracle or adjust GPU AA compositing semantics.
+
+## M43 Policy Note
+
+GRA-209 defines the M43 baseline and regression policy in
+`reports/wgsl-pipeline/2026-05-28-m43-baseline-regression-policy.md` and
+`.upstream/specs/wgsl-pipeline/12-benchmark-harness-and-performance-gates.md`.
+
+The measured CPU and GPU/cache rows created by GRA-207 and GRA-208 remain
+`reporting-only`. No required CI performance gate exists until a follow-up ticket
+adds explicit budget, host/JDK/backend/adapter eligibility, variance threshold,
+flake/quarantine handling, rollback rules, and a baseline owner.
