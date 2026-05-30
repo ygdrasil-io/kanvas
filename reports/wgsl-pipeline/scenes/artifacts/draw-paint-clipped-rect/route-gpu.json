@@ -1,0 +1,11 @@
+{
+  "sceneId": "draw-paint-clipped-rect",
+  "backend": "WebGPU",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.analytic-rect",
+  "selectedRoute": "webgpu.paint.draw-paint.clip-rect",
+  "pipelineKey": "paint=solidColor draw=drawPaint clip=rect(10,10,30,30) state=[blendMode=kSrcOver]",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.DrawPaintTest#drawPaint after clipRect only fills inside the clip",
+  "nonClaim": "Does not claim arbitrary clip stacks, AA clips, or inverse clips."
+}

@@ -1,0 +1,10 @@
+{
+  "sceneId": "gradient-color-filter-linear-kplus",
+  "backend": "CPU",
+  "status": "pass",
+  "selectedRoute": "cpu.shader.linear-gradient.color-filter.blend-kplus-oracle",
+  "fallbackReason": "none",
+  "referenceKind": "test-oracle",
+  "test": "org.skia.gpu.webgpu.GradientColorFilterTest#linear gradient with Blend(red, kPlus) colorFilter tints green to yellow",
+  "note": "M48 generated dashboard evidence aligned to the owner test oracle; no broad family support claim."
+}

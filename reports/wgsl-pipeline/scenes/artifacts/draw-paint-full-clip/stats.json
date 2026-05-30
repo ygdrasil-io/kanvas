@@ -1,0 +1,18 @@
+{
+  "sceneId": "draw-paint-full-clip",
+  "dimensions": {
+    "width": 64,
+    "height": 64
+  },
+  "pixels": 4096,
+  "matchingPixels": 4096,
+  "maxChannelDelta": 0,
+  "threshold": 99.95,
+  "cpuSimilarity": 100.0,
+  "gpuSimilarity": 100.0,
+  "gpuMatchingPixels": 4096,
+  "gpuMaxChannelDelta": 0,
+  "gpuStatus": "pass",
+  "backend": "WebGPU",
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.DrawPaintTest"
+}
