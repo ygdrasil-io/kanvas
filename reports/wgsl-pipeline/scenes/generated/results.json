@@ -4,6 +4,153 @@
   "description": "Generated scene rows materialized before pipelineSceneDashboard merges them with static dashboard rows.",
   "scenes": [
     {
+      "id": "runtime-effect-simple",
+      "title": "Registered SimpleRT runtime-effect route",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md",
+      "referenceKind": "test-oracle",
+      "reference": "artifacts/runtime-effect-simple/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/runtime-effect-simple/cpu.png",
+        "diff": "artifacts/runtime-effect-simple/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "selectedRoute": "cpu.runtime-effect.descriptor.simple_rt",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "Static oracle aligned to RuntimeEffectDescriptorWebGpuTest SimpleRT"
+        },
+        "performanceTrend": {
+          "status": "estimated",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.041,
+            "p95Ms": 0.055
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pixels": 4096,
+            "runtimeDescriptors": 1,
+            "coveragePlanCount": 1
+          },
+          "baseline": {
+            "name": "m40-cpu-static-seed",
+            "commit": "97dcd3b23c66fa1c05711c23a6f0e20ae26e126c"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "environment": "macOS local static dashboard seed; informational until native CPU benchmark harness lands",
+          "route": "cpu.runtime-effect.descriptor.simple_rt",
+          "rawMetrics": "artifacts/runtime-effect-simple/cpu-performance.json"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/runtime-effect-simple/gpu.png",
+        "diff": "artifacts/runtime-effect-simple/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.analytic-rect",
+          "selectedRoute": "webgpu.runtime-effect.descriptor.simple_rt",
+          "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"
+        },
+        "performanceTrend": {
+          "status": "estimated",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.105,
+            "p95Ms": 0.15
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pipelineCacheHits": 29,
+            "pipelineCacheMisses": 1,
+            "bindGroupCount": 1,
+            "resourceBytes": 4096
+          },
+          "baseline": {
+            "name": "m40-gpu-cache-static-seed",
+            "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
+          "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+          "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+          "route": "webgpu.runtime-effect.descriptor.simple_rt",
+          "rawMetrics": "artifacts/runtime-effect-simple/gpu-performance.json"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/runtime-effect-simple/cpu-diff.png",
+        "gpu": "artifacts/runtime-effect-simple/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/runtime-effect-simple/route-cpu.json",
+        "gpu": "artifacts/runtime-effect-simple/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 4096,
+        "matchingPixels": 4096,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m39-p1-scene-selection.md",
+        "reports/wgsl-pipeline/2026-05-28-m39-runtime-clip-localmatrix-dashboard-scenes.md",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RuntimeEffectDescriptorWebGpuTest.kt",
+        "reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json",
+        "gpu-raster/src/main/resources/shaders/runtime_simple_rt.wgsl",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/tools/WgslStrictValidationReportTest.kt",
+        "reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md",
+        "reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md",
+        "reports/wgsl-pipeline/scenes/generated/results.json"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.runtime-effect",
+        "feature.coverage.analytic-rect",
+        "route.cpu.descriptor",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.generated-evidence",
+        "risk.none"
+      ],
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:test",
+        "sourceTest": "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md",
+        "commit": "d3738c62e4c9952ccc05614152f442f63eecdb39",
+        "artifactRoot": "artifacts/runtime-effect-simple",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-274"
+      }
+    },
+    {
       "id": "src-over-stack",
       "title": "Partial alpha SrcOver blend stack",
       "priority": "P1",
