@@ -1,0 +1,10 @@
+{
+  "sceneId": "bitmap-shader-repeat-tile",
+  "backend": "CPU",
+  "status": "pass",
+  "selectedRoute": "cpu.shader.bitmap.repeat-tile-oracle",
+  "fallbackReason": "none",
+  "referenceKind": "test-oracle",
+  "test": "org.skia.gpu.webgpu.BitmapShaderPaintRectTest#paint shader kRepeat on oversized rect tiles the image",
+  "note": "M48 generated dashboard evidence aligned to owner test oracle; no broad family support claim."
+}

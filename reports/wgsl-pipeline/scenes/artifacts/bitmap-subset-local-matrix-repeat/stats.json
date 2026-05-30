@@ -1,0 +1,18 @@
+{
+  "sceneId": "bitmap-subset-local-matrix-repeat",
+  "dimensions": {
+    "width": 64,
+    "height": 64
+  },
+  "pixels": 65536,
+  "matchingPixels": 65536,
+  "maxChannelDelta": 0,
+  "threshold": 99.94,
+  "cpuSimilarity": 100.0,
+  "gpuSimilarity": 100.0,
+  "gpuMatchingPixels": 65536,
+  "gpuMaxChannelDelta": 0,
+  "gpuStatus": "pass",
+  "backend": "WebGPU",
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest"
+}
