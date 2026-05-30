@@ -259,3 +259,13 @@ fail, 8 generated-evidence rows, and 5 static-evidence rows. Remaining static
 rows are `runtime-effect-simple`, `clip-rect-difference`,
 `bitmap-shader-local-matrix`, `path-aa-stroke-outline-fallback`, and
 `path-aa-edge-budget-boundary`.
+
+
+## M47 Closeout
+
+M47 closed on 2026-05-31 by
+`reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md`.
+Final counters: 13 rows, 11 pass, 0 tracked-gap, 2 expected-unsupported, 0
+fail, 11 generated-evidence rows, and 2 static-evidence rows. Remaining static
+rows are `path-aa-stroke-outline-fallback` and `path-aa-edge-budget-boundary`;
+both are intentional Path AA policy sentinels with stable fallback reasons.
