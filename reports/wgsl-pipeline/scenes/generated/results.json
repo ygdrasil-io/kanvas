@@ -214,6 +214,108 @@
       }
     },
     {
+      "id": "path-aa-stroke-primitive",
+      "title": "Path AA primitive stroke family",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-30-m46-path-aa-stroke-primitive-generated-evidence.md",
+      "referenceKind": "test-oracle",
+      "reference": "artifacts/path-aa-stroke-primitive/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/path-aa-stroke-primitive/cpu.png",
+        "diff": "artifacts/path-aa-stroke-primitive/cpu-diff.png",
+        "similarity": 90.21,
+        "route": {
+          "coveragePlan": "Raster/reference Path AA stroke oracle for StrokeCircleGM representative; StrokeRectGM family evidence linked",
+          "selectedRoute": "cpu.raster.path-aa-stroke-primitive-oracle",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 270400,
+          "matchingPixels": 243919,
+          "maxChannelDelta": 75,
+          "threshold": 90.0,
+          "backend": "CPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests '*StrokeRectWebGpuTest' --tests '*StrokeCircleWebGpuTest' --tests '*StrokeRectCrossBackendTest' --tests '*StrokeCircleCrossBackendTest'"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/path-aa-stroke-primitive/gpu.png",
+        "diff": "artifacts/path-aa-stroke-primitive/gpu-diff.png",
+        "similarity": 91.81,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.path-aa-stroke-primitive",
+          "selectedRoute": "webgpu.coverage.path-aa-stroke-primitive",
+          "pipelineKey": "coverageKind=pathAaStrokePrimitive pathFillRule=winding topology=triangleList",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 270400,
+          "matchingPixels": 248258,
+          "maxChannelDelta": 169,
+          "threshold": 91.76,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests '*StrokeRectWebGpuTest' --tests '*StrokeCircleWebGpuTest' --tests '*StrokeRectCrossBackendTest' --tests '*StrokeCircleCrossBackendTest'"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/path-aa-stroke-primitive/cpu-diff.png",
+        "gpu": "artifacts/path-aa-stroke-primitive/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/path-aa-stroke-primitive/route-cpu.json",
+        "gpu": "artifacts/path-aa-stroke-primitive/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 270400,
+        "matchingPixels": 248258,
+        "maxChannelDelta": 169,
+        "threshold": 91.76
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m44-path-aa-family-selection.md",
+        "reports/wgsl-pipeline/2026-05-28-m44-path-aa-stroke-route.md",
+        "reports/wgsl-pipeline/2026-05-28-m44-path-aa-dashboard-evidence.md",
+        "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeRectWebGpuTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCircleWebGpuTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/StrokeRectCrossBackendTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/StrokeCircleCrossBackendTest.kt",
+        "reports/wgsl-pipeline/2026-05-30-m46-static-to-generated-inventory.md",
+        "reports/wgsl-pipeline/2026-05-30-m46-path-aa-stroke-primitive-generated-evidence.md",
+        "reports/wgsl-pipeline/scenes/generated/results.json"
+      ],
+      "m44Family": {
+        "selectedFamily": "StrokeRectGM + StrokeCircleGM primitive strokes",
+        "representative": "StrokeCircleGM",
+        "inventoryEffect": "coverage.edge-count-exceeded 50 -> 46 after GRA-212 targeted promotion",
+        "remainingUnsupported": "Broad Path AA suites remain expected unsupported with coverage.edge-count-exceeded"
+      },
+      "tags": [
+        "source.generated",
+        "feature.path-aa",
+        "feature.stroke",
+        "route.cpu.oracle",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.generated-evidence",
+        "risk.none"
+      ],
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:test",
+        "sourceTest": "org.skia.gpu.webgpu.StrokeRectWebGpuTest, org.skia.gpu.webgpu.StrokeCircleWebGpuTest, org.skia.gpu.webgpu.crossbackend.StrokeRectCrossBackendTest, org.skia.gpu.webgpu.crossbackend.StrokeCircleCrossBackendTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-30-m46-path-aa-stroke-primitive-generated-evidence.md",
+        "commit": "b45e275186b3d825a72a86eedae492d629d412f7",
+        "artifactRoot": "artifacts/path-aa-stroke-primitive",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-227"
+      }
+    },
+    {
       "id": "bitmap-rect-nearest",
       "title": "Bitmap rect nearest sampling",
       "priority": "P0",
