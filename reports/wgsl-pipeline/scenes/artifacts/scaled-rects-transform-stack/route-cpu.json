@@ -1,0 +1,10 @@
+{
+  "sceneId": "scaled-rects-transform-stack",
+  "backend": "CPU",
+  "status": "pass",
+  "selectedRoute": "cpu.gm.scaled-rects.reference-oracle",
+  "fallbackReason": "none",
+  "referenceKind": "skia-upstream",
+  "test": "org.skia.gpu.webgpu.ScaledRectsWebGpuTest#ScaledRectsGM renders close to reference PNG on the GPU backend",
+  "note": "M48 generated dashboard evidence aligned to the owner test oracle; no broad family support claim."
+}

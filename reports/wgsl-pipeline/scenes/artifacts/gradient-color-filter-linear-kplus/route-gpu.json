@@ -1,0 +1,11 @@
+{
+  "sceneId": "gradient-color-filter-linear-kplus",
+  "backend": "WebGPU",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.analytic-rect",
+  "selectedRoute": "webgpu.generated.linear-gradient.color-filter.blend-kplus",
+  "pipelineKey": "shaderFamily=linearGradient colorFilter=Blend(red,kPlus) coverage=analyticRect state=[blendMode=kSrcOver]",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.GradientColorFilterTest#linear gradient with Blend(red, kPlus) colorFilter tints green to yellow",
+  "nonClaim": "Does not claim all color filters, all blend modes, or color-space parity beyond this linear-gradient kPlus contract."
+}
