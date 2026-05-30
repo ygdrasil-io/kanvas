@@ -28,6 +28,11 @@ diagnostics work.
 For Linear milestone execution, skill usage, subagent handoffs, and PM demo
 evidence, read `.upstream/target/linear-agent-methodology.md`.
 
+For completed Linear backlog archival, use `reports/linear-archive/README.md`
+and `scripts/linear_archive.py`. Committed Linear archive snapshots are
+historical evidence only; active backlog remains in Linear and the current
+target/spec documents.
+
 Hard architecture decisions:
 
 - Do not port Ganesh or Graphite.
