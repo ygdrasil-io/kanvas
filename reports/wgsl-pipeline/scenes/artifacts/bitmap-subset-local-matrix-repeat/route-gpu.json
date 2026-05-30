@@ -1,0 +1,11 @@
+{
+  "sceneId": "bitmap-subset-local-matrix-repeat",
+  "backend": "WebGPU",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.analytic-rect",
+  "selectedRoute": "webgpu.shader.bitmap.subset-local-matrix-repeat",
+  "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat subset=true localMatrix=scaleRotate state=[blendMode=kSrcOver]",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest#BitmapSubsetShaderGM matches reference on raster and GPU backends",
+  "nonClaim": "Does not claim every subset sampling, perspective, all filtering modes, or codec-backed bitmap coverage."
+}

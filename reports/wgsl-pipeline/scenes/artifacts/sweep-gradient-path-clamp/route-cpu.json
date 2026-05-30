@@ -1,0 +1,10 @@
+{
+  "sceneId": "sweep-gradient-path-clamp",
+  "backend": "CPU",
+  "status": "pass",
+  "selectedRoute": "cpu.shader.sweep-gradient.path-aa-oracle",
+  "fallbackReason": "none",
+  "referenceKind": "test-oracle",
+  "test": "org.skia.gpu.webgpu.SweepGradientPathTest#kClamp sweep gradient on a circle path interpolates around the center",
+  "note": "M48 generated dashboard evidence aligned to owner test oracle; no broad family support claim."
+}

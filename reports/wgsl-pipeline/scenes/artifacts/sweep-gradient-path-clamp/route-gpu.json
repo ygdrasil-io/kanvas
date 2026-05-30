@@ -1,0 +1,11 @@
+{
+  "sceneId": "sweep-gradient-path-clamp",
+  "backend": "WebGPU",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.path-convex-fan",
+  "selectedRoute": "webgpu.generated.sweep-gradient.path-aa",
+  "pipelineKey": "shaderFamily=sweepGradient tile=kClamp coverage=pathConvexFan shape=circle state=[blendMode=kSrcOver]",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.SweepGradientPathTest#kClamp sweep gradient on a circle path interpolates around the center",
+  "nonClaim": "Does not claim all sweep-gradient tile modes, all gradient families, or broad Path AA support."
+}

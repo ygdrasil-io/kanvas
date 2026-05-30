@@ -4,6 +4,280 @@
   "description": "Generated scene rows materialized before pipelineSceneDashboard merges them with static dashboard rows.",
   "scenes": [
     {
+      "id": "bitmap-shader-repeat-tile",
+      "title": "Bitmap shader repeat tile paint rect",
+      "priority": "P0",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:test",
+        "sourceTest": "org.skia.gpu.webgpu.BitmapShaderPaintRectTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md",
+        "commit": "ecbc556956aa7bdcd0c43c2b89fd72ca3e0c035a",
+        "artifactRoot": "artifacts/bitmap-shader-repeat-tile",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-283"
+      },
+      "referenceKind": "test-oracle",
+      "reference": "artifacts/bitmap-shader-repeat-tile/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/bitmap-shader-repeat-tile/cpu.png",
+        "diff": "artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "selectedRoute": "cpu.shader.bitmap.repeat-tile-oracle",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderPaintRectTest"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/bitmap-shader-repeat-tile/gpu.png",
+        "diff": "artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.analytic-rect",
+          "selectedRoute": "webgpu.shader.bitmap.repeat-tile",
+          "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat localMatrix=identity state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderPaintRectTest"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
+        "gpu": "artifacts/bitmap-shader-repeat-tile/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/bitmap-shader-repeat-tile/route-cpu.json",
+        "gpu": "artifacts/bitmap-shader-repeat-tile/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 4096,
+        "matchingPixels": 4096,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BitmapShaderPaintRectTest.kt",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.image.bitmap",
+        "feature.sampling.nearest",
+        "feature.tile.repeat",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.generated-evidence",
+        "risk.none"
+      ]
+    },
+    {
+      "id": "bitmap-subset-local-matrix-repeat",
+      "title": "Bitmap subset shader local-matrix repeat",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:test",
+        "sourceTest": "org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md",
+        "commit": "ecbc556956aa7bdcd0c43c2b89fd72ca3e0c035a",
+        "artifactRoot": "artifacts/bitmap-subset-local-matrix-repeat",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-283"
+      },
+      "referenceKind": "skia-upstream",
+      "reference": "artifacts/bitmap-subset-local-matrix-repeat/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
+        "diff": "artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "selectedRoute": "cpu.shader.bitmap.subset-local-matrix-repeat",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 65536,
+          "matchingPixels": 65536,
+          "maxChannelDelta": 0,
+          "threshold": 99.94,
+          "backend": "CPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
+        "diff": "artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.analytic-rect",
+          "selectedRoute": "webgpu.shader.bitmap.subset-local-matrix-repeat",
+          "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat subset=true localMatrix=scaleRotate state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 65536,
+          "matchingPixels": 65536,
+          "maxChannelDelta": 0,
+          "threshold": 99.94,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+        "gpu": "artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+        "gpu": "artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 65536,
+        "matchingPixels": 65536,
+        "maxChannelDelta": 0,
+        "threshold": 99.94
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/BitmapSubsetShaderCrossBackendTest.kt",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.image.bitmap",
+        "feature.shader.local-matrix",
+        "feature.tile.repeat",
+        "feature.matrix-transform",
+        "route.gpu.webgpu",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.none"
+      ]
+    },
+    {
+      "id": "sweep-gradient-path-clamp",
+      "title": "Sweep gradient clamp on AA circle path",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:test",
+        "sourceTest": "org.skia.gpu.webgpu.SweepGradientPathTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md",
+        "commit": "ecbc556956aa7bdcd0c43c2b89fd72ca3e0c035a",
+        "artifactRoot": "artifacts/sweep-gradient-path-clamp",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-283"
+      },
+      "referenceKind": "test-oracle",
+      "reference": "artifacts/sweep-gradient-path-clamp/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/sweep-gradient-path-clamp/cpu.png",
+        "diff": "artifacts/sweep-gradient-path-clamp/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "selectedRoute": "cpu.shader.sweep-gradient.path-aa-oracle",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.SweepGradientPathTest"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/sweep-gradient-path-clamp/gpu.png",
+        "diff": "artifacts/sweep-gradient-path-clamp/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.path-convex-fan",
+          "selectedRoute": "webgpu.generated.sweep-gradient.path-aa",
+          "pipelineKey": "shaderFamily=sweepGradient tile=kClamp coverage=pathConvexFan shape=circle state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.SweepGradientPathTest"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/sweep-gradient-path-clamp/cpu-diff.png",
+        "gpu": "artifacts/sweep-gradient-path-clamp/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/sweep-gradient-path-clamp/route-cpu.json",
+        "gpu": "artifacts/sweep-gradient-path-clamp/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 4096,
+        "matchingPixels": 4096,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SweepGradientPathTest.kt",
+        "reports/wgsl-pipeline/scenes/artifacts/sweep-gradient-path-clamp/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/sweep-gradient-path-clamp/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/sweep-gradient-path-clamp/stats.json"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.gradient.sweep",
+        "feature.path-aa",
+        "feature.coverage.aa",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.generated-evidence",
+        "risk.none"
+      ]
+    },
+    {
       "id": "draw-paint-full-clip",
       "title": "drawPaint full clip opaque source",
       "priority": "P0",
