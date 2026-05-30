@@ -10,7 +10,7 @@ GPU backend.
 
 Last updated: 2026-05-31
 
-Post-MVP platform readiness: 90%.
+Post-MVP platform readiness through M47: 100%.
 
 The percentage is a readiness score, not an effort estimate. It moves only when
 Linear milestone work lands with visible report, artifact, dashboard, or CI
