@@ -91,6 +91,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | M44 | First Real Path AA Family Promotion | One narrow Path AA family moves from expected unsupported to rendered GPU support with CPU/GPU/reference evidence. |
 | M45 | Image-Filter DAG Subset V1 | A bounded image-filter DAG subset renders through explicit pre-pass/layer contracts and dashboard evidence. |
 | M46 | Generated Evidence Expansion | Convert the next high-value static dashboard rows to generated evidence while keeping zero tracked gaps and zero failing support claims. |
+| M47 | Remaining Static Evidence Hardening | Convert remaining static pass rows to generated evidence and keep Path AA expected-unsupported rows explicit as policy evidence. |
 
 ## Current Baseline
 
@@ -112,22 +113,22 @@ The two current `tracked-gap` P0 rows are:
 Both have route evidence but are missing adapter-backed GPU render captures in
 the current dashboard evidence.
 
-After M46, the merged dashboard export has:
+After M47, the merged dashboard export has:
 
 - 13 scene rows;
 - 11 pass;
 - 0 tracked-gap;
 - 2 expected-unsupported;
 - 0 fail;
-- 8 generated evidence rows;
-- 5 static evidence rows;
+- 11 generated evidence rows;
+- 2 static evidence rows;
 - 2 adapter-backed P0 rows;
 - tag aggregates for `feature.*`, `maturity.*`, and `risk.*`.
 
-M46 closed on 2026-05-30 by
-`reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md`.
-The remaining static rows are explicitly owned by follow-up scope and are not
-hidden from the dashboard.
+M47 closed on 2026-05-31 by
+`reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md`.
+The remaining static rows are deliberate Path AA policy sentinels, not unowned
+conversion debt.
 
 The two remaining expected unsupported rows are:
 

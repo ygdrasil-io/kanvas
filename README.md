@@ -28,13 +28,11 @@ tests into PM-readable progress and engineering-actionable proof.
 | Narrow Path AA support promotion | Done | 100% | M44 selected Path AA family |
 | Bounded image-filter DAG support | Done | 100% | M45 selected DAG subset |
 | Static-to-generated evidence expansion | Done | 100% | M46 converted five additional rows |
-| Remaining static evidence hardening | In progress | 33% | M47 inventory locked and `runtime-effect-simple` converted by [reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md](reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md) |
+| Remaining static evidence hardening | Done | 100% | M47 converted remaining static pass rows and validated Path AA policy rows |
 
-Overall readiness is 90% because M41-M46 are complete and M47 has two gates
-complete: the remaining static rows are inventoried, `runtime-effect-simple` is
-now generated evidence, two support rows remain selected for generated
-conversion, and two Path AA rows remain explicit expected-unsupported policy
-evidence.
+Overall readiness is 100% for the post-MVP evidence-hardening track through M47:
+all static pass rows have generated evidence, and the only remaining static rows
+are explicit Path AA expected-unsupported policy sentinels.
 
 Active Post-MVP evidence:
 
@@ -43,8 +41,9 @@ Active Post-MVP evidence:
 - dashboard source: [reports/wgsl-pipeline/scenes/](reports/wgsl-pipeline/scenes/)
 - generated demo: `rtk ./gradlew --no-daemon pipelineSceneDashboard`
 - M46 review: [reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md)
-- active M47 inventory: [reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md](reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md)
-- M47 runtime-effect conversion: [reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md](reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md)
+- M47 review: [reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md)
+- M47 inventory: [reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md](reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md)
+- M47 Path AA policy validation: [reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md](reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md)
 
 ## MVP Roadmap
 
@@ -124,7 +123,7 @@ Current scene dashboard:
 - generated output: `build/reports/wgsl-pipeline-scenes/index.html`
 - target doc: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
 
-Current dashboard evidence after M46 and M47 `runtime-effect-simple` conversion:
+Current dashboard evidence after M47 closeout:
 
 | Signal | Count | Meaning |
 |---|---:|---|
@@ -133,8 +132,8 @@ Current dashboard evidence after M46 and M47 `runtime-effect-simple` conversion:
 | `tracked-gap` | 0 | P0 adapter-backed capture gaps were closed by M42 and GRA-222. |
 | `expected-unsupported` | 2 | GPU intentionally refuses the scene with a stable fallback reason. |
 | `fail` | 0 | No dashboard row is currently a failing support claim. |
-| `maturity.generated-evidence` | 9 | M41, M46, and M47 generated rows, including P0 captures, Path AA stroke, image-filter DAG, SrcOver stack, and runtime-effect descriptor evidence. |
-| `maturity.static-evidence` | 4 | Remaining rows are explicitly listed in the M47 inventory. |
+| `maturity.generated-evidence` | 11 | M41, M46, and M47 generated rows, including P0 captures, Path AA stroke, image-filter DAG, SrcOver stack, runtime-effect, clip, and bitmap local-matrix evidence. |
+| `maturity.static-evidence` | 2 | Remaining rows are explicit Path AA expected-unsupported policy evidence. |
 | `maturity.adapter-backed` | 2 | P0 GPU captures on named adapter. |
 | CPU/GPU perf `measured` | 2 each | M43 benchmark payloads, reporting-only until CI gate policy is approved. |
 
@@ -150,11 +149,18 @@ Closed post-MVP milestones:
   three rows eligible for generated conversion;
 - M47/GRA-274: converted `runtime-effect-simple` to generated evidence while
   preserving the registered Kotlin/WGSL descriptor boundary;
+- M47/GRA-275: converted `clip-rect-difference` to generated evidence;
+- M47/GRA-276: converted `bitmap-shader-local-matrix` to generated evidence;
+- M47/GRA-277: kept the two Path AA expected-unsupported rows as static policy
+  evidence with stable fallback reasons;
+- M47/GRA-278: closed the sprint with 11 generated rows and 2 static policy rows;
 - GRA-221: added scene tags, exact-tag filtering, tag search, and
   feature/maturity/risk aggregates.
 
-Sprint review:
+Sprint reviews:
 [reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md](reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md)
+[reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md)
+[reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md)
 
 M46 closeout:
 [reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md](reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md)
