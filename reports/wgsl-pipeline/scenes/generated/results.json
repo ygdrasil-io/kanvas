@@ -316,6 +316,120 @@
       }
     },
     {
+      "id": "image-filter-compose-cf-matrix-transform",
+      "title": "Image-filter Compose ColorFilter over MatrixTransform",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-30-m46-image-filter-dag-subset-generated-evidence.md",
+      "referenceKind": "test-oracle",
+      "reference": "artifacts/image-filter-compose-cf-matrix-transform/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/image-filter-compose-cf-matrix-transform/cpu.png",
+        "diff": "artifacts/image-filter-compose-cf-matrix-transform/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "backend": "CPU",
+          "sceneId": "image-filter-compose-cf-matrix-transform",
+          "drawKind": "SaveLayerImageFilterTest Compose(ColorFilter, MatrixTransform)",
+          "selectedRoute": "cpu.image-filter.compose.cf-matrix-transform-oracle",
+          "compatibilityFallbackRoute": "kanvas-skia.current.image-filter-raster",
+          "fallbackReason": "none",
+          "test": "org.skia.gpu.webgpu.SaveLayerImageFilterTest#saveLayer with Compose(ColorFilter, MatrixTransform) grayscales the transformed pixels()"
+        },
+        "stats": {
+          "pixels": 1024,
+          "matchingPixels": 1024,
+          "maxChannelDelta": 0,
+          "threshold": 99.0,
+          "backend": "CPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.SaveLayerImageFilterTest"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/image-filter-compose-cf-matrix-transform/gpu.png",
+        "diff": "artifacts/image-filter-compose-cf-matrix-transform/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "backend": "WebGPU",
+          "sceneId": "image-filter-compose-cf-matrix-transform",
+          "drawKind": "SaveLayerImageFilterTest Compose(ColorFilter, MatrixTransform)",
+          "status": "pass",
+          "coverageStrategy": "webgpu.image-filter.compose.cf-matrix-transform",
+          "selectedRoute": "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite",
+          "prepassRoute": "webgpu.image-filter.compose.cf-matrix-transform.materialize-matrix",
+          "scratchOwner": "LayerCompositeDraw.materializeTargetTexture",
+          "scratchLifetime": "per-composite-dispatch",
+          "materialiseStages": 1,
+          "fallbackReason": "none",
+          "test": "org.skia.gpu.webgpu.SaveLayerImageFilterTest#saveLayer with Compose ColorFilter MatrixTransform exposes M45 route diagnostics()",
+          "sourceReport": "reports/wgsl-pipeline/2026-05-28-m45-image-filter-dag-route-implementation.md"
+        },
+        "stats": {
+          "pixels": 1024,
+          "matchingPixels": 1024,
+          "maxChannelDelta": 0,
+          "threshold": 99.0,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.SaveLayerImageFilterTest"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/image-filter-compose-cf-matrix-transform/cpu-diff.png",
+        "gpu": "artifacts/image-filter-compose-cf-matrix-transform/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/image-filter-compose-cf-matrix-transform/route-cpu.json",
+        "gpu": "artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json",
+        "prepass": "artifacts/image-filter-compose-cf-matrix-transform/route-prepass.json"
+      },
+      "stats": {
+        "pixels": 1024,
+        "matchingPixels": 1024,
+        "maxChannelDelta": 0,
+        "threshold": 99.0
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m45-image-filter-dag-subset-selection.md",
+        "reports/wgsl-pipeline/2026-05-28-m45-intermediate-texture-layer-ownership.md",
+        "reports/wgsl-pipeline/2026-05-28-m45-image-filter-dag-route-implementation.md",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SaveLayerImageFilterTest.kt",
+        "reports/wgsl-pipeline/2026-05-30-m46-static-to-generated-inventory.md",
+        "reports/wgsl-pipeline/2026-05-30-m46-image-filter-dag-subset-generated-evidence.md",
+        "reports/wgsl-pipeline/scenes/generated/results.json"
+      ],
+      "m45DagSubset": {
+        "selectedSubset": "Compose(ColorFilter(Matrix|Blend), MatrixTransform(affine, input=null))",
+        "representative": "SaveLayerImageFilterTest Compose(ColorFilter, MatrixTransform)",
+        "intermediateTexture": "LayerCompositeDraw.materializeTargetTexture",
+        "remainingUnsupported": "Broad image-filter DAG shapes remain scoped by stable diagnostics"
+      },
+      "tags": [
+        "source.generated",
+        "feature.image-filter",
+        "feature.color-filter",
+        "feature.matrix-transform",
+        "route.cpu.oracle",
+        "route.gpu.webgpu",
+        "reference.test-oracle",
+        "maturity.generated-evidence",
+        "risk.none"
+      ],
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:test",
+        "sourceTest": "org.skia.gpu.webgpu.SaveLayerImageFilterTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-30-m46-image-filter-dag-subset-generated-evidence.md",
+        "commit": "8870f486e42815ded9ec3308d9e72827ab6ee26b",
+        "artifactRoot": "artifacts/image-filter-compose-cf-matrix-transform",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-228"
+      }
+    },
+    {
       "id": "bitmap-rect-nearest",
       "title": "Bitmap rect nearest sampling",
       "priority": "P0",
