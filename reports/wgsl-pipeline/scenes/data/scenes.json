@@ -134,7 +134,8 @@
         "reports/wgsl-pipeline/2026-05-28-m37-path-aa-dashboard-scenes.md",
         "reports/wgsl-pipeline/2026-05-28-m37-path-aa-stroke-fallback.md",
         "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-outline-fallback/stats.json",
-        "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"
+        "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt",
+        "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md"
       ],
       "tags": [
         "source.static",
@@ -201,7 +202,8 @@
         "reports/wgsl-pipeline/2026-05-28-m37-path-aa-dashboard-scenes.md",
         "reports/wgsl-pipeline/2026-05-28-m37-path-aa-breadth-audit.md",
         "reports/wgsl-pipeline/2026-05-28-m37-path-aa-stroke-fallback.md",
-        "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/stats.json"
+        "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/stats.json",
+        "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md"
       ],
       "tags": [
         "source.static",
