@@ -10,15 +10,32 @@ GPU backend.
 
 Last updated: 2026-05-31
 
-Post-MVP platform readiness through M47: 100%.
+Post-MVP Big Target readiness for MEP: 35%.
 
-The percentage is a readiness score, not an effort estimate. It moves only when
-Linear milestone work lands with visible report, artifact, dashboard, or CI
-evidence.
+This percentage is a PM readiness score for the full Post-MVP target, not an
+effort estimate and not the completion state of the last sprint. It moves only
+when Kanvas gains release-relevant capability with visible report, artifact,
+dashboard, CI, or demo evidence.
 
 The MVP is complete. The big target is now the Kanvas Rendering Conformance &
 Performance Platform: a generated evidence system that turns CPU/GPU rendering
 tests into PM-readable progress and engineering-actionable proof.
+
+Current PM interpretation: M41-M47 built the evidence foundation, but the
+platform is not yet MEP-ready. The dashboard is cleaner and more generated than
+before, yet the production path still needs broader Skia integration coverage,
+real CI gates, wider scene breadth, stronger performance tracking, and a
+deployable demo/report workflow.
+
+| PM area | Weight | Status | Progress | Evidence / remaining work |
+|---|---:|---|---:|---|
+| Evidence foundation | 25% | Done through M47 | 100% | Generated dashboard, 11 generated rows, 0 tracked-gap, 0 fail |
+| Skia integration coverage | 25% | Early | 15% | Selected scenes exist, but coverage is still narrow and not representative enough for MEP |
+| CI and release gates | 20% | Early | 10% | Dashboard generation is validated, but promotion/performance gates are not yet release-grade |
+| Performance readiness | 15% | Early | 15% | M43 measured payloads exist, but trends remain reporting-only |
+| PM demo and reporting workflow | 15% | Prototype | 15% | Static dashboard works locally; deployable and repeatable PM workflow still missing |
+
+Weighted PM readiness: 35% after rounding.
 
 | Track | Status | Progress | Evidence |
 |---|---|---:|---|
@@ -30,9 +47,22 @@ tests into PM-readable progress and engineering-actionable proof.
 | Static-to-generated evidence expansion | Done | 100% | M46 converted five additional rows |
 | Remaining static evidence hardening | Done | 100% | M47 converted remaining static pass rows and validated Path AA policy rows |
 
-Overall readiness is 100% for the post-MVP evidence-hardening track through M47:
+Evidence-hardening readiness is 100% through M47:
 all static pass rows have generated evidence, and the only remaining static rows
 are explicit Path AA expected-unsupported policy sentinels.
+
+What remains before MEP:
+
+- broaden the Skia integration scene set beyond the current selected dashboard
+  rows;
+- make generated evidence the normal path for new support claims, not a
+  hand-curated closeout exercise;
+- define CI gates for required conformance, allowed expected-unsupported rows,
+  and non-blocking inventory;
+- turn performance payloads into stable trends and approved release thresholds;
+- publish a repeatable PM demo/report flow outside a local-only static page;
+- define a final MEP acceptance checklist that links Linear, CI, dashboard,
+  reports, and known limitations.
 
 Active Post-MVP evidence:
 

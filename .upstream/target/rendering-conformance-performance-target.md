@@ -35,6 +35,37 @@ The platform must answer five questions for every promoted scene:
 - what visual/statistical result was produced;
 - whether the result is support, a tracked gap, or expected unsupported scope.
 
+## PM Readiness
+
+Current Post-MVP Big Target readiness for MEP: 35%.
+
+This is a PM readiness score for the full target, not an effort estimate and not
+the completion state of the latest Linear sprint. M41-M47 completed the evidence
+foundation, but the platform is not yet MEP-ready because coverage, CI gates,
+performance trends, and repeatable PM demo/reporting still need dedicated work.
+
+| Area | Weight | Current state | Progress |
+|---|---:|---|---:|
+| Evidence foundation | 25% | M41-M47 complete: generated dashboard, 11 generated rows, 0 tracked-gap, 0 fail. | 100% |
+| Skia integration coverage | 25% | Selected scenes exist, but the set is still narrow and not representative enough for MEP. | 15% |
+| CI and release gates | 20% | Dashboard generation is validated; release-grade promotion and inventory gates are not complete. | 10% |
+| Performance readiness | 15% | Measured payloads exist, but trends remain reporting-only and thresholds are not release gates. | 15% |
+| PM demo and reporting workflow | 15% | Static local dashboard exists; deployable/repeatable PM workflow is still missing. | 15% |
+
+The resulting weighted readiness rounds to 35%. Evidence-hardening through M47
+is 100% complete, but that is only one part of the larger MEP target.
+
+Before MEP, Kanvas still needs:
+
+- broader Skia integration scene coverage;
+- generated evidence as the default path for new support claims;
+- CI gates for required conformance, allowed expected-unsupported rows, and
+  non-blocking inventory;
+- performance trends with approved release thresholds;
+- a repeatable PM demo/reporting workflow that is not only local/static;
+- a final MEP acceptance checklist linking Linear, CI, dashboard output,
+  reports, and known limitations.
+
 ## Evidence Levels
 
 | Level | Meaning | May claim support? |
