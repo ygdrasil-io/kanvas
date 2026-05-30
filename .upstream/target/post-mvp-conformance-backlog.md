@@ -251,3 +251,11 @@ M46 target:
 M46 should not change runtime support claims unless the generated artifacts
 prove the same route, threshold, fallback, and tag semantics as the static row
 being replaced.
+
+M46 closed on 2026-05-30 by
+`reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md`.
+Final counters: 13 rows, 11 pass, 0 tracked-gap, 2 expected-unsupported, 0
+fail, 8 generated-evidence rows, and 5 static-evidence rows. Remaining static
+rows are `runtime-effect-simple`, `clip-rect-difference`,
+`bitmap-shader-local-matrix`, `path-aa-stroke-outline-fallback`, and
+`path-aa-edge-budget-boundary`.
