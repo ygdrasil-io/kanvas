@@ -1,0 +1,11 @@
+{
+  "sceneId": "scaled-rects-transform-stack",
+  "backend": "WebGPU",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.path-convex-fan",
+  "selectedRoute": "webgpu.transform.scaled-rects.convex-polygon",
+  "pipelineKey": "gm=ScaledRects transform=rotate+skew coverage=convexPolygon state=[blendMode=kPlus]",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.ScaledRectsWebGpuTest#ScaledRectsGM renders close to reference PNG on the GPU backend",
+  "nonClaim": "Does not claim perspective, 3D transform, or all polygon AA edge behavior."
+}

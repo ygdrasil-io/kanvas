@@ -1,0 +1,18 @@
+{
+  "sceneId": "gradient-color-filter-linear-kplus",
+  "dimensions": {
+    "width": 32,
+    "height": 32
+  },
+  "pixels": 1024,
+  "matchingPixels": 1024,
+  "maxChannelDelta": 0,
+  "threshold": 99.95,
+  "cpuSimilarity": 100.0,
+  "gpuSimilarity": 100.0,
+  "gpuMatchingPixels": 1024,
+  "gpuMaxChannelDelta": 0,
+  "gpuStatus": "pass",
+  "backend": "WebGPU",
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.GradientColorFilterTest"
+}

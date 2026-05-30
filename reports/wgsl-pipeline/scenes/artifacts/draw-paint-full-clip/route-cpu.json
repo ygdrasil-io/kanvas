@@ -1,0 +1,10 @@
+{
+  "sceneId": "draw-paint-full-clip",
+  "backend": "CPU",
+  "status": "pass",
+  "selectedRoute": "cpu.paint.draw-paint.full-clip-oracle",
+  "fallbackReason": "none",
+  "referenceKind": "test-oracle",
+  "test": "org.skia.gpu.webgpu.DrawPaintTest#drawPaint fills the full clip with opaque source",
+  "note": "M48 generated dashboard evidence aligned to the owner test oracle; no broad family support claim."
+}

@@ -1,0 +1,11 @@
+{
+  "sceneId": "draw-paint-full-clip",
+  "backend": "WebGPU",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.analytic-rect",
+  "selectedRoute": "webgpu.paint.draw-paint.full-clip",
+  "pipelineKey": "paint=solidColor draw=drawPaint clip=full state=[blendMode=kSrcOver]",
+  "fallbackReason": "none",
+  "test": "org.skia.gpu.webgpu.DrawPaintTest#drawPaint fills the full clip with opaque source",
+  "nonClaim": "Does not claim all paint effects, color filters, color spaces, or blend modes."
+}
