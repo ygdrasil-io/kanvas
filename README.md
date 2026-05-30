@@ -6,6 +6,46 @@ pipeline target is based on a typed Kanvas IR, WGSL parser/generator support,
 CPU scalar/vector execution plans, and parser-validated generated WGSL for the
 GPU backend.
 
+## Post-MVP Big Target
+
+Last updated: 2026-05-31
+
+Post-MVP platform readiness: 90%.
+
+The percentage is a readiness score, not an effort estimate. It moves only when
+Linear milestone work lands with visible report, artifact, dashboard, or CI
+evidence.
+
+The MVP is complete. The big target is now the Kanvas Rendering Conformance &
+Performance Platform: a generated evidence system that turns CPU/GPU rendering
+tests into PM-readable progress and engineering-actionable proof.
+
+| Track | Status | Progress | Evidence |
+|---|---|---:|---|
+| Generated scene dashboard | Done | 100% | M41 generated rows and dashboard exporter |
+| Adapter-backed P0 GPU capture | Done | 100% | M42 P0 captures and status policy |
+| Measured CPU/GPU benchmark payloads | Done | 100% | M43 reporting-only benchmark evidence |
+| Narrow Path AA support promotion | Done | 100% | M44 selected Path AA family |
+| Bounded image-filter DAG support | Done | 100% | M45 selected DAG subset |
+| Static-to-generated evidence expansion | Done | 100% | M46 converted five additional rows |
+| Remaining static evidence hardening | In progress | 33% | M47 inventory locked and `runtime-effect-simple` converted by [reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md](reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md) |
+
+Overall readiness is 90% because M41-M46 are complete and M47 has two gates
+complete: the remaining static rows are inventoried, `runtime-effect-simple` is
+now generated evidence, two support rows remain selected for generated
+conversion, and two Path AA rows remain explicit expected-unsupported policy
+evidence.
+
+Active Post-MVP evidence:
+
+- target doc: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
+- backlog: [.upstream/target/post-mvp-conformance-backlog.md](.upstream/target/post-mvp-conformance-backlog.md)
+- dashboard source: [reports/wgsl-pipeline/scenes/](reports/wgsl-pipeline/scenes/)
+- generated demo: `rtk ./gradlew --no-daemon pipelineSceneDashboard`
+- M46 review: [reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md)
+- active M47 inventory: [reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md](reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md)
+- M47 runtime-effect conversion: [reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md](reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md)
+
 ## MVP Roadmap
 
 Last updated: 2026-05-28
@@ -72,11 +112,10 @@ Non-goals for the MVP:
 - hiding GPU inventory failures by lowering floors in bulk;
 - adding short-lived font or codec substitutes for dependency-gated gaps.
 
-## Post-MVP Big Target
+## Post-MVP Evidence Details
 
-The MVP is complete. The next target is the Kanvas Rendering Conformance &
-Performance Platform: a generated evidence system that turns CPU/GPU rendering
-tests into PM-readable and engineering-actionable proof.
+The Post-MVP target is tracked through the generated scene dashboard and the
+reports below.
 
 Current scene dashboard:
 
@@ -85,7 +124,7 @@ Current scene dashboard:
 - generated output: `build/reports/wgsl-pipeline-scenes/index.html`
 - target doc: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
 
-Current dashboard evidence after M46:
+Current dashboard evidence after M46 and M47 `runtime-effect-simple` conversion:
 
 | Signal | Count | Meaning |
 |---|---:|---|
@@ -94,8 +133,8 @@ Current dashboard evidence after M46:
 | `tracked-gap` | 0 | P0 adapter-backed capture gaps were closed by M42 and GRA-222. |
 | `expected-unsupported` | 2 | GPU intentionally refuses the scene with a stable fallback reason. |
 | `fail` | 0 | No dashboard row is currently a failing support claim. |
-| `maturity.generated-evidence` | 8 | M41 plus M46 generated rows, including P0 captures, Path AA stroke, image-filter DAG, and SrcOver stack. |
-| `maturity.static-evidence` | 5 | Remaining rows are explicitly listed in the M46 closeout. |
+| `maturity.generated-evidence` | 9 | M41, M46, and M47 generated rows, including P0 captures, Path AA stroke, image-filter DAG, SrcOver stack, and runtime-effect descriptor evidence. |
+| `maturity.static-evidence` | 4 | Remaining rows are explicitly listed in the M47 inventory. |
 | `maturity.adapter-backed` | 2 | P0 GPU captures on named adapter. |
 | CPU/GPU perf `measured` | 2 each | M43 benchmark payloads, reporting-only until CI gate policy is approved. |
 
@@ -107,6 +146,10 @@ Closed post-MVP milestones:
 - M44: promoted one narrow Path AA family to rendered GPU support;
 - M45: extended image-filter support to a bounded DAG subset;
 - M46: converted five additional static rows to generated evidence;
+- M47/GRA-273: locked the remaining static evidence inventory and selected the
+  three rows eligible for generated conversion;
+- M47/GRA-274: converted `runtime-effect-simple` to generated evidence while
+  preserving the registered Kotlin/WGSL descriptor boundary;
 - GRA-221: added scene tags, exact-tag filtering, tag search, and
   feature/maturity/risk aggregates.
 
