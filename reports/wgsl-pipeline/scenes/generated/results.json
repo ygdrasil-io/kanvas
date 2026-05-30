@@ -4,6 +4,108 @@
   "description": "Generated scene rows materialized before pipelineSceneDashboard merges them with static dashboard rows.",
   "scenes": [
     {
+      "id": "solid-rect",
+      "title": "Solid filled rect",
+      "priority": "P0",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-30-m46-solid-rect-generated-evidence.md",
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/solid-rect/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/solid-rect/cpu.png",
+        "diff": "artifacts/solid-rect/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "AnalyticRect(2.0,1.0,7.0,6.0,aa=false)",
+          "selectedRoute": "cpu.descriptor.coverage-plan.solid-rect",
+          "compatibilityFallbackRoute": "kanvas-skia.current.draw-rect",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 64,
+          "matchingPixels": 64,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "CPU",
+          "command": "rtk ./gradlew --no-daemon :kanvas-skia:pipelineConformanceTest --tests org.skia.core.SkBitmapDescriptorCoverageOracleTest"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/solid-rect/gpu.png",
+        "diff": "artifacts/solid-rect/gpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.analytic-rect",
+          "pipelineKey": "coverageKind=analyticRect",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 64,
+          "matchingPixels": 64,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "adapter": "Apple M2 Max",
+          "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.SolidRectSceneCaptureTest"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/solid-rect/cpu-diff.png",
+        "gpu": "artifacts/solid-rect/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/solid-rect/route-cpu.json",
+        "gpu": "artifacts/solid-rect/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 64,
+        "matchingPixels": 64,
+        "maxChannelDelta": 0,
+        "threshold": 99.95,
+        "gpuMatchingPixels": 64,
+        "gpuMaxChannelDelta": 0,
+        "adapter": "Apple M2 Max",
+        "backend": "WebGPU"
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-28-m36-solid-rect-scene.md",
+        "reports/wgsl-pipeline/2026-05-28-m42-solid-rect-adapter-capture.md",
+        "reports/wgsl-pipeline/scenes/artifacts/solid-rect/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/solid-rect/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/solid-rect/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/solid-rect/stats.json",
+        "kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SolidRectSceneCaptureTest.kt",
+        "reports/wgsl-pipeline/2026-05-30-m46-static-to-generated-inventory.md",
+        "reports/wgsl-pipeline/2026-05-30-m46-solid-rect-generated-evidence.md",
+        "reports/wgsl-pipeline/scenes/generated/results.json"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.shape.solid",
+        "feature.coverage.analytic-rect",
+        "route.cpu.descriptor",
+        "route.gpu.webgpu",
+        "reference.cpu-oracle",
+        "maturity.generated-evidence",
+        "maturity.adapter-backed",
+        "risk.none"
+      ],
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:test",
+        "sourceTest": "org.skia.gpu.webgpu.SolidRectSceneCaptureTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-30-m46-solid-rect-generated-evidence.md",
+        "commit": "8371f87efbfbcccd36af7826cf08d0a1abd8f799",
+        "artifactRoot": "artifacts/solid-rect",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-225"
+      }
+    },
+    {
       "id": "bitmap-rect-nearest",
       "title": "Bitmap rect nearest sampling",
       "priority": "P0",
