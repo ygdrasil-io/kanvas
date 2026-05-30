@@ -85,7 +85,7 @@ Current scene dashboard:
 - generated output: `build/reports/wgsl-pipeline-scenes/index.html`
 - target doc: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
 
-Current dashboard evidence after M45 and GRA-221:
+Current dashboard evidence after M46:
 
 | Signal | Count | Meaning |
 |---|---:|---|
@@ -94,8 +94,8 @@ Current dashboard evidence after M45 and GRA-221:
 | `tracked-gap` | 0 | P0 adapter-backed capture gaps were closed by M42 and GRA-222. |
 | `expected-unsupported` | 2 | GPU intentionally refuses the scene with a stable fallback reason. |
 | `fail` | 0 | No dashboard row is currently a failing support claim. |
-| `maturity.generated-evidence` | 3 | M41 generated rows: bitmap rect, crop image-filter pre-pass, linear gradient. |
-| `maturity.static-evidence` | 10 | Reviewable static rows retained for families not yet generated. |
+| `maturity.generated-evidence` | 8 | M41 plus M46 generated rows, including P0 captures, Path AA stroke, image-filter DAG, and SrcOver stack. |
+| `maturity.static-evidence` | 5 | Remaining rows are explicitly listed in the M46 closeout. |
 | `maturity.adapter-backed` | 2 | P0 GPU captures on named adapter. |
 | CPU/GPU perf `measured` | 2 each | M43 benchmark payloads, reporting-only until CI gate policy is approved. |
 
@@ -106,17 +106,15 @@ Closed post-MVP milestones:
 - M43: replaced selected estimated metrics with measured CPU/GPU benchmarks;
 - M44: promoted one narrow Path AA family to rendered GPU support;
 - M45: extended image-filter support to a bounded DAG subset;
+- M46: converted five additional static rows to generated evidence;
 - GRA-221: added scene tags, exact-tag filtering, tag search, and
   feature/maturity/risk aggregates.
 
-Next sprint:
-
-- M46: convert at least five additional static dashboard rows to generated
-  evidence, targeting `maturity.generated-evidence >= 8`,
-  `maturity.static-evidence <= 5`, `tracked-gap = 0`, and `fail = 0`.
-
 Sprint review:
 [reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md](reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md)
+
+M46 closeout:
+[reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md](reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md)
 
 Support claims after the MVP require visible evidence: reference, CPU/GPU
 render or explicit refusal, diffs, stats, route diagnostics, and stable fallback

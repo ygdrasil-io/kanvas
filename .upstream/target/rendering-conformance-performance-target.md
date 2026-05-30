@@ -112,21 +112,22 @@ The two current `tracked-gap` P0 rows are:
 Both have route evidence but are missing adapter-backed GPU render captures in
 the current dashboard evidence.
 
-After M45 and GRA-221, the merged dashboard export has:
+After M46, the merged dashboard export has:
 
 - 13 scene rows;
 - 11 pass;
 - 0 tracked-gap;
 - 2 expected-unsupported;
 - 0 fail;
-- 3 generated evidence rows;
-- 10 static evidence rows;
+- 8 generated evidence rows;
+- 5 static evidence rows;
 - 2 adapter-backed P0 rows;
 - tag aggregates for `feature.*`, `maturity.*`, and `risk.*`.
 
-M46 starts from this post-M45 baseline. The target is to reduce
-`maturity.static-evidence` by converting already-supported rows to generated
-evidence, not by hiding static rows or weakening support rules.
+M46 closed on 2026-05-30 by
+`reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md`.
+The remaining static rows are explicitly owned by follow-up scope and are not
+hidden from the dashboard.
 
 The two remaining expected unsupported rows are:
 
