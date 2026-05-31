@@ -101,6 +101,8 @@ def materialize_scene(
     inventory_id = scene["inventoryId"]
     status = scene["status"]
     fallback_reason = scene["fallbackReason"]
+    scene_source_report = scene.get("sourceReport", source_report)
+    scene_selected_report = scene.get("selectedReport", selected_report)
     base_row = base_rows.get(base_scene_id)
     if base_row is None:
         if not scene.get("allowArtifactOnlyBase"):
@@ -154,7 +156,7 @@ def materialize_scene(
     if status == "pass":
         gpu_route["adapter"] = scene.get("adapter", "Apple M2 Max")
         gpu_route["adapterBackend"] = scene.get("adapterBackend", "WebGPU/Metal")
-        gpu_route["adapterEvidenceReport"] = source_report
+        gpu_route["adapterEvidenceReport"] = scene_source_report
 
     pixels = as_int(scene.get("pixels"), 4096)
     matching_pixels = as_int(scene.get("matchingPixels"), pixels if status == "pass" else 0)
@@ -264,12 +266,12 @@ def materialize_scene(
         "title": scene["title"],
         "priority": scene.get("priority", "P1"),
         "status": status,
-        "source": source_report,
+        "source": scene_source_report,
         "generation": {
             "mode": "generated",
             "producer": "pipelineGeneratedSceneExport",
             "derivationTask": generated_by,
-            "derivationReport": source_report,
+            "derivationReport": scene_source_report,
             "derivationContract": contract_path,
             "commit": commit,
             "artifactRoot": artifact_prefix,
@@ -298,9 +300,9 @@ def materialize_scene(
             "threshold": threshold,
         },
         "evidence": [
-            source_report,
+            scene_source_report,
             contract_path,
-            selected_report,
+            scene_selected_report,
             "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
             f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/route-cpu.json",
             f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/route-gpu.json",

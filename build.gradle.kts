@@ -2427,6 +2427,7 @@ tasks.register("pipelineSceneDashboardGate") {
             "m53-imagefilters-cropped-boundary" to "image-filter.crop-input-nonnull-prepass-required",
             "m54-imagefilters-graph-boundary" to "image-filter.dag-or-picture-prepass-required",
             "m54-dash-circle-boundary" to "coverage.edge-count-exceeded",
+            "m60-bounded-stroke-cap-join" to "coverage.stroke-cap-join-selector-diagnostics-unavailable",
             "m60-bounded-nested-rrect-clip" to "coverage.nested-clip-visual-parity-below-threshold",
         )
         val staticPathAaSentinels = mapOf(
