@@ -1,8 +1,0 @@
-{
-  "contract": "M52 inventory-derived expected-unsupported refusal; no GPU render artifact is claimed",
-  "coverageStrategy": "webgpu.coverage.refuse",
-  "fallbackReason": "coverage.edge-count-exceeded",
-  "inventoryId": "skia-gm-closedcappedhairlines",
-  "pipelineKey": "coverageKind=pathAA hairlineCaps=closed edgeBudget=exceeded source=ClosedCappedHairlinesGM",
-  "selectedRoute": "webgpu.coverage.refuse"
-}
