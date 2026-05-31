@@ -233,3 +233,32 @@ all of the following:
 
 Until those criteria are implemented, M43 measured rows remain PM/engineering
 trend evidence and must not block required CI.
+
+## M49 Non-Blocking Trend Gate Contract
+
+M49 promotes the M43 measured payloads into a non-blocking trend gate contract,
+not a required release gate. The active contract is documented in:
+
+`reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md`
+
+The initial trend set remains:
+
+- `src-over-stack`;
+- `bitmap-shader-local-matrix`.
+
+These rows may move PM performance readiness from 15% to 35% only because the
+trend policy, PM-bundle display contract, warning behavior, and future promotion
+criteria are now explicit. They must remain `reporting-only` until a future
+ticket adds a CI-owned baseline, eligible host/JDK/backend/adapter matrix,
+sample/variance thresholds, quarantine rules, rollback rules, and a named
+baseline owner.
+
+M49 preserves these hard rules:
+
+- `estimated` metrics are informational only and are never release gates;
+- adapter-missing GPU measurements use `status=unavailable` with a stable
+  reason, not a failure;
+- `regression.label=regressed` is a warning, not a merge blocker, until the
+  required-gate criteria above are satisfied;
+- M43 local baselines whose names start with `m43-` are milestone evidence, not
+  CI-owned release baselines.
