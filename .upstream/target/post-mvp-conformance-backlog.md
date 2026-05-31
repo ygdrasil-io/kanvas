@@ -43,6 +43,7 @@ Current M40 dashboard state:
 | M51 Skia GM Inventory Coverage | Done: full Skia GM/sample surface is visible before broad scene promotion. | Generated deterministic inventory JSON/Markdown for 437 upstream GM C++ files and 751 Kotlin GM sources, classified 802 inventory rows, exposed inventory in the PM bundle, added inventory validation, and produced a 34-row M52+ promotion candidate backlog without changing support claims. |
 | M52 GM Inventory Promotion Pack | Done: selected M51 candidates become generated dashboard evidence. | Promoted 10 inventory-derived generated rows, documented selected/promoted/rejected candidates, kept 0 tracked-gap and 0 fail, exposed M52 counters in the PM bundle, and raised readiness to 85% without broad Skia GM support claims. |
 | M53 GM Feature Promotion Pack v2 | Done: a second selected GM feature pack becomes generated dashboard evidence. | Promoted 12 inventory-derived generated rows across five visual families, documented selected/promoted/rejected candidates, kept 0 tracked-gap and 0 fail, exposed M53 counters in the PM bundle, and raised readiness to 90% without broad Skia GM support claims. |
+| M54 Hard Feature Depth Pack | Done: selected hard feature rows deepen generated evidence. | Promoted 10 inventory-derived generated rows across bounded image-filter v2, Path AA / clip depth, and runtime / paint composition, documented selected/promoted/rejected candidates, attached 2 warning-only measured performance payloads, kept 0 tracked-gap and 0 fail, exposed M54 counters in the PM bundle, and raised readiness to 93% without broad support claims. |
 
 ## M41 Seed Tickets
 
@@ -611,3 +612,62 @@ Detailed reports:
 - `reports/wgsl-pipeline/2026-05-31-m53-inventory-promotion-pack.md`.
 - `reports/wgsl-pipeline/2026-05-31-m53-sprint-review.md`.
 - `reports/wgsl-pipeline/2026-05-31-m53-pm-report.md`.
+
+## M54 Outcome
+
+Closed on 2026-05-31 by
+`reports/wgsl-pipeline/2026-05-31-m54-sprint-review.md`.
+
+M54 promoted a bounded 10-row hard feature depth pack into generated dashboard
+evidence:
+
+| Signal | Count |
+|---|---:|
+| Selected candidates | 13 |
+| Promoted generated dashboard rows | 10 |
+| Generated `pass` rows | 8 |
+| Generated `expected-unsupported` rows | 2 |
+| Rejected/deferred candidates documented | 12 |
+| Warning-only measured performance rows | 2 |
+| `tracked-gap` | 0 |
+| `fail` | 0 |
+
+Final dashboard after M54:
+
+| Signal | Count |
+|---|---:|
+| Scene rows | 60 |
+| `pass` | 45 |
+| `expected-unsupported` | 15 |
+| `tracked-gap` | 0 |
+| `fail` | 0 |
+| Generated evidence rows | 58 |
+| Static policy rows | 2 |
+| Adapter-backed rows | 41 |
+| Inventory-derived generated rows | 32 |
+
+M54 final score:
+
+| PM area | M53 | M54 | Reason |
+|---|---:|---:|---|
+| Evidence foundation | 100% | 100% | Dashboard generation and gates remain green with 0 tracked-gap and 0 fail. |
+| Skia integration coverage | 94% | 98% | 10 selected hard feature candidates now have generated evidence or stable generated refusals across three hard families. |
+| CI and release gates | 90% | 95% | M54 metadata validation, gate family counters, and expected-unsupported policy entries are additive. |
+| Performance readiness | 60% | 65% | Two M54 rows carry measured warning-only payloads; thresholds remain non-blocking. |
+| PM demo and reporting workflow | 95% | 98% | PM bundle exposes selected/promoted/rejected M52, M53, and M54 counters and limitations. |
+
+Weighted final score: 93%.
+
+M54 does not claim broad Skia GM support, does not clear unpromoted inventory
+rows, and does not clear dependency-gated font, codec, emoji, shaping, SDF, LCD,
+glyph-mask, arbitrary image-filter DAG, arbitrary SkSL, broad Path AA, or
+release-blocking performance gate gaps.
+
+Detailed reports:
+
+- `reports/wgsl-pipeline/2026-05-31-m54-hard-feature-depth-selection.md`.
+- `reports/wgsl-pipeline/2026-05-31-m54-hard-feature-depth-pack.md`.
+- `reports/wgsl-pipeline/2026-05-31-m54-warning-only-performance-evidence.md`.
+- `reports/wgsl-pipeline/2026-05-31-m54-pm-bundle-counters-and-gates.md`.
+- `reports/wgsl-pipeline/2026-05-31-m54-sprint-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m54-pm-report.md`.
