@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "pipelineM61ImageFilterDagV2PromotionPack",
+  "description": "M61 bounded image-filter DAG V2 promotion contract. Rows are materialized from existing generated base scenes and do not claim Skia GM parity unless the row explicitly carries row-specific GM evidence.",
+  "artifactSourceRoot": "reports/wgsl-pipeline/scenes/artifacts",
+  "sourceReport": "reports/wgsl-pipeline/2026-06-01-m61-bounded-image-filter-dag-v2-promotion.md",
+  "selectedReport": "reports/wgsl-pipeline/2026-06-01-m61-bounded-image-filter-dag-v2-promotion.md",
+  "selectedCandidateCount": 1,
+  "outputEvidenceDir": "wgsl-pipeline-m61-generated",
+  "outputDescription": "M61 bounded image-filter DAG V2 generated dashboard row materialized from a selected bounded test-oracle scene.",
+  "outputManifest": "data/m61-generated-scenes.json",
+  "scenes": [
+    {
+      "id": "m61-compose-cf-matrix-transform-dag-v2",
+      "title": "M61 bounded Compose(ColorFilter, MatrixTransform) DAG V2",
+      "family": "bounded image-filter DAG V2",
+      "status": "pass",
+      "linearIssue": "FOR-15",
+      "baseArtifactScene": "image-filter-compose-cf-matrix-transform",
+      "referenceKind": "test-oracle",
+      "cpuRoute": "cpu.image-filter.compose.cf-matrix-transform-oracle",
+      "gpuRoute": "webgpu.image-filter.compose.cf-matrix-transform.dag-v2",
+      "pipelineKey": "imageFilter=Compose(ColorFilter,MatrixTransform) graph=boundedDAGv2 nodes=3 intermediates=1 source=SaveLayerImageFilterTest",
+      "fallbackReason": "none",
+      "graphDiagnosticsReport": "reports/wgsl-pipeline/2026-06-01-m61-bounded-image-filter-dag-v2-promotion.md",
+      "pixels": 1024,
+      "matchingPixels": 1024,
+      "threshold": 99,
+      "graphDiagnostics": {
+        "schemaVersion": 1,
+        "sceneId": "m61-compose-cf-matrix-transform-dag-v2",
+        "milestoneOwner": "M61 Image Filter DAG V2",
+        "status": "pass",
+        "fallbackReason": "none",
+        "nodeCount": 3,
+        "nodeBudget": 4,
+        "childrenPerNodeBudget": 2,
+        "intermediateTextureCount": 1,
+        "intermediateTextureBudget": 4,
+        "estimatedIntermediateBytes": 4096,
+        "bounds": {
+          "input": {"left": 0, "top": 0, "right": 32, "bottom": 32},
+          "output": {"left": 0, "top": 0, "right": 32, "bottom": 32}
+        },
+        "nodes": [
+          {"id": "source-image", "kind": "source-texture", "inputs": [], "support": "supported", "reason": "test oracle source texture is already materialized"},
+          {"id": "matrix-transform", "kind": "matrix-transform-affine", "inputs": ["source-image"], "support": "supported", "reason": "affine MatrixTransform materializes one bounded scratch texture"},
+          {"id": "color-filter-compose", "kind": "color-filter-compose", "inputs": ["matrix-transform"], "support": "supported", "reason": "final ColorFilter composite consumes the bounded matrix intermediate"}
+        ],
+        "passOrder": [
+          "matrix-transform-prepass",
+          "color-filter-final-composite"
+        ],
+        "ownership": {
+          "intermediatesAllocated": 1,
+          "parentSurfaceOwned": true,
+          "scratchOwner": "LayerCompositeDraw.materializeTargetTexture",
+          "scratchLifetime": "per-composite-dispatch",
+          "notes": [
+            "The promoted row is bounded to three nodes and one intermediate texture.",
+            "The row reuses generated SaveLayerImageFilterTest evidence and does not claim recursive graph scheduling or ImageFiltersGraphGM parity."
+          ]
+        },
+        "nonClaim": "No arbitrary image-filter DAG, ImageFiltersGraphGM parity, picture/layer prepass, perspective transform, or recursive scheduling support is claimed by this row."
+      },
+      "nonClaim": "Promotes only the bounded Compose(ColorFilter, MatrixTransform) DAG V2 subset with one affine intermediate; arbitrary recursive DAGs, ImageFiltersGraphGM parity, picture prepass, and perspective transforms remain out of scope.",
+      "tags": ["source.generated", "feature.image-filter", "feature.color-filter", "feature.matrix-transform", "feature.image-filter-dag", "route.cpu.oracle", "route.gpu.webgpu", "reference.test-oracle", "maturity.generated-evidence", "maturity.adapter-backed", "risk.none"]
+    }
+  ]
+}

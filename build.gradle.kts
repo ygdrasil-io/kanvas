@@ -656,6 +656,36 @@ tasks.register("pipelineM54HardFeatureDepthPack") {
     }
 }
 
+tasks.register("pipelineM61ImageFilterDagV2PromotionPack") {
+    group = "verification"
+    description = "Materializes M61 bounded image-filter DAG V2 generated scene rows and artifacts."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m54_hard_feature_depth_pack.py")
+    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m61-image-filter-dag-v2-promotion.json")
+    val sourceArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m61-generated")
+    inputs.file(scriptFile)
+    inputs.file(contractFile)
+    inputs.dir(sourceArtifactDir)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--contract",
+                contractFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineM57PathAaClipMicroPromotionPack") {
     group = "verification"
     description = "Materializes M57 bounded Path AA / clip micro-promotion generated scene rows and artifacts."
@@ -725,6 +755,7 @@ tasks.register("pipelineGeneratedSceneExport") {
     val m52GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m52-generated")
     val m53GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m53-generated")
     val m54GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m54-generated")
+    val m61GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m61-generated")
     val m57GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m57-generated")
     val m60GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m60-generated")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
@@ -732,6 +763,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         "pipelineM52InventoryPromotionPack",
         "pipelineM53InventoryPromotionPack",
         "pipelineM54HardFeatureDepthPack",
+        "pipelineM61ImageFilterDagV2PromotionPack",
         "pipelineM57PathAaClipMicroPromotionPack",
         "pipelineM60NestedClipPathAaPromotionPack",
     )
@@ -741,6 +773,7 @@ tasks.register("pipelineGeneratedSceneExport") {
     inputs.dir(m52GeneratedDir)
     inputs.dir(m53GeneratedDir)
     inputs.dir(m54GeneratedDir)
+    inputs.dir(m61GeneratedDir)
     inputs.dir(m57GeneratedDir)
     inputs.dir(m60GeneratedDir)
     outputs.dir(outputDir)
@@ -752,6 +785,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         val m52GeneratedRoot = m52GeneratedDir.get().asFile
         val m53GeneratedRoot = m53GeneratedDir.get().asFile
         val m54GeneratedRoot = m54GeneratedDir.get().asFile
+        val m61GeneratedRoot = m61GeneratedDir.get().asFile
         val m57GeneratedRoot = m57GeneratedDir.get().asFile
         val m60GeneratedRoot = m60GeneratedDir.get().asFile
         val manifest = manifestFile.asFile
@@ -796,6 +830,7 @@ tasks.register("pipelineGeneratedSceneExport") {
             val normalized = relativePath.replace('\\', '/')
             return listOf(
                 m60GeneratedRoot.resolve(normalized),
+                m61GeneratedRoot.resolve(normalized),
                 m54GeneratedRoot.resolve(normalized),
                 m57GeneratedRoot.resolve(normalized),
                 m53GeneratedRoot.resolve(normalized),
@@ -849,6 +884,15 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
+        val m61Manifest = m61GeneratedRoot.resolve("data/m61-generated-scenes.json")
+        val m61Scenes = if (m61Manifest.isFile) {
+            val m61Root = JsonSlurper().parse(m61Manifest) as? Map<*, *>
+                ?: throw GradleException("M61 generated scene manifest root must be a JSON object: ${m61Manifest.relativeTo(rootDir)}")
+            m61Root["scenes"] as? List<*>
+                ?: throw GradleException("M61 generated scene manifest must contain a `scenes` array: ${m61Manifest.relativeTo(rootDir)}")
+        } else {
+            emptyList<Any?>()
+        }
         val m60Manifest = m60GeneratedRoot.resolve("data/m60-generated-scenes.json")
         val m60Scenes = if (m60Manifest.isFile) {
             val m60Root = JsonSlurper().parse(m60Manifest) as? Map<*, *>
@@ -858,7 +902,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
-        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes + m60Scenes
+        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes + m60Scenes + m61Scenes
         val normalizedScenes = mutableListOf<Any?>()
 
         allGeneratedScenes.forEachIndexed { index, rawScene ->
@@ -2648,7 +2692,9 @@ tasks.register("pipelineSceneDashboardGate") {
         var adapterBackedRows = 0
         var inventoryDerivedRows = 0
         var m54Rows = 0
+        var m61Rows = 0
         val m54FamilyCounts = linkedMapOf<String, Int>()
+        val m61FamilyCounts = linkedMapOf<String, Int>()
 
         scenes.forEachIndexed { index, rawScene ->
             val scene = rawScene as? Map<*, *>
@@ -2794,6 +2840,11 @@ tasks.register("pipelineSceneDashboardGate") {
                     val family = generation.string("hardFeatureFamily") ?: "unknown"
                     m54FamilyCounts[family] = (m54FamilyCounts[family] ?: 0) + 1
                 }
+                if (generation?.string("derivationTask") == "pipelineM61ImageFilterDagV2PromotionPack") {
+                    m61Rows += 1
+                    val family = generation.string("hardFeatureFamily") ?: "unknown"
+                    m61FamilyCounts[family] = (m61FamilyCounts[family] ?: 0) + 1
+                }
                 val inventoryId = scene.string("inventoryId")
                 if ("source.inventory" in tagSet || inventoryId.isPresent()) {
                     inventoryDerivedRows += 1
@@ -2880,9 +2931,11 @@ tasks.register("pipelineSceneDashboardGate") {
             "adapterBacked" to adapterBackedRows,
             "inventoryDerived" to inventoryDerivedRows,
             "m54Rows" to m54Rows,
+            "m61Rows" to m61Rows,
         ) + statusCounts.mapKeys { "status.${it.key}" } +
             maturityCounts.mapKeys { "${it.key}" } +
-            m54FamilyCounts.mapKeys { "m54.family.${it.key}" }
+            m54FamilyCounts.mapKeys { "m54.family.${it.key}" } +
+            m61FamilyCounts.mapKeys { "m61.family.${it.key}" }
 
         val markdown = buildString {
             appendLine("# WGSL Scene Dashboard Gate Report")
