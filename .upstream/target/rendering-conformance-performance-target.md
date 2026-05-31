@@ -37,37 +37,37 @@ The platform must answer five questions for every promoted scene:
 
 ## PM Readiness
 
-Current Post-MVP Big Target readiness for MEP: 40%.
+Current Post-MVP Big Target readiness for MEP: 60%.
 
 This is a PM readiness score for the full target, not an effort estimate and not
 the completion state of the latest Linear sprint. M41-M47 completed the evidence
-foundation. M48 expanded representative Skia integration breadth enough to move
-coverage readiness from 15% to 35%, but the platform is not yet MEP-ready
-because CI gates, performance trends, broader adapter-backed coverage, and
-repeatable PM demo/reporting still need dedicated work.
+foundation, M48 expanded representative Skia integration breadth, and M49 turned
+the current dashboard into a release-oriented readiness gate candidate with
+portable PM reporting, broader adapter-backed proof, and an explicit
+non-blocking performance trend contract. The platform is still not complete MEP
+scope because release-blocking performance thresholds, broader scene families,
+production CI ownership, and dependency-gated text/font/codec gaps remain.
 
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
-| Evidence foundation | 25% | M41-M48 complete: generated dashboard, 21 generated rows, 0 tracked-gap, 0 fail. | 100% |
-| Skia integration coverage | 25% | M48 adds 10 selected rows across paint, clip, transform, bitmap, gradient, Path AA, and image-filter breadth while keeping unsupported scope explicit. | 35% |
-| CI and release gates | 20% | Dashboard generation is validated; release-grade promotion and inventory gates are not complete. | 10% |
-| Performance readiness | 15% | Measured payloads exist, but trends remain reporting-only and thresholds are not release gates. | 15% |
-| PM demo and reporting workflow | 15% | Static local dashboard exists; deployable/repeatable PM workflow is still missing. | 15% |
+| Evidence foundation | 25% | M41-M49 complete: generated dashboard, 21 generated rows, 0 tracked-gap, 0 fail, and a gate report. | 100% |
+| Skia integration coverage | 25% | M49 expands adapter-backed proof from 2 to 7 rows without broadening unsupported support claims. | 45% |
+| CI and release gates | 20% | `pipelineSceneDashboardGate` validates support-claim invariants and the negative fixture proves failure behavior. | 60% |
+| Performance readiness | 15% | Measured payloads have a non-blocking trend contract; thresholds are not release gates. | 35% |
+| PM demo and reporting workflow | 15% | `pipelinePmBundle` creates a portable PM bundle with manifest, dashboard, data, artifacts, limitations, and serve instructions. | 45% |
 
-The resulting weighted readiness rounds to 40%. Evidence-hardening through M47
-is 100% complete, and M48 coverage expansion is complete for its selected scene
-pack. These are still only parts of the larger MEP target.
+The resulting weighted readiness rounds to 60%. Evidence-hardening through M47,
+M48 coverage expansion, and M49 readiness gating are complete for their selected
+evidence sets. These are still only parts of the larger MEP target.
 
 Before MEP, Kanvas still needs:
 
 - broader Skia integration scene coverage;
 - generated evidence as the default path for new support claims;
-- CI gates for required conformance, allowed expected-unsupported rows, and
-  non-blocking inventory;
+- required-CI ownership for the dashboard gate and non-blocking inventory;
 - performance trends with approved release thresholds;
-- a repeatable PM demo/reporting workflow that is not only local/static;
-- a final MEP acceptance checklist linking Linear, CI, dashboard output,
-  reports, and known limitations.
+- hosted or release-owned PM reporting beyond the portable local bundle;
+- dependency-gated text/font/glyph/emoji/codec deliveries, not substitutes.
 
 ## Evidence Levels
 
@@ -127,7 +127,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | M46 | Generated Evidence Expansion | Convert the next high-value static dashboard rows to generated evidence while keeping zero tracked gaps and zero failing support claims. |
 | M47 | Remaining Static Evidence Hardening | Convert remaining static pass rows to generated evidence and keep Path AA expected-unsupported rows explicit as policy evidence. |
 | M48 | MEP Scene Coverage Expansion | Add representative P0/P1 Skia scene breadth across paint, clip, transform, bitmap, gradient, Path AA, and image-filter planning rows. |
-| M49 | MEP Readiness Gate Toward 60% | Promote the generated dashboard into CI/release gating, add a portable PM artifact bundle, design non-blocking performance trend gates, and broaden adapter-backed proof enough to justify a stretch 60% PM readiness score if all lanes land. |
+| M49 | MEP Readiness Gate Toward 60% | Completed: promoted the generated dashboard into a CI gate candidate, added a portable PM artifact bundle, defined non-blocking performance trend gates, and broadened adapter-backed proof enough to justify a 60% PM readiness score. |
 
 ## Current Baseline
 
@@ -149,7 +149,7 @@ The two current `tracked-gap` P0 rows are:
 Both have route evidence but are missing adapter-backed GPU render captures in
 the current dashboard evidence.
 
-After M48, the merged dashboard export has:
+After M49, the merged dashboard export has:
 
 - 23 scene rows;
 - 18 pass;
@@ -158,16 +158,23 @@ After M48, the merged dashboard export has:
 - 0 fail;
 - 21 generated evidence rows;
 - 2 static evidence rows;
-- 2 adapter-backed P0 rows;
+- 7 adapter-backed rows;
 - tag aggregates for `feature.*`, `maturity.*`, and `risk.*`.
 
-M48 support and refusal evidence is linked from:
+M48 and M49 support, refusal, and readiness evidence is linked from:
 
 - `reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md`;
 - `reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md`;
 - `reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md`;
 - `reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md`;
 - `reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md`.
+- `reports/wgsl-pipeline/2026-05-31-m49-dashboard-gate-invariants.md`;
+- `reports/wgsl-pipeline/2026-05-31-m49-ci-dashboard-validation-task.md`;
+- `reports/wgsl-pipeline/2026-05-31-m49-portable-pm-bundle.md`;
+- `reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md`;
+- `reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md`;
+- `reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md`;
+- `reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md`.
 
 The two static rows remain deliberate Path AA policy sentinels, not unowned
 conversion debt. M48 adds three generated expected-unsupported breadth rows so
@@ -184,31 +191,32 @@ The current expected unsupported rows are:
 - `image-filter-crop-nonnull-prepass-required` with
   `image-filter.crop-input-nonnull-prepass-required`.
 
-## M49 Proposed Target
+## M49 Closeout
 
-M49 should not be treated as "more rows only". Its purpose is to make the
-current dashboard usable as a MEP readiness gate.
+M49 was not treated as "more rows only". Its purpose was to make the current
+dashboard usable as a MEP readiness gate.
 
-The M49 stretch target is to move Post-MVP Big Target readiness from 40% to
-about 60%. That score is only defensible if the milestone improves all of these
-areas:
+M49 moved Post-MVP Big Target readiness from 40% to 60% by improving all of
+these areas:
 
-- CI and release gates move from 10% to roughly 60% through a validation task
+- CI and release gates moved from 10% to 60% through a validation task
   that fails on support-claim regressions, duplicate ids, missing generated
   artifacts, unsupported rows without stable fallback reasons, and accidental
   `tracked-gap` / `fail` rows;
-- PM demo and reporting workflow moves from 15% to roughly 45% through a
+- PM demo and reporting workflow moved from 15% to 45% through a
   portable bundle with dashboard HTML, scene JSON, generated result JSON,
   artifacts, manifest, known limitations, and a repeatable serve command;
-- performance readiness moves from 15% to roughly 35% through a non-blocking
+- performance readiness moved from 15% to 35% through a non-blocking
   trend gate contract for measured payloads, including host/JDK/backend/adapter
   eligibility and variance policy;
-- Skia integration coverage moves from 35% to roughly 45% through additional
+- Skia integration coverage moved from 35% to 45% through additional
   adapter-backed proof for selected high-value pass rows, not broad new family
   claims.
 
-The supporting sprint plan is
-`reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md`.
+The supporting sprint plan and closeout are:
+
+- `reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md`;
+- `reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md`.
 
 ## Agent Execution Policy
 

@@ -10,7 +10,7 @@ GPU backend.
 
 Last updated: 2026-05-31
 
-Post-MVP Big Target readiness for MEP: 40%.
+Post-MVP Big Target readiness for MEP: 60%.
 
 This percentage is a PM readiness score for the full Post-MVP target, not an
 effort estimate and not the completion state of the last sprint. It moves only
@@ -21,21 +21,22 @@ The MVP is complete. The big target is now the Kanvas Rendering Conformance &
 Performance Platform: a generated evidence system that turns CPU/GPU rendering
 tests into PM-readable progress and engineering-actionable proof.
 
-Current PM interpretation: M41-M47 built the evidence foundation, and M48
-expanded representative Skia integration breadth from the narrow 15% baseline to
-35%. The platform is still not MEP-ready: CI gates, performance trends, and a
-deployable demo/report workflow remain early, and broader Skia coverage still
-needs more families and adapter-backed proof.
+Current PM interpretation: M41-M47 built the evidence foundation, M48 expanded
+representative Skia integration breadth, and M49 promoted the dashboard into a
+release-oriented readiness gate candidate with portable PM reporting and broader
+adapter-backed proof. The platform is still not complete MEP scope: performance
+thresholds remain non-blocking, dependency-gated text/font/codec gaps remain out
+of scope, and broader scene families still need adapter-backed captures.
 
 | PM area | Weight | Status | Progress | Evidence / remaining work |
 |---|---:|---|---:|---|
-| Evidence foundation | 25% | Done through M48 | 100% | Generated dashboard, 21 generated rows, 0 tracked-gap, 0 fail |
-| Skia integration coverage | 25% | Expanded | 35% | M48 added 10 selected rows across paint, clip, transform, bitmap, gradient, Path AA, and image-filter breadth while keeping unsupported scope explicit |
-| CI and release gates | 20% | Early | 10% | Dashboard generation is validated, but promotion/performance gates are not yet release-grade |
-| Performance readiness | 15% | Early | 15% | M43 measured payloads exist, but trends remain reporting-only |
-| PM demo and reporting workflow | 15% | Prototype | 15% | Static dashboard works locally; deployable and repeatable PM workflow still missing |
+| Evidence foundation | 25% | Done through M49 | 100% | Generated dashboard, 21 generated rows, 0 tracked-gap, 0 fail, CI gate report |
+| Skia integration coverage | 25% | Adapter-backed expansion | 45% | M49 expanded adapter-backed proof from 2 to 7 rows without new unsupported claims |
+| CI and release gates | 20% | Gate candidate | 60% | `pipelineSceneDashboardGate` validates support-claim invariants and the negative fixture proves expected failure behavior |
+| Performance readiness | 15% | Non-blocking trend contract | 35% | M49 defines measured trend eligibility and variance policy; thresholds are still not release-blocking |
+| PM demo and reporting workflow | 15% | Portable bundle | 45% | `pipelinePmBundle` emits manifest, dashboard, data, artifacts, limitations, and local serve instructions |
 
-Weighted PM readiness: 40% after rounding.
+Weighted PM readiness: 60% after rounding.
 
 | Track | Status | Progress | Evidence |
 |---|---|---:|---|
@@ -47,7 +48,7 @@ Weighted PM readiness: 40% after rounding.
 | Static-to-generated evidence expansion | Done | 100% | M46 converted five additional rows |
 | Remaining static evidence hardening | Done | 100% | M47 converted remaining static pass rows and validated Path AA policy rows |
 | MEP scene coverage expansion | Done | 100% | M48 added 7 generated support rows and 3 expected-unsupported breadth rows |
-| MEP readiness gate toward 60% | Proposed | 0% | M49 should promote dashboard evidence into CI/release gates, portable PM reporting, non-blocking performance trends, and broader adapter-backed proof |
+| MEP readiness gate toward 60% | Done | 100% | M49 promoted dashboard evidence into a CI gate candidate, portable PM bundle, non-blocking performance trend contract, release checklist, and 7 adapter-backed rows |
 
 Evidence-hardening readiness is 100% through M47:
 all static pass rows have generated evidence, and the only remaining static rows
@@ -60,18 +61,27 @@ integration coverage from 15% to 35%, but not higher, because CI gates,
 performance thresholds, broad adapter-backed captures, text/font/codec coverage,
 and a repeatable PM demo workflow remain outside this milestone.
 
+M49 readiness gating is complete for the selected evidence set: the dashboard
+still has 23 rows, 18 pass, 5 expected-unsupported, 0 tracked-gap, 0 fail, 21
+generated rows, and 2 static policy rows, while adapter-backed proof increased
+from 2 to 7 rows. The new `pipelineSceneDashboardGate` task, negative fixture,
+portable PM bundle, release checklist, and non-blocking performance trend
+contract justify moving the overall Post-MVP readiness score from 40% to 60%.
+
 What remains before MEP:
 
 - broaden the Skia integration scene set beyond the current selected dashboard
   rows;
 - make generated evidence the normal path for new support claims, not a
   hand-curated closeout exercise;
-- define CI gates for required conformance, allowed expected-unsupported rows,
-  and non-blocking inventory;
-- turn performance payloads into stable trends and approved release thresholds;
-- publish a repeatable PM demo/report flow outside a local-only static page;
-- define a final MEP acceptance checklist that links Linear, CI, dashboard,
-  reports, and known limitations.
+- wire the dashboard gate candidate into required CI and define ownership for
+  non-blocking inventory;
+- turn performance payloads into approved release thresholds after baseline,
+  variance, environment, and rollback policy are owned;
+- publish or host the PM demo/report flow beyond the generated portable local
+  bundle;
+- close dependency-gated text/font/glyph/emoji/codec gaps through real
+  deliveries, not substitutes.
 
 Active Post-MVP evidence:
 
@@ -88,6 +98,13 @@ Active Post-MVP evidence:
 - M48 support evidence: [reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md](reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md), [reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md](reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md)
 - M48 unsupported breadth: [reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md](reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md)
 - M49 proposed sprint: [reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md](reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md)
+- M49 gate invariants: [reports/wgsl-pipeline/2026-05-31-m49-dashboard-gate-invariants.md](reports/wgsl-pipeline/2026-05-31-m49-dashboard-gate-invariants.md)
+- M49 CI validation task: [reports/wgsl-pipeline/2026-05-31-m49-ci-dashboard-validation-task.md](reports/wgsl-pipeline/2026-05-31-m49-ci-dashboard-validation-task.md)
+- M49 portable PM bundle: [reports/wgsl-pipeline/2026-05-31-m49-portable-pm-bundle.md](reports/wgsl-pipeline/2026-05-31-m49-portable-pm-bundle.md)
+- M49 adapter-backed expansion: [reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md](reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md)
+- M49 performance trend gate contract: [reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md](reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md)
+- M49 release readiness checklist: [reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md](reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md)
+- M49 sprint review: [reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md)
 
 ## MVP Roadmap
 
@@ -212,12 +229,16 @@ Closed post-MVP milestones:
   pack landed.
 - M48/GRA-286: closed the sprint with 23 rows, 21 generated rows, 0 tracked-gap,
   0 fail, and an M49 recommendation for CI/release gates.
+- M49/GRA-287: closed the readiness gate sprint with a CI gate candidate,
+  portable PM bundle, non-blocking performance trend contract, release
+  checklist, 7 adapter-backed rows, and a 60% PM readiness score.
 
 Sprint reviews:
 [reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md](reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md)
 [reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md)
 [reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md)
 [reports/wgsl-pipeline/2026-05-31-m48-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m48-sprint-review.md)
+[reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md)
 
 M46 closeout:
 [reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md](reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md)
