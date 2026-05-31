@@ -2901,6 +2901,26 @@ tasks.register("pipelineSceneDashboardGate") {
                         fail(sceneId, "adapter.metadata", "maturity.adapter-backed requires gpu.stats.adapter")
                     }
                 }
+                if ("feature.font" in tagSet || "feature.text" in tagSet) {
+                    val font = scene.map("font")
+                    val shapingMode = font?.string("shapingMode").orEmpty()
+                    val gpuPipelineKey = gpuRoute?.string("pipelineKey").orEmpty()
+                    val gpuSelectedRoute = gpuRoute?.string("selectedRoute").orEmpty()
+                    if (status == "pass" || gpuStatus == "pass") {
+                        if (!font?.string("glyphDiagnostics").isPresent()) {
+                            fail(sceneId, "font.glyph-diagnostics", "font/text pass rows require `font.glyphDiagnostics`")
+                        }
+                        if (!gpuPipelineKey.contains("glyphRepresentation=outline") && !gpuSelectedRoute.contains(".outline.")) {
+                            fail(sceneId, "font.route-claim", "font/text pass rows currently must claim outline/path rendering only")
+                        }
+                        if (gpuPipelineKey.contains("atlas", ignoreCase = true) || gpuSelectedRoute.contains("atlas", ignoreCase = true)) {
+                            fail(sceneId, "font.atlas-nonclaim", "font/text pass rows must not claim glyph atlas support without atlas artifacts")
+                        }
+                    }
+                    if (shapingMode.contains("complex", ignoreCase = true) && (status == "pass" || gpuStatus == "pass")) {
+                        fail(sceneId, "font.shaping-boundary", "complex shaping rows must remain refused until an explicit shaper exists")
+                    }
+                }
                 tagSet.filter { it.startsWith("maturity.") }.forEach { tag ->
                     maturityCounts[tag] = (maturityCounts[tag] ?: 0) + 1
                 }
