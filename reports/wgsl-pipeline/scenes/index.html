@@ -464,7 +464,7 @@
       </article>
       <article class="card">
         <b>Status</b>
-        <span><code>pass</code> means required artifacts meet the support threshold. <code>tracked-gap</code> means a backend route is visible but a capture, diff, threshold, or policy requirement is still unresolved. <code>expected-unsupported</code> must include a stable reason.</span>
+        <span><code>pass</code> on the overall scene means the support contract is met. Lane status can also mean that an artifact was produced; use the CPU/GPU parity rows to check similarity against the reference threshold. <code>tracked-gap</code> means a backend route is visible but a capture, diff, threshold, or policy requirement is still unresolved. <code>expected-unsupported</code> must include a stable reason.</span>
       </article>
       <article class="card">
         <b>Performance</b>
@@ -481,6 +481,8 @@
         <dd>Used when no upstream image is available. It is a controlled CPU render or oracle path used to compare the GPU lane.</dd>
         <dt>Diff panels</dt>
         <dd>Diff images compare CPU and GPU outputs against the reference when the artifact exists. Missing GPU diffs stay visible as tracked gaps.</dd>
+        <dt>Lane parity</dt>
+        <dd>CPU/GPU artifact production is separate from parity. A lane can produce an image while its similarity remains below the row threshold.</dd>
         <dt>Not parity</dt>
         <dd>A reference panel proves the selected scene contract only. It does not imply full Skia compatibility for neighboring APIs.</dd>
       </dl>
@@ -590,6 +592,38 @@
       const timing = trend.timing || {};
       const regression = trend.regression || {};
       return `${text(trend.status)} median=${text(timing.medianMs)}ms p95=${text(timing.p95Ms)}ms samples=${text(trend.sampleCount)} regression=${text(regression.label, 'unknown')}`;
+    }
+
+    function parityInfo(scene, laneName) {
+      const lane = scene[laneName] || {};
+      if (lane.referenceParity) return lane.referenceParity;
+      const stats = lane.stats || {};
+      const similarity = lane.similarity !== undefined ? lane.similarity : stats.similarity;
+      const threshold = stats.threshold !== undefined ? stats.threshold : (scene.stats && scene.stats.threshold);
+      const artifactStatus = lane.image ? 'produced' : 'not-produced';
+      if (similarity === undefined || threshold === undefined) {
+        return {
+          status: artifactStatus === 'produced' ? 'unavailable' : 'not-produced',
+          similarity,
+          threshold,
+          referenceKind: scene.referenceKind,
+        };
+      }
+      const numericSimilarity = Number(similarity);
+      const numericThreshold = Number(threshold);
+      const status = Number.isFinite(numericSimilarity) && Number.isFinite(numericThreshold)
+        ? (numericSimilarity >= numericThreshold ? 'meets-threshold' : 'below-threshold')
+        : 'unavailable';
+      return { status, similarity, threshold, referenceKind: scene.referenceKind };
+    }
+
+    function parityText(scene, laneName) {
+      const lane = scene[laneName] || {};
+      const parity = parityInfo(scene, laneName);
+      const artifactStatus = text(lane.artifactStatus, lane.image ? 'produced' : 'not-produced');
+      const similarity = parity.similarity === undefined ? 'unavailable' : parity.similarity;
+      const threshold = parity.threshold === undefined ? 'unavailable' : parity.threshold;
+      return `artifact=${artifactStatus}; parity=${text(parity.status)}; similarity=${similarity}; threshold=${threshold}; reference=${text(parity.referenceKind, scene.referenceKind)}`;
     }
 
     function artifactItems(scene) {
@@ -802,6 +836,8 @@
           <p>Reference: <code>${text(scene.referenceKind)}</code></p>
           <p>CPU route: <code>${text(cpuRoute)}</code></p>
           <p>GPU route: <code>${text(gpuRoute)}</code></p>
+          <p>CPU parity: <code>${parityText(scene, 'cpu')}</code></p>
+          <p>GPU parity: <code>${parityText(scene, 'gpu')}</code></p>
           <p>GPU fallback: <code>${text(fallback, 'none')}</code></p>
           <p>GPU blocker: <code>${text(blocker, 'none')}</code></p>
           <p>Follow-up: <code>${text(followUp, 'none')}</code></p>
