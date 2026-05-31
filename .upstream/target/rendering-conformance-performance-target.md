@@ -37,7 +37,7 @@ The platform must answer five questions for every promoted scene:
 
 ## PM Readiness
 
-Current Post-MVP Big Target readiness for MEP: 98%.
+Current Post-MVP Big Target readiness for MEP: 99%.
 
 This is a PM readiness score for the full target, not an effort estimate and not
 the completion state of the latest Linear sprint. M41-M47 completed the evidence
@@ -49,11 +49,13 @@ pack into generated dashboard evidence, M53 promoted a second 12-row GM
 feature pack, M54 promoted a 10-row hard feature depth pack, M55 added a
 non-blocking performance gate candidate for seven representative rows, and M56
 promoted one corrected sweep-gradient boundary row from expected unsupported to
-adapter-backed pass, and M57 added one bounded AA clip grid generated support
-row. The platform is still not complete MEP
-scope because release-blocking performance thresholds, broad Skia parity, broad
-font/text coverage, and dependency-gated codec gaps remain outside the selected
-evidence rows.
+adapter-backed pass, M57 added one bounded AA clip grid generated support row,
+and M58 turned selected measured performance rows into a narrow release-blocking
+gate. The platform is one step from the MEP readiness target: selected measured
+lanes are now release-blocking, but three selected rows remain not measured and
+must receive approved payloads before a broad 100% PM readiness claim is
+defensible. Broad Skia parity, broad font/text coverage, and dependency-gated
+codec gaps remain outside the selected evidence rows.
 
 M51 made the full Skia GM/sample surface visible as inventory before adding many
 more support rows. Inventory visibility improves planning readiness, but it
@@ -99,19 +101,27 @@ row-specific reference/CPU/GPU/diff/stats artifacts and route diagnostics. Exist
 edge-budget, dash, hairline, stroke-outline, and complex-clip refusals remain
 visible and unchanged. M57 moves readiness to 98%.
 
+M58 converts the M55 performance gate candidate into
+`pipelinePerformanceReleaseGate`. Four selected measured rows have
+release-blocking CPU and GPU/cache thresholds, three rows remain explicitly
+`not-measured`, and estimated/missing metrics are never treated as
+release-blocking measured evidence. M58 moves readiness to 99%, leaving the
+remaining not-measured rows as the final readiness gap.
+
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
 | Evidence foundation | 25% | M41-M57 complete: generated dashboard, 59 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
 | Skia integration coverage | 25% | M57 adds one bounded AA clip support row while inventory rows remain planning-only outside promoted rows. | 100% |
-| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, PM bundle generation, M54 metadata checks, M55 performance candidate output, the corrected M56 allowlist, and M57 generated evidence. | 99% |
-| Performance readiness | 15% | Seven M55 rows have candidate decisions: 4 measured pass rows, 3 deferred rows, 0 warn, 0 fail-candidate. Thresholds are not release gates. | 80% |
-| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, performance warnings, inventory reports, M52/M53/M54 counters, M55 performance candidate counters, M56 promotion/limitation evidence, and M57 micro-promotion evidence. | 100% |
+| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, PM bundle generation, M54 metadata checks, M55 performance candidate output, M56/M57 generated evidence, and M58 measured-row release gate. | 100% |
+| Performance readiness | 15% | Seven M58 rows have gate decisions: 4 measured pass rows, 3 not-measured rows, 8 measured blocking lanes, and 0 blocking failures. | 95% |
+| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, performance warnings, inventory reports, M52/M53/M54 counters, M55 candidate counters, M56/M57 evidence, and M58 release-gate counters. | 100% |
 
-The resulting weighted readiness is 98%. Evidence-hardening through M47, M48
+The resulting weighted readiness is 99%. Evidence-hardening through M47, M48
 coverage expansion, M49 readiness gating, M50 acceleration, M51 inventory
 visibility, M52 selected inventory promotion, M53 feature promotion, M54
-hard feature depth, M55 performance gate candidate evidence, and M56
-unsupported-to-pass correction, and M57 Path AA / clip micro-promotion are
+hard feature depth, M55 performance gate candidate evidence, M56
+unsupported-to-pass correction, M57 Path AA / clip micro-promotion, and M58
+measured-row performance release gate are
 complete for their selected evidence sets. These are still only parts of the
 larger MEP target.
 
@@ -199,6 +209,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | M51 | Skia GM Inventory Coverage | Completed: inventories upstream GM C++ files and Kotlin GM sources, classifies every row, exposes the inventory through PM/release artifacts, validates required fields, and produces the next promotion backlog without claiming broad support. |
 | M55 | Performance Gate Candidate | Completed: selects seven representative rows, emits non-blocking pass/deferred/warn/fail-candidate output, exposes PM bundle counters, and documents quarantine/rebaseline/rollback policy without enabling a release-blocking performance gate. |
 | M56 | Unsupported-to-Pass Feature Scene Pack | Partial: promotes one corrected sweep-gradient row to `pass`, rejects unsafe image-filter and Path AA shortcuts, and raises readiness to 96% instead of the 97% stretch target. |
+| M58 | Performance Release Gate | Completed for measured lanes: turns selected M55 measured rows into a narrow release-blocking gate, reports estimated/missing rows as not measured, exposes PM bundle counters, and raises readiness to 99%. |
 
 ## Current Baseline
 
@@ -516,6 +527,35 @@ M55 PM evidence:
 - `reports/wgsl-pipeline/2026-05-31-m55-pm-report.md`;
 - `reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json`;
 - `build/reports/wgsl-pipeline-performance-warnings/m55-performance-gate-candidate.md`.
+
+## M58 Performance Release Gate
+
+M58 converts the M55 candidate into a narrow release-blocking performance gate
+for measured rows only:
+
+- 7 selected rows;
+- 4 measured pass rows;
+- 3 not-measured rows;
+- 8 release-blocking measured lanes;
+- 6 not-measured lanes;
+- 0 blocking failures;
+- PM bundle counters under `m58PerformanceReleaseGate`.
+
+Estimated and missing metrics are reported as `not-measured`. They are not
+promoted to measured evidence and do not block release as measured rows.
+They also do not count as completed performance readiness; M59 should either
+produce approved measured payloads for the three not-measured rows or remove
+them from the release-gate target with an explicit PM decision.
+
+M58 PM evidence:
+
+- `reports/wgsl-pipeline/2026-05-31-m58-performance-release-gate-selection.md`;
+- `reports/wgsl-pipeline/2026-05-31-m58-performance-threshold-policy.md`;
+- `reports/wgsl-pipeline/2026-05-31-m58-sprint-review.md`;
+- `reports/wgsl-pipeline/2026-05-31-m58-pm-report.md`;
+- `reports/wgsl-pipeline/2026-05-31-m58-non-claims.md`;
+- `reports/wgsl-pipeline/performance/m58-performance-release-gate.json`;
+- `build/reports/wgsl-pipeline-performance-release-gate/m58-performance-release-gate.md`.
 
 ## M56 Unsupported-to-Pass Feature Scene Pack
 
