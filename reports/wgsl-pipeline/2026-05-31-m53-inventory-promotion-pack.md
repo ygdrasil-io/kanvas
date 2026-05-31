@@ -32,7 +32,7 @@ rows, and M53 generated rows before `pipelineSceneDashboard` and
 | Scene id | Inventory id | Family | Status | Contract |
 |---|---|---|---|---|
 | `m53-degenerate-gradient-linear` | `skia-gm-gradientsdegenerate` | gradients | `pass` | Bounded degenerate linear-gradient subset through CPU gradient oracle and generated WebGPU gradient route. |
-| `m53-sweep-gradient-clamp` | `skia-gm-gradients2ptconical` | gradients | `expected-unsupported` | Two-point conical gradient boundary remains explicit with stable `gradient.two-point-conical-unsupported`. |
+| `m53-sweep-gradient-clamp` | `skia-gm-sweepgradient` | gradients | `pass` | Sweep-gradient kClamp path subset reuses the existing CPU/GPU/ref/diff/stats evidence from `sweep-gradient-path-clamp`; two-point conical remains rejected below. |
 | `m53-bitmap-premul-alpha` | `skia-gm-bitmappremul` | bitmap/image | `pass` | Premultiplied alpha bitmap sampling subset through CPU oracle and WebGPU bitmap route. |
 | `m53-bitmap-filter-linear-subset` | `skia-gm-bitmapfilters` | bitmap/image | `pass` | Bounded bitmap filter subset through WebGPU image sampling route. |
 | `m53-arithmode-bounded-blend` | `skia-gm-arithmode` | blend/color-filter | `pass` | Arithmetic blend subset with bounded coefficients. |
@@ -50,8 +50,8 @@ rows, and M53 generated rows before `pipelineSceneDashboard` and
 |---|---:|
 | M53 selected candidates | 12 |
 | M53 promoted generated rows | 12 |
-| M53 promoted `pass` rows | 9 |
-| M53 promoted `expected-unsupported` rows | 3 |
+| M53 promoted `pass` rows | 10 |
+| M53 promoted `expected-unsupported` rows | 2 |
 | Feature families covered | 5 |
 | New `tracked-gap` rows | 0 |
 | New `fail` rows | 0 |
@@ -74,6 +74,7 @@ stable non-`none` fallback reason for `expected-unsupported`.
 | `skia-gm-runtimeimagefilter` | Runtime image-filter support needs a descriptor-backed slice; no SkSL/VM rebuild. |
 | `skia-gm-shadertext3` | Text/glyph rendering remains dependency-gated. |
 | `skia-gm-dftext` | SDF glyph backend remains gated. |
+| `skia-gm-gradients2ptconical` | Two-point conical gradient remains outside the sweep-gradient clamp scene contract. |
 | `skia-gm-dashcubics` | Broad dashed cubic coverage remains edge-budget gated. |
 
 ## Validation

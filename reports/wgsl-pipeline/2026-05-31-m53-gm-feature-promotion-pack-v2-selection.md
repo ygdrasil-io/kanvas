@@ -44,7 +44,7 @@ dashboard-promoted rows, 28 promotion-candidate rows, 619 not-triaged rows, and
 | Inventory id | Family | Intended status | Reference source | CPU route expectation | GPU route expectation | Fallback policy |
 |---|---|---|---|---|---|---|
 | `skia-gm-gradientsdegenerate` | gradients | `pass` if generated thresholds hold | Candidate-specific Skia GM capture or generated test oracle from `gradients_degenerate.cpp`. | CPU gradient PipelineIR oracle for bounded degenerate stop cases. | Generated WGSL gradient route for bounded degenerate linear/radial cases. | `fallbackReason=none` required for `pass`; reject instead of widening to arbitrary gradient behavior. |
-| `skia-gm-gradients2ptconical` | gradients | `expected-unsupported` unless a bounded conical route is proven | Candidate-specific Skia GM capture from `gradients_2pt_conical.cpp`. | CPU gradient oracle may record the selected conical fixture. | GPU must refuse with a stable conical-gradient reason unless a generated conical route lands with evidence. | Use a stable non-`none` fallback reason; no broad conical-gradient support claim. |
+| `skia-gm-sweepgradient` | gradients | `pass` for the kClamp path subset | Existing `sweep-gradient-path-clamp` generated test oracle. | CPU sweep-gradient path-AA oracle. | Generated WebGPU sweep-gradient path-AA route with `fallbackReason=none`. | Do not broaden to all sweep tile modes, all gradient families, or broad Path AA support. |
 | `skia-gm-bitmappremul` | bitmap/image | `pass` if premul sampling is stable | Candidate-specific Skia GM capture or generated bitmap oracle from `bitmappremul.cpp`. | CPU bitmap/image sampling oracle with premul alpha checks. | WebGPU bitmap/image sampling route with `fallbackReason=none`. | Reject if premul alpha mismatch appears; do not add a tracked gap. |
 | `skia-gm-bitmapfilters` | bitmap/image | `pass` for a bounded filtering subset | Candidate-specific Skia GM capture or generated bitmap filter oracle from `bitmapfilters.cpp`. | CPU bitmap sampling/filtering oracle for selected simple modes. | WebGPU image sampling route for selected filter modes only. | `fallbackReason=none` required for promoted filter modes; unsupported filters remain out of scope. |
 | `skia-gm-arithmode` | blend/color-filter | `pass` for a bounded arithmetic blend subset | Candidate-specific Skia GM capture or generated blend oracle from `arithmode.cpp`. | CPU PipelineIR paint/blend scalar oracle. | Generated WGSL BlendPlan route when `fallbackReason=none`. | Reject unsupported coefficients instead of claiming all arithmetic blend modes. |
@@ -61,8 +61,8 @@ Selected counters:
 | Signal | Count |
 |---|---:|
 | Selected inventory candidates | 12 |
-| Target `pass` candidates if viable | 9 |
-| Intentional `expected-unsupported` boundary candidates | 3 |
+| Target `pass` candidates if viable | 10 |
+| Intentional `expected-unsupported` boundary candidates | 2 |
 | Families covered | 5 |
 | New `tracked-gap` rows allowed | 0 |
 | Broad Skia GM support claims | 0 |
@@ -78,6 +78,7 @@ Selected counters:
 | `skia-gm-ayncyuvnoscale` | Deferred | Async YUV image source requires codec/YUV delivery outside this sprint. |
 | `skia-gm-runtimeimagefilter` | Deferred | Runtime image-filter support needs a descriptor-backed slice; do not rebuild SkSL or VM. |
 | `skia-gm-runtimeintrinsics` | Deferred | Runtime intrinsic coverage needs registered Kotlin/WGSL descriptor evidence; no arbitrary SkSL claim. |
+| `skia-gm-gradients2ptconical` | Deferred | Two-point conical gradient remains outside the sweep-gradient clamp scene contract. |
 | `skia-gm-shadertext3` | Rejected for M53 | Text/glyph rendering and shader text behavior remain dependency-gated. |
 | `skia-gm-dashtextcaps` | Rejected for M53 | Text plus dash cap behavior crosses dependency-gated glyph work and coverage limits. |
 | `skia-gm-dftext` | Rejected for M53 | SDF glyph backend remains gated. |
