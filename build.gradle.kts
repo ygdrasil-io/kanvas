@@ -1327,6 +1327,23 @@ tasks.register("pipelineSceneDashboard") {
             }
             val generationMode = validateGeneration(sceneId, rawScene, status)
             validateTags(sceneId, rawScene, generationMode)
+            val rawTags = rawScene["tags"] as? List<*>
+            val tagSet = rawTags?.filterIsInstance<String>()?.toSet().orEmpty()
+            val inventoryId = rawScene["inventoryId"] as? String
+            if ("source.inventory" in tagSet || inventoryId != null) {
+                if (inventoryId.isNullOrBlank()) {
+                    validationErrors += "$sceneId: inventory-derived generated rows require top-level `inventoryId`"
+                }
+                val generation = rawScene["generation"] as? Map<*, *>
+                val generationInventoryId = generation?.get("inventoryId") as? String
+                if (generationInventoryId.isNullOrBlank() || generationInventoryId != inventoryId) {
+                    validationErrors += "$sceneId: inventory-derived generated rows require matching `generation.inventoryId`"
+                }
+                val sourceReport = generation?.get("sourceReport") as? String
+                if (sourceReport.isNullOrBlank()) {
+                    validationErrors += "$sceneId: inventory-derived generated rows require `generation.sourceReport`"
+                }
+            }
 
             val cpu = requireMap(sceneId, rawScene, "cpu")
             val gpu = requireMap(sceneId, rawScene, "gpu")
@@ -2037,6 +2054,9 @@ tasks.register("pipelineSceneDashboardGate") {
             "image-filter-crop-nonnull-prepass-required" to "image-filter.crop-input-nonnull-prepass-required",
             "font-emoji-color-glyph-refusal" to "font.color-glyph-emoji-unsupported",
             "font-complex-shaping-refusal" to "font.complex-shaping-requires-explicit-shaper",
+            "m52-closed-capped-hairlines-edge-budget" to "coverage.edge-count-exceeded",
+            "m52-big-tile-image-filter-dag-refusal" to "image-filter.dag-or-picture-prepass-required",
+            "m52-color-emoji-blendmodes-refusal" to "font.color-glyph-emoji-unsupported",
         )
         val staticPathAaSentinels = mapOf(
             "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",
@@ -2156,6 +2176,7 @@ tasks.register("pipelineSceneDashboardGate") {
         val statusCounts = linkedMapOf<String, Int>()
         val maturityCounts = linkedMapOf<String, Int>()
         var adapterBackedRows = 0
+        var inventoryDerivedRows = 0
 
         scenes.forEachIndexed { index, rawScene ->
             val scene = rawScene as? Map<*, *>
@@ -2262,6 +2283,24 @@ tasks.register("pipelineSceneDashboardGate") {
                 val tagSet = tagStrings.toSet()
                 val generation = scene.map("generation")
                 val generationMode = generation?.string("mode")
+                val inventoryId = scene.string("inventoryId")
+                if ("source.inventory" in tagSet || inventoryId.isPresent()) {
+                    inventoryDerivedRows += 1
+                    if (!inventoryId.isPresent()) {
+                        fail(sceneId, "inventory.id", "inventory-derived rows require top-level `inventoryId`")
+                    }
+                    val generationInventoryId = generation?.string("inventoryId")
+                    if (!generationInventoryId.isPresent() || generationInventoryId != inventoryId) {
+                        fail(sceneId, "inventory.generation", "inventory-derived rows require matching `generation.inventoryId`")
+                    }
+                    val sourceReport = generation?.string("sourceReport")
+                    if (!sourceReport.isPresent()) {
+                        fail(sceneId, "inventory.sourceReport", "inventory-derived rows require `generation.sourceReport`")
+                    }
+                    if ("source.generated" !in tagSet) {
+                        fail(sceneId, "inventory.generated", "inventory-derived dashboard rows must also carry `source.generated`")
+                    }
+                }
                 if (generationMode == "generated" || generationMode == "mixed") {
                     listOf("source.", "feature.", "route.", "reference.", "maturity.").forEach { namespace ->
                         if (tagSet.none { it.startsWith(namespace) }) {
@@ -2328,6 +2367,7 @@ tasks.register("pipelineSceneDashboardGate") {
         val counterSummary = linkedMapOf(
             "total" to scenes.size,
             "adapterBacked" to adapterBackedRows,
+            "inventoryDerived" to inventoryDerivedRows,
         ) + statusCounts.mapKeys { "status.${it.key}" } + maturityCounts.mapKeys { "${it.key}" }
 
         val markdown = buildString {
@@ -2655,9 +2695,13 @@ tasks.register("pipelineSkiaGmInventory") {
 
     val scriptFile = layout.projectDirectory.file("scripts/skia_gm_inventory.py")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
+    val upstreamGmDir = file("/Users/chaos/workspace/kanvas-forge/skia-main/gm")
     inputs.file(scriptFile)
     inputs.dir(layout.projectDirectory.dir("skia-integration-tests/src/main/kotlin/org/skia/tests"))
-    inputs.dir("/Users/chaos/workspace/kanvas-forge/skia-main/gm")
+    if (upstreamGmDir.isDirectory) {
+        inputs.dir(upstreamGmDir)
+    }
+    inputs.property("upstreamGmDirPresent", upstreamGmDir.isDirectory)
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/data/scenes.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     outputs.dir(outputDir)
@@ -2858,6 +2902,30 @@ tasks.register("pipelinePmBundle") {
                     "adapter" to (stats?.get("adapter") as? String).orEmpty(),
                 )
             }
+        val inventoryDerivedScenes = scenes
+            .filterIsInstance<Map<*, *>>()
+            .filter { scene ->
+                scene["inventoryId"] is String ||
+                    (scene["tags"] as? List<*>)?.contains("source.inventory") == true
+            }
+        val m52PromotedRows = inventoryDerivedScenes.map { scene ->
+            mapOf(
+                "id" to (scene["id"] as? String).orEmpty(),
+                "inventoryId" to (scene["inventoryId"] as? String).orEmpty(),
+                "status" to (scene["status"] as? String).orEmpty(),
+                "sourceReport" to ((scene["generation"] as? Map<*, *>)?.get("sourceReport") as? String).orEmpty(),
+            )
+        }
+        val m52RejectedRows = listOf(
+            mapOf("inventoryId" to "skia-gm-animatedgif", "reason" to "Codec/animation dependency remains gated."),
+            mapOf("inventoryId" to "skia-gm-animcodecplayerexif", "reason" to "Codec/EXIF dependency remains gated."),
+            mapOf("inventoryId" to "skia-gm-dftext", "reason" to "SDF glyph backend remains gated."),
+            mapOf("inventoryId" to "skia-gm-dftextblobpersp", "reason" to "SDF glyph and perspective text remain gated."),
+            mapOf("inventoryId" to "skia-gm-runtimeimagefilter", "reason" to "Runtime image-filter contract needs a separate descriptor-backed slice."),
+            mapOf("inventoryId" to "skia-gm-runtimeintrinsics", "reason" to "Runtime intrinsic coverage needs separate WGSL descriptor evidence."),
+            mapOf("inventoryId" to "skia-gm-gradients2ptconical", "reason" to "Two-point conical gradient remains outside this narrow linear-gradient pack."),
+            mapOf("inventoryId" to "skia-gm-complexclip", "reason" to "Complex clip/path coverage needs a Geometry/Coverage-specific slice."),
+        )
         val inventoryDataFile = inventoryRoot.resolve("inventory.json")
         val inventoryData = if (inventoryDataFile.isFile) {
             JsonSlurper().parse(inventoryDataFile) as? Map<*, *>
@@ -2908,7 +2976,19 @@ tasks.register("pipelinePmBundle") {
                 "maturity" to maturityCounts,
                 "adapterBacked" to adapterBacked.size,
                 "expectedUnsupported" to expectedUnsupported.size,
+                "inventoryDerived" to inventoryDerivedScenes.size,
                 "unavailableReferences" to unavailable.size,
+            ),
+            "m52InventoryPromotion" to linkedMapOf<String, Any>(
+                "selectedRows" to 10,
+                "promotedRows" to m52PromotedRows.size,
+                "promotedPassRows" to m52PromotedRows.count { it["status"] == "pass" },
+                "promotedExpectedUnsupportedRows" to m52PromotedRows.count { it["status"] == "expected-unsupported" },
+                "rejectedRows" to m52RejectedRows.size,
+                "selectedReport" to "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+                "promotedRowsDetail" to m52PromotedRows,
+                "rejectedRowsDetail" to m52RejectedRows,
+                "notice" to "M52 inventory promotion rows are generated dashboard evidence for narrow scene contracts only; unpromoted inventory rows remain planning evidence.",
             ),
             "inventoryCounters" to inventorySummary,
             "dashboardInventoryLinks" to dashboardInventoryLinks,
@@ -2920,6 +3000,7 @@ tasks.register("pipelinePmBundle") {
                 "Performance trend warnings remain non-blocking until an owner-approved release-blocking policy exists.",
                 "The bundle is a static PM review artifact and does not execute GPU captures.",
                 "The M50 font/text rows prove selected simple OpenType evidence and explicit refusals only; broad font, emoji, shaping, SDF, LCD, glyph-mask, codec, arbitrary SkSL, arbitrary image-filter DAG, and broad Path AA support remain outside this bundle's claims.",
+                "M52 promoted 10 inventory-derived rows; the rows prove only their generated scene contracts and do not turn M51 inventory status into broad Skia GM support.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -2947,6 +3028,7 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- `performance/`: warning-only M50 performance trend report and policy.")
                 appendLine("- `inventory/`: M51 Skia GM inventory JSON and Markdown. Inventory rows are not support claims.")
                 appendLine("- `inventory-gate/`: M51 inventory validation reports and mismatch snapshot.")
+                appendLine("- M52 inventory promotion counters live in `manifest.json` under `m52InventoryPromotion`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
         )

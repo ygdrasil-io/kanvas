@@ -1,0 +1,10 @@
+{
+  "backend": "M52 inventory promotion pack",
+  "command": "rtk ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate",
+  "inventoryId": "skia-gm-androidblendmodes",
+  "matchingPixels": 4096,
+  "maxChannelDelta": 0,
+  "pixels": 4096,
+  "status": "pass",
+  "threshold": 99.95
+}

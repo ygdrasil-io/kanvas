@@ -1,0 +1,8 @@
+{
+  "contract": "M52 inventory-derived expected-unsupported refusal; no GPU render artifact is claimed",
+  "coverageStrategy": "webgpu.image-filter.refuse",
+  "fallbackReason": "image-filter.dag-or-picture-prepass-required",
+  "inventoryId": "skia-gm-bigtileimagefilter",
+  "pipelineKey": "imageFilter=bigTile graph=pictureLayer prepass=required source=BigTileImageFilterGM",
+  "selectedRoute": "webgpu.image-filter.refuse"
+}
