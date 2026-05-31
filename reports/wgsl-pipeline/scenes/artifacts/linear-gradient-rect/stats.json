@@ -24,5 +24,9 @@
   },
   "threshold": 99.95,
   "backend": "WebGPU",
-  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.LinearGradientRectTest --tests '*GeneratedLinearGradientWgslTest'"
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.LinearGradientRectTest --tests '*GeneratedLinearGradientWgslTest'",
+  "adapter": "Apple M2 Max",
+  "adapterEvidenceCommand": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.LinearGradientRectTest --tests *GeneratedLinearGradientWgslTest",
+  "adapterEvidenceCommit": "48c351b826bf6ed8b7d5725a41209d9010cbc6e1",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md"
 }
