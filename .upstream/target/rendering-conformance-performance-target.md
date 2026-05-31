@@ -37,7 +37,7 @@ The platform must answer five questions for every promoted scene:
 
 ## PM Readiness
 
-Current Post-MVP Big Target readiness for MEP: 95%.
+Current Post-MVP Big Target readiness for MEP: 96%.
 
 This is a PM readiness score for the full target, not an effort estimate and not
 the completion state of the latest Linear sprint. M41-M47 completed the evidence
@@ -46,8 +46,10 @@ dashboard into a release-oriented readiness gate candidate, M50 converted that
 candidate plus the front/font specs into executable evidence, M51 exposed the GM
 surface as planning inventory, M52 promoted a selected 10-row GM inventory
 pack into generated dashboard evidence, M53 promoted a second 12-row GM
-feature pack, M54 promoted a 10-row hard feature depth pack, and M55 added a
-non-blocking performance gate candidate for seven representative rows. The platform is still not complete MEP
+feature pack, M54 promoted a 10-row hard feature depth pack, M55 added a
+non-blocking performance gate candidate for seven representative rows, and M56
+promoted one corrected sweep-gradient boundary row from expected unsupported to
+adapter-backed pass. The platform is still not complete MEP
 scope because release-blocking performance thresholds, broad Skia parity, broad
 font/text coverage, and dependency-gated codec gaps remain outside the selected
 evidence rows.
@@ -64,10 +66,11 @@ diagnostics, and stable fallback semantics. This moves readiness only for the
 selected generated contracts and does not claim broad Skia GM support.
 
 M53 converts 12 more selected GM candidates into generated dashboard evidence:
-9 `pass` rows and 3 `expected-unsupported` rows across gradient, bitmap/image,
+10 `pass` rows and 2 `expected-unsupported` rows across gradient, bitmap/image,
 blend/color-filter, clip/transform/saveLayer, and bounded image-filter
-families. The rows are generated inventory-derived contracts with artifacts and
-route diagnostics; they still do not claim broad Skia GM parity.
+families after the M56 sweep-gradient correction. The rows are generated
+inventory-derived contracts with artifacts and route diagnostics; they still do
+not claim broad Skia GM parity.
 
 M54 converts 10 selected hard feature candidates into generated dashboard
 evidence: 8 `pass` rows and 2 `expected-unsupported` rows across bounded
@@ -83,18 +86,25 @@ are explicitly deferred with stable reasons, and the generated candidate report
 has 0 `warn` and 0 `fail-candidate`. The PM bundle exposes M55 candidate
 counters and limitations. No performance gate becomes release-blocking.
 
+M56 promotes `m53-sweep-gradient-clamp` from `expected-unsupported` to `pass`
+by correcting the inventory mapping from two-point conical to
+`skia-gm-sweepgradient`. Image-filter and Path AA / clip candidates remain
+unsupported because current artifacts do not prove row-specific GPU support.
+M56 moves readiness to 96%, not the 97% stretch target.
+
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
-| Evidence foundation | 25% | M41-M55 complete: generated dashboard, 58 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
-| Skia integration coverage | 25% | M54 promotes 10 selected hard-feature rows into generated evidence while inventory rows remain planning-only outside promoted rows. | 98% |
-| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, PM bundle generation, M54 metadata checks, and M55 performance candidate output. | 97% |
+| Evidence foundation | 25% | M41-M56 complete: generated dashboard, 58 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
+| Skia integration coverage | 25% | M56 promotes one previous expected-unsupported sweep-gradient row to adapter-backed pass while inventory rows remain planning-only outside promoted rows. | 99% |
+| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, PM bundle generation, M54 metadata checks, M55 performance candidate output, and the corrected M56 allowlist. | 98% |
 | Performance readiness | 15% | Seven M55 rows have candidate decisions: 4 measured pass rows, 3 deferred rows, 0 warn, 0 fail-candidate. Thresholds are not release gates. | 80% |
-| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, performance warnings, inventory reports, M52/M53/M54 counters, and M55 performance candidate counters. | 99% |
+| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, performance warnings, inventory reports, M52/M53/M54 counters, M55 performance candidate counters, and M56 promotion/limitation evidence. | 99% |
 
-The resulting weighted readiness is 95%. Evidence-hardening through M47, M48
+The resulting weighted readiness is 96%. Evidence-hardening through M47, M48
 coverage expansion, M49 readiness gating, M50 acceleration, M51 inventory
-visibility, M52 selected inventory promotion, M53 feature promotion, and M54
-hard feature depth, plus M55 performance gate candidate evidence, are
+visibility, M52 selected inventory promotion, M53 feature promotion, M54
+hard feature depth, M55 performance gate candidate evidence, and M56
+unsupported-to-pass correction are
 complete for their selected evidence sets. These are still only parts of the
 larger MEP target.
 
@@ -181,6 +191,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | M50 | MEP Readiness Acceleration Toward 80% | Completed: converted M49 gate candidate and front/font specs into required CI ownership, front QA evidence, broader adapter-backed captures, first generated font/text scene pack, performance warning automation, and score recalculation. |
 | M51 | Skia GM Inventory Coverage | Completed: inventories upstream GM C++ files and Kotlin GM sources, classifies every row, exposes the inventory through PM/release artifacts, validates required fields, and produces the next promotion backlog without claiming broad support. |
 | M55 | Performance Gate Candidate | Completed: selects seven representative rows, emits non-blocking pass/deferred/warn/fail-candidate output, exposes PM bundle counters, and documents quarantine/rebaseline/rollback policy without enabling a release-blocking performance gate. |
+| M56 | Unsupported-to-Pass Feature Scene Pack | Partial: promotes one corrected sweep-gradient row to `pass`, rejects unsafe image-filter and Path AA shortcuts, and raises readiness to 96% instead of the 97% stretch target. |
 
 ## Current Baseline
 
@@ -397,14 +408,14 @@ M52 PM evidence:
 M53 promotes a bounded set of 12 selected GM candidates into generated
 dashboard evidence:
 
-- 9 generated `pass` rows;
-- 3 generated `expected-unsupported` rows;
+- 10 generated `pass` rows after the M56 sweep-gradient correction;
+- 2 generated `expected-unsupported` rows after the M56 sweep-gradient correction;
 - 0 `tracked-gap` rows;
 - 0 `fail` rows;
 - 12 top-level `inventoryId` links;
 - PM bundle selected/promoted/rejected counters for M53.
 
-Dashboard after M53:
+Historical dashboard after M53, before the M56 sweep-gradient correction:
 
 | Signal | Count |
 |---|---:|
@@ -498,6 +509,41 @@ M55 PM evidence:
 - `reports/wgsl-pipeline/2026-05-31-m55-pm-report.md`;
 - `reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json`;
 - `build/reports/wgsl-pipeline-performance-warnings/m55-performance-gate-candidate.md`.
+
+## M56 Unsupported-to-Pass Feature Scene Pack
+
+M56 adds one real support promotion and two explicit non-promotions:
+
+- `m53-sweep-gradient-clamp` is now `pass` and maps to
+  `skia-gm-sweepgradient`;
+- `skia-gm-gradients2ptconical` remains rejected/deferred because two-point
+  conical gradients are still unsupported;
+- image-filter cropped/graph rows remain expected unsupported because current
+  artifacts prove only narrower existing rows;
+- Path AA / clip rows remain expected unsupported because current boundary rows
+  lack row-specific GPU image/diff/stats with `fallbackReason=none`.
+
+Final dashboard after M56:
+
+| Signal | Count |
+|---|---:|
+| Scene rows | 60 |
+| `pass` | 46 |
+| `expected-unsupported` | 14 |
+| `tracked-gap` | 0 |
+| `fail` | 0 |
+| Generated evidence rows | 58 |
+| Static policy rows | 2 |
+| Adapter-backed rows | 42 |
+| Inventory-derived generated rows | 32 |
+
+M56 PM evidence:
+
+- `reports/wgsl-pipeline/2026-05-31-m56-unsupported-to-pass-selection.md`;
+- `reports/wgsl-pipeline/2026-05-31-m56-gra334-image-filter-promotion-decision.md`;
+- `reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md`;
+- `reports/wgsl-pipeline/2026-05-31-m56-sprint-review.md`;
+- `reports/wgsl-pipeline/2026-05-31-m56-pm-report.md`.
 
 ## Agent Execution Policy
 
