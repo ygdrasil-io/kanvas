@@ -863,6 +863,70 @@
           "cpu": "artifacts/m52-big-tile-image-filter-dag-refusal/route-cpu.json",
           "gpu": "artifacts/m52-big-tile-image-filter-dag-refusal/route-gpu.json"
         },
+        "graphDiagnostics": {
+          "schemaVersion": 1,
+          "sceneId": "m52-big-tile-image-filter-dag-refusal",
+          "milestoneOwner": "M61 Image Filter DAG V2",
+          "status": "expected-unsupported",
+          "fallbackReason": "image-filter.dag-or-picture-prepass-required",
+          "nodeBudget": 4,
+          "nodeCount": 3,
+          "childrenPerNodeBudget": 2,
+          "intermediateTextureBudget": 4,
+          "intermediateTextureCount": 0,
+          "estimatedIntermediateBytes": 0,
+          "bounds": {
+            "input": {
+              "x": 0,
+              "y": 0,
+              "width": 256,
+              "height": 256
+            },
+            "output": {
+              "x": 0,
+              "y": 0,
+              "width": 256,
+              "height": 256
+            }
+          },
+          "nodes": [
+            {
+              "id": "picture-layer",
+              "kind": "picture-prepass",
+              "inputs": [],
+              "support": "unsupported",
+              "reason": "Picture/layer prepass ownership is outside M61 Image Filter DAG V2."
+            },
+            {
+              "id": "big-tile-filter",
+              "kind": "image-filter.big-tile",
+              "inputs": [
+                "picture-layer"
+              ],
+              "support": "blocked-by-input",
+              "reason": "BigTileImageFilter depends on the unresolved picture prepass source."
+            },
+            {
+              "id": "final-composite",
+              "kind": "surface-composite",
+              "inputs": [
+                "big-tile-filter"
+              ],
+              "support": "blocked-by-input",
+              "reason": "No GPU intermediate texture is produced for the upstream filter."
+            }
+          ],
+          "passOrder": [],
+          "ownership": {
+            "intermediatesAllocated": 0,
+            "parentSurfaceOwned": false,
+            "notes": [
+              "The refusal documents graph ownership and pass ordering only; it does not claim BigTile image-filter GPU support.",
+              "A future promotion must allocate bounded intermediates and expose a non-empty pass order before this can become a pass row."
+            ]
+          },
+          "nonClaim": "No arbitrary image-filter DAG, picture/layer prepass, or BigTile GPU support is claimed by this row."
+        },
         "stats": {
           "pixels": 0,
           "matchingPixels": 0,

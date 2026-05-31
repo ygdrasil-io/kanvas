@@ -14,6 +14,7 @@ from typing import Any
 
 PASS_ARTIFACTS = ("skia.png", "cpu.png", "cpu-diff.png", "gpu.png", "gpu-diff.png")
 UNSUPPORTED_ARTIFACTS = ("skia.png", "cpu.png", "cpu-diff.png")
+M61_GRAPH_DIAGNOSTICS_REPORT = "reports/wgsl-pipeline/2026-06-01-m61-image-filter-dag-diagnostics.md"
 PERFORMANCE_ARTIFACTS = ("cpu-performance.json", "gpu-performance.json")
 
 
@@ -195,6 +196,10 @@ def materialize_scene(
     write_json(target_root / "route-cpu.json", cpu_route)
     write_json(target_root / "route-gpu.json", gpu_route)
     write_json(target_root / "stats.json", stats)
+    graph_diagnostics = scene.get("graphDiagnostics")
+    has_graph_diagnostics = isinstance(graph_diagnostics, dict)
+    if has_graph_diagnostics:
+        write_json(target_root / "graph-diagnostics.json", graph_diagnostics)
 
     artifact_prefix = f"artifacts/{scene_id}"
     cpu: dict[str, Any] = {
@@ -340,6 +345,10 @@ def materialize_scene(
         ],
         "tags": scene["tags"],
     }
+    if has_graph_diagnostics:
+        row["graphDiagnostics"] = f"{artifact_prefix}/graph-diagnostics.json"
+        row["evidence"].append(f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/graph-diagnostics.json")
+        row["evidence"].append(M61_GRAPH_DIAGNOSTICS_REPORT)
     if status == "pass":
         row["diffs"]["gpu"] = f"{artifact_prefix}/gpu-diff.png"
     return row
