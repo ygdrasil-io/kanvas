@@ -8070,9 +8070,10 @@ public class SkWebGpuDevice(
      * canvas-side guard in [SkCanvas.bindClip] still throws. Future
      * slices widen the consumer set ; this first cut just covers
      * solid-color rect fills, the most common case.
-     */
+    */
     private var activeClipShape: SkClipShape? = null
     private var strokeOutlineOverflowFallbackDepth: Int = 0
+    private var activeDashIntervalCountForPathAaDiagnostics: Int? = null
 
     override fun setActiveClipShape(shape: SkClipShape?) {
         activeClipShape = shape
@@ -8131,6 +8132,7 @@ public class SkWebGpuDevice(
             cacheCounters = "shaderModules=${cache.shaderModuleCount};pipelines=${cache.pipelineCacheEntryCount};" +
                 "pipelineHits=${cache.pipelineCacheHits};pipelineMisses=${cache.pipelineCacheMisses};" +
                 "pipelineCreations=${cache.pipelineCreations}",
+            budgetDiagnostics = budgetDiagnostics?.dump(),
         )
 
     private fun CoveragePlan.productionDump(): String = when (this) {
@@ -9894,7 +9896,15 @@ public class SkWebGpuDevice(
                         !effectivePath.fillType.isInverse()
                     ) return
                     val paintNoEffect = paint.copy().apply { this.pathEffect = null }
-                    drawPath(effectivePath, ctm, clip, paintNoEffect)
+                    val previousDashIntervalCount = activeDashIntervalCountForPathAaDiagnostics
+                    if (pathEffect is SkDashPathEffect) {
+                        activeDashIntervalCountForPathAaDiagnostics = pathEffect.getIntervals().size
+                    }
+                    try {
+                        drawPath(effectivePath, ctm, clip, paintNoEffect)
+                    } finally {
+                        activeDashIntervalCountForPathAaDiagnostics = previousDashIntervalCount
+                    }
                     return
                 }
                 is SkPath1DPathEffect, is SkPath2DPathEffect -> error(
@@ -10242,6 +10252,7 @@ public class SkWebGpuDevice(
         var ci = 0
         var wi = 0
         var px = 0f; var py = 0f
+        var maxCubicSegmentsPerCubic = 0
         for (verb in path.verbs) {
             when (verb) {
                 SkPath.Verb.kMove, SkPath.Verb.kLine -> {
@@ -10267,7 +10278,10 @@ public class SkWebGpuDevice(
                     val (x1, y1) = ctm.mapXY(sx1, sy1)
                     val (x2, y2) = ctm.mapXY(sx2, sy2)
                     val (x3, y3) = ctm.mapXY(sx3, sy3)
+                    val beforeVertexCount = devVerts.size / 2
                     flattenCubicInto(devVerts, px, py, x1, y1, x2, y2, x3, y3, 0)
+                    val cubicSegments = (devVerts.size / 2) - beforeVertexCount
+                    maxCubicSegmentsPerCubic = maxOf(maxCubicSegmentsPerCubic, cubicSegments)
                     px = x3; py = y3
                 }
                 SkPath.Verb.kConic -> {
@@ -10287,6 +10301,21 @@ public class SkWebGpuDevice(
         }
         val n = devVerts.size / 2
         if (n < 3) return // Degenerate : nothing to fill.
+        var minX = Float.POSITIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+        var vi = 0
+        while (vi < devVerts.size) {
+            val x = devVerts[vi]
+            val y = devVerts[vi + 1]
+            minX = minOf(minX, x)
+            minY = minOf(minY, y)
+            maxX = maxOf(maxX, x)
+            maxY = maxOf(maxY, y)
+            vi += 2
+        }
+        val pathDeviceBounds = FloatRect(minX, minY, maxX, maxY)
 
         // Honour the device clip via scissor (axis-aligned int clip).
         val scissorL = clip.left.coerceAtLeast(0)
@@ -10554,6 +10583,11 @@ public class SkWebGpuDevice(
                     isConvex = isSingleContourConvex,
                     contourCount = contourStarts.size,
                     edgeCount = n,
+                    pathVerbCount = path.countVerbs(),
+                    maxCubicSegmentsPerCubic = maxCubicSegmentsPerCubic.takeIf { it > 0 },
+                    dashIntervalCount = activeDashIntervalCountForPathAaDiagnostics,
+                    clipStackDepth = null,
+                    deviceBounds = pathDeviceBounds,
                     strokeOutlineFallbackEnabled = strokeOutlineOverflowFallbackDepth > 0,
                 ),
             )
