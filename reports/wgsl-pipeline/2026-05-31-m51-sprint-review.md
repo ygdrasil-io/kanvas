@@ -93,7 +93,7 @@ boundaries. No candidate is marked supported without generated evidence.
 
 ## Validation
 
-Commands run:
+Commands run by the M51 implementation:
 
 ```bash
 rtk ./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate
@@ -104,14 +104,15 @@ without status, rows without family tags, and non-`not-triaged` rows without a
 reason. It reports the mismatch snapshot: 51 upstream-only rows, 365 Kotlin-only
 rows, and 0 duplicate normalized keys.
 
-Broader closeout validation is tracked in the final handoff for this change:
+Reviewer closeout validation reran the full required set:
 
 ```bash
 rtk git diff --check
-rtk ./gradlew --no-daemon pipelineSceneDashboard
-rtk ./gradlew --no-daemon pipelineSceneDashboardGate
-rtk ./gradlew --no-daemon pipelinePmBundle
+rtk ./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate pipelineSceneDashboard pipelineSceneDashboardGate pipelinePmBundle
 ```
+
+Result: pass. The rerun confirmed the inventory gate, scene dashboard gate, and
+PM bundle all stay coherent after M51.
 
 ## Limits And Non-Claims
 
