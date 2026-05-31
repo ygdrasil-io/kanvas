@@ -626,6 +626,36 @@ tasks.register("pipelineM53InventoryPromotionPack") {
     }
 }
 
+tasks.register("pipelineM54HardFeatureDepthPack") {
+    group = "verification"
+    description = "Materializes M54 hard feature depth generated scene rows and artifacts from a declarative contract."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m54_hard_feature_depth_pack.py")
+    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json")
+    val sourceArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m54-generated")
+    inputs.file(scriptFile)
+    inputs.file(contractFile)
+    inputs.dir(sourceArtifactDir)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--contract",
+                contractFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineGeneratedSceneExport") {
     group = "verification"
     description = "Materializes generated WGSL scene result artifacts into the dashboard export layout."
@@ -634,13 +664,15 @@ tasks.register("pipelineGeneratedSceneExport") {
     val manifestFile = sourceDir.file("generated/results.json")
     val m52GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m52-generated")
     val m53GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m53-generated")
+    val m54GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m54-generated")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
-    dependsOn("pipelineM52InventoryPromotionPack", "pipelineM53InventoryPromotionPack")
+    dependsOn("pipelineM52InventoryPromotionPack", "pipelineM53InventoryPromotionPack", "pipelineM54HardFeatureDepthPack")
     inputs.file(manifestFile)
     inputs.dir(sourceDir.dir("generated/artifacts"))
     inputs.dir(sourceDir.dir("artifacts"))
     inputs.dir(m52GeneratedDir)
     inputs.dir(m53GeneratedDir)
+    inputs.dir(m54GeneratedDir)
     outputs.dir(outputDir)
     outputs.upToDateWhen { false }
 
@@ -649,6 +681,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         val generatedSourceRoot = sourceRoot.resolve("generated")
         val m52GeneratedRoot = m52GeneratedDir.get().asFile
         val m53GeneratedRoot = m53GeneratedDir.get().asFile
+        val m54GeneratedRoot = m54GeneratedDir.get().asFile
         val manifest = manifestFile.asFile
         val targetRoot = outputDir.get().asFile
         val validationErrors = mutableListOf<String>()
@@ -690,6 +723,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         fun generatedArtifactSource(relativePath: String, allowDirectory: Boolean = false): File? {
             val normalized = relativePath.replace('\\', '/')
             return listOf(
+                m54GeneratedRoot.resolve(normalized),
                 m53GeneratedRoot.resolve(normalized),
                 m52GeneratedRoot.resolve(normalized),
                 generatedSourceRoot.resolve(normalized),
@@ -723,7 +757,16 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
-        val allGeneratedScenes = scenes + m52Scenes + m53Scenes
+        val m54Manifest = m54GeneratedRoot.resolve("data/m54-generated-scenes.json")
+        val m54Scenes = if (m54Manifest.isFile) {
+            val m54Root = JsonSlurper().parse(m54Manifest) as? Map<*, *>
+                ?: throw GradleException("M54 generated scene manifest root must be a JSON object: ${m54Manifest.relativeTo(rootDir)}")
+            m54Root["scenes"] as? List<*>
+                ?: throw GradleException("M54 generated scene manifest must contain a `scenes` array: ${m54Manifest.relativeTo(rootDir)}")
+        } else {
+            emptyList<Any?>()
+        }
+        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes
         val normalizedScenes = mutableListOf<Any?>()
 
         allGeneratedScenes.forEachIndexed { index, rawScene ->
@@ -2152,6 +2195,8 @@ tasks.register("pipelineSceneDashboardGate") {
             "m53-sweep-gradient-clamp" to "gradient.two-point-conical-unsupported",
             "m53-complexclip-boundary-refusal" to "coverage.complex-clip-path-unsupported",
             "m53-imagefilters-cropped-boundary" to "image-filter.crop-input-nonnull-prepass-required",
+            "m54-imagefilters-graph-boundary" to "image-filter.dag-or-picture-prepass-required",
+            "m54-dash-circle-boundary" to "coverage.edge-count-exceeded",
         )
         val staticPathAaSentinels = mapOf(
             "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",
@@ -2272,6 +2317,8 @@ tasks.register("pipelineSceneDashboardGate") {
         val maturityCounts = linkedMapOf<String, Int>()
         var adapterBackedRows = 0
         var inventoryDerivedRows = 0
+        var m54Rows = 0
+        val m54FamilyCounts = linkedMapOf<String, Int>()
 
         scenes.forEachIndexed { index, rawScene ->
             val scene = rawScene as? Map<*, *>
@@ -2378,6 +2425,11 @@ tasks.register("pipelineSceneDashboardGate") {
                 val tagSet = tagStrings.toSet()
                 val generation = scene.map("generation")
                 val generationMode = generation?.string("mode")
+                if (generation?.string("derivationTask") == "pipelineM54HardFeatureDepthPack") {
+                    m54Rows += 1
+                    val family = generation.string("hardFeatureFamily") ?: "unknown"
+                    m54FamilyCounts[family] = (m54FamilyCounts[family] ?: 0) + 1
+                }
                 val inventoryId = scene.string("inventoryId")
                 if ("source.inventory" in tagSet || inventoryId.isPresent()) {
                     inventoryDerivedRows += 1
@@ -2463,7 +2515,10 @@ tasks.register("pipelineSceneDashboardGate") {
             "total" to scenes.size,
             "adapterBacked" to adapterBackedRows,
             "inventoryDerived" to inventoryDerivedRows,
-        ) + statusCounts.mapKeys { "status.${it.key}" } + maturityCounts.mapKeys { "${it.key}" }
+            "m54Rows" to m54Rows,
+        ) + statusCounts.mapKeys { "status.${it.key}" } +
+            maturityCounts.mapKeys { "${it.key}" } +
+            m54FamilyCounts.mapKeys { "m54.family.${it.key}" }
 
         val markdown = buildString {
             appendLine("# WGSL Scene Dashboard Gate Report")
@@ -3021,18 +3076,21 @@ tasks.register("pipelinePmBundle") {
                     "inventoryId" to (scene["inventoryId"] as? String).orEmpty(),
                     "status" to (scene["status"] as? String).orEmpty(),
                     "sourceReport" to (generation?.get("sourceReport") as? String).orEmpty(),
+                    "derivationReport" to (generation?.get("derivationReport") as? String).orEmpty(),
                     "derivedFromGeneratedScene" to (generation?.get("derivedFromGeneratedScene") as? String).orEmpty(),
                     "derivationTask" to (generation?.get("derivationTask") as? String).orEmpty(),
                     "derivationContract" to (generation?.get("derivationContract") as? String).orEmpty(),
+                    "family" to (generation?.get("hardFeatureFamily") as? String).orEmpty(),
                 )
             }
         val m52PromotedRows = promotedRowsFor("pipelineM52InventoryPromotionPack")
         val m53PromotedRows = promotedRowsFor("pipelineM53InventoryPromotionPack")
-        val m53ValidationErrors = mutableListOf<String>()
+        val m54PromotedRows = promotedRowsFor("pipelineM54HardFeatureDepthPack")
+        val promotionValidationErrors = mutableListOf<String>()
         inventoryDerivedScenes
             .filter { scene ->
                 val generation = scene["generation"] as? Map<*, *>
-                generation?.get("derivationTask") == "pipelineM53InventoryPromotionPack"
+                generation?.get("derivationTask") in setOf("pipelineM53InventoryPromotionPack", "pipelineM54HardFeatureDepthPack")
             }
             .forEach { scene ->
                 val sceneId = (scene["id"] as? String).orEmpty()
@@ -3044,31 +3102,31 @@ tasks.register("pipelinePmBundle") {
                 val gpu = scene["gpu"] as? Map<*, *>
                 val gpuRoute = gpu?.get("route") as? Map<*, *>
                 val status = scene["status"] as? String
-                if (inventoryId.isNullOrBlank()) m53ValidationErrors += "$sceneId: missing inventoryId"
-                if (!tags.contains("source.inventory")) m53ValidationErrors += "$sceneId: missing source.inventory tag"
-                if ((generation?.get("sourceReport") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing generation.sourceReport"
-                if ((generation?.get("derivationContract") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing generation.derivationContract"
-                if ((routeDiagnostics?.get("cpu") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing CPU route diagnostics"
-                if ((routeDiagnostics?.get("gpu") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing GPU route diagnostics"
+                if (inventoryId.isNullOrBlank()) promotionValidationErrors += "$sceneId: missing inventoryId"
+                if (!tags.contains("source.inventory")) promotionValidationErrors += "$sceneId: missing source.inventory tag"
+                if ((generation?.get("sourceReport") as? String).isNullOrBlank()) promotionValidationErrors += "$sceneId: missing generation.sourceReport"
+                if ((generation?.get("derivationContract") as? String).isNullOrBlank()) promotionValidationErrors += "$sceneId: missing generation.derivationContract"
+                if ((routeDiagnostics?.get("cpu") as? String).isNullOrBlank()) promotionValidationErrors += "$sceneId: missing CPU route diagnostics"
+                if ((routeDiagnostics?.get("gpu") as? String).isNullOrBlank()) promotionValidationErrors += "$sceneId: missing GPU route diagnostics"
                 if (status == "pass") {
-                    if ((gpu?.get("image") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: pass row missing GPU image"
-                    if ((gpu?.get("diff") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: pass row missing GPU diff"
-                    if ((gpuRoute?.get("fallbackReason") as? String) != "none") m53ValidationErrors += "$sceneId: pass row fallbackReason must be none"
+                    if ((gpu?.get("image") as? String).isNullOrBlank()) promotionValidationErrors += "$sceneId: pass row missing GPU image"
+                    if ((gpu?.get("diff") as? String).isNullOrBlank()) promotionValidationErrors += "$sceneId: pass row missing GPU diff"
+                    if ((gpuRoute?.get("fallbackReason") as? String) != "none") promotionValidationErrors += "$sceneId: pass row fallbackReason must be none"
                 }
                 if (status == "expected-unsupported") {
                     val fallback = gpuRoute?.get("fallbackReason") as? String
                     if (fallback.isNullOrBlank() || fallback == "none") {
-                        m53ValidationErrors += "$sceneId: expected-unsupported row missing stable fallback reason"
+                        promotionValidationErrors += "$sceneId: expected-unsupported row missing stable fallback reason"
                     }
                 }
-                if ((cpu?.get("image") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing CPU image"
-                if ((cpu?.get("diff") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing CPU diff"
+                if ((cpu?.get("image") as? String).isNullOrBlank()) promotionValidationErrors += "$sceneId: missing CPU image"
+                if ((cpu?.get("diff") as? String).isNullOrBlank()) promotionValidationErrors += "$sceneId: missing CPU diff"
             }
-        if (m53ValidationErrors.isNotEmpty()) {
+        if (promotionValidationErrors.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("M53 inventory promotion validation failed:")
-                    m53ValidationErrors.sorted().forEach { appendLine("- $it") }
+                    appendLine("Inventory promotion validation failed:")
+                    promotionValidationErrors.sorted().forEach { appendLine("- $it") }
                 }
             )
         }
@@ -3085,6 +3143,40 @@ tasks.register("pipelinePmBundle") {
                 )
             }
             .orEmpty()
+        val m54ContractFile = rootDir.resolve("reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json")
+        val m54Contract = JsonSlurper().parse(m54ContractFile) as? Map<*, *>
+            ?: throw GradleException("M54 contract root must be a JSON object: ${m54ContractFile.relativeTo(rootDir)}")
+        val m54SelectedRows = (m54Contract["selectedCandidateCount"] as? Number)?.toInt()
+            ?: (m54Contract["scenes"] as? List<*>).orEmpty().size
+        val m54RejectedRows = (m54Contract["rejectedRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?.map {
+                mapOf(
+                    "inventoryId" to (it["inventoryId"] as? String).orEmpty(),
+                    "reason" to (it["reason"] as? String).orEmpty(),
+                )
+            }
+            .orEmpty()
+        val m54FamilyCounters = m54PromotedRows
+            .map { it["family"].orEmpty().ifBlank { "unknown" } }
+            .groupingBy { it }
+            .eachCount()
+            .toSortedMap()
+        val m54PerformanceRows = scenes
+            .filterIsInstance<Map<*, *>>()
+            .filter { scene ->
+                val generation = scene["generation"] as? Map<*, *>
+                generation?.get("derivationTask") == "pipelineM54HardFeatureDepthPack" &&
+                    ((scene["cpu"] as? Map<*, *>)?.get("performanceTrend") is Map<*, *> ||
+                        (scene["gpu"] as? Map<*, *>)?.get("performanceTrend") is Map<*, *>)
+            }
+            .map { scene ->
+                mapOf(
+                    "id" to (scene["id"] as? String).orEmpty(),
+                    "cpuStatus" to (((scene["cpu"] as? Map<*, *>)?.get("performanceTrend") as? Map<*, *>)?.get("status") as? String).orEmpty(),
+                    "gpuStatus" to (((scene["gpu"] as? Map<*, *>)?.get("performanceTrend") as? Map<*, *>)?.get("status") as? String).orEmpty(),
+                )
+            }
         val m52RejectedRows = listOf(
             mapOf("inventoryId" to "skia-gm-animatedgif", "reason" to "Codec/animation dependency remains gated."),
             mapOf("inventoryId" to "skia-gm-animcodecplayerexif", "reason" to "Codec/EXIF dependency remains gated."),
@@ -3129,6 +3221,7 @@ tasks.register("pipelinePmBundle") {
             "generatedResultJson" to "generated/data/generated-scenes.json",
             "m52GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json",
             "m53GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json",
+            "m54GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json",
             "gateReport" to "gate/scene-dashboard-gate.md",
             "frontQaReport" to "front-qa/front-qa.md",
             "frontQaJson" to "front-qa/front-qa.json",
@@ -3173,6 +3266,20 @@ tasks.register("pipelinePmBundle") {
                 "rejectedRowsDetail" to m53RejectedRows,
                 "notice" to "M53 inventory promotion rows are generated dashboard evidence for narrow scene contracts only; unpromoted inventory rows remain planning evidence.",
             ),
+            "m54HardFeatureDepth" to linkedMapOf<String, Any>(
+                "selectedRows" to m54SelectedRows,
+                "promotedRows" to m54PromotedRows.size,
+                "promotedPassRows" to m54PromotedRows.count { it["status"] == "pass" },
+                "promotedExpectedUnsupportedRows" to m54PromotedRows.count { it["status"] == "expected-unsupported" },
+                "rejectedRows" to m54RejectedRows.size,
+                "familyCounters" to m54FamilyCounters,
+                "performanceWarningRows" to m54PerformanceRows,
+                "selectedReport" to "reports/wgsl-pipeline/2026-05-31-m54-hard-feature-depth-selection.md",
+                "promotionReport" to "reports/wgsl-pipeline/2026-05-31-m54-hard-feature-depth-pack.md",
+                "promotedRowsDetail" to m54PromotedRows,
+                "rejectedRowsDetail" to m54RejectedRows,
+                "notice" to "M54 hard feature depth rows are generated dashboard evidence for narrow selected scene contracts only; performance payloads remain warning-only.",
+            ),
             "inventoryCounters" to inventorySummary,
             "dashboardInventoryLinks" to dashboardInventoryLinks,
             "expectedUnsupportedRows" to expectedUnsupported,
@@ -3185,6 +3292,7 @@ tasks.register("pipelinePmBundle") {
                 "The M50 font/text rows prove selected simple OpenType evidence and explicit refusals only; broad font, emoji, shaping, SDF, LCD, glyph-mask, codec, arbitrary SkSL, arbitrary image-filter DAG, and broad Path AA support remain outside this bundle's claims.",
                 "M52 promoted 10 inventory-derived rows; the rows prove only their generated scene contracts and do not turn M51 inventory status into broad Skia GM support.",
                 "M53 promotes selected GM feature rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, font, codec, emoji, shaping, SDF, LCD, and glyph-mask support remain outside this bundle's claims.",
+                "M54 promotes selected hard feature depth rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, dependency-gated font/codec/emoji substitutes, and release-blocking performance gates remain outside this bundle's claims.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -3214,6 +3322,7 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- `inventory-gate/`: M51 inventory validation reports and mismatch snapshot.")
                 appendLine("- M52 inventory promotion counters live in `manifest.json` under `m52InventoryPromotion`.")
                 appendLine("- M53 inventory promotion counters live in `manifest.json` under `m53InventoryPromotion`.")
+                appendLine("- M54 hard feature depth counters live in `manifest.json` under `m54HardFeatureDepth`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
         )
