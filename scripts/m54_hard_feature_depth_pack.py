@@ -227,7 +227,7 @@ def materialize_scene(
         "status": status,
         "artifactStatus": "not-exported",
         "referenceParity": {
-            "status": parity_status(gpu_similarity, gpu_threshold, "produced"),
+            "status": parity_status(gpu_similarity, gpu_threshold, "not-exported"),
             "similarity": gpu_similarity,
             "threshold": gpu_threshold,
             "referenceKind": scene["referenceKind"],
