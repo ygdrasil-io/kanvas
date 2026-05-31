@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "sprint": "M58",
+  "sourceCandidate": "reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json",
+  "sourceReports": [
+    "reports/wgsl-pipeline/2026-05-31-m55-performance-gate-candidate-selection.md",
+    "reports/wgsl-pipeline/2026-05-31-m55-official-performance-baseline-payloads.md",
+    "reports/wgsl-pipeline/2026-05-31-m55-quarantine-rebaseline-rollback-policy.md"
+  ],
+  "policy": {
+    "releaseBlocking": true,
+    "mode": "measured-rows-only",
+    "thresholdMedianPct": 15.0,
+    "thresholdP95Pct": 20.0,
+    "minimumSampleCount": 30,
+    "baselineOwner": "Kanvas rendering release owner",
+    "hostEligibility": "matching host OS/architecture, JDK, backend, and adapter for GPU/cache lanes",
+    "missingOrEstimatedStatus": "not-release-blocking",
+    "nonClaims": [
+      "Estimated metrics are never promoted to measured evidence.",
+      "Missing metrics are reported but are not treated as release-blocking measured rows.",
+      "The gate blocks only measured lanes selected in this M58 contract when required measured metadata is missing or timing exceeds explicit thresholds."
+    ]
+  },
+  "selectedRows": [
+    {
+      "sceneId": "src-over-stack",
+      "family": "blend/composition",
+      "baselineRole": "Measured SrcOver composition and destination load/store baseline",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.026834,
+          "thresholdP95Ms": 0.119050,
+          "sourceBaseline": "m50-cpu-warning-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.029996,
+          "thresholdP95Ms": 0.044449,
+          "sourceBaseline": "m50-gpu-cache-warning-local"
+        }
+      }
+    },
+    {
+      "sceneId": "bitmap-shader-local-matrix",
+      "family": "bitmap/local matrix",
+      "baselineRole": "Measured bitmap local-matrix shader baseline",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.018017,
+          "thresholdP95Ms": 0.019150,
+          "sourceBaseline": "m50-cpu-warning-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.007380,
+          "thresholdP95Ms": 0.009199,
+          "sourceBaseline": "m50-gpu-cache-warning-local"
+        }
+      }
+    },
+    {
+      "sceneId": "m54-src-over-composition-depth",
+      "family": "M54 runtime / paint composition",
+      "baselineRole": "M54 composition depth row carrying measured SrcOver performance evidence",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.026834,
+          "thresholdP95Ms": 0.119050,
+          "sourceBaseline": "m50-cpu-warning-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.029996,
+          "thresholdP95Ms": 0.044449,
+          "sourceBaseline": "m50-gpu-cache-warning-local"
+        }
+      }
+    },
+    {
+      "sceneId": "m54-local-matrix-blend-composition",
+      "family": "M54 bitmap/local matrix + paint composition",
+      "baselineRole": "M54 local-matrix blend row carrying measured bitmap local-matrix performance evidence",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.018017,
+          "thresholdP95Ms": 0.019150,
+          "sourceBaseline": "m50-cpu-warning-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.007380,
+          "thresholdP95Ms": 0.009199,
+          "sourceBaseline": "m50-gpu-cache-warning-local"
+        }
+      }
+    },
+    {
+      "sceneId": "solid-rect",
+      "family": "simple fill baseline",
+      "baselineRole": "P0 solid fill and analytic coverage smoke baseline",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": false,
+          "deferredReason": "No approved measured CPU payload exists for solid-rect yet."
+        },
+        "gpu": {
+          "releaseBlocking": false,
+          "deferredReason": "No approved measured WebGPU/cache payload exists for solid-rect yet."
+        }
+      }
+    },
+    {
+      "sceneId": "linear-gradient-rect",
+      "family": "gradient/shader",
+      "baselineRole": "Generated linear-gradient shader baseline",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": false,
+          "deferredReason": "Existing performanceTrend is estimated; M58 does not promote estimated data to measured."
+        },
+        "gpu": {
+          "releaseBlocking": false,
+          "deferredReason": "Existing WebGPU/cache performanceTrend is estimated and lacks an approved measured adapter baseline."
+        }
+      }
+    },
+    {
+      "sceneId": "m54-simple-aa-clip",
+      "family": "M54 Path AA / clip",
+      "baselineRole": "Representative M54 clip/coverage depth row",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": false,
+          "deferredReason": "Clip/coverage timing requires a dedicated benchmark before claiming measured trend evidence."
+        },
+        "gpu": {
+          "releaseBlocking": false,
+          "deferredReason": "WebGPU clip/cache timing lacks an approved measured adapter baseline."
+        }
+      }
+    }
+  ],
+  "excludedRows": [
+    {
+      "sceneId": "m54-imagefilter-transformed-affine",
+      "reason": "No approved measured image-filter v2 benchmark baseline exists in M58."
+    },
+    {
+      "sceneId": "m54-runtime-imagefilter-descriptor",
+      "reason": "Runtime image-filter descriptor timing remains estimated on the base row and is not promoted to measured."
+    }
+  ]
+}

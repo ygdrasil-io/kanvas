@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "sprint": "M59",
+  "sourceContract": "reports/wgsl-pipeline/performance/m58-performance-release-gate.json",
+  "sourceReports": [
+    "reports/wgsl-pipeline/2026-05-31-m58-performance-release-gate-selection.md",
+    "reports/wgsl-pipeline/2026-05-31-m58-performance-threshold-policy.md",
+    "reports/wgsl-pipeline/2026-05-31-m58-pm-report.md"
+  ],
+  "policy": {
+    "releaseBlocking": true,
+    "mode": "all-selected-rows-measured",
+    "thresholdMedianPct": 15.0,
+    "thresholdP95Pct": 20.0,
+    "minimumSampleCount": 30,
+    "baselineOwner": "Kanvas rendering release owner",
+    "hostEligibility": "matching host OS/architecture, JDK, backend, and adapter for GPU/cache lanes",
+    "missingOrEstimatedStatus": "release-blocking-failure-for-selected-rows",
+    "nonClaims": [
+      "Estimated metrics are never promoted to measured evidence.",
+      "Missing metrics fail selected release-blocking lanes instead of being counted as measured.",
+      "M59 closes only the selected performance target; it does not claim broad Skia performance parity."
+    ]
+  },
+  "selectedRows": [
+    {
+      "sceneId": "src-over-stack",
+      "family": "blend/composition",
+      "baselineRole": "Measured SrcOver composition and destination load/store baseline",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.026834,
+          "thresholdP95Ms": 0.119050,
+          "sourceBaseline": "m50-cpu-warning-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.029996,
+          "thresholdP95Ms": 0.044449,
+          "sourceBaseline": "m50-gpu-cache-warning-local"
+        }
+      }
+    },
+    {
+      "sceneId": "bitmap-shader-local-matrix",
+      "family": "bitmap/local matrix",
+      "baselineRole": "Measured bitmap local-matrix shader baseline",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.018017,
+          "thresholdP95Ms": 0.019150,
+          "sourceBaseline": "m50-cpu-warning-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.007380,
+          "thresholdP95Ms": 0.009199,
+          "sourceBaseline": "m50-gpu-cache-warning-local"
+        }
+      }
+    },
+    {
+      "sceneId": "m54-src-over-composition-depth",
+      "family": "M54 runtime / paint composition",
+      "baselineRole": "M54 composition depth row carrying measured SrcOver performance evidence",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.026834,
+          "thresholdP95Ms": 0.119050,
+          "sourceBaseline": "m50-cpu-warning-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.029996,
+          "thresholdP95Ms": 0.044449,
+          "sourceBaseline": "m50-gpu-cache-warning-local"
+        }
+      }
+    },
+    {
+      "sceneId": "m54-local-matrix-blend-composition",
+      "family": "M54 bitmap/local matrix + paint composition",
+      "baselineRole": "M54 local-matrix blend row carrying measured bitmap local-matrix performance evidence",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.018017,
+          "thresholdP95Ms": 0.019150,
+          "sourceBaseline": "m50-cpu-warning-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.007380,
+          "thresholdP95Ms": 0.009199,
+          "sourceBaseline": "m50-gpu-cache-warning-local"
+        }
+      }
+    },
+    {
+      "sceneId": "solid-rect",
+      "family": "simple fill baseline",
+      "baselineRole": "P0 solid fill and analytic coverage smoke baseline",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.020028,
+          "thresholdP95Ms": 0.093800,
+          "sourceBaseline": "m59-cpu-measured-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.005750,
+          "thresholdP95Ms": 0.012150,
+          "sourceBaseline": "m59-gpu-cache-measured-local"
+        }
+      }
+    },
+    {
+      "sceneId": "linear-gradient-rect",
+      "family": "gradient/shader",
+      "baselineRole": "Generated linear-gradient shader baseline",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.018256,
+          "thresholdP95Ms": 0.202100,
+          "sourceBaseline": "m59-cpu-measured-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.005606,
+          "thresholdP95Ms": 0.006450,
+          "sourceBaseline": "m59-gpu-cache-measured-local"
+        }
+      }
+    },
+    {
+      "sceneId": "m54-simple-aa-clip",
+      "family": "M54 Path AA / clip",
+      "baselineRole": "Representative M54 clip/coverage depth row",
+      "owner": "Kanvas rendering release owner",
+      "lanes": {
+        "cpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.041017,
+          "thresholdP95Ms": 0.414400,
+          "sourceBaseline": "m59-cpu-measured-local"
+        },
+        "gpu": {
+          "releaseBlocking": true,
+          "thresholdMedianMs": 0.005989,
+          "thresholdP95Ms": 0.007399,
+          "sourceBaseline": "m59-gpu-cache-measured-local"
+        }
+      }
+    }
+  ],
+  "excludedRows": [
+    {
+      "sceneId": "m54-imagefilter-transformed-affine",
+      "reason": "No approved measured image-filter v2 benchmark baseline exists in M59."
+    },
+    {
+      "sceneId": "m54-runtime-imagefilter-descriptor",
+      "reason": "Runtime image-filter descriptor timing remains estimated on the base row and is not promoted to measured."
+    }
+  ]
+}
