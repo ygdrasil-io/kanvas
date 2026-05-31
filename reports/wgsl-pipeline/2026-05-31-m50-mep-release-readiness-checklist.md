@@ -28,7 +28,7 @@ Milestone: M50 -- MEP Readiness Acceleration Toward 80%
 | M50-C Adapter-backed scene expansion V2 | `pass` | 17 adapter-backed rows, `reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md` |
 | M50-D First font/text evidence pack | `pass` | 3 font pass rows, 2 font expected-unsupported rows, `reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md` |
 | M50-E Performance warning gate | `pass` | `pipelinePerformanceTrendWarnings`, `reports/wgsl-pipeline/2026-05-31-m50-performance-warning-gate.md` |
-| M50-F Closeout and score update | `pending validation` | `reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md` |
+| M50-F Closeout and score update | `pass` | `reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md`; reviewer reran closeout validation and confirmed the M50 counters. |
 
 ## Score Rule
 

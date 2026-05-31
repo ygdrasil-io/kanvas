@@ -436,3 +436,4 @@ Detailed evidence:
 
 - `reports/wgsl-pipeline/2026-05-31-m50-80-readiness-sprint-plan.md`.
 - `reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m50-verification-and-linear-sync.md`.

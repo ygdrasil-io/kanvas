@@ -188,14 +188,15 @@ M48-M50 support, refusal, and readiness evidence is linked from:
 - `reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md`;
 - `reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md`;
 - `reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md`;
-- `reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md`;
 - `reports/wgsl-pipeline/2026-05-31-m50-ci-release-gate.md`;
 - `reports/wgsl-pipeline/2026-05-31-m50-front-evidence-gate.md`;
 - `reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md`;
 - `reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md`;
 - `reports/wgsl-pipeline/2026-05-31-m50-performance-warning-gate.md`;
 - `reports/wgsl-pipeline/2026-05-31-m50-mep-release-readiness-checklist.md`;
-- `reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md`;
+- `reports/wgsl-pipeline/2026-05-31-m50-verification-and-linear-sync.md`.
 
 Draft follow-up spec packs:
 
