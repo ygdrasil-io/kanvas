@@ -31,6 +31,13 @@ latest front and font spec packs document those next surfaces, but they are
 spec-only and do not change the readiness score until implementation evidence
 lands.
 
+Next objective: M50 targets 80% readiness only if the sprint converts the M49
+gate candidate and draft front/font specs into owned executable evidence:
+required CI ownership, front/browser/accessibility validation, broader
+adapter-backed scene captures, first generated font/text evidence, and automated
+warning-only performance trends. Until those artifacts land, the official score
+remains 60%.
+
 | PM area | Weight | Status | Progress | Evidence / remaining work |
 |---|---:|---|---:|---|
 | Evidence foundation | 25% | Done through M49 | 100% | Generated dashboard, 21 generated rows, 0 tracked-gap, 0 fail, CI gate report |
@@ -54,6 +61,7 @@ Weighted PM readiness: 60% after rounding.
 | MEP readiness gate toward 60% | Done | 100% | M49 promoted dashboard evidence into a CI gate candidate, portable PM bundle, non-blocking performance trend contract, release checklist, and 7 adapter-backed rows |
 | Front evidence experience specs | Draft spec complete | 100% | `front/` documents dashboard UX, PM workflow, accessibility, and quality gates without changing rendering claims |
 | Font and text evidence specs | Draft spec complete | 100% | `font/` documents OpenType, shaping, glyph rendering, color fonts, emoji, and validation boundaries without clearing dependency-gated rows |
+| MEP readiness acceleration toward 80% | Proposed | 0% | M50 plan requires required CI ownership, front QA gates, at least 14 adapter-backed rows, first generated font/text evidence pack, performance warning automation, and a closeout score recalculation |
 
 Evidence-hardening readiness is 100% through M47:
 all static pass rows have generated evidence, and the only remaining static rows
@@ -91,6 +99,20 @@ What remains before MEP:
   deliveries, not substitutes, then promote font scenes with generated
   CPU/GPU/refusal evidence.
 
+M50 can move the PM score toward 80% only if these requirements land together:
+
+- CI/release ownership for `pipelineSceneDashboardGate` and non-blocking
+  inventory evidence;
+- front PM dashboard gates for image inspection, filters, route/reference
+  notices, desktop/mobile screenshots, accessibility, and PM bundle inclusion;
+- at least 14 adapter-backed rows across multiple Skia-relevant scene families;
+- first generated font/text scene pack with pass rows and explicit
+  expected-unsupported rows using stable fallback reasons;
+- automated warning-only performance trend output with baselines, variance
+  policy, owner, quarantine, and rollback notes;
+- sprint review that recalculates the score from artifacts and keeps the score
+  below 80% if any lane remains documentation-only.
+
 Active Post-MVP evidence:
 
 - target doc: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
@@ -115,6 +137,7 @@ Active Post-MVP evidence:
 - M49 performance trend gate contract: [reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md](reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md)
 - M49 release readiness checklist: [reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md](reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md)
 - M49 sprint review: [reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md)
+- M50 proposed sprint: [reports/wgsl-pipeline/2026-05-31-m50-80-readiness-sprint-plan.md](reports/wgsl-pipeline/2026-05-31-m50-80-readiness-sprint-plan.md)
 
 ## MVP Roadmap
 

@@ -63,6 +63,21 @@ The resulting weighted readiness rounds to 60%. Evidence-hardening through M47,
 M48 coverage expansion, and M49 readiness gating are complete for their selected
 evidence sets. These are still only parts of the larger MEP target.
 
+The next proposed objective is M50: move toward 80% only if the current gate
+candidate and draft front/font specs become executable, owned evidence. The
+score must remain below 80% if any required lane lands only as planning prose.
+
+| Area | Weight | M50 target | Required movement |
+|---|---:|---:|---|
+| Evidence foundation | 25% | 100% | Preserve generated dashboard semantics, zero `tracked-gap`, zero `fail`, and stable fallback policy. |
+| Skia integration coverage | 25% | 65% | Reach at least 14 adapter-backed rows and add first generated font/text evidence without broad unsupported claims. |
+| CI and release gates | 20% | 85% | Make `pipelineSceneDashboardGate`, PM bundle validation, and non-blocking inventory ownership release-visible. |
+| Performance readiness | 15% | 60% | Emit automated warning-only trend evidence with baseline owner, variance, quarantine, and rollback policy. |
+| PM demo and reporting workflow | 15% | 85% | Add accepted front/browser/accessibility evidence, image inspection, route/reference notices, and portable PM bundle links. |
+
+This target mix weights to 80%, but it is a closeout rule, not the current
+score.
+
 Before MEP, Kanvas still needs:
 
 - broader Skia integration scene coverage;
@@ -136,6 +151,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | M49 | MEP Readiness Gate Toward 60% | Completed: promoted the generated dashboard into a CI gate candidate, added a portable PM artifact bundle, defined non-blocking performance trend gates, and broadened adapter-backed proof enough to justify a 60% PM readiness score. |
 | Spec split | Front Evidence Experience | Draft spec pack added for dashboard UX, image inspection, PM bundle workflow, accessibility, and quality gates. Spec-only; no score movement. |
 | Spec split | Font And Text Evidence | Draft spec pack added for pure Kotlin OpenType, shaping, glyph rendering, color fonts, emoji, and font conformance. Spec-only; dependency-gated rows remain gated. |
+| M50 | MEP Readiness Acceleration Toward 80% | Proposed: convert M49 gate candidate and front/font specs into required CI ownership, front QA evidence, broader adapter-backed captures, first generated font/text scene pack, performance warning automation, and a score recalculation. |
 
 ## Current Baseline
 
@@ -188,6 +204,7 @@ Draft follow-up spec packs:
 
 - `.upstream/specs/front/README.md`;
 - `.upstream/specs/font/README.md`.
+- `reports/wgsl-pipeline/2026-05-31-m50-80-readiness-sprint-plan.md`.
 
 The two static rows remain deliberate Path AA policy sentinels, not unowned
 conversion debt. M48 adds three generated expected-unsupported breadth rows so
@@ -246,6 +263,27 @@ change the 60% PM readiness score. The score only moves when the documented
 front or font work produces release-relevant evidence: accepted gates,
 adapter-backed captures, generated scene rows, stable refusal rows, or PM
 artifacts.
+
+## M50 Proposed Objective
+
+M50 should try to move the target from 60% to 80% by landing five executable
+lanes:
+
+- required CI ownership for `pipelineSceneDashboardGate`, PM bundle validation,
+  and non-blocking inventory visibility;
+- front evidence gates for image inspection, filters, route/reference notices,
+  desktop/mobile browser screenshots, accessibility, and PM bundle attachment;
+- adapter-backed scene expansion from 7 rows to at least 14 rows across
+  multiple Skia-relevant families;
+- first generated font/text evidence pack, with selected pass rows from the
+  existing pure Kotlin OpenType/simple text path and explicit
+  expected-unsupported rows for unsupported glyph/text surfaces;
+- automated warning-only performance trends with baseline owner, variance
+  policy, quarantine, rollback notes, and refreshed measured payloads.
+
+M50 must not claim complete MEP, broad Skia parity, broad font/emoji/shaping
+support, or release-blocking performance thresholds. If font evidence or
+performance automation remains documentation-only, 80% is not defensible.
 
 ## Agent Execution Policy
 
