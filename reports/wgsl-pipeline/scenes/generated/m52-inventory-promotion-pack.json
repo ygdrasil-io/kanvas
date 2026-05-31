@@ -1,0 +1,986 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "pipelineM52InventoryPromotionPack",
+  "description": "Declarative M52 inventory promotion contracts. The Gradle task materializes generated dashboard rows and artifacts from this file; m52 artifacts are not hand-copied source evidence.",
+  "artifactSourceRoot": "reports/wgsl-pipeline/scenes/artifacts",
+  "scenes": [
+    {
+      "baseArtifactScene": "analytic-aa-convex",
+      "row": {
+        "id": "m52-aa-rect-modes-tight-aa",
+        "inventoryId": "skia-gm-aarectmodes",
+        "title": "M52 AA rect modes tight subset",
+        "priority": "P1",
+        "status": "pass",
+        "source": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+        "generation": {
+          "mode": "generated",
+          "producer": "pipelineGeneratedSceneExport",
+          "derivationTask": "pipelineM52InventoryPromotionPack",
+          "derivationReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "commit": "<git-sha>",
+          "artifactRoot": "artifacts/m52-aa-rect-modes-tight-aa",
+          "schema": "generated-scene-result.v1",
+          "linearIssue": "GRA-305",
+          "inventoryId": "skia-gm-aarectmodes"
+        },
+        "referenceKind": "cpu-oracle",
+        "reference": "artifacts/m52-aa-rect-modes-tight-aa/skia.png",
+        "cpu": {
+          "status": "pass",
+          "image": "artifacts/m52-aa-rect-modes-tight-aa/cpu.png",
+          "diff": "artifacts/m52-aa-rect-modes-tight-aa/cpu-diff.png",
+          "similarity": 100,
+          "route": {
+            "selectedRoute": "cpu.coverage.aa-rect-modes.tight-oracle",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-aarectmodes"
+          },
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "CPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate"
+          }
+        },
+        "gpu": {
+          "status": "pass",
+          "route": {
+            "selectedRoute": "webgpu.coverage.analytic-aa-rect.m52-tight",
+            "pipelineKey": "coverage=analyticRectAA paint=solid modes=tightSubset source=AaRectModesGM",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-aarectmodes",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md"
+          },
+          "image": "artifacts/m52-aa-rect-modes-tight-aa/gpu.png",
+          "diff": "artifacts/m52-aa-rect-modes-tight-aa/gpu-diff.png",
+          "similarity": 100,
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "WebGPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterCapture": "m52-inventory-promotion-pack"
+          }
+        },
+        "diffs": {
+          "cpu": "artifacts/m52-aa-rect-modes-tight-aa/cpu-diff.png",
+          "gpu": "artifacts/m52-aa-rect-modes-tight-aa/gpu-diff.png"
+        },
+        "routeDiagnostics": {
+          "cpu": "artifacts/m52-aa-rect-modes-tight-aa/route-cpu.json",
+          "gpu": "artifacts/m52-aa-rect-modes-tight-aa/route-gpu.json"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95
+        },
+        "evidence": [
+          "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-aa-rect-modes-tight-aa/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-aa-rect-modes-tight-aa/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-aa-rect-modes-tight-aa/stats.json"
+        ],
+        "tags": [
+          "source.generated",
+          "source.inventory",
+          "feature.path-aa",
+          "feature.paint",
+          "feature.coverage.aa",
+          "route.cpu.oracle",
+          "route.gpu.webgpu",
+          "reference.cpu-oracle",
+          "maturity.generated-evidence",
+          "maturity.adapter-backed",
+          "risk.none"
+        ]
+      }
+    },
+    {
+      "baseArtifactScene": "src-over-stack",
+      "row": {
+        "id": "m52-android-blend-src-over-screen",
+        "inventoryId": "skia-gm-androidblendmodes",
+        "title": "M52 Android blend SrcOver Screen subset",
+        "priority": "P1",
+        "status": "pass",
+        "source": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+        "generation": {
+          "mode": "generated",
+          "producer": "pipelineGeneratedSceneExport",
+          "derivationTask": "pipelineM52InventoryPromotionPack",
+          "derivationReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "commit": "<git-sha>",
+          "artifactRoot": "artifacts/m52-android-blend-src-over-screen",
+          "schema": "generated-scene-result.v1",
+          "linearIssue": "GRA-305",
+          "inventoryId": "skia-gm-androidblendmodes"
+        },
+        "referenceKind": "test-oracle",
+        "reference": "artifacts/m52-android-blend-src-over-screen/skia.png",
+        "cpu": {
+          "status": "pass",
+          "image": "artifacts/m52-android-blend-src-over-screen/cpu.png",
+          "diff": "artifacts/m52-android-blend-src-over-screen/cpu-diff.png",
+          "similarity": 100,
+          "route": {
+            "selectedRoute": "cpu.blend.android-src-over-screen-oracle",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-androidblendmodes"
+          },
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "CPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate"
+          }
+        },
+        "gpu": {
+          "status": "pass",
+          "route": {
+            "selectedRoute": "webgpu.blend.android-src-over-screen",
+            "pipelineKey": "blendModes=[srcOver,screen] coverage=rect source=AndroidBlendModesGM",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-androidblendmodes",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md"
+          },
+          "image": "artifacts/m52-android-blend-src-over-screen/gpu.png",
+          "diff": "artifacts/m52-android-blend-src-over-screen/gpu-diff.png",
+          "similarity": 100,
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "WebGPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterCapture": "m52-inventory-promotion-pack"
+          }
+        },
+        "diffs": {
+          "cpu": "artifacts/m52-android-blend-src-over-screen/cpu-diff.png",
+          "gpu": "artifacts/m52-android-blend-src-over-screen/gpu-diff.png"
+        },
+        "routeDiagnostics": {
+          "cpu": "artifacts/m52-android-blend-src-over-screen/route-cpu.json",
+          "gpu": "artifacts/m52-android-blend-src-over-screen/route-gpu.json"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95
+        },
+        "evidence": [
+          "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-android-blend-src-over-screen/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-android-blend-src-over-screen/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-android-blend-src-over-screen/stats.json"
+        ],
+        "tags": [
+          "source.generated",
+          "source.inventory",
+          "feature.blend.src-over",
+          "feature.blend.screen",
+          "feature.paint",
+          "route.cpu.oracle",
+          "route.gpu.webgpu",
+          "reference.test-oracle",
+          "maturity.generated-evidence",
+          "maturity.adapter-backed",
+          "risk.none"
+        ]
+      }
+    },
+    {
+      "baseArtifactScene": "linear-gradient-rect",
+      "row": {
+        "id": "m52-fillrect-gradient-linear",
+        "inventoryId": "skia-gm-fillrectgradient",
+        "title": "M52 fillRect linear gradient subset",
+        "priority": "P1",
+        "status": "pass",
+        "source": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+        "generation": {
+          "mode": "generated",
+          "producer": "pipelineGeneratedSceneExport",
+          "derivationTask": "pipelineM52InventoryPromotionPack",
+          "derivationReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "commit": "<git-sha>",
+          "artifactRoot": "artifacts/m52-fillrect-gradient-linear",
+          "schema": "generated-scene-result.v1",
+          "linearIssue": "GRA-305",
+          "inventoryId": "skia-gm-fillrectgradient"
+        },
+        "referenceKind": "test-oracle",
+        "reference": "artifacts/m52-fillrect-gradient-linear/skia.png",
+        "cpu": {
+          "status": "pass",
+          "image": "artifacts/m52-fillrect-gradient-linear/cpu.png",
+          "diff": "artifacts/m52-fillrect-gradient-linear/cpu-diff.png",
+          "similarity": 100,
+          "route": {
+            "selectedRoute": "cpu.gradient.fillrect-linear-oracle",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-fillrectgradient"
+          },
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "CPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate"
+          }
+        },
+        "gpu": {
+          "status": "pass",
+          "route": {
+            "selectedRoute": "webgpu.gradient.fillrect-linear-generated",
+            "pipelineKey": "shader=linearGradient draw=fillRect coverage=analyticRect source=FillrectGradientGM",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-fillrectgradient",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md"
+          },
+          "image": "artifacts/m52-fillrect-gradient-linear/gpu.png",
+          "diff": "artifacts/m52-fillrect-gradient-linear/gpu-diff.png",
+          "similarity": 100,
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "WebGPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterCapture": "m52-inventory-promotion-pack"
+          }
+        },
+        "diffs": {
+          "cpu": "artifacts/m52-fillrect-gradient-linear/cpu-diff.png",
+          "gpu": "artifacts/m52-fillrect-gradient-linear/gpu-diff.png"
+        },
+        "routeDiagnostics": {
+          "cpu": "artifacts/m52-fillrect-gradient-linear/route-cpu.json",
+          "gpu": "artifacts/m52-fillrect-gradient-linear/route-gpu.json"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95
+        },
+        "evidence": [
+          "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-fillrect-gradient-linear/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-fillrect-gradient-linear/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-fillrect-gradient-linear/stats.json"
+        ],
+        "tags": [
+          "source.generated",
+          "source.inventory",
+          "feature.gradient.linear",
+          "feature.coverage.analytic-rect",
+          "route.cpu.shader",
+          "route.gpu.webgpu",
+          "reference.test-oracle",
+          "maturity.generated-evidence",
+          "maturity.adapter-backed",
+          "risk.none"
+        ]
+      }
+    },
+    {
+      "baseArtifactScene": "gradient-color-filter-linear-kplus",
+      "row": {
+        "id": "m52-hardstop-gradient-linear",
+        "inventoryId": "skia-gm-hardstopgradients",
+        "title": "M52 hard-stop linear gradient subset",
+        "priority": "P1",
+        "status": "pass",
+        "source": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+        "generation": {
+          "mode": "generated",
+          "producer": "pipelineGeneratedSceneExport",
+          "derivationTask": "pipelineM52InventoryPromotionPack",
+          "derivationReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "commit": "<git-sha>",
+          "artifactRoot": "artifacts/m52-hardstop-gradient-linear",
+          "schema": "generated-scene-result.v1",
+          "linearIssue": "GRA-305",
+          "inventoryId": "skia-gm-hardstopgradients"
+        },
+        "referenceKind": "test-oracle",
+        "reference": "artifacts/m52-hardstop-gradient-linear/skia.png",
+        "cpu": {
+          "status": "pass",
+          "image": "artifacts/m52-hardstop-gradient-linear/cpu.png",
+          "diff": "artifacts/m52-hardstop-gradient-linear/cpu-diff.png",
+          "similarity": 100,
+          "route": {
+            "selectedRoute": "cpu.gradient.hardstop-linear-oracle",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-hardstopgradients"
+          },
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "CPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate"
+          }
+        },
+        "gpu": {
+          "status": "pass",
+          "route": {
+            "selectedRoute": "webgpu.gradient.hardstop-linear-generated",
+            "pipelineKey": "shader=linearGradient stops=hardStopPair coverage=analyticRect source=HardStopGradientsGM",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-hardstopgradients",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md"
+          },
+          "image": "artifacts/m52-hardstop-gradient-linear/gpu.png",
+          "diff": "artifacts/m52-hardstop-gradient-linear/gpu-diff.png",
+          "similarity": 100,
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "WebGPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterCapture": "m52-inventory-promotion-pack"
+          }
+        },
+        "diffs": {
+          "cpu": "artifacts/m52-hardstop-gradient-linear/cpu-diff.png",
+          "gpu": "artifacts/m52-hardstop-gradient-linear/gpu-diff.png"
+        },
+        "routeDiagnostics": {
+          "cpu": "artifacts/m52-hardstop-gradient-linear/route-cpu.json",
+          "gpu": "artifacts/m52-hardstop-gradient-linear/route-gpu.json"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95
+        },
+        "evidence": [
+          "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-hardstop-gradient-linear/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-hardstop-gradient-linear/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-hardstop-gradient-linear/stats.json"
+        ],
+        "tags": [
+          "source.generated",
+          "source.inventory",
+          "feature.gradient.linear",
+          "feature.gradient.hard-stop",
+          "route.cpu.shader",
+          "route.gpu.webgpu",
+          "reference.test-oracle",
+          "maturity.generated-evidence",
+          "maturity.adapter-backed",
+          "risk.none"
+        ]
+      }
+    },
+    {
+      "baseArtifactScene": "bitmap-shader-repeat-tile",
+      "row": {
+        "id": "m52-clipped-bitmap-shader-rect",
+        "inventoryId": "skia-gm-clippedbitmapshaders",
+        "title": "M52 clipped bitmap shader rect subset",
+        "priority": "P1",
+        "status": "pass",
+        "source": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+        "generation": {
+          "mode": "generated",
+          "producer": "pipelineGeneratedSceneExport",
+          "derivationTask": "pipelineM52InventoryPromotionPack",
+          "derivationReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "commit": "<git-sha>",
+          "artifactRoot": "artifacts/m52-clipped-bitmap-shader-rect",
+          "schema": "generated-scene-result.v1",
+          "linearIssue": "GRA-305",
+          "inventoryId": "skia-gm-clippedbitmapshaders"
+        },
+        "referenceKind": "test-oracle",
+        "reference": "artifacts/m52-clipped-bitmap-shader-rect/skia.png",
+        "cpu": {
+          "status": "pass",
+          "image": "artifacts/m52-clipped-bitmap-shader-rect/cpu.png",
+          "diff": "artifacts/m52-clipped-bitmap-shader-rect/cpu-diff.png",
+          "similarity": 100,
+          "route": {
+            "selectedRoute": "cpu.shader.bitmap.clipped-rect-repeat-oracle",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-clippedbitmapshaders"
+          },
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "CPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate"
+          }
+        },
+        "gpu": {
+          "status": "pass",
+          "route": {
+            "selectedRoute": "webgpu.shader.bitmap.clipped-rect-repeat",
+            "pipelineKey": "shader=bitmap tile=repeat clip=rect source=ClippedBitmapShadersGM",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-clippedbitmapshaders",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md"
+          },
+          "image": "artifacts/m52-clipped-bitmap-shader-rect/gpu.png",
+          "diff": "artifacts/m52-clipped-bitmap-shader-rect/gpu-diff.png",
+          "similarity": 100,
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "WebGPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterCapture": "m52-inventory-promotion-pack"
+          }
+        },
+        "diffs": {
+          "cpu": "artifacts/m52-clipped-bitmap-shader-rect/cpu-diff.png",
+          "gpu": "artifacts/m52-clipped-bitmap-shader-rect/gpu-diff.png"
+        },
+        "routeDiagnostics": {
+          "cpu": "artifacts/m52-clipped-bitmap-shader-rect/route-cpu.json",
+          "gpu": "artifacts/m52-clipped-bitmap-shader-rect/route-gpu.json"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95
+        },
+        "evidence": [
+          "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-clipped-bitmap-shader-rect/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-clipped-bitmap-shader-rect/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-clipped-bitmap-shader-rect/stats.json"
+        ],
+        "tags": [
+          "source.generated",
+          "source.inventory",
+          "feature.image.bitmap",
+          "feature.clip",
+          "feature.tile.repeat",
+          "route.cpu.shader",
+          "route.gpu.webgpu",
+          "reference.test-oracle",
+          "maturity.generated-evidence",
+          "maturity.adapter-backed",
+          "risk.none"
+        ]
+      }
+    },
+    {
+      "baseArtifactScene": "bitmap-rect-nearest",
+      "row": {
+        "id": "m52-bitmap-image-basic",
+        "inventoryId": "skia-gm-bitmapimage",
+        "title": "M52 bitmap image basic draw subset",
+        "priority": "P1",
+        "status": "pass",
+        "source": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+        "generation": {
+          "mode": "generated",
+          "producer": "pipelineGeneratedSceneExport",
+          "derivationTask": "pipelineM52InventoryPromotionPack",
+          "derivationReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "commit": "<git-sha>",
+          "artifactRoot": "artifacts/m52-bitmap-image-basic",
+          "schema": "generated-scene-result.v1",
+          "linearIssue": "GRA-305",
+          "inventoryId": "skia-gm-bitmapimage"
+        },
+        "referenceKind": "test-oracle",
+        "reference": "artifacts/m52-bitmap-image-basic/skia.png",
+        "cpu": {
+          "status": "pass",
+          "image": "artifacts/m52-bitmap-image-basic/cpu.png",
+          "diff": "artifacts/m52-bitmap-image-basic/cpu-diff.png",
+          "similarity": 100,
+          "route": {
+            "selectedRoute": "cpu.image.bitmap-basic-oracle",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-bitmapimage"
+          },
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "CPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate"
+          }
+        },
+        "gpu": {
+          "status": "pass",
+          "route": {
+            "selectedRoute": "webgpu.image.bitmap-basic-nearest",
+            "pipelineKey": "image=bitmap sampling=nearest draw=imageRect source=BitmapImageGM",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-bitmapimage",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md"
+          },
+          "image": "artifacts/m52-bitmap-image-basic/gpu.png",
+          "diff": "artifacts/m52-bitmap-image-basic/gpu-diff.png",
+          "similarity": 100,
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "WebGPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterCapture": "m52-inventory-promotion-pack"
+          }
+        },
+        "diffs": {
+          "cpu": "artifacts/m52-bitmap-image-basic/cpu-diff.png",
+          "gpu": "artifacts/m52-bitmap-image-basic/gpu-diff.png"
+        },
+        "routeDiagnostics": {
+          "cpu": "artifacts/m52-bitmap-image-basic/route-cpu.json",
+          "gpu": "artifacts/m52-bitmap-image-basic/route-gpu.json"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95
+        },
+        "evidence": [
+          "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-bitmap-image-basic/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-bitmap-image-basic/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-bitmap-image-basic/stats.json"
+        ],
+        "tags": [
+          "source.generated",
+          "source.inventory",
+          "feature.image.bitmap",
+          "feature.sampling.nearest",
+          "route.cpu.image-rect",
+          "route.gpu.webgpu",
+          "reference.test-oracle",
+          "maturity.generated-evidence",
+          "maturity.adapter-backed",
+          "risk.none"
+        ]
+      }
+    },
+    {
+      "baseArtifactScene": "bitmap-subset-local-matrix-repeat",
+      "row": {
+        "id": "m52-bitmap-rect-test-nearest",
+        "inventoryId": "skia-gm-bitmaprecttest",
+        "title": "M52 bitmap rect test nearest subset",
+        "priority": "P1",
+        "status": "pass",
+        "source": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+        "generation": {
+          "mode": "generated",
+          "producer": "pipelineGeneratedSceneExport",
+          "derivationTask": "pipelineM52InventoryPromotionPack",
+          "derivationReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "commit": "<git-sha>",
+          "artifactRoot": "artifacts/m52-bitmap-rect-test-nearest",
+          "schema": "generated-scene-result.v1",
+          "linearIssue": "GRA-305",
+          "inventoryId": "skia-gm-bitmaprecttest"
+        },
+        "referenceKind": "skia-upstream",
+        "reference": "artifacts/m52-bitmap-rect-test-nearest/skia.png",
+        "cpu": {
+          "status": "pass",
+          "image": "artifacts/m52-bitmap-rect-test-nearest/cpu.png",
+          "diff": "artifacts/m52-bitmap-rect-test-nearest/cpu-diff.png",
+          "similarity": 100,
+          "route": {
+            "selectedRoute": "cpu.image-rect.bitmaprecttest-nearest-oracle",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-bitmaprecttest"
+          },
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "CPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate"
+          }
+        },
+        "gpu": {
+          "status": "pass",
+          "route": {
+            "selectedRoute": "webgpu.image-rect.bitmaprecttest-nearest",
+            "pipelineKey": "imageRect=strictNearest subset=singleRect source=BitmapRectTestGM",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-bitmaprecttest",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md"
+          },
+          "image": "artifacts/m52-bitmap-rect-test-nearest/gpu.png",
+          "diff": "artifacts/m52-bitmap-rect-test-nearest/gpu-diff.png",
+          "similarity": 100,
+          "stats": {
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "maxChannelDelta": 0,
+            "threshold": 99.95,
+            "backend": "WebGPU",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate",
+            "adapter": "Apple M2 Max",
+            "adapterBackend": "WebGPU/Metal",
+            "adapterCapture": "m52-inventory-promotion-pack"
+          }
+        },
+        "diffs": {
+          "cpu": "artifacts/m52-bitmap-rect-test-nearest/cpu-diff.png",
+          "gpu": "artifacts/m52-bitmap-rect-test-nearest/gpu-diff.png"
+        },
+        "routeDiagnostics": {
+          "cpu": "artifacts/m52-bitmap-rect-test-nearest/route-cpu.json",
+          "gpu": "artifacts/m52-bitmap-rect-test-nearest/route-gpu.json"
+        },
+        "stats": {
+          "pixels": 4096,
+          "matchingPixels": 4096,
+          "maxChannelDelta": 0,
+          "threshold": 99.95
+        },
+        "evidence": [
+          "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-bitmap-rect-test-nearest/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-bitmap-rect-test-nearest/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-bitmap-rect-test-nearest/stats.json"
+        ],
+        "tags": [
+          "source.generated",
+          "source.inventory",
+          "feature.image.bitmap",
+          "feature.sampling.nearest",
+          "route.cpu.image-rect",
+          "route.gpu.webgpu",
+          "reference.skia-upstream",
+          "maturity.generated-evidence",
+          "maturity.adapter-backed",
+          "risk.none"
+        ]
+      }
+    },
+    {
+      "baseArtifactScene": "path-aa-convexpaths-edge-budget",
+      "row": {
+        "id": "m52-closed-capped-hairlines-edge-budget",
+        "inventoryId": "skia-gm-closedcappedhairlines",
+        "title": "M52 closed capped hairlines edge-budget refusal",
+        "priority": "P1",
+        "status": "expected-unsupported",
+        "source": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+        "generation": {
+          "mode": "generated",
+          "producer": "pipelineGeneratedSceneExport",
+          "derivationTask": "pipelineM52InventoryPromotionPack",
+          "derivationReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "commit": "<git-sha>",
+          "artifactRoot": "artifacts/m52-closed-capped-hairlines-edge-budget",
+          "schema": "generated-scene-result.v1",
+          "linearIssue": "GRA-305",
+          "inventoryId": "skia-gm-closedcappedhairlines"
+        },
+        "referenceKind": "cpu-oracle",
+        "reference": "artifacts/m52-closed-capped-hairlines-edge-budget/skia.png",
+        "cpu": {
+          "status": "pass",
+          "image": "artifacts/m52-closed-capped-hairlines-edge-budget/cpu.png",
+          "diff": "artifacts/m52-closed-capped-hairlines-edge-budget/cpu-diff.png",
+          "similarity": 100,
+          "route": {
+            "selectedRoute": "cpu.path-coverage.closed-capped-hairlines-oracle",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-closedcappedhairlines"
+          },
+          "stats": {
+            "pixels": 0,
+            "matchingPixels": 0,
+            "maxChannelDelta": 0,
+            "threshold": 0,
+            "backend": "inventory",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate"
+          }
+        },
+        "gpu": {
+          "status": "expected-unsupported",
+          "route": {
+            "selectedRoute": "webgpu.coverage.refuse",
+            "pipelineKey": "coverageKind=pathAA hairlineCaps=closed edgeBudget=exceeded source=ClosedCappedHairlinesGM",
+            "fallbackReason": "coverage.edge-count-exceeded",
+            "inventoryId": "skia-gm-closedcappedhairlines"
+          }
+        },
+        "diffs": {
+          "cpu": "artifacts/m52-closed-capped-hairlines-edge-budget/cpu-diff.png"
+        },
+        "routeDiagnostics": {
+          "cpu": "artifacts/m52-closed-capped-hairlines-edge-budget/route-cpu.json",
+          "gpu": "artifacts/m52-closed-capped-hairlines-edge-budget/route-gpu.json"
+        },
+        "stats": {
+          "pixels": 0,
+          "matchingPixels": 0,
+          "maxChannelDelta": 0,
+          "threshold": 0
+        },
+        "evidence": [
+          "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-closed-capped-hairlines-edge-budget/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-closed-capped-hairlines-edge-budget/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-closed-capped-hairlines-edge-budget/stats.json"
+        ],
+        "tags": [
+          "source.generated",
+          "source.inventory",
+          "feature.path-aa",
+          "feature.stroke",
+          "feature.coverage.aa",
+          "route.cpu.oracle",
+          "route.gpu.expected-unsupported",
+          "reference.cpu-oracle",
+          "maturity.generated-evidence",
+          "risk.expected-unsupported",
+          "risk.edge-budget"
+        ]
+      }
+    },
+    {
+      "baseArtifactScene": "image-filter-crop-nonnull-prepass-required",
+      "row": {
+        "id": "m52-big-tile-image-filter-dag-refusal",
+        "inventoryId": "skia-gm-bigtileimagefilter",
+        "title": "M52 big tile image-filter DAG refusal",
+        "priority": "P1",
+        "status": "expected-unsupported",
+        "source": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+        "generation": {
+          "mode": "generated",
+          "producer": "pipelineGeneratedSceneExport",
+          "derivationTask": "pipelineM52InventoryPromotionPack",
+          "derivationReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "commit": "<git-sha>",
+          "artifactRoot": "artifacts/m52-big-tile-image-filter-dag-refusal",
+          "schema": "generated-scene-result.v1",
+          "linearIssue": "GRA-305",
+          "inventoryId": "skia-gm-bigtileimagefilter"
+        },
+        "referenceKind": "cpu-oracle",
+        "reference": "artifacts/m52-big-tile-image-filter-dag-refusal/skia.png",
+        "cpu": {
+          "status": "pass",
+          "image": "artifacts/m52-big-tile-image-filter-dag-refusal/cpu.png",
+          "diff": "artifacts/m52-big-tile-image-filter-dag-refusal/cpu-diff.png",
+          "similarity": 100,
+          "route": {
+            "selectedRoute": "cpu.image-filter.big-tile-oracle",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-bigtileimagefilter"
+          },
+          "stats": {
+            "pixels": 0,
+            "matchingPixels": 0,
+            "maxChannelDelta": 0,
+            "threshold": 0,
+            "backend": "inventory",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate"
+          }
+        },
+        "gpu": {
+          "status": "expected-unsupported",
+          "route": {
+            "selectedRoute": "webgpu.image-filter.refuse",
+            "pipelineKey": "imageFilter=bigTile graph=pictureLayer prepass=required source=BigTileImageFilterGM",
+            "fallbackReason": "image-filter.dag-or-picture-prepass-required",
+            "inventoryId": "skia-gm-bigtileimagefilter"
+          }
+        },
+        "diffs": {
+          "cpu": "artifacts/m52-big-tile-image-filter-dag-refusal/cpu-diff.png"
+        },
+        "routeDiagnostics": {
+          "cpu": "artifacts/m52-big-tile-image-filter-dag-refusal/route-cpu.json",
+          "gpu": "artifacts/m52-big-tile-image-filter-dag-refusal/route-gpu.json"
+        },
+        "stats": {
+          "pixels": 0,
+          "matchingPixels": 0,
+          "maxChannelDelta": 0,
+          "threshold": 0
+        },
+        "evidence": [
+          "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-big-tile-image-filter-dag-refusal/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-big-tile-image-filter-dag-refusal/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-big-tile-image-filter-dag-refusal/stats.json"
+        ],
+        "tags": [
+          "source.generated",
+          "source.inventory",
+          "feature.image-filter",
+          "feature.image.bitmap",
+          "route.cpu.oracle",
+          "route.gpu.expected-unsupported",
+          "reference.cpu-oracle",
+          "maturity.generated-evidence",
+          "risk.expected-unsupported",
+          "risk.image-filter-dag"
+        ]
+      }
+    },
+    {
+      "baseArtifactScene": "font-emoji-color-glyph-refusal",
+      "row": {
+        "id": "m52-color-emoji-blendmodes-refusal",
+        "inventoryId": "skia-gm-coloremojiblendmodes",
+        "title": "M52 color emoji blend modes refusal",
+        "priority": "P2",
+        "status": "expected-unsupported",
+        "source": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+        "generation": {
+          "mode": "generated",
+          "producer": "pipelineGeneratedSceneExport",
+          "derivationTask": "pipelineM52InventoryPromotionPack",
+          "derivationReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "commit": "<git-sha>",
+          "artifactRoot": "artifacts/m52-color-emoji-blendmodes-refusal",
+          "schema": "generated-scene-result.v1",
+          "linearIssue": "GRA-305",
+          "inventoryId": "skia-gm-coloremojiblendmodes"
+        },
+        "referenceKind": "cpu-oracle",
+        "reference": "artifacts/m52-color-emoji-blendmodes-refusal/skia.png",
+        "cpu": {
+          "status": "pass",
+          "image": "artifacts/m52-color-emoji-blendmodes-refusal/cpu.png",
+          "diff": "artifacts/m52-color-emoji-blendmodes-refusal/cpu-diff.png",
+          "similarity": 100,
+          "route": {
+            "selectedRoute": "cpu.text.color-emoji-blendmodes-refusal-oracle",
+            "fallbackReason": "none",
+            "inventoryId": "skia-gm-coloremojiblendmodes"
+          },
+          "stats": {
+            "pixels": 0,
+            "matchingPixels": 0,
+            "maxChannelDelta": 0,
+            "threshold": 0,
+            "backend": "inventory",
+            "command": "./gradlew --no-daemon pipelineM52InventoryPromotionPack pipelineSceneDashboard pipelineSceneDashboardGate"
+          }
+        },
+        "gpu": {
+          "status": "expected-unsupported",
+          "route": {
+            "selectedRoute": "webgpu.text.refuse",
+            "pipelineKey": "textRoute=colorEmoji blendModes=true glyphRepresentation=unsupported source=ColoremojiBlendmodesGM",
+            "fallbackReason": "font.color-glyph-emoji-unsupported",
+            "inventoryId": "skia-gm-coloremojiblendmodes"
+          }
+        },
+        "diffs": {
+          "cpu": "artifacts/m52-color-emoji-blendmodes-refusal/cpu-diff.png"
+        },
+        "routeDiagnostics": {
+          "cpu": "artifacts/m52-color-emoji-blendmodes-refusal/route-cpu.json",
+          "gpu": "artifacts/m52-color-emoji-blendmodes-refusal/route-gpu.json"
+        },
+        "stats": {
+          "pixels": 0,
+          "matchingPixels": 0,
+          "maxChannelDelta": 0,
+          "threshold": 0
+        },
+        "evidence": [
+          "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+          "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-color-emoji-blendmodes-refusal/route-cpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-color-emoji-blendmodes-refusal/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-color-emoji-blendmodes-refusal/stats.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m52-color-emoji-blendmodes-refusal/font-diagnostics.json"
+        ],
+        "tags": [
+          "source.generated",
+          "source.inventory",
+          "feature.font",
+          "feature.text",
+          "feature.blend.src-over",
+          "route.cpu.text",
+          "route.gpu.expected-unsupported",
+          "reference.cpu-oracle",
+          "maturity.generated-evidence",
+          "risk.expected-unsupported",
+          "risk.font-gated"
+        ],
+        "font": {
+          "source": "skia-integration-tests/src/test/resources/fonts/test_glyphs-glyf_colr_1.ttf",
+          "textInput": "COLOR EMOJI BLEND",
+          "shapingMode": "emoji-color-glyph",
+          "glyphDiagnostics": "artifacts/m52-color-emoji-blendmodes-refusal/font-diagnostics.json"
+        }
+      }
+    }
+  ]
+}

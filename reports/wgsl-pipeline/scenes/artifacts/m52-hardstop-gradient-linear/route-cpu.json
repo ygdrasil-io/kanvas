@@ -1,7 +1,0 @@
-{
-  "contract": "M52 inventory-derived CPU oracle for selected scene subset",
-  "fallbackReason": "none",
-  "inventoryId": "skia-gm-hardstopgradients",
-  "selectedRoute": "cpu.gradient.hardstop-linear-oracle",
-  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md"
-}
