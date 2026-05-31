@@ -1,0 +1,13 @@
+{
+  "status": "pass",
+  "selectedRoute": "webgpu.text.outline.simple-latin",
+  "coverageStrategy": "webgpu.coverage.glyph-outline-path",
+  "pipelineKey": "textRoute=simple-latin glyphRepresentation=outline state=[blendMode=kSrcOver]",
+  "fallbackReason": "none",
+  "fontSource": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+  "textInput": "KANVAS",
+  "shapingMode": "simple-glyph-id-map",
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md"
+}

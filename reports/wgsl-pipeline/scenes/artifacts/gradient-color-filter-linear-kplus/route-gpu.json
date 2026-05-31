@@ -7,5 +7,9 @@
   "pipelineKey": "shaderFamily=linearGradient colorFilter=Blend(red,kPlus) coverage=analyticRect state=[blendMode=kSrcOver]",
   "fallbackReason": "none",
   "test": "org.skia.gpu.webgpu.GradientColorFilterTest#linear gradient with Blend(red, kPlus) colorFilter tints green to yellow",
-  "nonClaim": "Does not claim all color filters, all blend modes, or color-space parity beyond this linear-gradient kPlus contract."
+  "nonClaim": "Does not claim all color filters, all blend modes, or color-space parity beyond this linear-gradient kPlus contract.",
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterCapture": "m50-adapter-backed-v2",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
 }

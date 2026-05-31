@@ -9,11 +9,11 @@
       color-scheme: light;
       --ink: #17211c;
       --muted: #647067;
-      --paper: #f4efe5;
-      --panel: #fffaf0;
-      --line: #d7c9ad;
+      --paper: #f7f7f2;
+      --panel: #ffffff;
+      --line: #c8d0c8;
       --accent: #245c45;
-      --accent-2: #c66b2d;
+      --accent-2: #5c5d8c;
       --good: #1f7a4c;
       --gap: #9b4f17;
       --bad: #9f2f2f;
@@ -24,10 +24,7 @@
     body {
       margin: 0;
       color: var(--ink);
-      background:
-        radial-gradient(circle at 15% 8%, rgba(198, 107, 45, 0.18), transparent 28rem),
-        radial-gradient(circle at 90% 18%, rgba(36, 92, 69, 0.16), transparent 24rem),
-        linear-gradient(135deg, #f4efe5 0%, #e9ddc7 100%);
+      background: linear-gradient(135deg, #f7f7f2 0%, #e7ece8 100%);
       font-family: Georgia, "Times New Roman", serif;
       min-height: 100vh;
     }
@@ -40,29 +37,18 @@
 
     .hero {
       border: 1px solid var(--line);
-      background: rgba(255, 250, 240, 0.84);
+      background: rgba(255, 255, 255, 0.9);
       box-shadow: 0 24px 70px rgba(52, 43, 24, 0.18);
       padding: clamp(28px, 5vw, 58px);
       position: relative;
       overflow: hidden;
     }
 
-    .hero::after {
-      content: "";
-      position: absolute;
-      right: -140px;
-      top: -160px;
-      width: 360px;
-      height: 360px;
-      border: 1px solid rgba(36, 92, 69, 0.22);
-      transform: rotate(17deg);
-    }
-
     .eyebrow {
       margin: 0 0 14px;
       color: var(--accent-2);
       font: 700 0.78rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: 0.14em;
+      letter-spacing: 0;
       text-transform: uppercase;
     }
 
@@ -71,7 +57,7 @@
       margin: 0;
       font-size: clamp(2.3rem, 7vw, 5.8rem);
       line-height: 0.92;
-      letter-spacing: -0.055em;
+      letter-spacing: 0;
     }
 
     .lede {
@@ -95,7 +81,7 @@
 
     .card, .scene-card {
       border: 1px solid var(--line);
-      background: rgba(255, 250, 240, 0.78);
+      background: rgba(255, 255, 255, 0.86);
       padding: 20px;
     }
 
@@ -105,7 +91,7 @@
       color: var(--accent);
       font: 700 0.84rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
     }
 
     .scene-card h2 {
@@ -121,7 +107,7 @@
       padding: 6px 10px;
       font: 700 0.74rem/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
     }
 
     .status.pass { color: var(--good); }
@@ -140,7 +126,7 @@
     .route-notice {
       margin-top: 24px;
       border: 1px solid var(--line);
-      background: rgba(255, 250, 240, 0.86);
+      background: rgba(255, 255, 255, 0.86);
       padding: 22px;
       color: var(--muted);
       line-height: 1.55;
@@ -166,7 +152,7 @@
       color: var(--accent);
       font: 700 0.78rem/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
     }
 
     .reference-notice dd,
@@ -183,13 +169,20 @@
 
     .visual-panel {
       border: 1px solid var(--line);
-      background: #f8f1e2;
+      background: #f7f7f2;
       min-height: 132px;
       display: grid;
       grid-template-rows: auto 1fr auto;
       color: inherit;
       text-decoration: none;
       cursor: zoom-in;
+    }
+
+    button.visual-panel {
+      width: 100%;
+      padding: 0;
+      font: inherit;
+      text-align: left;
     }
 
     .visual-panel:hover,
@@ -205,7 +198,7 @@
       color: var(--accent);
       font: 700 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
     }
 
     .visual-panel img {
@@ -263,7 +256,7 @@
 
     .image-dialog header {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       align-items: center;
       border-bottom: 1px solid var(--line);
@@ -276,16 +269,15 @@
       overflow-wrap: anywhere;
     }
 
-    .dialog-button,
-    .dialog-link {
+    .dialog-button {
       border: 1px solid var(--line);
-      background: #fffaf0;
+      background: #ffffff;
       color: var(--accent);
       padding: 8px 10px;
       font: 700 0.72rem/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       text-decoration: none;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
       cursor: pointer;
     }
 
@@ -333,7 +325,7 @@
     .filters {
       margin-top: 24px;
       border: 1px solid var(--line);
-      background: rgba(255, 250, 240, 0.9);
+      background: rgba(255, 255, 255, 0.9);
       padding: 18px;
     }
 
@@ -354,14 +346,14 @@
       color: var(--accent);
       font: 700 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
     }
 
     .filter-grid select,
     .filter-grid input {
       width: 100%;
       border: 1px solid var(--line);
-      background: #fffaf0;
+      background: #ffffff;
       color: var(--ink);
       padding: 9px 10px;
       font: 0.92rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -382,7 +374,7 @@
 
     .aggregate-card {
       border: 1px solid var(--line);
-      background: rgba(248, 241, 226, 0.74);
+      background: rgba(247, 247, 242, 0.82);
       padding: 12px;
     }
 
@@ -392,7 +384,7 @@
       color: var(--accent);
       font: 700 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0;
     }
 
     .aggregate-card code {
@@ -400,7 +392,7 @@
       margin: 0 6px 6px 0;
       padding: 3px 6px;
       border: 1px solid rgba(36, 92, 69, 0.18);
-      background: #fffaf0;
+      background: #ffffff;
     }
 
     .tag-list {
@@ -413,7 +405,7 @@
     .tag-list code {
       padding: 3px 6px;
       border: 1px solid rgba(36, 92, 69, 0.18);
-      background: #f8f1e2;
+      background: #f7f7f2;
       color: var(--accent);
       font-size: 0.72rem;
     }
@@ -421,7 +413,7 @@
     .empty {
       margin-top: 24px;
       border: 1px dashed var(--line);
-      background: rgba(255, 250, 240, 0.62);
+      background: rgba(255, 255, 255, 0.72);
       padding: 28px;
       color: var(--muted);
       line-height: 1.55;
@@ -522,6 +514,12 @@
         <label>Reference
           <select id="reference-filter"></select>
         </label>
+        <label>Maturity
+          <select id="maturity-filter"></select>
+        </label>
+        <label>Adapter-backed
+          <select id="adapter-filter"></select>
+        </label>
         <label>GPU fallback
           <select id="fallback-filter"></select>
         </label>
@@ -550,7 +548,6 @@
   <dialog id="image-dialog" class="image-dialog" aria-labelledby="image-dialog-title">
     <header>
       <h2 id="image-dialog-title">Image preview</h2>
-      <a id="image-dialog-raw" class="dialog-link" href="#" target="_blank" rel="noopener">Open raw</a>
       <button id="image-dialog-close" class="dialog-button" type="button">Close</button>
     </header>
     <div class="dialog-body">
@@ -566,12 +563,13 @@
     const imageDialogTitle = document.getElementById('image-dialog-title');
     const imageDialogImage = document.getElementById('image-dialog-img');
     const imageDialogPath = document.getElementById('image-dialog-path');
-    const imageDialogRaw = document.getElementById('image-dialog-raw');
     const imageDialogClose = document.getElementById('image-dialog-close');
     const filterControls = {
       status: document.getElementById('status-filter'),
       priority: document.getElementById('priority-filter'),
       reference: document.getElementById('reference-filter'),
+      maturity: document.getElementById('maturity-filter'),
+      adapter: document.getElementById('adapter-filter'),
       fallback: document.getElementById('fallback-filter'),
       performance: document.getElementById('performance-filter'),
       tag: document.getElementById('tag-filter'),
@@ -616,11 +614,11 @@
         `;
       }
       return `
-        <a class="visual-panel ${extraClass}" href="${path}" data-image-preview="${path}" data-image-label="${label}">
+        <button class="visual-panel ${extraClass}" type="button" data-image-preview="${path}" data-image-label="${label}">
           <strong>${label}</strong>
           <img src="${path}" alt="${label}">
           <span>${path}</span>
-        </a>
+        </button>
       `;
     }
 
@@ -661,6 +659,17 @@
       return Array.isArray(scene.tags) ? scene.tags : [];
     }
 
+    function maturityStatus(scene) {
+      const tags = sceneTags(scene);
+      if (tags.includes('maturity.generated-evidence')) return 'generated';
+      if (tags.includes('maturity.static-evidence')) return 'static';
+      return 'unavailable';
+    }
+
+    function adapterStatus(scene) {
+      return sceneTags(scene).includes('maturity.adapter-backed') ? 'adapter-backed' : 'not-adapter-backed';
+    }
+
     function optionLabel(value) {
       return value === 'all' ? 'All' : value;
     }
@@ -680,6 +689,8 @@
       fillSelect(filterControls.status, uniqueValues(scenes, (scene) => scene.status), 'All statuses');
       fillSelect(filterControls.priority, uniqueValues(scenes, (scene) => scene.priority), 'All priorities');
       fillSelect(filterControls.reference, uniqueValues(scenes, (scene) => scene.referenceKind), 'All references');
+      fillSelect(filterControls.maturity, uniqueValues(scenes, maturityStatus), 'All maturity');
+      fillSelect(filterControls.adapter, uniqueValues(scenes, adapterStatus), 'All adapter evidence');
       fillSelect(filterControls.fallback, uniqueValues(scenes, gpuFallback), 'All fallbacks');
       fillSelect(filterControls.performance, uniqueValues(scenes, performanceStatus), 'All performance');
       fillSelect(filterControls.tag, [...new Set(scenes.flatMap(sceneTags))].sort(), 'All tags');
@@ -696,6 +707,8 @@
         scene.status,
         scene.priority,
         scene.referenceKind,
+        maturityStatus(scene),
+        adapterStatus(scene),
         cpuRoute,
         gpuRoute,
         gpuFallback(scene),
@@ -737,6 +750,8 @@
         status: filterControls.status.value,
         priority: filterControls.priority.value,
         reference: filterControls.reference.value,
+        maturity: filterControls.maturity.value,
+        adapter: filterControls.adapter.value,
         fallback: filterControls.fallback.value,
         performance: filterControls.performance.value,
         tag: filterControls.tag.value,
@@ -746,6 +761,8 @@
         (filters.status === 'all' || scene.status === filters.status) &&
         (filters.priority === 'all' || scene.priority === filters.priority) &&
         (filters.reference === 'all' || scene.referenceKind === filters.reference) &&
+        (filters.maturity === 'all' || maturityStatus(scene) === filters.maturity) &&
+        (filters.adapter === 'all' || adapterStatus(scene) === filters.adapter) &&
         (filters.fallback === 'all' || gpuFallback(scene) === filters.fallback) &&
         (filters.performance === 'all' || performanceStatus(scene) === filters.performance) &&
         (filters.tag === 'all' || sceneTags(scene).includes(filters.tag)) &&
@@ -807,7 +824,6 @@
       imageDialogImage.src = path;
       imageDialogImage.alt = label || path;
       imageDialogPath.textContent = path;
-      imageDialogRaw.href = path;
       imageDialog.showModal();
       imageDialogClose.focus();
     }

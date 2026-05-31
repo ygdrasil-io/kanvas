@@ -1,0 +1,13 @@
+{
+  "pixels": 18432,
+  "matchingPixels": 18432,
+  "maxChannelDelta": 0,
+  "threshold": 99.95,
+  "status": "pass",
+  "fallbackReason": "none",
+  "command": "rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md"
+}

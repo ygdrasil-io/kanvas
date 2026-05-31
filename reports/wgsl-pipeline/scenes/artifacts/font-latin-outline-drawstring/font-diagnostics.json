@@ -1,0 +1,19 @@
+{
+  "fontSource": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+  "textInput": "KANVAS",
+  "shapingMode": "simple-glyph-id-map",
+  "glyphCount": 6,
+  "glyphIds": [
+    75,
+    66,
+    80,
+    89,
+    69,
+    88
+  ],
+  "glyphRepresentation": "outline-path",
+  "cpuRoute": "cpu.text.outline.simple-latin",
+  "gpuRoute": "webgpu.text.outline.simple-latin",
+  "referenceKind": "cpu-oracle",
+  "unsupported": false
+}

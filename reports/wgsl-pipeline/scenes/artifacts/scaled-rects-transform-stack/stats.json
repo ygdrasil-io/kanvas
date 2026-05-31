@@ -8,11 +8,15 @@
   "matchingPixels": 4096,
   "maxChannelDelta": 0,
   "threshold": 99.99,
-  "cpuSimilarity": 100.0,
-  "gpuSimilarity": 100.0,
+  "cpuSimilarity": 100,
+  "gpuSimilarity": 100,
   "gpuMatchingPixels": 4096,
   "gpuMaxChannelDelta": 0,
   "gpuStatus": "pass",
   "backend": "WebGPU",
-  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ScaledRectsWebGpuTest"
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ScaledRectsWebGpuTest",
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterCapture": "m50-adapter-backed-v2",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
 }

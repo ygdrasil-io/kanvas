@@ -7,5 +7,9 @@
   "pipelineKey": "paint=solidColor draw=drawPaint clip=rect(10,10,30,30) state=[blendMode=kSrcOver]",
   "fallbackReason": "none",
   "test": "org.skia.gpu.webgpu.DrawPaintTest#drawPaint after clipRect only fills inside the clip",
-  "nonClaim": "Does not claim arbitrary clip stacks, AA clips, or inverse clips."
+  "nonClaim": "Does not claim arbitrary clip stacks, AA clips, or inverse clips.",
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterCapture": "m50-adapter-backed-v2",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
 }

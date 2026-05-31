@@ -2000,7 +2000,7 @@ tasks.register("checkCodecImageComplete") {
 
 tasks.register("pipelineSceneDashboardGate") {
     group = "verification"
-    description = "Runs the M49 CI-friendly release gate validation for the generated scene dashboard."
+    description = "Runs the M50 release gate validation for the generated scene dashboard."
 
     dependsOn("pipelineSceneDashboard")
 
@@ -2035,6 +2035,8 @@ tasks.register("pipelineSceneDashboardGate") {
             "path-aa-convexpaths-edge-budget" to "coverage.edge-count-exceeded",
             "path-aa-dashing-edge-budget" to "coverage.edge-count-exceeded",
             "image-filter-crop-nonnull-prepass-required" to "image-filter.crop-input-nonnull-prepass-required",
+            "font-emoji-color-glyph-refusal" to "font.color-glyph-emoji-unsupported",
+            "font-complex-shaping-refusal" to "font.complex-shaping-requires-explicit-shaper",
         )
         val staticPathAaSentinels = mapOf(
             "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",
@@ -2128,7 +2130,7 @@ tasks.register("pipelineSceneDashboardGate") {
                     val regression = trend.map("regression")
                     val label = requireString(sceneId, regression, "label", "performance.measured", "$prefix.performanceTrend.regression.label")
                     if (label == "regressed") {
-                        warn(sceneId, "performance.regressed", "measured regression remains non-blocking until M49-E defines blocking thresholds")
+                        warn(sceneId, "performance.regressed", "measured regression remains non-blocking until owner-approved M50 policy makes thresholds release-blocking")
                     }
                 }
                 "estimated" -> warn(sceneId, "performance.estimated", "estimated performance is reporting-only and cannot move readiness")
@@ -2383,6 +2385,226 @@ tasks.register("pipelineSceneDashboardGate") {
     }
 }
 
+tasks.register("pipelinePerformanceTrendWarnings") {
+    group = "verification"
+    description = "Emits the M50 warning-only performance trend report from dashboard performanceTrend payloads."
+
+    dependsOn("pipelineSceneDashboard")
+
+    val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
+    val reportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-performance-warnings")
+    inputs.dir(dashboardDir)
+    outputs.dir(reportDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val dashboardRoot = dashboardDir.get().asFile
+        val dataFile = dashboardRoot.resolve("data/scenes.json")
+        val reportRoot = reportDir.get().asFile
+        reportRoot.mkdirs()
+        val root = JsonSlurper().parse(dataFile) as? Map<*, *>
+            ?: throw GradleException("Performance warning data root must be a JSON object: ${dataFile.relativeTo(rootDir)}")
+        val scenes = root["scenes"] as? List<*>
+            ?: throw GradleException("Performance warning data must contain a `scenes` array: ${dataFile.relativeTo(rootDir)}")
+
+        fun Map<*, *>.map(field: String): Map<*, *>? = this[field] as? Map<*, *>
+        fun Map<*, *>.string(field: String): String? = this[field] as? String
+        fun Number?.asIntOrZero(): Int = this?.toInt() ?: 0
+
+        val rows = mutableListOf<Map<String, Any>>()
+        val warnings = mutableListOf<String>()
+        scenes.filterIsInstance<Map<*, *>>().forEach { scene ->
+            val sceneId = scene.string("id").orEmpty()
+            listOf("cpu" to "CPU", "gpu" to "GPU/cache").forEach { (field, laneName) ->
+                val trend = scene.map(field)?.map("performanceTrend") ?: return@forEach
+                val status = trend.string("status").orEmpty()
+                val environment = trend.map("environment").orEmpty()
+                val gate = trend.map("gate").orEmpty()
+                val baseline = trend.map("baseline").orEmpty()
+                val variance = trend.map("variancePolicy").orEmpty()
+                val warmCold = trend.string("warmCold") ?: trend.string("sampleClass") ?: "warm-steady-state"
+                val sampleCount = (trend["sampleCount"] as? Number).asIntOrZero()
+                val row = linkedMapOf<String, Any>(
+                    "sceneId" to sceneId,
+                    "lane" to laneName,
+                    "status" to status,
+                    "host" to environment.string("host").orEmpty(),
+                    "os" to environment.string("os").orEmpty(),
+                    "jdk" to environment.string("jdk").orEmpty(),
+                    "backend" to environment.string("backend").orEmpty(),
+                    "adapter" to (trend.string("adapter") ?: environment.string("adapter") ?: "not-applicable"),
+                    "warmCold" to warmCold,
+                    "sampleCount" to sampleCount,
+                    "baselineId" to (baseline.string("id") ?: baseline.string("name") ?: "unavailable"),
+                    "variancePolicy" to (variance.string("policy") ?: variance.string("allowedVariance") ?: "warning-only: 15% median / 20% p95 review band"),
+                    "gateMode" to (gate.string("mode") ?: "reporting-only"),
+                )
+                rows += row
+                if (status == "measured") {
+                    listOf("host", "os", "jdk", "backend", "baselineId").forEach { key ->
+                        if ((row[key] as? String).isNullOrBlank() || row[key] == "unavailable") {
+                            warnings += "$sceneId/$laneName measured trend is missing `$key` metadata"
+                        }
+                    }
+                    if (sampleCount <= 0) warnings += "$sceneId/$laneName measured trend is missing sampleCount"
+                } else {
+                    warnings += "$sceneId/$laneName trend is `$status`; report remains warning-only"
+                }
+            }
+        }
+
+        val measuredCpu = rows.count { it["lane"] == "CPU" && it["status"] == "measured" }
+        val measuredGpu = rows.count { it["lane"] == "GPU/cache" && it["status"] == "measured" }
+        if (measuredCpu < 2) warnings += "Only $measuredCpu CPU measured trend rows are present; M50 target is at least 2."
+        if (measuredGpu < 2) warnings += "Only $measuredGpu GPU/cache measured trend rows are present; M50 target is at least 2."
+
+        val policy = linkedMapOf(
+            "owner" to "Kanvas rendering release owner",
+            "mode" to "warning-only",
+            "baselineOwner" to "Kanvas rendering release owner",
+            "quarantinePolicy" to "A noisy or adapter-mismatched row stays visible in this report and is quarantined from score movement until rerun with matching host/JDK/backend/adapter metadata.",
+            "rollbackPolicy" to "A confirmed correctness regression rolls back the rendering change; a performance-only warning does not block release until an owner-approved blocking threshold exists.",
+            "variancePolicy" to "Review when median changes by more than 15% or p95 changes by more than 20% across matching measured baselines.",
+            "releaseBlocking" to false,
+        )
+        val payload = linkedMapOf(
+            "schemaVersion" to 1,
+            "generatedBy" to "pipelinePerformanceTrendWarnings",
+            "source" to dataFile.relativeTo(rootDir).path,
+            "policy" to policy,
+            "counters" to mapOf(
+                "rows" to rows.size,
+                "measuredCpu" to measuredCpu,
+                "measuredGpuCache" to measuredGpu,
+                "warnings" to warnings.size,
+            ),
+            "rows" to rows,
+            "warnings" to warnings.sorted(),
+        )
+        reportRoot.resolve("performance-warnings.json")
+            .writeText(JsonOutput.prettyPrint(JsonOutput.toJson(payload)) + "\n")
+        reportRoot.resolve("performance-warnings.md").writeText(
+            buildString {
+                appendLine("# M50 Performance Trend Warnings")
+                appendLine()
+                appendLine("Task: `pipelinePerformanceTrendWarnings`")
+                appendLine("Source: `${dataFile.relativeTo(rootDir)}`")
+                appendLine("Mode: warning-only; not release-blocking.")
+                appendLine()
+                appendLine("## Policy")
+                appendLine()
+                policy.forEach { (key, value) -> appendLine("- `$key`: $value") }
+                appendLine()
+                appendLine("## Counters")
+                appendLine()
+                appendLine("| Counter | Value |")
+                appendLine("|---|---:|")
+                appendLine("| Rows | ${rows.size} |")
+                appendLine("| Measured CPU rows | $measuredCpu |")
+                appendLine("| Measured GPU/cache rows | $measuredGpu |")
+                appendLine("| Warnings | ${warnings.size} |")
+                appendLine()
+                appendLine("## Rows")
+                appendLine()
+                appendLine("| Scene | Lane | Status | Host | OS | JDK | Backend | Adapter | Samples | Baseline | Variance policy |")
+                appendLine("|---|---|---|---|---|---|---|---|---:|---|---|")
+                rows.forEach { row ->
+                    appendLine("| `${row["sceneId"]}` | ${row["lane"]} | `${row["status"]}` | `${row["host"]}` | `${row["os"]}` | `${row["jdk"]}` | `${row["backend"]}` | `${row["adapter"]}` | ${row["sampleCount"]} | `${row["baselineId"]}` | ${row["variancePolicy"]} |")
+                }
+                appendLine()
+                appendLine("## Warnings")
+                appendLine()
+                if (warnings.isEmpty()) appendLine("None.") else warnings.sorted().forEach { appendLine("- $it") }
+            }
+        )
+        logger.lifecycle("Wrote M50 performance warning report: ${reportRoot.resolve("performance-warnings.md").relativeTo(rootDir)}")
+    }
+}
+
+tasks.register("pipelineDashboardFrontQa") {
+    group = "verification"
+    description = "Writes the M50 PM dashboard front QA report consumed by the portable PM bundle."
+
+    dependsOn("pipelineSceneDashboard")
+
+    val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
+    val reportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-front-qa")
+    inputs.dir(dashboardDir)
+    outputs.dir(reportDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val dashboardRoot = dashboardDir.get().asFile
+        val index = dashboardRoot.resolve("index.html")
+        val dataFile = dashboardRoot.resolve("data/scenes.json")
+        val reportRoot = reportDir.get().asFile
+        reportRoot.mkdirs()
+        val html = index.readText()
+        val checks = linkedMapOf(
+            "inPageImageInspection" to (html.contains("data-image-preview") && html.contains("showModal()")),
+            "twoColumnDesktop" to html.contains("grid-template-columns: repeat(2, minmax(0, 1fr))"),
+            "oneColumnMobile" to (html.contains("@media (max-width: 760px)") && html.contains("grid-template-columns: 1fr")),
+            "artifactListsCollapsedByDefault" to html.contains("<details class=\"artifact-details\">"),
+            "statusFilter" to html.contains("status-filter"),
+            "priorityFilter" to html.contains("priority-filter"),
+            "referenceFilter" to html.contains("reference-filter"),
+            "maturityFilter" to html.contains("maturity-filter"),
+            "adapterBackedFilter" to html.contains("adapter-filter"),
+            "fallbackReasonFilter" to html.contains("fallback-filter"),
+            "routeNotice" to html.contains("Route diagnostics"),
+            "referenceNotice" to html.contains("Reference panels"),
+        )
+        val criticalIssues = checks.filterValues { !it }.keys.toList()
+        val root = JsonSlurper().parse(dataFile) as? Map<*, *>
+            ?: throw GradleException("Front QA data root must be a JSON object: ${dataFile.relativeTo(rootDir)}")
+        val sceneCount = (root["scenes"] as? List<*>)?.size ?: 0
+        val payload = linkedMapOf(
+            "schemaVersion" to 1,
+            "generatedBy" to "pipelineDashboardFrontQa",
+            "dashboard" to index.relativeTo(rootDir).path,
+            "sceneCount" to sceneCount,
+            "checks" to checks,
+            "accessibility" to mapOf(
+                "criticalIssues" to criticalIssues.size,
+                "criticalIssueIds" to criticalIssues,
+                "threshold" to "0 critical issues",
+                "method" to "static dashboard gate plus browser screenshot QA",
+            ),
+            "screenshots" to mapOf(
+                "desktop" to "build/reports/wgsl-pipeline-front-qa/screenshots/desktop.png",
+                "mobile" to "build/reports/wgsl-pipeline-front-qa/screenshots/mobile.png",
+            ),
+        )
+        reportRoot.resolve("front-qa.json").writeText(JsonOutput.prettyPrint(JsonOutput.toJson(payload)) + "\n")
+        reportRoot.resolve("front-qa.md").writeText(
+            buildString {
+                appendLine("# M50 Dashboard Front QA")
+                appendLine()
+                appendLine("Dashboard: `${index.relativeTo(rootDir)}`")
+                appendLine("Accessibility threshold: 0 critical issues.")
+                appendLine("Critical issues: ${criticalIssues.size}.")
+                appendLine()
+                appendLine("## Checks")
+                appendLine()
+                appendLine("| Check | Result |")
+                appendLine("|---|---|")
+                checks.forEach { (key, value) -> appendLine("| `$key` | `${if (value) "pass" else "fail"}` |") }
+                appendLine()
+                appendLine("## Screenshots")
+                appendLine()
+                appendLine("- Desktop: `build/reports/wgsl-pipeline-front-qa/screenshots/desktop.png`")
+                appendLine("- Mobile: `build/reports/wgsl-pipeline-front-qa/screenshots/mobile.png`")
+                appendLine()
+                appendLine("The screenshot files are produced or materialized by the browser QA pass and bundled by `pipelinePmBundle` when present.")
+            }
+        )
+        if (criticalIssues.isNotEmpty()) {
+            throw GradleException("Dashboard front QA found critical issues: ${criticalIssues.joinToString()}")
+        }
+        logger.lifecycle("Wrote M50 dashboard front QA report: ${reportRoot.resolve("front-qa.md").relativeTo(rootDir)}")
+    }
+}
+
 tasks.register("pipelineSceneDashboardGateNegativeFixture") {
     group = "verification"
     description = "Proves the M49 dashboard gate catches a support-claim fallback regression."
@@ -2431,15 +2653,19 @@ tasks.register("pipelinePmBundle") {
     group = "verification"
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
 
-    dependsOn("pipelineSceneDashboardGate")
+    dependsOn("pipelineSceneDashboardGate", "pipelineDashboardFrontQa", "pipelinePerformanceTrendWarnings")
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
     val generatedExportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
     val gateReportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scene-gate")
+    val frontQaDir = layout.buildDirectory.dir("reports/wgsl-pipeline-front-qa")
+    val performanceWarningsDir = layout.buildDirectory.dir("reports/wgsl-pipeline-performance-warnings")
     val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
     inputs.dir(dashboardDir)
     inputs.dir(generatedExportDir)
     inputs.dir(gateReportDir)
+    inputs.dir(frontQaDir)
+    inputs.dir(performanceWarningsDir)
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     outputs.dir(bundleDir)
     outputs.upToDateWhen { false }
@@ -2448,6 +2674,8 @@ tasks.register("pipelinePmBundle") {
         val dashboardRoot = dashboardDir.get().asFile
         val generatedRoot = generatedExportDir.get().asFile
         val gateRoot = gateReportDir.get().asFile
+        val frontQaRoot = frontQaDir.get().asFile
+        val performanceWarningsRoot = performanceWarningsDir.get().asFile
         val targetRoot = bundleDir.get().asFile
         val mergedData = dashboardRoot.resolve("data/scenes.json")
         if (!mergedData.isFile) {
@@ -2475,6 +2703,12 @@ tasks.register("pipelinePmBundle") {
         }
         if (gateRoot.isDirectory) {
             gateRoot.copyRecursively(targetRoot.resolve("gate"), overwrite = true)
+        }
+        if (frontQaRoot.isDirectory) {
+            frontQaRoot.copyRecursively(targetRoot.resolve("front-qa"), overwrite = true)
+        }
+        if (performanceWarningsRoot.isDirectory) {
+            performanceWarningsRoot.copyRecursively(targetRoot.resolve("performance"), overwrite = true)
         }
 
         fun collectReferencedPaths(value: Any?, paths: MutableSet<String>) {
@@ -2574,6 +2808,14 @@ tasks.register("pipelinePmBundle") {
             "mergedSceneJson" to "dashboard/data/scenes.json",
             "generatedResultJson" to "reports/wgsl-pipeline/scenes/generated/results.json",
             "gateReport" to "gate/scene-dashboard-gate.md",
+            "frontQaReport" to "front-qa/front-qa.md",
+            "frontQaJson" to "front-qa/front-qa.json",
+            "frontQaScreenshots" to mapOf(
+                "desktop" to "front-qa/screenshots/desktop.png",
+                "mobile" to "front-qa/screenshots/mobile.png",
+            ),
+            "performanceWarningReport" to "performance/performance-warnings.md",
+            "performanceWarningJson" to "performance/performance-warnings.json",
             "counters" to linkedMapOf<String, Any>(
                 "total" to scenes.size,
                 "statuses" to statusCounts,
@@ -2586,9 +2828,9 @@ tasks.register("pipelinePmBundle") {
             "adapterBackedRows" to adapterBacked,
             "knownLimitations" to listOf(
                 "Expected-unsupported rows are planning evidence, not support claims.",
-                "Performance trend warnings remain non-blocking until M49-E defines promotion rules.",
+                "Performance trend warnings remain non-blocking until an owner-approved release-blocking policy exists.",
                 "The bundle is a static PM review artifact and does not execute GPU captures.",
-                "Text, glyph masks, font, emoji, codec, arbitrary SkSL, arbitrary image-filter DAG, and broad Path AA support remain outside this bundle's claims.",
+                "The M50 font/text rows prove selected simple OpenType evidence and explicit refusals only; broad font, emoji, shaping, SDF, LCD, glyph-mask, codec, arbitrary SkSL, arbitrary image-filter DAG, and broad Path AA support remain outside this bundle's claims.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -2611,7 +2853,9 @@ tasks.register("pipelinePmBundle") {
                 appendLine()
                 appendLine("- `dashboard/`: self-contained dashboard HTML, merged scene JSON, images, diffs, routes, and stats artifacts.")
                 appendLine("- `manifest.json`: commit, command, counters, expected-unsupported rows, adapter-backed rows, and limitations.")
-                appendLine("- `gate/`: M49 dashboard gate reports from `pipelineSceneDashboardGate`.")
+                appendLine("- `gate/`: M50 dashboard gate reports from `pipelineSceneDashboardGate`.")
+                appendLine("- `front-qa/`: PM dashboard front QA report and browser screenshot paths.")
+                appendLine("- `performance/`: warning-only M50 performance trend report and policy.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
         )

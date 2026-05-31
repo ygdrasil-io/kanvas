@@ -1,71 +1,82 @@
 {
-    "sceneId": "src-over-stack",
-    "lane": "CPU",
-    "status": "measured",
-    "command": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
-    "phase": "cpu-dashboard-row",
-    "sampleCount": 30,
-    "timing": {
-        "medianMs": 0.023334,
-        "p95Ms": 0.099208
-    },
-    "environment": {
-        "host": "Omega",
-        "os": "Mac OS X 26.5 aarch64",
-        "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
-        "backend": "CPU scalar Kotlin dashboard benchmark",
-        "vector": "not used"
-    },
-    "counters": {
-        "routeInvocations": 2,
-        "pixels": 4096,
-        "blendOps": 2,
-        "coveragePlanCount": 2
-    },
-    "baseline": {
-        "name": "m43-cpu-measured-local",
-        "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae"
-    },
-    "regression": {
-        "label": "unknown"
-    },
-    "gate": {
-        "mode": "reporting-only",
-        "reason": "M43 measured CPU metrics do not gate CI until budget and rollback policy exist"
-    },
-    "route": "cpu.blend.src-over-stack",
-    "rawMetrics": "artifacts/src-over-stack/cpu-performance.json",
-    "rawSamples": [
-        0.128583,
-        0.094375,
-        0.094583,
-        0.094333,
-        0.099208,
-        0.094,
-        0.088458,
-        0.057334,
-        0.047709,
-        0.046583,
-        0.045709,
-        0.0455,
-        0.028,
-        0.020917,
-        0.018792,
-        0.018291,
-        0.017958,
-        0.023334,
-        0.023375,
-        0.024334,
-        0.019042,
-        0.017125,
-        0.017291,
-        0.017042,
-        0.016833,
-        0.016708,
-        0.016875,
-        0.01675,
-        0.017125,
-        0.016875
-    ],
-    "checksum": -1665679360
+  "sceneId": "src-over-stack",
+  "lane": "CPU",
+  "status": "measured",
+  "command": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
+  "phase": "cpu-dashboard-row",
+  "sampleCount": 30,
+  "timing": {
+    "medianMs": 0.023334,
+    "p95Ms": 0.099208
+  },
+  "environment": {
+    "host": "Omega",
+    "os": "Mac OS X 26.5 aarch64",
+    "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+    "backend": "CPU scalar Kotlin dashboard benchmark",
+    "vector": "not used"
+  },
+  "counters": {
+    "routeInvocations": 2,
+    "pixels": 4096,
+    "blendOps": 2,
+    "coveragePlanCount": 2
+  },
+  "baseline": {
+    "name": "m43-cpu-measured-local",
+    "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae",
+    "id": "m50-cpu-warning-local",
+    "owner": "Kanvas rendering release owner"
+  },
+  "regression": {
+    "label": "unknown"
+  },
+  "gate": {
+    "mode": "warning-only",
+    "owner": "Kanvas rendering release owner",
+    "quarantinePolicy": "adapter or variance mismatch remains visible and non-blocking",
+    "rollbackPolicy": "correctness regression rolls back; performance warning needs owner triage before blocking"
+  },
+  "route": "cpu.blend.src-over-stack",
+  "rawMetrics": "artifacts/src-over-stack/cpu-performance.json",
+  "rawSamples": [
+    0.128583,
+    0.094375,
+    0.094583,
+    0.094333,
+    0.099208,
+    0.094,
+    0.088458,
+    0.057334,
+    0.047709,
+    0.046583,
+    0.045709,
+    0.0455,
+    0.028,
+    0.020917,
+    0.018792,
+    0.018291,
+    0.017958,
+    0.023334,
+    0.023375,
+    0.024334,
+    0.019042,
+    0.017125,
+    0.017291,
+    0.017042,
+    0.016833,
+    0.016708,
+    0.016875,
+    0.01675,
+    0.017125,
+    0.016875
+  ],
+  "checksum": -1665679360,
+  "warmCold": "warm-steady-state",
+  "variancePolicy": {
+    "policy": "warning-only: 15% median / 20% p95 review band",
+    "allowedMedianDeltaPercent": 15,
+    "allowedP95DeltaPercent": 20,
+    "releaseBlocking": false
+  }
 }

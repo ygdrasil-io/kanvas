@@ -1,0 +1,11 @@
+{
+  "status": "expected-unsupported",
+  "selectedRoute": "webgpu.text.refuse",
+  "coverageStrategy": "webgpu.coverage.refuse",
+  "pipelineKey": "textRoute=emoji-color-glyph glyphRepresentation=unsupported",
+  "fallbackReason": "font.color-glyph-emoji-unsupported",
+  "fontSource": "skia-integration-tests/src/test/resources/fonts/test_glyphs-glyf_colr_1.ttf",
+  "textInput": "EMOJI",
+  "shapingMode": "emoji-color-glyph",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md"
+}

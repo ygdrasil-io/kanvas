@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "selectedRoute": "cpu.text.refusal-oracle.complex-shaping",
+  "fallbackReason": "none",
+  "fontSource": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Italic.ttf",
+  "textInput": "SHAPE",
+  "shapingMode": "complex-shaping",
+  "glyphDiagnostics": "artifacts/font-complex-shaping-refusal/font-diagnostics.json",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md"
+}

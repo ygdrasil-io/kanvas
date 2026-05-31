@@ -37,6 +37,11 @@ on:
       - 'settings.gradle.kts'
       - '.github/workflows/test.yml'
       - '.upstream/source/map/**'
+      - '.upstream/specs/front/**'
+      - '.upstream/specs/font/**'
+      - '.upstream/target/rendering-conformance-performance-target.md'
+      - '.upstream/target/post-mvp-conformance-backlog.md'
+      - 'reports/wgsl-pipeline/**'
   push:
     branches: [master]
     paths:
@@ -56,6 +61,11 @@ on:
       - 'settings.gradle.kts'
       - '.github/workflows/test.yml'
       - '.upstream/source/map/**'
+      - '.upstream/specs/front/**'
+      - '.upstream/specs/font/**'
+      - '.upstream/target/rendering-conformance-performance-target.md'
+      - '.upstream/target/post-mvp-conformance-backlog.md'
+      - 'reports/wgsl-pipeline/**'
   workflow_dispatch:
 
 permissions:
@@ -221,3 +231,34 @@ jobs:
             gpu-raster/build/test-results/test/
             gpu-raster/test-similarity-scores-webgpu.properties
           if-no-files-found: ignore
+
+  wgsl_scene_dashboard_release_gate:
+    name: WGSL scene dashboard release gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run dashboard release gate and PM bundle
+        run: ./gradlew --no-daemon pipelineSceneDashboardGate pipelinePerformanceTrendWarnings pipelinePmBundle
+
+      - name: Upload WGSL dashboard release artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wgsl-scene-dashboard-release-gate
+          path: |
+            build/reports/wgsl-pipeline-scenes/
+            build/reports/wgsl-pipeline-scene-gate/
+            build/reports/wgsl-pipeline-front-qa/
+            build/reports/wgsl-pipeline-performance-warnings/
+            build/reports/wgsl-pipeline-pm-bundle/
+          if-no-files-found: error

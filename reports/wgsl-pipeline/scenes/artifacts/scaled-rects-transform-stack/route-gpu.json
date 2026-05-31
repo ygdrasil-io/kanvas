@@ -7,5 +7,9 @@
   "pipelineKey": "gm=ScaledRects transform=rotate+skew coverage=convexPolygon state=[blendMode=kPlus]",
   "fallbackReason": "none",
   "test": "org.skia.gpu.webgpu.ScaledRectsWebGpuTest#ScaledRectsGM renders close to reference PNG on the GPU backend",
-  "nonClaim": "Does not claim perspective, 3D transform, or all polygon AA edge behavior."
+  "nonClaim": "Does not claim perspective, 3D transform, or all polygon AA edge behavior.",
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterCapture": "m50-adapter-backed-v2",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
 }

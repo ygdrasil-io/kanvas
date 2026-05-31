@@ -359,31 +359,30 @@ After M49, two draft spec packs were added:
   explicit shaping, glyph rendering, glyph-mask handoff, color fonts, emoji,
   and font validation.
 
-These specs are planning and ownership evidence. They do not change the
-Post-MVP Big Target readiness score, which remains 60%, because no new runtime
-support claim, adapter-backed capture, release-owned CI gate, or generated font
-scene row landed with the spec split.
+These specs were planning and ownership evidence until M50. M50 added selected
+implementation evidence and moved the Post-MVP Big Target readiness score to
+80%; broad front hosting, font/text, emoji, shaping, SDF, LCD, glyph-mask, and
+codec support remain outside the selected rows.
 
-## M50 Plan
+## M50 Outcome
 
-M50 should target 80% Post-MVP readiness, but the score is conditional. It is
-not enough to add more spec text. The sprint must produce release-visible,
-executable evidence from the current M49 dashboard gate candidate and the draft
-front/font spec packs.
+M50 targeted and reached 80% Post-MVP readiness because the sprint produced
+release-visible executable evidence from the M49 dashboard gate candidate and
+the draft front/font spec packs.
 
 Target score formula:
 
 | PM area | Current | M50 target | Evidence required |
 |---|---:|---:|---|
-| Evidence foundation | 100% | 100% | Preserve generated dashboard semantics, 0 `tracked-gap`, 0 `fail`, stable fallback policy, and deterministic scene export. |
-| Skia integration coverage | 45% | 65% | Raise adapter-backed rows from 7 to at least 14 and add first generated font/text scene evidence without broad unsupported claims. |
-| CI and release gates | 60% | 85% | Make `pipelineSceneDashboardGate`, PM bundle validation, and non-blocking inventory ownership visible from the accepted release path. |
-| Performance readiness | 35% | 60% | Automate warning-only trend evidence with baseline owner, environment metadata, variance policy, quarantine, and rollback notes. |
-| PM demo and reporting workflow | 45% | 85% | Add front/browser/accessibility QA, image inspection, filters, route/reference notices, and PM bundle attachment. |
+| Evidence foundation | 100% | 100% | Dashboard has 28 rows, 0 `tracked-gap`, 0 `fail`, stable fallback policy, and deterministic scene export. |
+| Skia integration coverage | 45% | 65% | Adapter-backed rows rose from 7 to 17 and first generated font/text scene evidence landed without broad unsupported claims. |
+| CI and release gates | 60% | 85% | `wgsl_scene_dashboard_release_gate` archives dashboard, gate, front QA, performance warning, and PM bundle reports. |
+| Performance readiness | 35% | 60% | `pipelinePerformanceTrendWarnings` emits warning-only trend evidence with baseline owner, environment metadata, variance policy, quarantine, and rollback notes. |
+| PM demo and reporting workflow | 45% | 85% | PM bundle includes front QA, image inspection, filters, route/reference notices, screenshot paths, and performance warning output. |
 
-Weighted result if all lanes land: 80%.
+Weighted result: 80%.
 
-M50 seed tickets:
+M50 completed lanes:
 
 - M50-A Required CI ownership for dashboard gate and inventory reporting.
   Definition of Done: release path runs `pipelineSceneDashboardGate`, archives
@@ -411,9 +410,9 @@ M50 seed tickets:
   emitted by CI or release automation; owner, quarantine, and rollback policy
   are documented.
 - M50-F Closeout and score update.
-  Definition of Done: sprint review links tickets, PRs, CI runs, generated
-  dashboard, PM bundle, screenshots, performance output, font evidence, and
-  known limitations; README and target docs move only to the justified score.
+  Result: sprint review links generated dashboard, PM bundle, screenshots,
+  performance output, font evidence, known limitations, and README/target docs
+  now use the justified 80% score.
 
 Validation baseline:
 
@@ -430,11 +429,10 @@ Font/text tickets must also run the focused owning tests, starting with:
 rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'
 ```
 
-M50 must not claim complete MEP, broad Skia parity, broad font/emoji/shaping/
-SDF/LCD/glyph-mask support, or release-blocking performance thresholds. If a
-lane remains documentation-only, the sprint review must publish the lower
-justified score instead of claiming 80%.
+M50 does not claim complete MEP, broad Skia parity, broad font/emoji/shaping/
+SDF/LCD/glyph-mask support, or release-blocking performance thresholds.
 
-Detailed plan:
+Detailed evidence:
 
 - `reports/wgsl-pipeline/2026-05-31-m50-80-readiness-sprint-plan.md`.
+- `reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md`.

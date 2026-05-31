@@ -37,35 +37,29 @@ The platform must answer five questions for every promoted scene:
 
 ## PM Readiness
 
-Current Post-MVP Big Target readiness for MEP: 60%.
+Current Post-MVP Big Target readiness for MEP: 80%.
 
 This is a PM readiness score for the full target, not an effort estimate and not
 the completion state of the latest Linear sprint. M41-M47 completed the evidence
-foundation, M48 expanded representative Skia integration breadth, and M49 turned
-the current dashboard into a release-oriented readiness gate candidate with
-portable PM reporting, broader adapter-backed proof, and an explicit
-non-blocking performance trend contract. The platform is still not complete MEP
-scope because release-blocking performance thresholds, broader scene families,
-production CI ownership, and dependency-gated text/font/codec gaps remain. The
-front and font spec packs now document the next PM-facing and text/glyph
-surfaces, but they are draft/spec-only and do not increase PM readiness without
-new gates, captures, or generated evidence.
+foundation, M48 expanded representative Skia integration breadth, M49 turned the
+dashboard into a release-oriented readiness gate candidate, and M50 converted
+that candidate plus the front/font specs into executable evidence. The platform
+is still not complete MEP scope because release-blocking performance thresholds,
+broad Skia parity, broad font/text coverage, and dependency-gated codec gaps
+remain outside the selected evidence rows.
 
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
-| Evidence foundation | 25% | M41-M49 complete: generated dashboard, 21 generated rows, 0 tracked-gap, 0 fail, and a gate report. | 100% |
-| Skia integration coverage | 25% | M49 expands adapter-backed proof from 2 to 7 rows without broadening unsupported support claims. | 45% |
-| CI and release gates | 20% | `pipelineSceneDashboardGate` validates support-claim invariants and the negative fixture proves failure behavior. | 60% |
-| Performance readiness | 15% | Measured payloads have a non-blocking trend contract; thresholds are not release gates. | 35% |
-| PM demo and reporting workflow | 15% | `pipelinePmBundle` creates a portable PM bundle with manifest, dashboard, data, artifacts, limitations, and serve instructions. | 45% |
+| Evidence foundation | 25% | M41-M50 complete: generated dashboard, 26 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
+| Skia integration coverage | 25% | M50 raises adapter-backed proof to 17 rows and adds first selected font/text evidence without broad support claims. | 65% |
+| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, and PM bundle generation with archived reports. | 85% |
+| Performance readiness | 15% | `pipelinePerformanceTrendWarnings` emits owner, baseline, environment, variance, quarantine, and rollback policy; thresholds are not release gates. | 60% |
+| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, screenshot paths, and performance warnings. | 85% |
 
-The resulting weighted readiness rounds to 60%. Evidence-hardening through M47,
-M48 coverage expansion, and M49 readiness gating are complete for their selected
-evidence sets. These are still only parts of the larger MEP target.
-
-The next proposed objective is M50: move toward 80% only if the current gate
-candidate and draft front/font specs become executable, owned evidence. The
-score must remain below 80% if any required lane lands only as planning prose.
+The resulting weighted readiness is 80%. Evidence-hardening through M47, M48
+coverage expansion, M49 readiness gating, and M50 acceleration are complete for
+their selected evidence sets. These are still only parts of the larger MEP
+target.
 
 | Area | Weight | M50 target | Required movement |
 |---|---:|---:|---|
@@ -75,19 +69,15 @@ score must remain below 80% if any required lane lands only as planning prose.
 | Performance readiness | 15% | 60% | Emit automated warning-only trend evidence with baseline owner, variance, quarantine, and rollback policy. |
 | PM demo and reporting workflow | 15% | 85% | Add accepted front/browser/accessibility evidence, image inspection, route/reference notices, and portable PM bundle links. |
 
-This target mix weights to 80%, but it is a closeout rule, not the current
-score.
+This target mix has landed for M50 and is the current score.
 
 Before MEP, Kanvas still needs:
 
 - broader Skia integration scene coverage;
 - generated evidence as the default path for new support claims;
-- required-CI ownership for the dashboard gate and non-blocking inventory;
 - performance trends with approved release thresholds;
 - hosted or release-owned PM reporting beyond the portable local bundle;
-- acceptance of front UX/browser/accessibility gates backed by generated
-  dashboard evidence;
-- dependency-gated text/font/glyph/emoji/codec deliveries, not substitutes,
+- broader dependency-gated text/font/glyph/emoji/codec deliveries, not substitutes,
   followed by generated font scene evidence.
 
 ## Evidence Levels
@@ -151,7 +141,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | M49 | MEP Readiness Gate Toward 60% | Completed: promoted the generated dashboard into a CI gate candidate, added a portable PM artifact bundle, defined non-blocking performance trend gates, and broadened adapter-backed proof enough to justify a 60% PM readiness score. |
 | Spec split | Front Evidence Experience | Draft spec pack added for dashboard UX, image inspection, PM bundle workflow, accessibility, and quality gates. Spec-only; no score movement. |
 | Spec split | Font And Text Evidence | Draft spec pack added for pure Kotlin OpenType, shaping, glyph rendering, color fonts, emoji, and font conformance. Spec-only; dependency-gated rows remain gated. |
-| M50 | MEP Readiness Acceleration Toward 80% | Proposed: convert M49 gate candidate and front/font specs into required CI ownership, front QA evidence, broader adapter-backed captures, first generated font/text scene pack, performance warning automation, and a score recalculation. |
+| M50 | MEP Readiness Acceleration Toward 80% | Completed: converted M49 gate candidate and front/font specs into required CI ownership, front QA evidence, broader adapter-backed captures, first generated font/text scene pack, performance warning automation, and score recalculation. |
 
 ## Current Baseline
 
@@ -173,19 +163,19 @@ The two current `tracked-gap` P0 rows are:
 Both have route evidence but are missing adapter-backed GPU render captures in
 the current dashboard evidence.
 
-After M49, the merged dashboard export has:
+After M50, the merged dashboard export has:
 
-- 23 scene rows;
-- 18 pass;
+- 28 scene rows;
+- 21 pass;
 - 0 tracked-gap;
-- 5 expected-unsupported;
+- 7 expected-unsupported;
 - 0 fail;
-- 21 generated evidence rows;
+- 26 generated evidence rows;
 - 2 static evidence rows;
-- 7 adapter-backed rows;
+- 17 adapter-backed rows;
 - tag aggregates for `feature.*`, `maturity.*`, and `risk.*`.
 
-M48 and M49 support, refusal, and readiness evidence is linked from:
+M48-M50 support, refusal, and readiness evidence is linked from:
 
 - `reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md`;
 - `reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md`;
@@ -199,6 +189,13 @@ M48 and M49 support, refusal, and readiness evidence is linked from:
 - `reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md`;
 - `reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md`;
 - `reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m50-ci-release-gate.md`;
+- `reports/wgsl-pipeline/2026-05-31-m50-front-evidence-gate.md`;
+- `reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md`;
+- `reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md`;
+- `reports/wgsl-pipeline/2026-05-31-m50-performance-warning-gate.md`;
+- `reports/wgsl-pipeline/2026-05-31-m50-mep-release-readiness-checklist.md`;
+- `reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md`.
 
 Draft follow-up spec packs:
 
@@ -220,6 +217,10 @@ The current expected unsupported rows are:
 - `path-aa-dashing-edge-budget` with `coverage.edge-count-exceeded`;
 - `image-filter-crop-nonnull-prepass-required` with
   `image-filter.crop-input-nonnull-prepass-required`.
+- `font-emoji-color-glyph-refusal` with
+  `font.color-glyph-emoji-unsupported`;
+- `font-complex-shaping-refusal` with
+  `font.complex-shaping-requires-explicit-shaper`.
 
 ## M49 Closeout
 
@@ -258,16 +259,14 @@ After M49, the target gained two draft spec packs:
   `SkTypeface`, `SkFontMgr`, explicit `SkShaper`, glyph rendering, color
   fonts, emoji, and font conformance.
 
-These specs improve planning quality and ownership boundaries, but they do not
-change the 60% PM readiness score. The score only moves when the documented
-front or font work produces release-relevant evidence: accepted gates,
-adapter-backed captures, generated scene rows, stable refusal rows, or PM
-artifacts.
+These specs now have selected M50 implementation evidence. They still do not
+claim broad front-hosting, font, text, emoji, shaping, SDF, LCD, glyph-mask, or
+codec completion beyond the generated rows and QA artifacts named in the M50
+reports.
 
-## M50 Proposed Objective
+## M50 Closeout
 
-M50 should try to move the target from 60% to 80% by landing five executable
-lanes:
+M50 moved the target from 60% to 80% by landing five executable lanes:
 
 - required CI ownership for `pipelineSceneDashboardGate`, PM bundle validation,
   and non-blocking inventory visibility;
@@ -281,9 +280,8 @@ lanes:
 - automated warning-only performance trends with baseline owner, variance
   policy, quarantine, rollback notes, and refreshed measured payloads.
 
-M50 must not claim complete MEP, broad Skia parity, broad font/emoji/shaping
-support, or release-blocking performance thresholds. If font evidence or
-performance automation remains documentation-only, 80% is not defensible.
+M50 does not claim complete MEP, broad Skia parity, broad font/emoji/shaping
+support, or release-blocking performance thresholds.
 
 ## Agent Execution Policy
 

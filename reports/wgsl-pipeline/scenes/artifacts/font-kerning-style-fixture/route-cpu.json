@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "selectedRoute": "cpu.text.outline.kerning-style",
+  "fallbackReason": "none",
+  "fontSource": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Bold.ttf",
+  "textInput": "AVATAR",
+  "shapingMode": "simple-kerning-fixture",
+  "glyphDiagnostics": "artifacts/font-kerning-style-fixture/font-diagnostics.json",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md"
+}
