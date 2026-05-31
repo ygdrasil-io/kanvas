@@ -855,7 +855,10 @@
           "maxChannelDelta": 255,
           "threshold": 80.0,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest",
+          "adapter": "Apple M2 Max",
+          "adapterEvidenceCommand": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest",
+          "adapterEvidenceCommit": "48c351b826bf6ed8b7d5725a41209d9010cbc6e1"
         },
         "performanceTrend": {
           "status": "estimated",
@@ -910,7 +913,8 @@
         "kanvas-skia/src/test/kotlin/org/skia/core/ClipPathDifferenceTest.kt",
         "reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md",
         "reports/wgsl-pipeline/2026-05-31-m47-clip-rect-difference-generated-evidence.md",
-        "reports/wgsl-pipeline/scenes/generated/results.json"
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md"
       ],
       "tags": [
         "source.generated",
@@ -920,7 +924,8 @@
         "route.gpu.webgpu",
         "reference.skia-upstream",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ],
       "generation": {
         "mode": "generated",
@@ -1049,7 +1054,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.95,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderRotatedTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderRotatedTest",
+          "adapter": "Apple M2 Max",
+          "adapterEvidenceCommand": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderRotatedTest",
+          "adapterEvidenceCommit": "48c351b826bf6ed8b7d5725a41209d9010cbc6e1"
         },
         "performanceTrend": {
           "sceneId": "bitmap-shader-local-matrix",
@@ -1154,7 +1162,8 @@
         "reports/wgsl-pipeline/2026-05-28-m43-real-benchmark-harness-closeout.md",
         "reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md",
         "reports/wgsl-pipeline/2026-05-31-m47-bitmap-shader-local-matrix-generated-evidence.md",
-        "reports/wgsl-pipeline/scenes/generated/results.json"
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md"
       ],
       "tags": [
         "source.generated",
@@ -1164,7 +1173,8 @@
         "route.gpu.webgpu",
         "reference.test-oracle",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ],
       "generation": {
         "mode": "generated",
@@ -1293,7 +1303,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.95,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BlendModeTest --tests org.skia.gpu.webgpu.TranslucentSrcOverTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BlendModeTest --tests org.skia.gpu.webgpu.TranslucentSrcOverTest",
+          "adapter": "Apple M2 Max",
+          "adapterEvidenceCommand": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BlendModeTest --tests org.skia.gpu.webgpu.TranslucentSrcOverTest",
+          "adapterEvidenceCommit": "48c351b826bf6ed8b7d5725a41209d9010cbc6e1"
         },
         "performanceTrend": {
           "sceneId": "src-over-stack",
@@ -1396,7 +1409,8 @@
         "reports/wgsl-pipeline/scenes/artifacts/src-over-stack/gpu-performance.json",
         "reports/wgsl-pipeline/2026-05-30-m46-static-to-generated-inventory.md",
         "reports/wgsl-pipeline/2026-05-30-m46-src-over-stack-measured-generated-evidence.md",
-        "reports/wgsl-pipeline/scenes/generated/results.json"
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md"
       ],
       "tags": [
         "source.generated",
@@ -1406,7 +1420,8 @@
         "route.gpu.webgpu",
         "reference.test-oracle",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ],
       "generation": {
         "mode": "generated",
@@ -1889,7 +1904,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.95,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuSmokeTest --tests org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuSmokeTest --tests org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
+          "adapter": "Apple M2 Max",
+          "adapterEvidenceCommand": "rtk ./gradlew --no-daemon :gpu-raster:gpuSmokeTest --tests org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
+          "adapterEvidenceCommit": "48c351b826bf6ed8b7d5725a41209d9010cbc6e1"
         }
       },
       "diffs": {
@@ -1913,7 +1931,8 @@
         "reports/wgsl-pipeline/2026-05-27-m32-image-rect-smoke-promotion.md",
         "reports/wgsl-pipeline/scenes/generated/results.json",
         "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/stats.json",
-        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/DrawBitmapRectSkbug4734WebGpuTest.kt"
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/DrawBitmapRectSkbug4734WebGpuTest.kt",
+        "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md"
       ],
       "generation": {
         "mode": "generated",
@@ -1934,7 +1953,8 @@
         "route.gpu.webgpu",
         "reference.skia-upstream",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ]
     },
     {
@@ -2102,7 +2122,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.95,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.LinearGradientRectTest --tests '*GeneratedLinearGradientWgslTest'"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.LinearGradientRectTest --tests '*GeneratedLinearGradientWgslTest'",
+          "adapter": "Apple M2 Max",
+          "adapterEvidenceCommand": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.LinearGradientRectTest --tests *GeneratedLinearGradientWgslTest",
+          "adapterEvidenceCommit": "48c351b826bf6ed8b7d5725a41209d9010cbc6e1"
         },
         "performanceTrend": {
           "status": "estimated",
@@ -2155,7 +2178,8 @@
         "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/cpu-performance.json",
         "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/gpu-performance.json",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/LinearGradientRectTest.kt",
-        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/tools/GeneratedLinearGradientWgslTest.kt"
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/tools/GeneratedLinearGradientWgslTest.kt",
+        "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md"
       ],
       "generation": {
         "mode": "generated",
@@ -2176,7 +2200,8 @@
         "route.gpu.webgpu",
         "reference.test-oracle",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ]
     },
     {

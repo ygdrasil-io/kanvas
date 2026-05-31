@@ -9,5 +9,9 @@
   "blendPlan": "Fixed-function WebGPU blend allowlist accepts kSrc and kSrcOver",
   "fallbackReason": "none",
   "test": "org.skia.gpu.webgpu.BlendModeTest#kSrcOver matches CPU for partial alpha over non opaque destination",
-  "secondaryTest": "org.skia.gpu.webgpu.TranslucentSrcOverTest#50 percent blue rect over opaque red blends to expected premul bytes"
+  "secondaryTest": "org.skia.gpu.webgpu.TranslucentSrcOverTest#50 percent blue rect over opaque red blends to expected premul bytes",
+  "adapter": "Apple M2 Max",
+  "adapterEvidenceCommand": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BlendModeTest --tests org.skia.gpu.webgpu.TranslucentSrcOverTest",
+  "adapterEvidenceCommit": "48c351b826bf6ed8b7d5725a41209d9010cbc6e1",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md"
 }
