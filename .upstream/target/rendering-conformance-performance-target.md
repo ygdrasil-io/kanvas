@@ -37,7 +37,7 @@ The platform must answer five questions for every promoted scene:
 
 ## PM Readiness
 
-Current Post-MVP Big Target readiness for MEP: 80%.
+Current Post-MVP Big Target readiness for MEP: 82%.
 
 This is a PM readiness score for the full target, not an effort estimate and not
 the completion state of the latest Linear sprint. M41-M47 completed the evidence
@@ -48,23 +48,23 @@ is still not complete MEP scope because release-blocking performance thresholds,
 broad Skia parity, broad font/text coverage, and dependency-gated codec gaps
 remain outside the selected evidence rows.
 
-The next proposed sprint is M51. Its job is to make the full Skia GM/sample
-surface visible as inventory before adding many more support rows. Inventory
-visibility can improve planning readiness, but it does not count as rendered
-support without generated reference/CPU/GPU/refusal artifacts.
+M51 made the full Skia GM/sample surface visible as inventory before adding many
+more support rows. Inventory visibility improves planning readiness, but it
+does not count as rendered support without generated reference/CPU/GPU/refusal
+artifacts.
 
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
 | Evidence foundation | 25% | M41-M50 complete: generated dashboard, 26 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
-| Skia integration coverage | 25% | M50 raises adapter-backed proof to 17 rows and adds first selected font/text evidence without broad support claims. | 65% |
+| Skia integration coverage | 25% | M51 exposes 802 inventory rows across 437 upstream GM files and 751 Kotlin GM sources, with mismatches and M52+ candidates visible but no broad support claims. | 70% |
 | CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, and PM bundle generation with archived reports. | 85% |
 | Performance readiness | 15% | `pipelinePerformanceTrendWarnings` emits owner, baseline, environment, variance, quarantine, and rollback policy; thresholds are not release gates. | 60% |
-| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, screenshot paths, and performance warnings. | 85% |
+| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, screenshot paths, performance warnings, inventory, and inventory gate reports. | 88% |
 
-The resulting weighted readiness is 80%. Evidence-hardening through M47, M48
-coverage expansion, M49 readiness gating, and M50 acceleration are complete for
-their selected evidence sets. These are still only parts of the larger MEP
-target.
+The resulting weighted readiness is 82%. Evidence-hardening through M47, M48
+coverage expansion, M49 readiness gating, M50 acceleration, and M51 inventory
+visibility are complete for their selected evidence sets. These are still only
+parts of the larger MEP target.
 
 | Area | Weight | M50 target | Required movement |
 |---|---:|---:|---|
@@ -147,7 +147,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | Spec split | Front Evidence Experience | Draft spec pack added for dashboard UX, image inspection, PM bundle workflow, accessibility, and quality gates. Spec-only; no score movement. |
 | Spec split | Font And Text Evidence | Draft spec pack added for pure Kotlin OpenType, shaping, glyph rendering, color fonts, emoji, and font conformance. Spec-only; dependency-gated rows remain gated. |
 | M50 | MEP Readiness Acceleration Toward 80% | Completed: converted M49 gate candidate and front/font specs into required CI ownership, front QA evidence, broader adapter-backed captures, first generated font/text scene pack, performance warning automation, and score recalculation. |
-| M51 | Skia GM Inventory Coverage | Proposed: inventory upstream GM C++ files and Kotlin GM sources, classify every row, expose the inventory through PM/release artifacts, and produce the next promotion backlog without claiming broad support. |
+| M51 | Skia GM Inventory Coverage | Completed: inventories upstream GM C++ files and Kotlin GM sources, classifies every row, exposes the inventory through PM/release artifacts, validates required fields, and produces the next promotion backlog without claiming broad support. |
 
 ## Current Baseline
 
@@ -203,6 +203,7 @@ M48-M50 support, refusal, and readiness evidence is linked from:
 - `reports/wgsl-pipeline/2026-05-31-m50-mep-release-readiness-checklist.md`;
 - `reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md`;
 - `reports/wgsl-pipeline/2026-05-31-m50-verification-and-linear-sync.md`.
+- `reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md`.
 
 Draft follow-up spec packs:
 
@@ -290,11 +291,10 @@ M50 moved the target from 60% to 80% by landing five executable lanes:
 M50 does not claim complete MEP, broad Skia parity, broad font/emoji/shaping
 support, or release-blocking performance thresholds.
 
-## M51 Proposed Objective
+## M51 Outcome
 
-M51 should create the bridge from the selected M50 dashboard to broad Skia GM
-coverage. The output should be an inventory layer, not hundreds of new support
-rows.
+M51 created the bridge from the selected M50 dashboard to broad Skia GM
+coverage. The output is an inventory layer, not hundreds of new support rows.
 
 Planning baseline:
 
@@ -302,11 +302,12 @@ Planning baseline:
 - Kotlin GM source files: 751 local `*GM.kt` files under
   `skia-integration-tests/src/main/kotlin/org/skia/tests/`.
 
-The counts are expected to differ because one upstream file may define multiple
-variants and Kotlin may split or generate wrappers. M51 must report those
-mismatches explicitly.
+The final generated inventory has 802 rows: 386 matched upstream/Kotlin rows,
+51 upstream-only rows, and 365 Kotlin-only rows. The counts differ because one
+upstream file may define multiple variants and Kotlin may split or generate
+wrappers. M51 reports those mismatches explicitly.
 
-M51 may move readiness from 80% to about 82% only if it lands:
+M51 moved readiness from 80% to 82% by landing:
 
 - deterministic inventory JSON and Markdown;
 - status taxonomy for promoted, candidate, expected-unsupported,
@@ -315,10 +316,10 @@ M51 may move readiness from 80% to about 82% only if it lands:
 - PM bundle links and filters for inventory status, family, upstream source,
   and Kotlin source presence;
 - inventory gate that fails duplicate ids and missing required fields;
-- M52 promotion candidate backlog with 25-40 high-value scenes across multiple
+- M52 promotion candidate backlog with 34 high-value scenes across multiple
   rendering families.
 
-M51 must not claim every Skia GM is supported, must not weaken the scene
+M51 does not claim every Skia GM is supported, does not weaken the scene
 dashboard gate, and must not hide untriaged or dependency-gated rows.
 
 ## Agent Execution Policy

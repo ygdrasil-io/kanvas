@@ -2649,23 +2649,85 @@ tasks.register("pipelineSceneDashboardGateNegativeFixture") {
     }
 }
 
+tasks.register("pipelineSkiaGmInventory") {
+    group = "verification"
+    description = "Generates the M51 Skia GM/sample inventory JSON and Markdown without changing dashboard support claims."
+
+    val scriptFile = layout.projectDirectory.file("scripts/skia_gm_inventory.py")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
+    inputs.file(scriptFile)
+    inputs.dir(layout.projectDirectory.dir("skia-integration-tests/src/main/kotlin/org/skia/tests"))
+    inputs.dir("/Users/chaos/workspace/kanvas-forge/skia-main/gm")
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/data/scenes.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "generate",
+                "--project-root",
+                rootDir.absolutePath,
+                "--output-dir",
+                outputDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
+tasks.register("pipelineSkiaGmInventoryGate") {
+    group = "verification"
+    description = "Validates the M51 Skia GM inventory and writes PM-readable gate reports."
+
+    dependsOn("pipelineSkiaGmInventory")
+
+    val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
+    val reportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
+    inputs.file(inventoryDir.map { it.file("inventory.json") })
+    outputs.dir(reportDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                layout.projectDirectory.file("scripts/skia_gm_inventory.py").asFile.absolutePath,
+                "validate",
+                "--project-root",
+                rootDir.absolutePath,
+                "--inventory-json",
+                inventoryDir.get().file("inventory.json").asFile.relativeTo(rootDir).path,
+                "--report-dir",
+                reportDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelinePmBundle") {
     group = "verification"
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
 
-    dependsOn("pipelineSceneDashboardGate", "pipelineDashboardFrontQa", "pipelinePerformanceTrendWarnings")
+    dependsOn("pipelineSceneDashboardGate", "pipelineDashboardFrontQa", "pipelinePerformanceTrendWarnings", "pipelineSkiaGmInventoryGate")
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
     val generatedExportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
     val gateReportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scene-gate")
     val frontQaDir = layout.buildDirectory.dir("reports/wgsl-pipeline-front-qa")
     val performanceWarningsDir = layout.buildDirectory.dir("reports/wgsl-pipeline-performance-warnings")
+    val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
+    val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
     inputs.dir(dashboardDir)
     inputs.dir(generatedExportDir)
     inputs.dir(gateReportDir)
     inputs.dir(frontQaDir)
     inputs.dir(performanceWarningsDir)
+    inputs.dir(inventoryDir)
+    inputs.dir(inventoryGateDir)
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     outputs.dir(bundleDir)
     outputs.upToDateWhen { false }
@@ -2676,6 +2738,8 @@ tasks.register("pipelinePmBundle") {
         val gateRoot = gateReportDir.get().asFile
         val frontQaRoot = frontQaDir.get().asFile
         val performanceWarningsRoot = performanceWarningsDir.get().asFile
+        val inventoryRoot = inventoryDir.get().asFile
+        val inventoryGateRoot = inventoryGateDir.get().asFile
         val targetRoot = bundleDir.get().asFile
         val mergedData = dashboardRoot.resolve("data/scenes.json")
         if (!mergedData.isFile) {
@@ -2709,6 +2773,12 @@ tasks.register("pipelinePmBundle") {
         }
         if (performanceWarningsRoot.isDirectory) {
             performanceWarningsRoot.copyRecursively(targetRoot.resolve("performance"), overwrite = true)
+        }
+        if (inventoryRoot.isDirectory) {
+            inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
+        }
+        if (inventoryGateRoot.isDirectory) {
+            inventoryGateRoot.copyRecursively(targetRoot.resolve("inventory-gate"), overwrite = true)
         }
 
         fun collectReferencedPaths(value: Any?, paths: MutableSet<String>) {
@@ -2788,6 +2858,18 @@ tasks.register("pipelinePmBundle") {
                     "adapter" to (stats?.get("adapter") as? String).orEmpty(),
                 )
             }
+        val inventoryDataFile = inventoryRoot.resolve("inventory.json")
+        val inventoryData = if (inventoryDataFile.isFile) {
+            JsonSlurper().parse(inventoryDataFile) as? Map<*, *>
+                ?: throw GradleException("Inventory root must be a JSON object: ${inventoryDataFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
+        val inventorySummary = (inventoryData["summary"] as? Map<*, *>).orEmpty()
+        val dashboardInventoryLinks = (inventoryData["dashboardInventoryLinks"] as? Map<*, *>)
+            ?.mapKeys { it.key.toString() }
+            ?.mapValues { it.value.toString() }
+            .orEmpty()
         val commit = try {
             providers.exec {
                 commandLine("git", "rev-parse", "HEAD")
@@ -2816,6 +2898,10 @@ tasks.register("pipelinePmBundle") {
             ),
             "performanceWarningReport" to "performance/performance-warnings.md",
             "performanceWarningJson" to "performance/performance-warnings.json",
+            "skiaGmInventoryJson" to "inventory/inventory.json",
+            "skiaGmInventoryMarkdown" to "inventory/inventory.md",
+            "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
+            "inventoryNotice" to "Skia GM inventory rows are planning/classification evidence only and do not change dashboard support claims or counters.",
             "counters" to linkedMapOf<String, Any>(
                 "total" to scenes.size,
                 "statuses" to statusCounts,
@@ -2824,9 +2910,12 @@ tasks.register("pipelinePmBundle") {
                 "expectedUnsupported" to expectedUnsupported.size,
                 "unavailableReferences" to unavailable.size,
             ),
+            "inventoryCounters" to inventorySummary,
+            "dashboardInventoryLinks" to dashboardInventoryLinks,
             "expectedUnsupportedRows" to expectedUnsupported,
             "adapterBackedRows" to adapterBacked,
             "knownLimitations" to listOf(
+                "Skia GM inventory rows classify visibility and planning state only; support still requires generated dashboard evidence.",
                 "Expected-unsupported rows are planning evidence, not support claims.",
                 "Performance trend warnings remain non-blocking until an owner-approved release-blocking policy exists.",
                 "The bundle is a static PM review artifact and does not execute GPU captures.",
@@ -2856,6 +2945,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- `gate/`: M50 dashboard gate reports from `pipelineSceneDashboardGate`.")
                 appendLine("- `front-qa/`: PM dashboard front QA report and browser screenshot paths.")
                 appendLine("- `performance/`: warning-only M50 performance trend report and policy.")
+                appendLine("- `inventory/`: M51 Skia GM inventory JSON and Markdown. Inventory rows are not support claims.")
+                appendLine("- `inventory-gate/`: M51 inventory validation reports and mismatch snapshot.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
         )

@@ -40,7 +40,7 @@ Current M40 dashboard state:
 | M48 Skia Scene Coverage Expansion | Expand from clean dashboard evidence to a representative MEP scene pack. | Add 8-12 selected P0/P1 rows across multiple Skia-relevant families, keep unsupported breadth explicit, and update PM readiness without introducing tracked gaps or failing support claims. |
 | M49 MEP Readiness Gate Toward 60% | Promote the dashboard from local evidence into release-oriented readiness gates and PM packaging. | Add gate invariant spec, CI validation task, portable PM artifact bundle, adapter-backed expansion to at least six rows, non-blocking performance trend gate contract, MEP release checklist, and sprint review. The 60% readiness score may be claimed only if all lanes land with merged evidence. |
 | M50 MEP Readiness Acceleration Toward 80% | Convert M49 gate candidate and front/font specs into executable release evidence. | Required CI ownership, front/browser/accessibility gates, at least 14 adapter-backed rows, first generated font/text evidence pack, automated warning-only performance trends, and sprint review score recalculation. The 80% score may be claimed only if every lane lands with artifacts. |
-| M51 Skia GM Inventory Coverage | Make the full Skia GM/sample surface visible before broad scene promotion. | Generate deterministic inventory JSON/Markdown for upstream GM C++ files and Kotlin GM sources, classify every row, expose inventory in the PM bundle, add inventory validation, and produce the M52 promotion candidate backlog without changing support claims. |
+| M51 Skia GM Inventory Coverage | Done: full Skia GM/sample surface is visible before broad scene promotion. | Generated deterministic inventory JSON/Markdown for 437 upstream GM C++ files and 751 Kotlin GM sources, classified 802 inventory rows, exposed inventory in the PM bundle, added inventory validation, and produced a 34-row M52+ promotion candidate backlog without changing support claims. |
 
 ## M41 Seed Tickets
 
@@ -439,10 +439,10 @@ Detailed evidence:
 - `reports/wgsl-pipeline/2026-05-31-m50-sprint-review.md`.
 - `reports/wgsl-pipeline/2026-05-31-m50-verification-and-linear-sync.md`.
 
-## M51 Plan
+## M51 Outcome
 
-M51 should prepare broad Skia sample convergence by inventorying the full GM
-surface. It must not add hundreds of support rows just to look complete.
+M51 prepared broad Skia sample convergence by inventorying the full GM surface.
+It did not add hundreds of support rows just to look complete.
 
 Planning baseline:
 
@@ -451,8 +451,9 @@ Planning baseline:
 | Upstream Skia `gm/*.cpp` | 437 | Local C++ GM files under `/Users/chaos/workspace/kanvas-forge/skia-main/gm`. |
 | Kotlin `*GM.kt` sources | 751 | Local files under `skia-integration-tests/src/main/kotlin/org/skia/tests/`. |
 | M50 dashboard rows | 28 | Current scene evidence rows; not equivalent to full Skia inventory. |
+| Generated inventory rows | 802 | Merged planning rows with explicit source presence and status. |
 
-M51 target score:
+M51 final score:
 
 | PM area | M50 | M51 target | Evidence required |
 |---|---:|---:|---|
@@ -460,39 +461,27 @@ M51 target score:
 | Skia integration coverage | 65% | 70% | Full GM inventory is visible and classified, but support only moves for generated scene evidence. |
 | CI and release gates | 85% | 85% | Inventory validation is additive and does not weaken the M50 release gate. |
 | Performance readiness | 60% | 60% | No performance threshold change in M51. |
-| PM demo and reporting workflow | 85% | 88% | PM bundle exposes inventory, counters, filters, and M52 candidate backlog. |
+| PM demo and reporting workflow | 85% | 88% | PM bundle exposes inventory, counters, filters, gate output, and M52 candidate backlog. |
 
-Weighted target: about 82%.
+Weighted final score: 82%.
 
-M51 seed tickets:
+M51 delivered:
 
-- M51-A Inventory schema and scanner.
-  Definition of Done: deterministic JSON/Markdown records upstream C++ GM files,
-  Kotlin GM files, stable ids, source paths, display names, family tags, initial
-  statuses, and mismatch reports.
-- M51-B Classification taxonomy.
-  Definition of Done: every row has exactly one status among
-  `dashboard-promoted`, `promotion-candidate`, `expected-unsupported`,
-  `dependency-gated`, `not-triaged`, `non-rendering-or-utility`, or
-  `duplicate-or-variant`; every non-`not-triaged` row has a reason.
-- M51-C PM inventory view.
-  Definition of Done: PM bundle links inventory JSON/Markdown, states clearly
-  that inventory rows are not support claims, and supports grouping or filtering
-  by status, family, upstream source, and Kotlin source presence.
-- M51-D M52 promotion candidate backlog.
-  Definition of Done: select 25-40 high-value candidates across paint/blend,
-  bitmap/image, gradients, clip/transform, Path AA, image filters, runtime
-  effects, text/font, and codec/image decode boundaries, with source links,
-  reference availability, expected routes, dependency risk, and validation
-  command.
-- M51-E Inventory gate.
-  Definition of Done: validation fails duplicate ids and missing source/status/
-  family fields, reports mismatch count changes, and is included in PM/release
-  artifacts.
-- M51-F Sprint review and score sync.
-  Definition of Done: sprint review reports inventory counts, classified count,
-  not-triaged count, promoted count, candidate count, dependency-gated count,
-  expected-unsupported count, validation commands, and final justified score.
+- M51-A Inventory schema and scanner: `pipelineSkiaGmInventory` writes
+  deterministic JSON/Markdown with stable ids, source paths, display names,
+  family tags, status, reason, and mismatch reports.
+- M51-B Classification taxonomy: every row has exactly one allowed status; every
+  non-`not-triaged` row has a reason.
+- M51-C PM inventory view: `pipelinePmBundle` includes inventory JSON/Markdown,
+  inventory gate output, counters, limitations, and dashboard-to-inventory links
+  where possible.
+- M51-D M52 promotion candidate backlog: the inventory selects 34 candidates
+  across paint/blend, bitmap/image, gradients, clip/transform, Path AA, image
+  filters, runtime effects, text/font, and codec/image decode boundaries.
+- M51-E Inventory gate: `pipelineSkiaGmInventoryGate` fails duplicate ids and
+  missing required source/status/family fields, and reports mismatch snapshots.
+- M51-F Sprint review and score sync: the sprint review reports final inventory
+  counts, validation commands, artifacts, limits/non-claims, and the 82% score.
 
 Validation baseline:
 
@@ -503,15 +492,16 @@ rtk ./gradlew --no-daemon pipelineSceneDashboardGate
 rtk ./gradlew --no-daemon pipelinePmBundle
 ```
 
-M51 should add inventory-specific validation, for example:
+M51 inventory-specific validation:
 
 ```bash
 rtk ./gradlew --no-daemon pipelineSkiaGmInventory
 rtk ./gradlew --no-daemon pipelineSkiaGmInventoryGate
 ```
 
-The final task names must be recorded in the closeout.
+The final task names are recorded in the closeout.
 
-Detailed plan:
+Detailed reports:
 
 - `reports/wgsl-pipeline/2026-05-31-m51-skia-gm-inventory-sprint-plan.md`.
+- `reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md`.
