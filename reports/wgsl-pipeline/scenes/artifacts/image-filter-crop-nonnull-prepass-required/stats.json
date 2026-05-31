@@ -1,0 +1,10 @@
+{
+  "pixels": 0,
+  "matchingPixels": 0,
+  "maxChannelDelta": 0,
+  "threshold": 0.0,
+  "backend": "inventory",
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.tools.GpuInventoryFailureReportTest",
+  "status": "expected-unsupported",
+  "fallbackReason": "image-filter.crop-input-nonnull-prepass-required"
+}
