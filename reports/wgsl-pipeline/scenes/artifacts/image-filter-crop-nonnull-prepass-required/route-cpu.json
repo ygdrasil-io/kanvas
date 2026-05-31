@@ -1,0 +1,11 @@
+{
+  "backend": "CPU",
+  "sceneId": "image-filter-crop-nonnull-prepass-required",
+  "status": "pass",
+  "coveragePlan": "ImageFilterGraph(Crop(input=nonNull),requiresChildPrePass=true,outsideSelectedM38Shape=true)",
+  "selectedRoute": "cpu.image-filter.crop-nonnull-reference",
+  "fallbackReason": "none",
+  "sourceTest": "org.skia.gpu.webgpu.tools.GpuInventoryFailureReportTest",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+  "nonClaim": "Does not claim arbitrary image-filter DAG support, recursive crop pre-passes, or general layer scheduling."
+}

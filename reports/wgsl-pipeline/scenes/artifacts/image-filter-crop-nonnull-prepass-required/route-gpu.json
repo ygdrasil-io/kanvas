@@ -1,0 +1,11 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "image-filter-crop-nonnull-prepass-required",
+  "status": "expected-unsupported",
+  "coverageStrategy": "webgpu.image-filter.refuse",
+  "pipelineKey": "imageFilter=Crop(input=nonNull),prePass=required,selectedM38Shape=false",
+  "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+  "sourceTest": "org.skia.gpu.webgpu.tools.GpuInventoryFailureReportTest",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+  "nonClaim": "Does not claim arbitrary image-filter DAG support, recursive crop pre-passes, or general layer scheduling."
+}
