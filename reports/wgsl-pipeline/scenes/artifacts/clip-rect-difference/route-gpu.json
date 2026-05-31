@@ -8,5 +8,9 @@
   "pipelineKey": "clipOp=kDifference shape=rect+rrect maskFilter=blur",
   "fallbackReason": "none",
   "nonSelectedPolicy": "non-selected AA clip variants may remain expected-unsupported with stable fallback reasons",
-  "test": "org.skia.gpu.webgpu.ClipDifferenceCrossTest#Skbug9319GM survives clipRect_kDifference and clipRRect_kDifference on GPU"
+  "test": "org.skia.gpu.webgpu.ClipDifferenceCrossTest#Skbug9319GM survives clipRect_kDifference and clipRRect_kDifference on GPU",
+  "adapter": "Apple M2 Max",
+  "adapterEvidenceCommand": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest",
+  "adapterEvidenceCommit": "48c351b826bf6ed8b7d5725a41209d9010cbc6e1",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md"
 }

@@ -1,11 +1,18 @@
 {
   "sceneId": "bitmap-rect-nearest",
-  "dimensions": { "width": 64, "height": 64 },
+  "dimensions": {
+    "width": 64,
+    "height": 64
+  },
   "pixels": 4096,
   "matchingPixels": 4096,
   "maxChannelDelta": 0,
   "threshold": 99.95,
   "cpuSimilarity": 100.0,
   "gpuSimilarity": 100.0,
-  "sourceTest": "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest"
+  "sourceTest": "org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
+  "adapter": "Apple M2 Max",
+  "adapterEvidenceCommand": "rtk ./gradlew --no-daemon :gpu-raster:gpuSmokeTest --tests org.skia.gpu.webgpu.DrawBitmapRectSkbug4734WebGpuTest",
+  "adapterEvidenceCommit": "48c351b826bf6ed8b7d5725a41209d9010cbc6e1",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md"
 }
