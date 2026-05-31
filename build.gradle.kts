@@ -2456,6 +2456,14 @@ tasks.register("pipelineSceneDashboardGate") {
                 else -> true
             }
         }
+        fun scenePathFile(path: String): File? {
+            val normalized = path.replace('\\', '/')
+            return when {
+                normalized.startsWith("artifacts/") || normalized.startsWith("data/") -> dashboardRoot.resolve(normalized)
+                normalized.startsWith("reports/") -> rootDir.resolve(normalized)
+                else -> null
+            }
+        }
 
         fun requireString(sceneId: String, owner: Map<*, *>?, field: String, invariant: String, display: String = field): String? {
             val value = owner?.string(field)
@@ -2530,6 +2538,94 @@ tasks.register("pipelineSceneDashboardGate") {
                 "estimated" -> warn(sceneId, "performance.estimated", "estimated performance is reporting-only and cannot move readiness")
                 null -> Unit
                 else -> fail(sceneId, "performance.status", "unknown `$prefix.performanceTrend.status` '$status'")
+            }
+        }
+
+        fun validateGraphDiagnostics(sceneId: String, graphDiagnostics: String, fallbackReason: String) {
+            val graphFile = scenePathFile(graphDiagnostics)
+            if (graphFile == null || !graphFile.isFile) {
+                fail(sceneId, "image-filter.graph-diagnostics", "`graphDiagnostics` does not exist: `$graphDiagnostics`")
+                return
+            }
+            val graph = try {
+                JsonSlurper().parse(graphFile) as? Map<*, *>
+            } catch (error: Exception) {
+                fail(sceneId, "image-filter.graph-diagnostics", "invalid graph diagnostics JSON `${graphFile.relativeTo(rootDir)}`: ${error.message}")
+                return
+            }
+            if (graph == null) {
+                fail(sceneId, "image-filter.graph-diagnostics", "graph diagnostics must be a JSON object")
+                return
+            }
+
+            fun graphString(field: String): String? {
+                val value = graph.string(field)
+                if (!value.isPresent()) fail(sceneId, "image-filter.graph-diagnostics", "missing or invalid `graphDiagnostics.$field`")
+                return value
+            }
+
+            fun graphNumber(field: String): Number? {
+                val value = graph[field] as? Number
+                if (value == null) fail(sceneId, "image-filter.graph-diagnostics", "missing or invalid `graphDiagnostics.$field`")
+                return value
+            }
+
+            val graphSceneId = graphString("sceneId")
+            if (graphSceneId != null && graphSceneId != sceneId) {
+                fail(sceneId, "image-filter.graph-diagnostics", "`graphDiagnostics.sceneId` must match `$sceneId`, got `$graphSceneId`")
+            }
+            val graphFallback = graphString("fallbackReason")
+            if (graphFallback != null && graphFallback != fallbackReason) {
+                fail(sceneId, "image-filter.graph-diagnostics", "`graphDiagnostics.fallbackReason` must match `$fallbackReason`, got `$graphFallback`")
+            }
+            graphString("milestoneOwner")
+            graphString("status")
+            graphString("nonClaim")
+            val nodeCount = graphNumber("nodeCount")?.toInt()
+            val nodeBudget = graphNumber("nodeBudget")?.toInt()
+            graphNumber("childrenPerNodeBudget")
+            val intermediateTextureCount = graphNumber("intermediateTextureCount")?.toInt()
+            val intermediateTextureBudget = graphNumber("intermediateTextureBudget")?.toInt()
+            graphNumber("estimatedIntermediateBytes")
+            if (nodeCount != null && nodeBudget != null && nodeCount > nodeBudget) {
+                fail(sceneId, "image-filter.graph-diagnostics", "`nodeCount` exceeds `nodeBudget`: $nodeCount > $nodeBudget")
+            }
+            if (intermediateTextureCount != null && intermediateTextureBudget != null && intermediateTextureCount > intermediateTextureBudget) {
+                fail(sceneId, "image-filter.graph-diagnostics", "`intermediateTextureCount` exceeds `intermediateTextureBudget`: $intermediateTextureCount > $intermediateTextureBudget")
+            }
+            val bounds = graph.map("bounds")
+            if (bounds?.map("input") == null || bounds.map("output") == null) {
+                fail(sceneId, "image-filter.graph-diagnostics", "missing `bounds.input` or `bounds.output`")
+            }
+            val nodes = graph.list("nodes")
+            if (nodes == null || nodes.isEmpty()) {
+                fail(sceneId, "image-filter.graph-diagnostics", "missing or empty `nodes`")
+            } else {
+                if (nodeCount != null && nodes.size != nodeCount) {
+                    fail(sceneId, "image-filter.graph-diagnostics", "`nodes.size` must match `nodeCount`: ${nodes.size} != $nodeCount")
+                }
+                nodes.forEachIndexed { nodeIndex, rawNode ->
+                    val node = rawNode as? Map<*, *>
+                    if (node == null) {
+                        fail(sceneId, "image-filter.graph-diagnostics", "`nodes[$nodeIndex]` must be an object")
+                    } else {
+                        listOf("id", "kind", "support").forEach { field ->
+                            if (!node.string(field).isPresent()) {
+                                fail(sceneId, "image-filter.graph-diagnostics", "missing or invalid `nodes[$nodeIndex].$field`")
+                            }
+                        }
+                        if (node.list("inputs") == null) {
+                            fail(sceneId, "image-filter.graph-diagnostics", "missing or invalid `nodes[$nodeIndex].inputs`")
+                        }
+                    }
+                }
+            }
+            if (graph.list("passOrder") == null) {
+                fail(sceneId, "image-filter.graph-diagnostics", "missing `passOrder`")
+            }
+            val ownership = graph.map("ownership")
+            if (ownership == null || ownership.isEmpty()) {
+                fail(sceneId, "image-filter.graph-diagnostics", "missing or empty `ownership`")
             }
         }
 
@@ -2669,6 +2765,29 @@ tasks.register("pipelineSceneDashboardGate") {
                 }
                 val tagSet = tagStrings.toSet()
                 val generation = scene.map("generation")
+                val graphDiagnostics = scene.string("graphDiagnostics")
+                val fallback = gpuRoute?.string("fallbackReason").orEmpty()
+                val selectedGpuRoute = gpuRoute?.string("selectedRoute").orEmpty()
+                val pipelineKey = gpuRoute?.string("pipelineKey").orEmpty()
+                val pipelineKeyDagSignal = pipelineKey.contains("graph", ignoreCase = true) ||
+                    pipelineKey.contains("dag=", ignoreCase = true) ||
+                    pipelineKey.contains(" dag", ignoreCase = true) ||
+                    pipelineKey.contains("dag-or", ignoreCase = true)
+                val isGeneratedRow = "source.generated" in tagSet || generation?.string("mode") == "generated"
+                val isImageFilterDagRow = isGeneratedRow && "feature.image-filter" in tagSet &&
+                    (sceneId.contains("graph") ||
+                        sceneId.contains("dag") ||
+                        fallback.contains("dag", ignoreCase = true) ||
+                        selectedGpuRoute.contains("graph", ignoreCase = true) ||
+                        selectedGpuRoute.contains("dag", ignoreCase = true) ||
+                        pipelineKeyDagSignal)
+                if (isImageFilterDagRow) {
+                    if (!graphDiagnostics.isPresent()) {
+                        fail(sceneId, "image-filter.graph-diagnostics", "generated image-filter DAG rows require `graphDiagnostics`")
+                    } else {
+                        validateGraphDiagnostics(sceneId, graphDiagnostics!!, fallback)
+                    }
+                }
                 val generationMode = generation?.string("mode")
                 if (generation?.string("derivationTask") == "pipelineM54HardFeatureDepthPack") {
                     m54Rows += 1
