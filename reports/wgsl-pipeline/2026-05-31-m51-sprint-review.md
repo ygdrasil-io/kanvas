@@ -2,7 +2,7 @@
 
 Date: 2026-05-31
 Status: Closed
-Target: `.upstream/target/rendering-conformance-performance-target.md`
+Target: `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
 Plan: `reports/wgsl-pipeline/2026-05-31-m51-skia-gm-inventory-sprint-plan.md`
 
 ## Outcome

@@ -10,10 +10,15 @@ For the target high-performance WGSL/WebGPU pipeline architecture, read
 `.upstream/target/high-performance-wgsl-pipeline-target.md` before planning
 pipeline, shader, runtime-effect, or raster/GPU convergence work.
 
-For post-MVP rendering conformance and performance work, read
-`.upstream/target/rendering-conformance-performance-target.md` before planning
-generated dashboard, adapter-backed capture, benchmark, Path AA promotion, or
-image-filter DAG work.
+For the active Skia-like real-time renderer target, read
+`.upstream/target/skia-like-realtime-renderer-target.md` and
+`.upstream/specs/skia-like-realtime/README.md` before planning rendering
+feature expansion, Skia GM promotion, real-time runtime, performance tiering,
+PM demos, or release-candidate work.
+
+The completed MEP conformance/performance target and old post-MVP backlogs live
+under `archives/target-closeout-2026-05-31/`. Treat them as historical
+evidence only, not active backlog or acceptance criteria.
 
 For pre-Geometry WGSL paint-pipeline implementation specs, read
 `.upstream/specs/wgsl-pipeline/README.md` before planning PipelineIR, WGSL
@@ -40,6 +45,11 @@ Hard architecture decisions:
 - Keep WebGPU as the GPU backend.
 - Keep `SkRuntimeEffect` as a compatibility facade backed by registered
   Kotlin/WGSL implementations.
+- Use Kadre from `ygdrasil-io/poc-koreos` for live/native windowing work. It
+  is incubating and unpublished, so it may be included as a git submodule.
+- Treat `ygdrasil-io/wgsl4k` as evolving. If parser/IR/generator behavior is
+  ambiguous or surprising, stop the Kanvas assumption and open a `wgsl4k`
+  ticket with minimized evidence instead of adding a hidden workaround.
 - Do not mark rendering support as complete without reference, CPU/GPU
   evidence or explicit refusal, diff/stat artifacts, route diagnostics, and
   stable fallback policy.

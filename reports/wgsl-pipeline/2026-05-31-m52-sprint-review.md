@@ -4,7 +4,7 @@ Date: 2026-05-31
 Status: Closed
 Linear epic: GRA-302
 Tickets: GRA-303 through GRA-308
-Target: `.upstream/target/rendering-conformance-performance-target.md`
+Target: `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
 
 ## Outcome
 
