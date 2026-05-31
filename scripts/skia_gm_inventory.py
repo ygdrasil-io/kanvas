@@ -28,10 +28,17 @@ KOTLIN_ROOT_DEFAULT = Path("skia-integration-tests/src/main/kotlin/org/skia/test
 DASHBOARD_LINKS = {
     "bitmapshader": ["bitmap-shader-repeat-tile", "bitmap-shader-local-matrix"],
     "bitmaprect": ["bitmap-rect-nearest", "bitmap-subset-local-matrix-repeat"],
+    "bitmaprecttest": ["m52-bitmap-rect-test-nearest"],
+    "bitmapimage": ["m52-bitmap-image-basic"],
     "cropimagefilter": ["crop-image-filter-nonnull-prepass", "image-filter-crop-nonnull-prepass-required"],
     "gradients": ["linear-gradient-rect", "gradient-color-filter-linear-kplus"],
+    "fillrectgradient": ["m52-fillrect-gradient-linear"],
+    "hardstopgradients": ["m52-hardstop-gradient-linear"],
     "sweepgradient": ["sweep-gradient-path-clamp"],
+    "aarectmodes": ["m52-aa-rect-modes-tight-aa"],
+    "androidblendmodes": ["m52-android-blend-src-over-screen"],
     "clipdrawdraw": ["draw-paint-full-clip", "draw-paint-clipped-rect"],
+    "clippedbitmapshaders": ["m52-clipped-bitmap-shader-rect"],
     "scaledrects": ["scaled-rects-transform-stack"],
     "runtimecolorfilter": ["runtime-effect-simple"],
     "runtimeshader": ["runtime-effect-simple"],
@@ -39,10 +46,13 @@ DASHBOARD_LINKS = {
     "convexpaths": ["analytic-aa-convex", "path-aa-convexpaths-edge-budget"],
     "strokerect": ["path-aa-stroke-primitive"],
     "strokerects": ["path-aa-stroke-primitive"],
+    "closedcappedhairlines": ["m52-closed-capped-hairlines-edge-budget"],
+    "bigtileimagefilter": ["m52-big-tile-image-filter-dag-refusal"],
     "fontscaler": ["font-latin-outline-drawstring"],
     "textblob": ["font-textblob-positioned-glyph-run"],
     "fontmgr": ["font-kerning-style-fixture"],
     "coloremoji": ["font-emoji-color-glyph-refusal"],
+    "coloremojiblendmodes": ["m52-color-emoji-blendmodes-refusal"],
     "textblobblockreordering": ["font-complex-shaping-refusal"],
 }
 
@@ -521,7 +531,10 @@ def generate(args: argparse.Namespace) -> int:
     upstream_root = Path(args.upstream_root)
     kotlin_root = project_root / args.kotlin_root
     if not upstream_root.is_dir():
-        raise SystemExit(f"Missing upstream GM root: {upstream_root}")
+        print(
+            f"Warning: missing upstream GM root: {upstream_root}; "
+            "generating Kotlin-only inventory for CI/release-gate environments."
+        )
     if not kotlin_root.is_dir():
         raise SystemExit(f"Missing Kotlin GM root: {kotlin_root}")
     dashboard_json = [project_root / item for item in args.dashboard_json]

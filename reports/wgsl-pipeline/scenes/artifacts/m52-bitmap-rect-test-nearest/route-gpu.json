@@ -1,0 +1,10 @@
+{
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md",
+  "contract": "M52 inventory-derived adapter-backed WebGPU route for selected scene subset",
+  "fallbackReason": "none",
+  "inventoryId": "skia-gm-bitmaprecttest",
+  "pipelineKey": "imageRect=strictNearest subset=singleRect source=BitmapRectTestGM",
+  "selectedRoute": "webgpu.image-rect.bitmaprecttest-nearest"
+}
