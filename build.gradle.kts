@@ -566,22 +566,56 @@ tasks.register("pipelineConformanceReport") {
     }
 }
 
+tasks.register("pipelineM52InventoryPromotionPack") {
+    group = "verification"
+    description = "Materializes M52 inventory-derived generated scene rows and artifacts from a declarative contract."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m52_inventory_promotion_pack.py")
+    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json")
+    val sourceArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m52-generated")
+    inputs.file(scriptFile)
+    inputs.file(contractFile)
+    inputs.dir(sourceArtifactDir)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--contract",
+                contractFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineGeneratedSceneExport") {
     group = "verification"
     description = "Materializes generated WGSL scene result artifacts into the dashboard export layout."
 
     val sourceDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes")
     val manifestFile = sourceDir.file("generated/results.json")
+    val m52GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m52-generated")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
+    dependsOn("pipelineM52InventoryPromotionPack")
     inputs.file(manifestFile)
     inputs.dir(sourceDir.dir("generated/artifacts"))
     inputs.dir(sourceDir.dir("artifacts"))
+    inputs.dir(m52GeneratedDir)
     outputs.dir(outputDir)
     outputs.upToDateWhen { false }
 
     doLast {
         val sourceRoot = sourceDir.asFile
         val generatedSourceRoot = sourceRoot.resolve("generated")
+        val m52GeneratedRoot = m52GeneratedDir.get().asFile
         val manifest = manifestFile.asFile
         val targetRoot = outputDir.get().asFile
         val validationErrors = mutableListOf<String>()
@@ -623,6 +657,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         fun generatedArtifactSource(relativePath: String, allowDirectory: Boolean = false): File? {
             val normalized = relativePath.replace('\\', '/')
             return listOf(
+                m52GeneratedRoot.resolve(normalized),
                 generatedSourceRoot.resolve(normalized),
                 sourceRoot.resolve(normalized),
             ).firstOrNull { it.isFile || (allowDirectory && it.isDirectory) }
@@ -636,9 +671,19 @@ tasks.register("pipelineGeneratedSceneExport") {
         }
         val scenes = root["scenes"] as? List<*>
             ?: throw GradleException("Generated scene manifest must contain a `scenes` array: ${manifest.relativeTo(rootDir)}")
+        val m52Manifest = m52GeneratedRoot.resolve("data/m52-generated-scenes.json")
+        val m52Scenes = if (m52Manifest.isFile) {
+            val m52Root = JsonSlurper().parse(m52Manifest) as? Map<*, *>
+                ?: throw GradleException("M52 generated scene manifest root must be a JSON object: ${m52Manifest.relativeTo(rootDir)}")
+            m52Root["scenes"] as? List<*>
+                ?: throw GradleException("M52 generated scene manifest must contain a `scenes` array: ${m52Manifest.relativeTo(rootDir)}")
+        } else {
+            emptyList<Any?>()
+        }
+        val allGeneratedScenes = scenes + m52Scenes
         val normalizedScenes = mutableListOf<Any?>()
 
-        scenes.forEachIndexed { index, rawScene ->
+        allGeneratedScenes.forEachIndexed { index, rawScene ->
             if (rawScene !is Map<*, *>) {
                 validationErrors += "generated.scenes[$index]: generated scene record must be an object"
                 return@forEachIndexed
@@ -709,7 +754,10 @@ tasks.register("pipelineGeneratedSceneExport") {
         val exported = linkedMapOf(
             "schemaVersion" to 1,
             "generatedBy" to "pipelineGeneratedSceneExport",
-            "source" to "reports/wgsl-pipeline/scenes/generated/results.json",
+            "source" to listOf(
+                "reports/wgsl-pipeline/scenes/generated/results.json",
+                "build/reports/wgsl-pipeline-m52-generated/data/m52-generated-scenes.json",
+            ),
             "scenes" to normalizedScenes,
         )
         targetRoot.resolve("data/generated-scenes.json")
@@ -2696,6 +2744,8 @@ tasks.register("pipelineSkiaGmInventory") {
     val scriptFile = layout.projectDirectory.file("scripts/skia_gm_inventory.py")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val upstreamGmDir = file("/Users/chaos/workspace/kanvas-forge/skia-main/gm")
+    val m52GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m52-generated")
+    dependsOn("pipelineM52InventoryPromotionPack")
     inputs.file(scriptFile)
     inputs.dir(layout.projectDirectory.dir("skia-integration-tests/src/main/kotlin/org/skia/tests"))
     if (upstreamGmDir.isDirectory) {
@@ -2704,6 +2754,7 @@ tasks.register("pipelineSkiaGmInventory") {
     inputs.property("upstreamGmDirPresent", upstreamGmDir.isDirectory)
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/data/scenes.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    inputs.file(m52GeneratedDir.map { it.file("data/m52-generated-scenes.json") })
     outputs.dir(outputDir)
     outputs.upToDateWhen { false }
 
@@ -2717,6 +2768,8 @@ tasks.register("pipelineSkiaGmInventory") {
                 rootDir.absolutePath,
                 "--output-dir",
                 outputDir.get().asFile.relativeTo(rootDir).path,
+                "--dashboard-json",
+                m52GeneratedDir.get().file("data/m52-generated-scenes.json").asFile.relativeTo(rootDir).path,
             )
         }.result.get().assertNormalExitValue()
     }
@@ -2909,11 +2962,15 @@ tasks.register("pipelinePmBundle") {
                     (scene["tags"] as? List<*>)?.contains("source.inventory") == true
             }
         val m52PromotedRows = inventoryDerivedScenes.map { scene ->
+            val generation = scene["generation"] as? Map<*, *>
             mapOf(
                 "id" to (scene["id"] as? String).orEmpty(),
                 "inventoryId" to (scene["inventoryId"] as? String).orEmpty(),
                 "status" to (scene["status"] as? String).orEmpty(),
-                "sourceReport" to ((scene["generation"] as? Map<*, *>)?.get("sourceReport") as? String).orEmpty(),
+                "sourceReport" to (generation?.get("sourceReport") as? String).orEmpty(),
+                "derivedFromGeneratedScene" to (generation?.get("derivedFromGeneratedScene") as? String).orEmpty(),
+                "derivationTask" to (generation?.get("derivationTask") as? String).orEmpty(),
+                "derivationContract" to (generation?.get("derivationContract") as? String).orEmpty(),
             )
         }
         val m52RejectedRows = listOf(
@@ -2956,7 +3013,9 @@ tasks.register("pipelinePmBundle") {
             "serveCommand" to serveCommand,
             "dashboardEntry" to "dashboard/index.html",
             "mergedSceneJson" to "dashboard/data/scenes.json",
-            "generatedResultJson" to "reports/wgsl-pipeline/scenes/generated/results.json",
+            "generatedSourceJson" to "reports/wgsl-pipeline/scenes/generated/results.json",
+            "generatedResultJson" to "generated/data/generated-scenes.json",
+            "m52GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json",
             "gateReport" to "gate/scene-dashboard-gate.md",
             "frontQaReport" to "front-qa/front-qa.md",
             "frontQaJson" to "front-qa/front-qa.json",

@@ -23,7 +23,7 @@ generated dashboard row. M52 does not claim broad Skia GM support.
 |---|---|
 | GRA-303 | Selected 10 M51 candidates across paint/blend, bitmap/image, gradients, clip/transform, Path AA, image filters, and text/font boundaries. |
 | GRA-304 | Defined each row's evidence contract in `2026-05-31-m52-inventory-promotion-pack.md`. |
-| GRA-305 | Added generated dashboard rows and canonical artifacts under `reports/wgsl-pipeline/scenes/artifacts/`. |
+| GRA-305 | Added `pipelineM52InventoryPromotionPack`, which verifies each selected base generated dashboard row, carries forward its real generation trace, and materializes M52 dashboard rows plus artifacts under `build/reports/wgsl-pipeline-m52-generated/`. |
 | GRA-306 | Integrated dashboard counters and PM bundle `m52InventoryPromotion` metadata. |
 | GRA-307 | Strengthened gates for inventory-derived rows: `inventoryId`, matching `generation.inventoryId`, `sourceReport`, and `source.generated` are now required. |
 | GRA-308 | Updated sprint review, PM report, README, target, and backlog score sync. |
@@ -60,10 +60,10 @@ generated dashboard row. M52 does not claim broad Skia GM support.
 ## Validation
 
 ```bash
-rtk git diff --check
-rtk ./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate
-rtk ./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate
-rtk ./gradlew --no-daemon pipelinePmBundle
+git diff --check
+./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate
+./gradlew --no-daemon pipelineSceneDashboard pipelineSceneDashboardGate
+./gradlew --no-daemon pipelinePmBundle
 ```
 
 Result: pass.
