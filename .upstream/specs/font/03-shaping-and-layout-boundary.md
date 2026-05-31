@@ -1,7 +1,7 @@
 # Shaping And Layout Boundary
 
 Status: Draft
-Target: `.upstream/target/rendering-conformance-performance-target.md`
+Target: `.upstream/target/skia-like-realtime-renderer-target.md`
 Current implementation: `kanvas-skia/src/main/kotlin/org/skia/foundation/SkShaper.kt`
 
 Legacy JVM-specific shaper code can exist under `cpu-raster/`, but the target

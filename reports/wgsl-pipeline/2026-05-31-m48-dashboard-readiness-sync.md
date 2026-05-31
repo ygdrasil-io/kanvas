@@ -11,7 +11,7 @@ GRA-285 synchronizes PM-facing readiness docs after the M48 scene pack landed.
 The changed docs are:
 
 - `README.md`
-- `.upstream/target/rendering-conformance-performance-target.md`
+- `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
 
 ## Dashboard Counters
 

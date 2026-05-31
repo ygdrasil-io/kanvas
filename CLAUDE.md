@@ -27,11 +27,18 @@ as the target design for the high-performance WGSL/WebGPU pipeline, including
 the shared Kanvas pipeline IR, WGSL parser/IR module builder, CPU scalar/vector
 execution, and GPU generated-shader direction.
 
-For post-MVP rendering conformance and performance planning, use
-[.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
-as the big target and
-[.upstream/target/post-mvp-conformance-backlog.md](.upstream/target/post-mvp-conformance-backlog.md)
-as the M41-M45 backlog entry point.
+For the active Skia-like real-time renderer target, use
+[.upstream/target/skia-like-realtime-renderer-target.md](.upstream/target/skia-like-realtime-renderer-target.md)
+and
+[.upstream/specs/skia-like-realtime/README.md](.upstream/specs/skia-like-realtime/README.md)
+before planning rendering feature expansion, Skia GM promotion, real-time
+runtime, performance tiering, PM demos, or release-candidate work.
+
+The completed MEP conformance/performance target and old post-MVP backlogs live
+under
+[archives/target-closeout-2026-05-31/](archives/target-closeout-2026-05-31/).
+Treat them as historical evidence only, not active backlog or acceptance
+criteria.
 
 For pre-Geometry WGSL paint-pipeline implementation planning, use
 [.upstream/specs/wgsl-pipeline/README.md](.upstream/specs/wgsl-pipeline/README.md)
@@ -61,6 +68,11 @@ Hard architecture decisions:
 - Keep WebGPU as the GPU backend.
 - Keep `SkRuntimeEffect` as a compatibility facade backed by registered
   Kotlin/WGSL implementations.
+- Use Kadre from `ygdrasil-io/poc-koreos` for live/native windowing work. It
+  is incubating and unpublished, so it may be included as a git submodule.
+- Treat `ygdrasil-io/wgsl4k` as evolving. If parser/IR/generator behavior is
+  ambiguous or surprising, stop the Kanvas assumption and open a `wgsl4k`
+  ticket with minimized evidence instead of adding a hidden workaround.
 - Do not mark rendering support as complete without reference, CPU/GPU
   evidence or explicit refusal, diff/stat artifacts, route diagnostics, and
   stable fallback policy.

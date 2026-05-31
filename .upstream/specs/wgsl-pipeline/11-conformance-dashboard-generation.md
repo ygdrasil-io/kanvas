@@ -1,8 +1,9 @@
 # Conformance Dashboard Generation
 
 Status: Draft
-Target: `.upstream/target/rendering-conformance-performance-target.md`
-Milestone: M41 -- Generated Conformance Dashboard
+Target: `.upstream/target/skia-like-realtime-renderer-target.md`
+Historical milestone: M41 -- Generated Conformance Dashboard
+Current role: delivered evidence infrastructure retained by the active target.
 
 ## Purpose
 

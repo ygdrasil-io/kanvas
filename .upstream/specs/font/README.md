@@ -1,8 +1,9 @@
 # Font And Text Specs
 
 Status: Draft
-Target: `.upstream/target/rendering-conformance-performance-target.md`
+Target: `.upstream/target/skia-like-realtime-renderer-target.md`
 Parent target: `.upstream/target/high-performance-wgsl-pipeline-target.md`
+Historical MEP target: `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
 
 This spec pack owns the Kanvas font, text, glyph, and font-rendering target.
 It covers portable font loading, typeface selection, shaping boundaries, glyph
@@ -18,8 +19,10 @@ rendering truth by itself.
 
 ## Source Of Truth
 
-- Rendering conformance target:
-  `.upstream/target/rendering-conformance-performance-target.md`
+- Active rendering target:
+  `.upstream/target/skia-like-realtime-renderer-target.md`
+- Historical MEP conformance target:
+  `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
 - WGSL pipeline target:
   `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - Current portable OpenType scope:
@@ -173,4 +176,4 @@ rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.TextMaskF
 ```
 
 Any promoted font scene must also satisfy the generated evidence rules in
-`.upstream/target/rendering-conformance-performance-target.md`.
+`.upstream/target/skia-like-realtime-renderer-target.md`.

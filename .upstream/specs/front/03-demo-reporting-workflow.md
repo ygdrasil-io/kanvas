@@ -1,7 +1,7 @@
 # Demo And Reporting Workflow
 
 Status: Draft
-Target: `.upstream/target/rendering-conformance-performance-target.md`
+Target: `.upstream/target/skia-like-realtime-renderer-target.md`
 
 ## Purpose
 

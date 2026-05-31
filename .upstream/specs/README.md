@@ -15,13 +15,27 @@ not be treated as active backlog.
 | `geometry-coverage/` | Geometry and coverage work: GeometryPlan, CoveragePlan, lowering rules, CPU coverage oracle, WebGPU coverage strategies, diagnostics, validation, and migration. |
 | `font/` | Font and text work: pure Kotlin OpenType backend, SkFont/SkTypeface/SkFontMgr, shaping boundary, glyph rendering, glyph masks, color fonts, emoji, fixtures, and font conformance gates. |
 | `front/` | Front-facing evidence experience: dashboard UX, filters, artifact browsing, PM reporting workflow, accessibility, and export quality gates. Does not define rendering support. |
-| `release-readiness-mvp.md` | MVP release candidate gate tying M32 image-rect, M33 Path AA, M34 image filters, required CI, inventory classification, and PM evidence together. |
-| `../target/post-mvp-pipeline-backlog.md` | Closed M36-M40 static dashboard and post-MVP pipeline evidence backlog. |
-| `../target/rendering-conformance-performance-target.md` | Big target for the post-MVP rendering conformance and performance platform. |
-| `../target/post-mvp-conformance-backlog.md` | Proposed M41-M45 backlog for generated conformance, adapter-backed captures, measured benchmarks, Path AA promotion, and image-filter DAG subset. |
+| `skia-like-realtime/` | Active post-MEP target: missing rendering features, Skia-like fidelity, real-time runtime, performance tiering, PM demos, and release-candidate planning. |
+| `release-readiness-mvp.md` | Historical MVP release candidate gate tying M32 image-rect, M33 Path AA, M34 image filters, required CI, inventory classification, and PM evidence together. |
 
 Use the pack README as the entry point before planning or reviewing work in
 that area.
+
+## Active Target
+
+| Target | Scope |
+|---|---|
+| `../target/skia-like-realtime-renderer-target.md` | Active M60-M70 ambition: add missing features, converge toward Skia CPU output, and deliver a real-time renderer with PM-visible demos. |
+| `../target/high-performance-wgsl-pipeline-target.md` | Parent architecture for PipelineIR, WGSL parser/generator, CPU/GPU convergence, and runtime-effect constraints. |
+
+## Historical Target Archive
+
+| Archive | Historical scope |
+|---|---|
+| `../../archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md` | Completed MEP conformance/performance target, closed at 100% after M59. |
+| `../../archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md` | Closed M41-M45 generated conformance, adapter-backed capture, benchmark, Path AA, and image-filter DAG backlog seed. |
+| `../../archives/target-closeout-2026-05-31/post-mvp-pipeline-backlog.md` | Closed M36-M40 static dashboard and post-MVP pipeline evidence backlog. |
+| `../../archives/target-closeout-2026-05-31/task-prompt-m0-m11.md` | Historical generic executor prompt for the old milestone range. |
 
 ## MVP Tail Specs
 
