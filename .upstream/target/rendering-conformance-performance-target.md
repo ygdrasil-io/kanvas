@@ -37,23 +37,26 @@ The platform must answer five questions for every promoted scene:
 
 ## PM Readiness
 
-Current Post-MVP Big Target readiness for MEP: 35%.
+Current Post-MVP Big Target readiness for MEP: 40%.
 
 This is a PM readiness score for the full target, not an effort estimate and not
 the completion state of the latest Linear sprint. M41-M47 completed the evidence
-foundation, but the platform is not yet MEP-ready because coverage, CI gates,
-performance trends, and repeatable PM demo/reporting still need dedicated work.
+foundation. M48 expanded representative Skia integration breadth enough to move
+coverage readiness from 15% to 35%, but the platform is not yet MEP-ready
+because CI gates, performance trends, broader adapter-backed coverage, and
+repeatable PM demo/reporting still need dedicated work.
 
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
-| Evidence foundation | 25% | M41-M47 complete: generated dashboard, 11 generated rows, 0 tracked-gap, 0 fail. | 100% |
-| Skia integration coverage | 25% | Selected scenes exist, but the set is still narrow and not representative enough for MEP. | 15% |
+| Evidence foundation | 25% | M41-M48 complete: generated dashboard, 21 generated rows, 0 tracked-gap, 0 fail. | 100% |
+| Skia integration coverage | 25% | M48 adds 10 selected rows across paint, clip, transform, bitmap, gradient, Path AA, and image-filter breadth while keeping unsupported scope explicit. | 35% |
 | CI and release gates | 20% | Dashboard generation is validated; release-grade promotion and inventory gates are not complete. | 10% |
 | Performance readiness | 15% | Measured payloads exist, but trends remain reporting-only and thresholds are not release gates. | 15% |
 | PM demo and reporting workflow | 15% | Static local dashboard exists; deployable/repeatable PM workflow is still missing. | 15% |
 
-The resulting weighted readiness rounds to 35%. Evidence-hardening through M47
-is 100% complete, but that is only one part of the larger MEP target.
+The resulting weighted readiness rounds to 40%. Evidence-hardening through M47
+is 100% complete, and M48 coverage expansion is complete for its selected scene
+pack. These are still only parts of the larger MEP target.
 
 Before MEP, Kanvas still needs:
 
@@ -123,6 +126,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | M45 | Image-Filter DAG Subset V1 | A bounded image-filter DAG subset renders through explicit pre-pass/layer contracts and dashboard evidence. |
 | M46 | Generated Evidence Expansion | Convert the next high-value static dashboard rows to generated evidence while keeping zero tracked gaps and zero failing support claims. |
 | M47 | Remaining Static Evidence Hardening | Convert remaining static pass rows to generated evidence and keep Path AA expected-unsupported rows explicit as policy evidence. |
+| M48 | MEP Scene Coverage Expansion | Add representative P0/P1 Skia scene breadth across paint, clip, transform, bitmap, gradient, Path AA, and image-filter planning rows. |
 
 ## Current Baseline
 
@@ -144,28 +148,40 @@ The two current `tracked-gap` P0 rows are:
 Both have route evidence but are missing adapter-backed GPU render captures in
 the current dashboard evidence.
 
-After M47, the merged dashboard export has:
+After M48, the merged dashboard export has:
 
-- 13 scene rows;
-- 11 pass;
+- 23 scene rows;
+- 18 pass;
 - 0 tracked-gap;
-- 2 expected-unsupported;
+- 5 expected-unsupported;
 - 0 fail;
-- 11 generated evidence rows;
+- 21 generated evidence rows;
 - 2 static evidence rows;
 - 2 adapter-backed P0 rows;
 - tag aggregates for `feature.*`, `maturity.*`, and `risk.*`.
 
-M47 closed on 2026-05-31 by
-`reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md`.
-The remaining static rows are deliberate Path AA policy sentinels, not unowned
-conversion debt.
+M48 support and refusal evidence is linked from:
 
-The two remaining expected unsupported rows are:
+- `reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md`;
+- `reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md`;
+- `reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md`;
+- `reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md`;
+- `reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md`.
+
+The two static rows remain deliberate Path AA policy sentinels, not unowned
+conversion debt. M48 adds three generated expected-unsupported breadth rows so
+future planning sees the high-value unsupported surface area instead of hiding
+it.
+
+The current expected unsupported rows are:
 
 - `path-aa-stroke-outline-fallback` with
   `coverage.stroke-outline-edge-count-exceeded`;
 - `path-aa-edge-budget-boundary` with `coverage.edge-count-exceeded`.
+- `path-aa-convexpaths-edge-budget` with `coverage.edge-count-exceeded`;
+- `path-aa-dashing-edge-budget` with `coverage.edge-count-exceeded`;
+- `image-filter-crop-nonnull-prepass-required` with
+  `image-filter.crop-input-nonnull-prepass-required`.
 
 ## Agent Execution Policy
 
