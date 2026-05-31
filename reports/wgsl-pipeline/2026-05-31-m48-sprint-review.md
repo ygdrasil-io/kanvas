@@ -39,7 +39,7 @@ AA or arbitrary image-filter support overclaim.
 | GRA-283 | Added 3 generated bitmap and gradient support rows. | #1261 | `1c7e4678d2ec249a67dc367948929d94f0e4f58c` | `reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md` |
 | GRA-284 | Added 3 expected-unsupported Path AA/image-filter breadth rows. | #1262 | `02ffeeb82cf9abb4ad10f4eed9d1483a2f41038c` | `reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md` |
 | GRA-285 | Synced PM readiness docs and moved Big Target readiness from 35% to 40%. | #1263 | `73dc0f54e6b657f133d5487cba173ff0d6aa53ee` | `reports/wgsl-pipeline/2026-05-31-m48-dashboard-readiness-sync.md` |
-| GRA-286 | Closed M48 with this sprint review and M49 recommendation. | This PR | TBD | `reports/wgsl-pipeline/2026-05-31-m48-sprint-review.md` |
+| GRA-286 | Closed M48 with this sprint review and M49 recommendation. | #1264 | `f68453d344fef9594edfb47c4ec52e24fbcaa94a` | `reports/wgsl-pipeline/2026-05-31-m48-sprint-review.md` |
 
 ## New Scenes By Family
 

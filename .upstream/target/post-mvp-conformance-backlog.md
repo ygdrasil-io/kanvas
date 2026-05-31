@@ -36,6 +36,8 @@ Current M40 dashboard state:
 | M44 First Real Path AA Family Promotion | Promote one narrow Path AA family to rendered support. | One selected family has CPU/GPU/reference artifacts, route diagnostics, passing thresholds, and reduced expected-unsupported inventory without weakening fallback diagnostics. |
 | M45 Image-Filter DAG Subset V1 | Extend image-filter support beyond the selected M38 pre-pass. | A bounded multi-node or multi-family image-filter subset renders through explicit pre-pass/layer contracts with dashboard evidence and stable out-of-scope diagnostics. |
 | M46 Generated Evidence Expansion | Convert high-value static pass rows to generated evidence. | At least five additional dashboard rows are generated from test/report outputs, merged export remains 0 tracked-gap / 0 fail, and remaining static rows are explicitly listed with owners. |
+| M47 Remaining Static Evidence Hardening | Convert remaining static pass rows and keep Path AA policy rows visible. | Remaining static pass rows are generated evidence, expected-unsupported Path AA rows remain explicit policy sentinels, and the merged export remains 0 tracked-gap / 0 fail. |
+| M48 Skia Scene Coverage Expansion | Expand from clean dashboard evidence to a representative MEP scene pack. | Add 8-12 selected P0/P1 rows across multiple Skia-relevant families, keep unsupported breadth explicit, and update PM readiness without introducing tracked gaps or failing support claims. |
 
 ## M41 Seed Tickets
 
@@ -269,3 +271,29 @@ Final counters: 13 rows, 11 pass, 0 tracked-gap, 2 expected-unsupported, 0
 fail, 11 generated-evidence rows, and 2 static-evidence rows. Remaining static
 rows are `path-aa-stroke-outline-fallback` and `path-aa-edge-budget-boundary`;
 both are intentional Path AA policy sentinels with stable fallback reasons.
+
+## M48 Closeout
+
+M48 closed on 2026-05-31 by
+`reports/wgsl-pipeline/2026-05-31-m48-sprint-review.md`.
+Final counters: 23 rows, 18 pass, 0 tracked-gap, 5 expected-unsupported, 0
+fail, 21 generated-evidence rows, and 2 static-evidence rows.
+
+M48 added 10 selected P0/P1 rows:
+
+- 7 generated support rows across paint, clip, transform, bitmap, gradient,
+  blend, and Path AA-adjacent coverage;
+- 3 generated expected-unsupported breadth rows for hard Path AA and
+  image-filter planning boundaries.
+
+The Post-MVP Big Target readiness moved from 35% to 40%. The Skia integration
+coverage sub-score moved from 15% to 35% because M48 broadened representative
+scene evidence while preserving 0 tracked-gap and 0 fail. The score does not
+move higher because CI/release gates, performance thresholds, broader
+adapter-backed coverage, text/font/codec coverage, and deployable PM reporting
+remain outside M48.
+
+Recommended next milestone: M49 should focus on CI and release gates for the
+generated scene dashboard, including required invariants, CI-friendly validation,
+portable PM artifact bundles, release readiness checklist, and performance gate
+design.

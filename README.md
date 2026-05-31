@@ -208,11 +208,14 @@ Closed post-MVP milestones:
   breadth rows;
 - M48/GRA-285: synced PM dashboard counters and readiness after the M48 scene
   pack landed.
+- M48/GRA-286: closed the sprint with 23 rows, 21 generated rows, 0 tracked-gap,
+  0 fail, and an M49 recommendation for CI/release gates.
 
 Sprint reviews:
 [reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md](reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md)
 [reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md)
 [reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md)
+[reports/wgsl-pipeline/2026-05-31-m48-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m48-sprint-review.md)
 
 M46 closeout:
 [reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md](reports/wgsl-pipeline/2026-05-30-m46-generated-evidence-expansion-closeout.md)
