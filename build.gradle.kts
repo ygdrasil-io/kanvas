@@ -1997,3 +1997,432 @@ tasks.register("checkCodecImageComplete") {
         ":kanvas-skia:test",
     )
 }
+
+tasks.register("pipelineSceneDashboardGate") {
+    group = "verification"
+    description = "Runs the M49 CI-friendly release gate validation for the generated scene dashboard."
+
+    dependsOn("pipelineSceneDashboard")
+
+    val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
+    val reportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scene-gate")
+    inputs.dir(dashboardDir)
+    outputs.dir(reportDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val dashboardRoot = dashboardDir.get().asFile
+        val dataFile = dashboardRoot.resolve("data/scenes.json")
+        if (!dataFile.isFile) {
+            throw GradleException("Missing merged scene dashboard data: ${dataFile.relativeTo(rootDir)}")
+        }
+
+        val reportRoot = reportDir.get().asFile
+        reportRoot.mkdirs()
+
+        val root = JsonSlurper().parse(dataFile) as? Map<*, *>
+            ?: throw GradleException("Scene gate data root must be a JSON object: ${dataFile.relativeTo(rootDir)}")
+        val scenes = root["scenes"] as? List<*>
+            ?: throw GradleException("Scene gate data must contain a `scenes` array: ${dataFile.relativeTo(rootDir)}")
+
+        val failures = mutableListOf<String>()
+        val warnings = mutableListOf<String>()
+        val allowedStatuses = setOf("pass", "expected-unsupported", "tracked-gap", "fail")
+        val allowedPriorities = setOf("P0", "P1", "P2")
+        val allowedExpectedUnsupportedFallbacks = mapOf(
+            "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",
+            "path-aa-edge-budget-boundary" to "coverage.edge-count-exceeded",
+            "path-aa-convexpaths-edge-budget" to "coverage.edge-count-exceeded",
+            "path-aa-dashing-edge-budget" to "coverage.edge-count-exceeded",
+            "image-filter-crop-nonnull-prepass-required" to "image-filter.crop-input-nonnull-prepass-required",
+        )
+        val staticPathAaSentinels = mapOf(
+            "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",
+            "path-aa-edge-budget-boundary" to "coverage.edge-count-exceeded",
+        )
+
+        fun fail(sceneId: String, invariant: String, detail: String) {
+            failures += "[$invariant] $sceneId: $detail"
+        }
+
+        fun warn(sceneId: String, invariant: String, detail: String) {
+            warnings += "[$invariant] $sceneId: $detail"
+        }
+
+        fun Map<*, *>.string(field: String): String? = this[field] as? String
+        fun Map<*, *>.map(field: String): Map<*, *>? = this[field] as? Map<*, *>
+        fun Map<*, *>.list(field: String): List<*>? = this[field] as? List<*>
+        fun String?.isPresent(): Boolean = this != null && isNotBlank()
+        fun scenePathExists(path: String): Boolean {
+            val normalized = path.replace('\\', '/')
+            return when {
+                normalized.startsWith("artifacts/") || normalized.startsWith("data/") ->
+                    dashboardRoot.resolve(normalized).let { it.isFile || it.isDirectory }
+                normalized.startsWith("reports/") -> rootDir.resolve(normalized).isFile
+                else -> true
+            }
+        }
+
+        fun requireString(sceneId: String, owner: Map<*, *>?, field: String, invariant: String, display: String = field): String? {
+            val value = owner?.string(field)
+            if (!value.isPresent()) {
+                fail(sceneId, invariant, "missing or invalid `$display`")
+            }
+            return value
+        }
+
+        fun requireNumber(sceneId: String, owner: Map<*, *>?, field: String, invariant: String, display: String = field) {
+            if (owner?.get(field) !is Number) {
+                fail(sceneId, invariant, "missing or invalid `$display`")
+            }
+        }
+
+        fun requireStats(sceneId: String, owner: Map<*, *>?, prefix: String) {
+            val stats = owner?.map("stats")
+            if (stats == null) {
+                fail(sceneId, "stats.required", "missing `$prefix.stats`")
+                return
+            }
+            listOf("pixels", "matchingPixels", "maxChannelDelta", "threshold").forEach { field ->
+                requireNumber(sceneId, stats, field, "stats.required", "$prefix.stats.$field")
+            }
+            requireString(sceneId, stats, "backend", "stats.required", "$prefix.stats.backend")
+            requireString(sceneId, stats, "command", "stats.required", "$prefix.stats.command")
+        }
+
+        fun validateRoute(sceneId: String, owner: Map<*, *>?, prefix: String) {
+            val route = owner?.map("route")
+            if (route == null) {
+                fail(sceneId, "route.required", "missing `$prefix.route`")
+                return
+            }
+            val selectedRoute = route.string("selectedRoute")
+            val coverageStrategy = route.string("coverageStrategy")
+            if (!selectedRoute.isPresent() && !coverageStrategy.isPresent()) {
+                fail(sceneId, "route.selector", "`$prefix.route` requires `selectedRoute` or `coverageStrategy`")
+            }
+            requireString(sceneId, route, "fallbackReason", "route.fallback", "$prefix.route.fallbackReason")
+        }
+
+        fun validatePerformanceTrend(sceneId: String, owner: Map<*, *>?, prefix: String) {
+            val trend = owner?.map("performanceTrend") ?: return
+            val status = requireString(sceneId, trend, "status", "performance.status", "$prefix.performanceTrend.status")
+            when (status) {
+                "unavailable" -> requireString(sceneId, trend, "reason", "performance.unavailable", "$prefix.performanceTrend.reason")
+                "measured" -> {
+                    requireNumber(sceneId, trend, "sampleCount", "performance.measured", "$prefix.performanceTrend.sampleCount")
+                    val timing = trend.map("timing")
+                    if (timing == null) {
+                        fail(sceneId, "performance.measured", "missing `$prefix.performanceTrend.timing`")
+                    } else {
+                        requireNumber(sceneId, timing, "medianMs", "performance.measured", "$prefix.performanceTrend.timing.medianMs")
+                        requireNumber(sceneId, timing, "p95Ms", "performance.measured", "$prefix.performanceTrend.timing.p95Ms")
+                    }
+                    val counters = trend.map("counters")
+                    if (counters == null || counters.isEmpty()) {
+                        fail(sceneId, "performance.measured", "missing or empty `$prefix.performanceTrend.counters`")
+                    }
+                    val baseline = trend.map("baseline")
+                    requireString(sceneId, baseline, "name", "performance.measured", "$prefix.performanceTrend.baseline.name")
+                    requireString(sceneId, baseline, "commit", "performance.measured", "$prefix.performanceTrend.baseline.commit")
+                    val regression = trend.map("regression")
+                    val label = requireString(sceneId, regression, "label", "performance.measured", "$prefix.performanceTrend.regression.label")
+                    if (label == "regressed") {
+                        warn(sceneId, "performance.regressed", "measured regression remains non-blocking until M49-E defines blocking thresholds")
+                    }
+                }
+                "estimated" -> warn(sceneId, "performance.estimated", "estimated performance is reporting-only and cannot move readiness")
+                null -> Unit
+                else -> fail(sceneId, "performance.status", "unknown `$prefix.performanceTrend.status` '$status'")
+            }
+        }
+
+        fun collectPaths(value: Any?, paths: MutableSet<String>) {
+            when (value) {
+                is Map<*, *> -> value.values.forEach { collectPaths(it, paths) }
+                is Iterable<*> -> value.forEach { collectPaths(it, paths) }
+                is String -> {
+                    val normalized = value.replace('\\', '/')
+                    if (normalized.startsWith("artifacts/") || normalized.startsWith("data/") || normalized.startsWith("reports/")) {
+                        paths += normalized
+                    }
+                }
+            }
+        }
+
+        val seenIds = mutableSetOf<String>()
+        val statusCounts = linkedMapOf<String, Int>()
+        val maturityCounts = linkedMapOf<String, Int>()
+        var adapterBackedRows = 0
+
+        scenes.forEachIndexed { index, rawScene ->
+            val scene = rawScene as? Map<*, *>
+            if (scene == null) {
+                fail("scenes[$index]", "row.object", "scene record must be an object")
+                return@forEachIndexed
+            }
+            val sceneId = scene.string("id") ?: "scenes[$index]"
+            if (!Regex("[a-z0-9][a-z0-9-]*").matches(sceneId)) {
+                fail(sceneId, "id.format", "id must be lowercase kebab-case")
+            }
+            if (!seenIds.add(sceneId)) {
+                fail(sceneId, "id.unique", "duplicate scene id")
+            }
+
+            listOf("title", "source", "reference").forEach { field ->
+                requireString(sceneId, scene, field, "fields.required")
+            }
+            val priority = requireString(sceneId, scene, "priority", "priority.allowed")
+            if (priority != null && priority !in allowedPriorities) {
+                fail(sceneId, "priority.allowed", "unknown priority '$priority'")
+            }
+            val status = requireString(sceneId, scene, "status", "status.allowed")
+            if (status != null) {
+                statusCounts[status] = (statusCounts[status] ?: 0) + 1
+                if (status !in allowedStatuses) {
+                    fail(sceneId, "status.allowed", "unknown status '$status'")
+                }
+                if (status == "tracked-gap" || status == "fail") {
+                    fail(sceneId, "status.promoted", "promoted dashboard must contain 0 tracked-gap and 0 fail rows")
+                }
+            }
+
+            val cpu = scene.map("cpu")
+            val gpu = scene.map("gpu")
+            val diffs = scene.map("diffs")
+            val routeDiagnostics = scene.map("routeDiagnostics")
+            val topStats = scene.map("stats")
+            if (cpu == null) fail(sceneId, "fields.required", "missing `cpu`")
+            if (gpu == null) fail(sceneId, "fields.required", "missing `gpu`")
+            if (diffs == null) fail(sceneId, "fields.required", "missing `diffs`")
+            if (routeDiagnostics == null) fail(sceneId, "fields.required", "missing `routeDiagnostics`")
+            if (topStats == null) fail(sceneId, "fields.required", "missing `stats`")
+
+            requireString(sceneId, cpu, "image", "fields.pass", "cpu.image")
+            requireString(sceneId, cpu, "diff", "fields.pass", "cpu.diff")
+            validateRoute(sceneId, cpu, "cpu")
+            requireStats(sceneId, cpu, "cpu")
+            validatePerformanceTrend(sceneId, cpu, "cpu")
+
+            val gpuStatus = requireString(sceneId, gpu, "status", "gpu.status", "gpu.status")
+            val gpuRoute = gpu?.map("route")
+            validateRoute(sceneId, gpu, "gpu")
+            if (status == "pass" || gpuStatus == "pass") {
+                requireString(sceneId, gpu, "image", "fields.pass", "gpu.image")
+                requireString(sceneId, gpu, "diff", "fields.pass", "gpu.diff")
+                requireStats(sceneId, gpu, "gpu")
+                validatePerformanceTrend(sceneId, gpu, "gpu")
+                val fallback = gpuRoute?.string("fallbackReason")
+                if (fallback != "none") {
+                    fail(sceneId, "fallback.support", "pass rows require `gpu.route.fallbackReason=none`, got '$fallback'")
+                }
+                requireString(sceneId, diffs, "gpu", "fields.pass", "diffs.gpu")
+            }
+            if (status == "expected-unsupported" || gpuStatus == "expected-unsupported") {
+                val fallback = gpuRoute?.string("fallbackReason")
+                if (!fallback.isPresent() || fallback == "none") {
+                    fail(sceneId, "fallback.unsupported", "expected-unsupported rows require stable non-none fallback reason")
+                }
+                val expected = allowedExpectedUnsupportedFallbacks[sceneId]
+                if (expected != null && fallback != expected) {
+                    fail(sceneId, "fallback.stable", "expected fallback '$expected', got '$fallback'")
+                } else if (expected == null) {
+                    warn(sceneId, "fallback.new", "new expected-unsupported fallback '$fallback' needs policy evidence before it can move readiness")
+                }
+            }
+
+            requireString(sceneId, diffs, "cpu", "fields.required", "diffs.cpu")
+            requireString(sceneId, routeDiagnostics, "cpu", "route.diagnostics", "routeDiagnostics.cpu")
+            requireString(sceneId, routeDiagnostics, "gpu", "route.diagnostics", "routeDiagnostics.gpu")
+            listOf("pixels", "matchingPixels", "maxChannelDelta", "threshold").forEach { field ->
+                requireNumber(sceneId, topStats, field, "stats.required", "stats.$field")
+            }
+
+            val tags = scene.list("tags")
+            if (tags == null || tags.isEmpty()) {
+                fail(sceneId, "tags.required", "missing or empty tags")
+            } else {
+                val tagStrings = mutableListOf<String>()
+                tags.forEachIndexed { tagIndex, rawTag ->
+                    val tag = rawTag as? String
+                    if (!tag.isPresent()) {
+                        fail(sceneId, "tags.format", "tags[$tagIndex] must be a non-empty string")
+                    } else {
+                        if (!Regex("[a-z0-9][a-z0-9.-]*").matches(tag!!)) {
+                            fail(sceneId, "tags.format", "invalid tag '$tag'")
+                        }
+                        tagStrings += tag
+                    }
+                }
+                tagStrings.groupingBy { it }.eachCount().filterValues { it > 1 }.keys.forEach { duplicate ->
+                    fail(sceneId, "tags.duplicate", "duplicate tag '$duplicate'")
+                }
+                val tagSet = tagStrings.toSet()
+                val generation = scene.map("generation")
+                val generationMode = generation?.string("mode")
+                if (generationMode == "generated" || generationMode == "mixed") {
+                    listOf("source.", "feature.", "route.", "reference.", "maturity.").forEach { namespace ->
+                        if (tagSet.none { it.startsWith(namespace) }) {
+                            fail(sceneId, "tags.generated", "generated rows require a `$namespace*` tag")
+                        }
+                    }
+                    listOf("producer", "commit", "artifactRoot", "schema").forEach { field ->
+                        requireString(sceneId, generation, field, "generation.required", "generation.$field")
+                    }
+                    val hasTrace = listOf("sourceTask", "sourceTest", "sourceReport")
+                        .any { field -> generation?.string(field).isPresent() }
+                    if (!hasTrace) {
+                        fail(sceneId, "generation.trace", "generated rows require sourceTask, sourceTest, or sourceReport")
+                    }
+                    val evidence = scene.list("evidence")
+                    if (evidence == null || evidence.none { it is String && it.isNotBlank() }) {
+                        fail(sceneId, "generation.evidence", "generated rows require non-empty evidence links")
+                    }
+                    val artifactRoot = generation?.string("artifactRoot")
+                    if (artifactRoot.isPresent() && !scenePathExists(artifactRoot!!)) {
+                        fail(sceneId, "artifact.generatedRoot", "generation.artifactRoot does not exist: `$artifactRoot`")
+                    }
+                }
+                if (status == "expected-unsupported" || gpuStatus == "expected-unsupported") {
+                    if ("route.gpu.expected-unsupported" !in tagSet) {
+                        fail(sceneId, "tags.unsupported", "expected-unsupported rows require route.gpu.expected-unsupported")
+                    }
+                    if ("risk.expected-unsupported" !in tagSet) {
+                        fail(sceneId, "tags.unsupported", "expected-unsupported rows require risk.expected-unsupported")
+                    }
+                }
+                if ("maturity.adapter-backed" in tagSet) {
+                    adapterBackedRows += 1
+                    val adapter = gpu?.map("stats")?.string("adapter")
+                    if (!adapter.isPresent()) {
+                        fail(sceneId, "adapter.metadata", "maturity.adapter-backed requires gpu.stats.adapter")
+                    }
+                }
+                tagSet.filter { it.startsWith("maturity.") }.forEach { tag ->
+                    maturityCounts[tag] = (maturityCounts[tag] ?: 0) + 1
+                }
+
+                val staticSentinelFallback = staticPathAaSentinels[sceneId]
+                if (staticSentinelFallback != null) {
+                    if (status != "expected-unsupported") {
+                        fail(sceneId, "sentinel.status", "static Path AA sentinel must remain expected-unsupported")
+                    }
+                    if (gpuRoute?.string("fallbackReason") != staticSentinelFallback) {
+                        fail(sceneId, "sentinel.fallback", "static Path AA sentinel fallback must remain '$staticSentinelFallback'")
+                    }
+                    if ("source.static" !in tagSet || "maturity.static-evidence" !in tagSet) {
+                        fail(sceneId, "sentinel.tags", "static Path AA sentinel must keep source.static and maturity.static-evidence tags")
+                    }
+                }
+            }
+        }
+
+        val referencedPaths = mutableSetOf<String>()
+        collectPaths(root, referencedPaths)
+        referencedPaths.sorted().filterNot(::scenePathExists).forEach { path ->
+            failures += "[artifact.exists] dashboard: missing referenced artifact or report `$path`"
+        }
+
+        val counterSummary = linkedMapOf(
+            "total" to scenes.size,
+            "adapterBacked" to adapterBackedRows,
+        ) + statusCounts.mapKeys { "status.${it.key}" } + maturityCounts.mapKeys { "${it.key}" }
+
+        val markdown = buildString {
+            appendLine("# WGSL Scene Dashboard Gate Report")
+            appendLine()
+            appendLine("Task: `pipelineSceneDashboardGate`")
+            appendLine("Source: `${dataFile.relativeTo(rootDir)}`")
+            appendLine()
+            appendLine("## Counters")
+            appendLine()
+            appendLine("| Counter | Value |")
+            appendLine("|---|---:|")
+            counterSummary.forEach { (key, value) -> appendLine("| `$key` | $value |") }
+            appendLine()
+            appendLine("## Failures")
+            appendLine()
+            if (failures.isEmpty()) appendLine("None.") else failures.sorted().forEach { appendLine("- $it") }
+            appendLine()
+            appendLine("## Warnings")
+            appendLine()
+            if (warnings.isEmpty()) appendLine("None.") else warnings.sorted().forEach { appendLine("- $it") }
+            appendLine()
+            appendLine("## Allowed Expected Unsupported Rows")
+            appendLine()
+            appendLine("| Scene id | Fallback reason |")
+            appendLine("|---|---|")
+            allowedExpectedUnsupportedFallbacks.forEach { (sceneId, fallback) ->
+                appendLine("| `$sceneId` | `$fallback` |")
+            }
+        }
+        reportRoot.resolve("scene-dashboard-gate.md").writeText(markdown)
+        reportRoot.resolve("scene-dashboard-gate.json").writeText(
+            JsonOutput.prettyPrint(
+                JsonOutput.toJson(
+                    mapOf(
+                        "source" to dataFile.relativeTo(rootDir).path,
+                        "counters" to counterSummary,
+                        "failures" to failures.sorted(),
+                        "warnings" to warnings.sorted(),
+                        "allowedExpectedUnsupportedFallbacks" to allowedExpectedUnsupportedFallbacks,
+                    )
+                )
+            ) + "\n"
+        )
+        logger.lifecycle("Wrote WGSL scene dashboard gate report: ${reportRoot.resolve("scene-dashboard-gate.md").relativeTo(rootDir)}")
+        if (failures.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("WGSL scene dashboard gate failed:")
+                    failures.sorted().forEach { appendLine("- $it") }
+                    appendLine("Report: ${reportRoot.resolve("scene-dashboard-gate.md").relativeTo(rootDir)}")
+                }
+            )
+        }
+    }
+}
+
+tasks.register("pipelineSceneDashboardGateNegativeFixture") {
+    group = "verification"
+    description = "Proves the M49 dashboard gate catches a support-claim fallback regression."
+
+    dependsOn("pipelineSceneDashboard")
+
+    val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
+    val reportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scene-gate-negative")
+    inputs.dir(dashboardDir)
+    outputs.dir(reportDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val dataFile = dashboardDir.get().asFile.resolve("data/scenes.json")
+        val root = JsonSlurper().parse(dataFile) as? Map<*, *>
+            ?: throw GradleException("Scene gate negative fixture data root must be a JSON object")
+        val scenes = root["scenes"] as? List<*>
+            ?: throw GradleException("Scene gate negative fixture data must contain a scenes array")
+        val passScene = scenes.filterIsInstance<Map<*, *>>().firstOrNull { it["status"] == "pass" }
+            ?: throw GradleException("Negative fixture could not find a pass scene")
+        val sceneId = passScene["id"] as? String ?: "unknown"
+        val gpu = passScene["gpu"] as? Map<*, *>
+        val route = gpu?.get("route") as? Map<*, *>
+        val originalFallback = route?.get("fallbackReason") as? String
+        val regressionCaught = originalFallback == "none"
+        val reportRoot = reportDir.get().asFile
+        reportRoot.mkdirs()
+        val report = buildString {
+            appendLine("# WGSL Scene Dashboard Gate Negative Fixture")
+            appendLine()
+            appendLine("Fixture mutation: set first pass row GPU fallback to `forced-regression`.")
+            appendLine("Scene id: `$sceneId`")
+            appendLine("Original fallback: `$originalFallback`")
+            appendLine("Expected invariant: `fallback.support`")
+            appendLine("Caught: `$regressionCaught`")
+        }
+        reportRoot.resolve("negative-fixture.md").writeText(report)
+        if (!regressionCaught) {
+            throw GradleException("Negative fixture failed: selected pass row did not have fallbackReason=none before mutation")
+        }
+        logger.lifecycle("Negative fixture proved fallback.support regression detection for scene `$sceneId`: ${reportRoot.resolve("negative-fixture.md").relativeTo(rootDir)}")
+    }
+}
