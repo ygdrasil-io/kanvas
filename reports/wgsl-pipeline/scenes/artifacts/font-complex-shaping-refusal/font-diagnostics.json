@@ -1,0 +1,12 @@
+{
+  "fontSource": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Italic.ttf",
+  "textInput": "SHAPE",
+  "shapingMode": "complex-shaping",
+  "glyphCount": 5,
+  "glyphRepresentation": "unsupported",
+  "cpuRoute": "cpu.text.refusal-oracle.complex-shaping",
+  "gpuRoute": "webgpu.text.refuse",
+  "referenceKind": "cpu-oracle",
+  "unsupported": true,
+  "fallbackReason": "font.complex-shaping-requires-explicit-shaper"
+}

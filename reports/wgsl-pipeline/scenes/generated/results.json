@@ -26,7 +26,7 @@
         "status": "pass",
         "image": "artifacts/bitmap-shader-repeat-tile/cpu.png",
         "diff": "artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "selectedRoute": "cpu.shader.bitmap.repeat-tile-oracle",
           "fallbackReason": "none"
@@ -44,12 +44,15 @@
         "status": "pass",
         "image": "artifacts/bitmap-shader-repeat-tile/gpu.png",
         "diff": "artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect",
           "selectedRoute": "webgpu.shader.bitmap.repeat-tile",
           "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat localMatrix=identity state=[blendMode=kSrcOver]",
-          "fallbackReason": "none"
+          "fallbackReason": "none",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
         },
         "stats": {
           "pixels": 4096,
@@ -57,7 +60,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.95,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderPaintRectTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderPaintRectTest",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterCapture": "m50-adapter-backed-v2"
         }
       },
       "diffs": {
@@ -81,7 +87,8 @@
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BitmapShaderPaintRectTest.kt",
         "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
         "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json"
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json",
+        "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
       ],
       "tags": [
         "source.generated",
@@ -91,7 +98,8 @@
         "route.gpu.webgpu",
         "reference.test-oracle",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ]
     },
     {
@@ -117,7 +125,7 @@
         "status": "pass",
         "image": "artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
         "diff": "artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "selectedRoute": "cpu.shader.bitmap.subset-local-matrix-repeat",
           "fallbackReason": "none"
@@ -135,12 +143,15 @@
         "status": "pass",
         "image": "artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
         "diff": "artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect",
           "selectedRoute": "webgpu.shader.bitmap.subset-local-matrix-repeat",
           "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat subset=true localMatrix=scaleRotate state=[blendMode=kSrcOver]",
-          "fallbackReason": "none"
+          "fallbackReason": "none",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
         },
         "stats": {
           "pixels": 65536,
@@ -148,7 +159,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.94,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterCapture": "m50-adapter-backed-v2"
         }
       },
       "diffs": {
@@ -172,7 +186,8 @@
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/BitmapSubsetShaderCrossBackendTest.kt",
         "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
         "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json",
+        "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
       ],
       "tags": [
         "source.generated",
@@ -183,7 +198,8 @@
         "route.gpu.webgpu",
         "reference.skia-upstream",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ]
     },
     {
@@ -209,7 +225,7 @@
         "status": "pass",
         "image": "artifacts/sweep-gradient-path-clamp/cpu.png",
         "diff": "artifacts/sweep-gradient-path-clamp/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "selectedRoute": "cpu.shader.sweep-gradient.path-aa-oracle",
           "fallbackReason": "none"
@@ -227,12 +243,15 @@
         "status": "pass",
         "image": "artifacts/sweep-gradient-path-clamp/gpu.png",
         "diff": "artifacts/sweep-gradient-path-clamp/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.path-convex-fan",
           "selectedRoute": "webgpu.generated.sweep-gradient.path-aa",
           "pipelineKey": "shaderFamily=sweepGradient tile=kClamp coverage=pathConvexFan shape=circle state=[blendMode=kSrcOver]",
-          "fallbackReason": "none"
+          "fallbackReason": "none",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
         },
         "stats": {
           "pixels": 4096,
@@ -240,7 +259,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.95,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.SweepGradientPathTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.SweepGradientPathTest",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterCapture": "m50-adapter-backed-v2"
         }
       },
       "diffs": {
@@ -264,7 +286,8 @@
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SweepGradientPathTest.kt",
         "reports/wgsl-pipeline/scenes/artifacts/sweep-gradient-path-clamp/route-cpu.json",
         "reports/wgsl-pipeline/scenes/artifacts/sweep-gradient-path-clamp/route-gpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/sweep-gradient-path-clamp/stats.json"
+        "reports/wgsl-pipeline/scenes/artifacts/sweep-gradient-path-clamp/stats.json",
+        "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
       ],
       "tags": [
         "source.generated",
@@ -274,7 +297,8 @@
         "route.gpu.webgpu",
         "reference.test-oracle",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ]
     },
     {
@@ -300,7 +324,7 @@
         "status": "pass",
         "image": "artifacts/draw-paint-full-clip/cpu.png",
         "diff": "artifacts/draw-paint-full-clip/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "selectedRoute": "cpu.paint.draw-paint.full-clip-oracle",
           "fallbackReason": "none"
@@ -318,12 +342,15 @@
         "status": "pass",
         "image": "artifacts/draw-paint-full-clip/gpu.png",
         "diff": "artifacts/draw-paint-full-clip/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect",
           "selectedRoute": "webgpu.paint.draw-paint.full-clip",
           "pipelineKey": "paint=solidColor draw=drawPaint clip=full state=[blendMode=kSrcOver]",
-          "fallbackReason": "none"
+          "fallbackReason": "none",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
         },
         "stats": {
           "pixels": 4096,
@@ -331,7 +358,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.95,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.DrawPaintTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.DrawPaintFullClipTest",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterCapture": "m50-adapter-backed-v2"
         }
       },
       "diffs": {
@@ -355,7 +385,8 @@
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/DrawPaintTest.kt",
         "reports/wgsl-pipeline/scenes/artifacts/draw-paint-full-clip/route-cpu.json",
         "reports/wgsl-pipeline/scenes/artifacts/draw-paint-full-clip/route-gpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/draw-paint-full-clip/stats.json"
+        "reports/wgsl-pipeline/scenes/artifacts/draw-paint-full-clip/stats.json",
+        "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
       ],
       "tags": [
         "source.generated",
@@ -364,7 +395,8 @@
         "route.gpu.webgpu",
         "reference.test-oracle",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ]
     },
     {
@@ -390,7 +422,7 @@
         "status": "pass",
         "image": "artifacts/draw-paint-clipped-rect/cpu.png",
         "diff": "artifacts/draw-paint-clipped-rect/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "selectedRoute": "cpu.paint.draw-paint.clip-rect-oracle",
           "fallbackReason": "none"
@@ -408,12 +440,15 @@
         "status": "pass",
         "image": "artifacts/draw-paint-clipped-rect/gpu.png",
         "diff": "artifacts/draw-paint-clipped-rect/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect",
           "selectedRoute": "webgpu.paint.draw-paint.clip-rect",
           "pipelineKey": "paint=solidColor draw=drawPaint clip=rect(10,10,30,30) state=[blendMode=kSrcOver]",
-          "fallbackReason": "none"
+          "fallbackReason": "none",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
         },
         "stats": {
           "pixels": 4096,
@@ -421,7 +456,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.95,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.DrawPaintTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.DrawPaintClippedRectTest",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterCapture": "m50-adapter-backed-v2"
         }
       },
       "diffs": {
@@ -445,7 +483,8 @@
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/DrawPaintTest.kt",
         "reports/wgsl-pipeline/scenes/artifacts/draw-paint-clipped-rect/route-cpu.json",
         "reports/wgsl-pipeline/scenes/artifacts/draw-paint-clipped-rect/route-gpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/draw-paint-clipped-rect/stats.json"
+        "reports/wgsl-pipeline/scenes/artifacts/draw-paint-clipped-rect/stats.json",
+        "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
       ],
       "tags": [
         "source.generated",
@@ -455,7 +494,8 @@
         "route.gpu.webgpu",
         "reference.test-oracle",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ]
     },
     {
@@ -481,7 +521,7 @@
         "status": "pass",
         "image": "artifacts/scaled-rects-transform-stack/cpu.png",
         "diff": "artifacts/scaled-rects-transform-stack/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "selectedRoute": "cpu.gm.scaled-rects.reference-oracle",
           "fallbackReason": "none"
@@ -499,12 +539,15 @@
         "status": "pass",
         "image": "artifacts/scaled-rects-transform-stack/gpu.png",
         "diff": "artifacts/scaled-rects-transform-stack/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.path-convex-fan",
           "selectedRoute": "webgpu.transform.scaled-rects.convex-polygon",
           "pipelineKey": "gm=ScaledRects transform=rotate+skew coverage=convexPolygon state=[blendMode=kPlus]",
-          "fallbackReason": "none"
+          "fallbackReason": "none",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
         },
         "stats": {
           "pixels": 4096,
@@ -512,7 +555,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.99,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ScaledRectsWebGpuTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ScaledRectsTransformStackTest",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterCapture": "m50-adapter-backed-v2"
         }
       },
       "diffs": {
@@ -536,7 +582,8 @@
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ScaledRectsWebGpuTest.kt",
         "reports/wgsl-pipeline/scenes/artifacts/scaled-rects-transform-stack/route-cpu.json",
         "reports/wgsl-pipeline/scenes/artifacts/scaled-rects-transform-stack/route-gpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/scaled-rects-transform-stack/stats.json"
+        "reports/wgsl-pipeline/scenes/artifacts/scaled-rects-transform-stack/stats.json",
+        "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
       ],
       "tags": [
         "source.generated",
@@ -546,7 +593,8 @@
         "route.gpu.webgpu",
         "reference.skia-upstream",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ]
     },
     {
@@ -572,7 +620,7 @@
         "status": "pass",
         "image": "artifacts/gradient-color-filter-linear-kplus/cpu.png",
         "diff": "artifacts/gradient-color-filter-linear-kplus/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "selectedRoute": "cpu.shader.linear-gradient.color-filter.blend-kplus-oracle",
           "fallbackReason": "none"
@@ -590,12 +638,15 @@
         "status": "pass",
         "image": "artifacts/gradient-color-filter-linear-kplus/gpu.png",
         "diff": "artifacts/gradient-color-filter-linear-kplus/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect",
           "selectedRoute": "webgpu.generated.linear-gradient.color-filter.blend-kplus",
           "pipelineKey": "shaderFamily=linearGradient colorFilter=Blend(red,kPlus) coverage=analyticRect state=[blendMode=kSrcOver]",
-          "fallbackReason": "none"
+          "fallbackReason": "none",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
         },
         "stats": {
           "pixels": 1024,
@@ -603,7 +654,10 @@
           "maxChannelDelta": 0,
           "threshold": 99.95,
           "backend": "WebGPU",
-          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.GradientColorFilterTest"
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.GradientColorFilterLinearKPlusTest",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterCapture": "m50-adapter-backed-v2"
         }
       },
       "diffs": {
@@ -627,7 +681,8 @@
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GradientColorFilterTest.kt",
         "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/route-cpu.json",
         "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/route-gpu.json",
-        "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/stats.json"
+        "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/stats.json",
+        "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
       ],
       "tags": [
         "source.generated",
@@ -637,7 +692,8 @@
         "route.gpu.webgpu",
         "reference.test-oracle",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.none",
+        "maturity.adapter-backed"
       ]
     },
     {
@@ -652,7 +708,7 @@
         "status": "pass",
         "image": "artifacts/runtime-effect-simple/cpu.png",
         "diff": "artifacts/runtime-effect-simple/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "selectedRoute": "cpu.runtime-effect.descriptor.simple_rt",
           "fallbackReason": "none"
@@ -694,7 +750,7 @@
         "status": "pass",
         "image": "artifacts/runtime-effect-simple/gpu.png",
         "diff": "artifacts/runtime-effect-simple/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect",
           "selectedRoute": "webgpu.runtime-effect.descriptor.simple_rt",
@@ -799,7 +855,7 @@
         "status": "pass",
         "image": "artifacts/clip-rect-difference/cpu.png",
         "diff": "artifacts/clip-rect-difference/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coveragePlan": "clipRect(kDifference) + clipRRect(kDifference) CPU coverage oracle",
           "selectedRoute": "cpu.coverage.clip-rect-difference",
@@ -809,7 +865,7 @@
           "pixels": 131072,
           "matchingPixels": 131072,
           "maxChannelDelta": 0,
-          "threshold": 80.0,
+          "threshold": 80,
           "backend": "CPU",
           "command": "Skia upstream reference skbug_9319.png"
         },
@@ -853,7 +909,7 @@
           "pixels": 131072,
           "matchingPixels": 110672,
           "maxChannelDelta": 255,
-          "threshold": 80.0,
+          "threshold": 80,
           "backend": "WebGPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest",
           "adapter": "Apple M2 Max",
@@ -900,7 +956,7 @@
         "pixels": 131072,
         "matchingPixels": 110672,
         "maxChannelDelta": 255,
-        "threshold": 80.0
+        "threshold": 80
       },
       "evidence": [
         "reports/wgsl-pipeline/2026-05-28-m39-p1-scene-selection.md",
@@ -951,7 +1007,7 @@
         "status": "pass",
         "image": "artifacts/bitmap-shader-local-matrix/cpu.png",
         "diff": "artifacts/bitmap-shader-local-matrix/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coveragePlan": "AnalyticRect(10.0,10.0,14.0,14.0,aa=false)",
           "selectedRoute": "cpu.shader.bitmap.local-matrix",
@@ -991,14 +1047,18 @@
           },
           "baseline": {
             "name": "m43-cpu-measured-local",
-            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae"
+            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae",
+            "id": "m50-cpu-warning-local",
+            "owner": "Kanvas rendering release owner"
           },
           "regression": {
             "label": "unknown"
           },
           "gate": {
-            "mode": "reporting-only",
-            "reason": "M43 measured CPU metrics do not gate CI until budget and rollback policy exist"
+            "mode": "warning-only",
+            "owner": "Kanvas rendering release owner",
+            "quarantinePolicy": "adapter or variance mismatch remains visible and non-blocking",
+            "rollbackPolicy": "correctness regression rolls back; performance warning needs owner triage before blocking"
           },
           "route": "cpu.shader.bitmap.local-matrix",
           "rawMetrics": "artifacts/bitmap-shader-local-matrix/cpu-performance.json",
@@ -1034,14 +1094,21 @@
             0.015917,
             0.015792
           ],
-          "checksum": 1386683128
+          "checksum": 1386683128,
+          "warmCold": "warm-steady-state",
+          "variancePolicy": {
+            "policy": "warning-only: 15% median / 20% p95 review band",
+            "allowedMedianDeltaPercent": 15,
+            "allowedP95DeltaPercent": 20,
+            "releaseBlocking": false
+          }
         }
       },
       "gpu": {
         "status": "pass",
         "image": "artifacts/bitmap-shader-local-matrix/gpu.png",
         "diff": "artifacts/bitmap-shader-local-matrix/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect",
           "selectedRoute": "webgpu.shader.bitmap.local-matrix",
@@ -1087,14 +1154,18 @@
           },
           "baseline": {
             "name": "m43-gpu-cache-measured-local",
-            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae"
+            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae",
+            "id": "m50-gpu-cache-warning-local",
+            "owner": "Kanvas rendering release owner"
           },
           "regression": {
             "label": "unknown"
           },
           "gate": {
-            "mode": "reporting-only",
-            "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
+            "mode": "warning-only",
+            "owner": "Kanvas rendering release owner",
+            "quarantinePolicy": "adapter or variance mismatch remains visible and non-blocking",
+            "rollbackPolicy": "correctness regression rolls back; performance warning needs owner triage before blocking"
           },
           "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
           "route": "webgpu.shader.bitmap.local-matrix",
@@ -1131,7 +1202,14 @@
             0.006333,
             0.00625
           ],
-          "checksum": 2118653005
+          "checksum": 2118653005,
+          "warmCold": "warm-steady-state",
+          "variancePolicy": {
+            "policy": "warning-only: 15% median / 20% p95 review band",
+            "allowedMedianDeltaPercent": 15,
+            "allowedP95DeltaPercent": 20,
+            "releaseBlocking": false
+          }
         }
       },
       "diffs": {
@@ -1200,7 +1278,7 @@
         "status": "pass",
         "image": "artifacts/src-over-stack/cpu.png",
         "diff": "artifacts/src-over-stack/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coveragePlan": "AnalyticRect stack: red kSrc [8,8,40,40], blue kSrcOver [16,16,48,48]",
           "selectedRoute": "cpu.blend.src-over-stack",
@@ -1240,14 +1318,18 @@
           },
           "baseline": {
             "name": "m43-cpu-measured-local",
-            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae"
+            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae",
+            "id": "m50-cpu-warning-local",
+            "owner": "Kanvas rendering release owner"
           },
           "regression": {
             "label": "unknown"
           },
           "gate": {
-            "mode": "reporting-only",
-            "reason": "M43 measured CPU metrics do not gate CI until budget and rollback policy exist"
+            "mode": "warning-only",
+            "owner": "Kanvas rendering release owner",
+            "quarantinePolicy": "adapter or variance mismatch remains visible and non-blocking",
+            "rollbackPolicy": "correctness regression rolls back; performance warning needs owner triage before blocking"
           },
           "route": "cpu.blend.src-over-stack",
           "rawMetrics": "artifacts/src-over-stack/cpu-performance.json",
@@ -1283,14 +1365,21 @@
             0.017125,
             0.016875
           ],
-          "checksum": -1665679360
+          "checksum": -1665679360,
+          "warmCold": "warm-steady-state",
+          "variancePolicy": {
+            "policy": "warning-only: 15% median / 20% p95 review band",
+            "allowedMedianDeltaPercent": 15,
+            "allowedP95DeltaPercent": 20,
+            "releaseBlocking": false
+          }
         }
       },
       "gpu": {
         "status": "pass",
         "image": "artifacts/src-over-stack/gpu.png",
         "diff": "artifacts/src-over-stack/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect-stack",
           "selectedRoute": "webgpu.blend.src-over.fixed-function",
@@ -1336,14 +1425,18 @@
           },
           "baseline": {
             "name": "m43-gpu-cache-measured-local",
-            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae"
+            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae",
+            "id": "m50-gpu-cache-warning-local",
+            "owner": "Kanvas rendering release owner"
           },
           "regression": {
             "label": "unknown"
           },
           "gate": {
-            "mode": "reporting-only",
-            "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
+            "mode": "warning-only",
+            "owner": "Kanvas rendering release owner",
+            "quarantinePolicy": "adapter or variance mismatch remains visible and non-blocking",
+            "rollbackPolicy": "correctness regression rolls back; performance warning needs owner triage before blocking"
           },
           "pipelineKey": "state=[blendMode=kSrc] + state=[blendMode=kSrcOver] fixedFunctionBlend",
           "route": "webgpu.blend.src-over.fixed-function",
@@ -1380,7 +1473,14 @@
             0.013041,
             0.012375
           ],
-          "checksum": 13481319
+          "checksum": 13481319,
+          "warmCold": "warm-steady-state",
+          "variancePolicy": {
+            "policy": "warning-only: 15% median / 20% p95 review band",
+            "allowedMedianDeltaPercent": 15,
+            "allowedP95DeltaPercent": 20,
+            "releaseBlocking": false
+          }
         }
       },
       "diffs": {
@@ -1447,7 +1547,7 @@
         "status": "pass",
         "image": "artifacts/solid-rect/cpu.png",
         "diff": "artifacts/solid-rect/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coveragePlan": "AnalyticRect(2.0,1.0,7.0,6.0,aa=false)",
           "selectedRoute": "cpu.descriptor.coverage-plan.solid-rect",
@@ -1467,7 +1567,7 @@
         "status": "pass",
         "image": "artifacts/solid-rect/gpu.png",
         "diff": "artifacts/solid-rect/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect",
           "pipelineKey": "coverageKind=analyticRect",
@@ -1549,7 +1649,7 @@
         "status": "pass",
         "image": "artifacts/analytic-aa-convex/cpu.png",
         "diff": "artifacts/analytic-aa-convex/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coveragePlan": "PathCoverage(singleContour=true,convex=true,aa=true,edgeCountWithinBudget=true)",
           "selectedRoute": "cpu.path-coverage.analytic-aa-convex-composited-oracle",
@@ -1569,7 +1669,7 @@
         "status": "pass",
         "image": "artifacts/analytic-aa-convex/gpu.png",
         "diff": "artifacts/analytic-aa-convex/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.path-convex-fan",
           "pipelineKey": "coverageKind=pathConvexFan",
@@ -1667,7 +1767,7 @@
           "pixels": 270400,
           "matchingPixels": 243919,
           "maxChannelDelta": 75,
-          "threshold": 90.0,
+          "threshold": 90,
           "backend": "CPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests '*StrokeRectWebGpuTest' --tests '*StrokeCircleWebGpuTest' --tests '*StrokeRectCrossBackendTest' --tests '*StrokeCircleCrossBackendTest'"
         }
@@ -1759,7 +1859,7 @@
         "status": "pass",
         "image": "artifacts/image-filter-compose-cf-matrix-transform/cpu.png",
         "diff": "artifacts/image-filter-compose-cf-matrix-transform/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "backend": "CPU",
           "sceneId": "image-filter-compose-cf-matrix-transform",
@@ -1773,7 +1873,7 @@
           "pixels": 1024,
           "matchingPixels": 1024,
           "maxChannelDelta": 0,
-          "threshold": 99.0,
+          "threshold": 99,
           "backend": "CPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.SaveLayerImageFilterTest"
         }
@@ -1782,7 +1882,7 @@
         "status": "pass",
         "image": "artifacts/image-filter-compose-cf-matrix-transform/gpu.png",
         "diff": "artifacts/image-filter-compose-cf-matrix-transform/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "backend": "WebGPU",
           "sceneId": "image-filter-compose-cf-matrix-transform",
@@ -1802,7 +1902,7 @@
           "pixels": 1024,
           "matchingPixels": 1024,
           "maxChannelDelta": 0,
-          "threshold": 99.0,
+          "threshold": 99,
           "backend": "WebGPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.SaveLayerImageFilterTest"
         }
@@ -1820,7 +1920,7 @@
         "pixels": 1024,
         "matchingPixels": 1024,
         "maxChannelDelta": 0,
-        "threshold": 99.0
+        "threshold": 99
       },
       "evidence": [
         "reports/wgsl-pipeline/2026-05-28-m45-image-filter-dag-subset-selection.md",
@@ -1873,7 +1973,7 @@
         "status": "pass",
         "image": "artifacts/bitmap-rect-nearest/cpu.png",
         "diff": "artifacts/bitmap-rect-nearest/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coveragePlan": "AnalyticRect(image-rect-destination,aa=false)",
           "selectedRoute": "cpu.image-rect.strict-nearest",
@@ -1892,7 +1992,7 @@
         "status": "pass",
         "image": "artifacts/bitmap-rect-nearest/gpu.png",
         "diff": "artifacts/bitmap-rect-nearest/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.image-rect.strict-nearest",
           "pipelineKey": "imageRect.strictNearest.promotedSmoke",
@@ -1980,7 +2080,7 @@
           "pixels": 128000,
           "matchingPixels": 108644,
           "maxChannelDelta": 110,
-          "threshold": 50.0,
+          "threshold": 50,
           "backend": "CPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests '*SimpleOffsetImageFilterCrossBackendTest'"
         }
@@ -2000,7 +2100,7 @@
           "pixels": 128000,
           "matchingPixels": 125600,
           "maxChannelDelta": 110,
-          "threshold": 50.0,
+          "threshold": 50,
           "backend": "WebGPU",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests '*SimpleOffsetImageFilterWebGpuTest'"
         }
@@ -2018,7 +2118,7 @@
         "pixels": 128000,
         "matchingPixels": 125600,
         "maxChannelDelta": 110,
-        "threshold": 50.0
+        "threshold": 50
       },
       "evidence": [
         "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md",
@@ -2066,7 +2166,7 @@
         "status": "pass",
         "image": "artifacts/linear-gradient-rect/cpu.png",
         "diff": "artifacts/linear-gradient-rect/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coveragePlan": "AnalyticRect(2.0,10.0,62.0,50.0,aa=false)",
           "selectedRoute": "cpu.shader.linear-gradient.rect",
@@ -2109,7 +2209,7 @@
         "status": "pass",
         "image": "artifacts/linear-gradient-rect/gpu.png",
         "diff": "artifacts/linear-gradient-rect/gpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coverageStrategy": "webgpu.coverage.analytic-rect",
           "selectedRoute": "webgpu.generated.linear-gradient.rect",
@@ -2227,7 +2327,7 @@
         "status": "pass",
         "image": "artifacts/path-aa-convexpaths-edge-budget/cpu.png",
         "diff": "artifacts/path-aa-convexpaths-edge-budget/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coveragePlan": "PathCoverage(aa=true,convexPathsSuite=true,edgeCountOverBudget=true)",
           "selectedRoute": "cpu.path-coverage.convexpaths-oracle",
@@ -2237,7 +2337,7 @@
           "pixels": 0,
           "matchingPixels": 0,
           "maxChannelDelta": 0,
-          "threshold": 0.0,
+          "threshold": 0,
           "backend": "inventory",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuInventoryTest"
         }
@@ -2261,7 +2361,7 @@
         "pixels": 0,
         "matchingPixels": 0,
         "maxChannelDelta": 0,
-        "threshold": 0.0
+        "threshold": 0
       },
       "evidence": [
         "reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md",
@@ -2309,7 +2409,7 @@
         "status": "pass",
         "image": "artifacts/path-aa-dashing-edge-budget/cpu.png",
         "diff": "artifacts/path-aa-dashing-edge-budget/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coveragePlan": "PathCoverage(strokeDash=true,aa=true,edgeCountOverBudget=true)",
           "selectedRoute": "cpu.path-coverage.dashing-oracle",
@@ -2319,7 +2419,7 @@
           "pixels": 0,
           "matchingPixels": 0,
           "maxChannelDelta": 0,
-          "threshold": 0.0,
+          "threshold": 0,
           "backend": "inventory",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuInventoryTest"
         }
@@ -2343,7 +2443,7 @@
         "pixels": 0,
         "matchingPixels": 0,
         "maxChannelDelta": 0,
-        "threshold": 0.0
+        "threshold": 0
       },
       "evidence": [
         "reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md",
@@ -2392,7 +2492,7 @@
         "status": "pass",
         "image": "artifacts/image-filter-crop-nonnull-prepass-required/cpu.png",
         "diff": "artifacts/image-filter-crop-nonnull-prepass-required/cpu-diff.png",
-        "similarity": 100.0,
+        "similarity": 100,
         "route": {
           "coveragePlan": "ImageFilterGraph(Crop(input=nonNull),requiresChildPrePass=true,outsideSelectedM38Shape=true)",
           "selectedRoute": "cpu.image-filter.crop-nonnull-reference",
@@ -2402,7 +2502,7 @@
           "pixels": 0,
           "matchingPixels": 0,
           "maxChannelDelta": 0,
-          "threshold": 0.0,
+          "threshold": 0,
           "backend": "inventory",
           "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.tools.GpuInventoryFailureReportTest"
         }
@@ -2426,7 +2526,7 @@
         "pixels": 0,
         "matchingPixels": 0,
         "maxChannelDelta": 0,
-        "threshold": 0.0
+        "threshold": 0
       },
       "evidence": [
         "reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md",
@@ -2448,6 +2548,482 @@
         "reference.cpu-oracle",
         "maturity.generated-evidence",
         "risk.expected-unsupported"
+      ]
+    },
+    {
+      "id": "font-latin-outline-drawstring",
+      "title": "Simple Latin outline drawString",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":kanvas-skia:test",
+        "sourceTest": "org.skia.foundation.opentype.OpenTypeFontTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+        "commit": "dce4886b82aaca90bcb0ae15a83e5147679ad560",
+        "artifactRoot": "artifacts/font-latin-outline-drawstring",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "M50-D"
+      },
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/font-latin-outline-drawstring/skia.png",
+      "font": {
+        "source": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+        "textInput": "KANVAS",
+        "shapingMode": "simple-glyph-id-map",
+        "glyphDiagnostics": "artifacts/font-latin-outline-drawstring/font-diagnostics.json"
+      },
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/font-latin-outline-drawstring/cpu.png",
+        "diff": "artifacts/font-latin-outline-drawstring/cpu-diff.png",
+        "similarity": 100,
+        "route": {
+          "selectedRoute": "cpu.text.outline.simple-latin",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 18432,
+          "matchingPixels": 18432,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "status": "pass",
+          "fallbackReason": "none",
+          "command": "rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'",
+          "backend": "CPU"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/font-latin-outline-drawstring/gpu.png",
+        "diff": "artifacts/font-latin-outline-drawstring/gpu-diff.png",
+        "similarity": 100,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.glyph-outline-path",
+          "selectedRoute": "webgpu.text.outline.simple-latin",
+          "pipelineKey": "textRoute=simple-latin glyphRepresentation=outline state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 18432,
+          "matchingPixels": 18432,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "status": "pass",
+          "fallbackReason": "none",
+          "command": "rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'",
+          "backend": "WebGPU",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/font-latin-outline-drawstring/cpu-diff.png",
+        "gpu": "artifacts/font-latin-outline-drawstring/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/font-latin-outline-drawstring/route-cpu.json",
+        "gpu": "artifacts/font-latin-outline-drawstring/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 18432,
+        "matchingPixels": 18432,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+        "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+        "reports/wgsl-pipeline/scenes/artifacts/font-latin-outline-drawstring/font-diagnostics.json",
+        "reports/wgsl-pipeline/scenes/artifacts/font-latin-outline-drawstring/stats.json"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.font",
+        "feature.text",
+        "feature.glyph-outline",
+        "route.cpu.text",
+        "route.gpu.webgpu",
+        "reference.cpu-oracle",
+        "maturity.generated-evidence",
+        "maturity.adapter-backed",
+        "risk.none"
+      ]
+    },
+    {
+      "id": "font-textblob-positioned-glyph-run",
+      "title": "Positioned glyph-run text blob",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":kanvas-skia:test",
+        "sourceTest": "org.skia.foundation.opentype.LiberationOpenTypeFontMgrTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+        "commit": "dce4886b82aaca90bcb0ae15a83e5147679ad560",
+        "artifactRoot": "artifacts/font-textblob-positioned-glyph-run",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "M50-D"
+      },
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/font-textblob-positioned-glyph-run/skia.png",
+      "font": {
+        "source": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Regular.ttf",
+        "textInput": "GLYPH RUN",
+        "shapingMode": "prepositioned-simple-run",
+        "glyphDiagnostics": "artifacts/font-textblob-positioned-glyph-run/font-diagnostics.json"
+      },
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/font-textblob-positioned-glyph-run/cpu.png",
+        "diff": "artifacts/font-textblob-positioned-glyph-run/cpu-diff.png",
+        "similarity": 100,
+        "route": {
+          "selectedRoute": "cpu.text.outline.positioned-glyph-run",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 18432,
+          "matchingPixels": 18432,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "status": "pass",
+          "fallbackReason": "none",
+          "command": "rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'",
+          "backend": "CPU"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/font-textblob-positioned-glyph-run/gpu.png",
+        "diff": "artifacts/font-textblob-positioned-glyph-run/gpu-diff.png",
+        "similarity": 100,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.glyph-outline-path",
+          "selectedRoute": "webgpu.text.outline.positioned-glyph-run",
+          "pipelineKey": "textRoute=positioned-glyph-run glyphRepresentation=outline state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 18432,
+          "matchingPixels": 18432,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "status": "pass",
+          "fallbackReason": "none",
+          "command": "rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'",
+          "backend": "WebGPU",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/font-textblob-positioned-glyph-run/cpu-diff.png",
+        "gpu": "artifacts/font-textblob-positioned-glyph-run/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/font-textblob-positioned-glyph-run/route-cpu.json",
+        "gpu": "artifacts/font-textblob-positioned-glyph-run/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 18432,
+        "matchingPixels": 18432,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+        "kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Regular.ttf",
+        "reports/wgsl-pipeline/scenes/artifacts/font-textblob-positioned-glyph-run/font-diagnostics.json",
+        "reports/wgsl-pipeline/scenes/artifacts/font-textblob-positioned-glyph-run/stats.json"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.font",
+        "feature.text",
+        "feature.glyph-outline",
+        "route.cpu.text",
+        "route.gpu.webgpu",
+        "reference.cpu-oracle",
+        "maturity.generated-evidence",
+        "maturity.adapter-backed",
+        "risk.none"
+      ]
+    },
+    {
+      "id": "font-kerning-style-fixture",
+      "title": "Kerning and style OpenType fixture",
+      "priority": "P2",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":kanvas-skia:test",
+        "sourceTest": "org.skia.foundation.opentype.OpenTypeSystemFontMgrTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+        "commit": "dce4886b82aaca90bcb0ae15a83e5147679ad560",
+        "artifactRoot": "artifacts/font-kerning-style-fixture",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "M50-D"
+      },
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/font-kerning-style-fixture/skia.png",
+      "font": {
+        "source": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Bold.ttf",
+        "textInput": "AVATAR",
+        "shapingMode": "simple-kerning-fixture",
+        "glyphDiagnostics": "artifacts/font-kerning-style-fixture/font-diagnostics.json"
+      },
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/font-kerning-style-fixture/cpu.png",
+        "diff": "artifacts/font-kerning-style-fixture/cpu-diff.png",
+        "similarity": 100,
+        "route": {
+          "selectedRoute": "cpu.text.outline.kerning-style",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 18432,
+          "matchingPixels": 18432,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "status": "pass",
+          "fallbackReason": "none",
+          "command": "rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'",
+          "backend": "CPU"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/font-kerning-style-fixture/gpu.png",
+        "diff": "artifacts/font-kerning-style-fixture/gpu-diff.png",
+        "similarity": 100,
+        "route": {
+          "coverageStrategy": "webgpu.coverage.glyph-outline-path",
+          "selectedRoute": "webgpu.text.outline.kerning-style-fixture",
+          "pipelineKey": "textRoute=kerning-style glyphRepresentation=outline state=[blendMode=kSrcOver]",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 18432,
+          "matchingPixels": 18432,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "status": "pass",
+          "fallbackReason": "none",
+          "command": "rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'",
+          "backend": "WebGPU",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/font-kerning-style-fixture/cpu-diff.png",
+        "gpu": "artifacts/font-kerning-style-fixture/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/font-kerning-style-fixture/route-cpu.json",
+        "gpu": "artifacts/font-kerning-style-fixture/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 18432,
+        "matchingPixels": 18432,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+        "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Bold.ttf",
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/font-diagnostics.json",
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/stats.json"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.font",
+        "feature.text",
+        "feature.glyph-outline",
+        "route.cpu.text",
+        "route.gpu.webgpu",
+        "reference.cpu-oracle",
+        "maturity.generated-evidence",
+        "maturity.adapter-backed",
+        "risk.none"
+      ]
+    },
+    {
+      "id": "font-emoji-color-glyph-refusal",
+      "title": "Emoji color glyph explicit refusal",
+      "priority": "P2",
+      "status": "expected-unsupported",
+      "source": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":kanvas-skia:test",
+        "sourceTest": "org.skia.foundation.opentype.OpenTypeFontMgrMakeFromSkStreamTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+        "commit": "dce4886b82aaca90bcb0ae15a83e5147679ad560",
+        "artifactRoot": "artifacts/font-emoji-color-glyph-refusal",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "M50-D"
+      },
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/font-emoji-color-glyph-refusal/skia.png",
+      "font": {
+        "source": "skia-integration-tests/src/test/resources/fonts/test_glyphs-glyf_colr_1.ttf",
+        "textInput": "EMOJI",
+        "shapingMode": "emoji-color-glyph",
+        "glyphDiagnostics": "artifacts/font-emoji-color-glyph-refusal/font-diagnostics.json"
+      },
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/font-emoji-color-glyph-refusal/cpu.png",
+        "diff": "artifacts/font-emoji-color-glyph-refusal/cpu-diff.png",
+        "similarity": 100,
+        "route": {
+          "selectedRoute": "cpu.text.refusal-oracle.emoji-color-glyph",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 18432,
+          "matchingPixels": 18432,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "status": "pass",
+          "fallbackReason": "none",
+          "command": "rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'",
+          "backend": "CPU"
+        }
+      },
+      "gpu": {
+        "status": "expected-unsupported",
+        "route": {
+          "coverageStrategy": "webgpu.coverage.refuse",
+          "selectedRoute": "webgpu.text.refuse",
+          "pipelineKey": "textRoute=emoji-color-glyph glyphRepresentation=unsupported",
+          "fallbackReason": "font.color-glyph-emoji-unsupported"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/font-emoji-color-glyph-refusal/cpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/font-emoji-color-glyph-refusal/route-cpu.json",
+        "gpu": "artifacts/font-emoji-color-glyph-refusal/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 18432,
+        "matchingPixels": 18432,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+        "skia-integration-tests/src/test/resources/fonts/test_glyphs-glyf_colr_1.ttf",
+        "reports/wgsl-pipeline/scenes/artifacts/font-emoji-color-glyph-refusal/font-diagnostics.json",
+        "reports/wgsl-pipeline/scenes/artifacts/font-emoji-color-glyph-refusal/stats.json"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.font",
+        "feature.text",
+        "route.cpu.text",
+        "route.gpu.expected-unsupported",
+        "reference.cpu-oracle",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported",
+        "risk.font-gated"
+      ]
+    },
+    {
+      "id": "font-complex-shaping-refusal",
+      "title": "Complex shaping explicit refusal",
+      "priority": "P2",
+      "status": "expected-unsupported",
+      "source": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":kanvas-skia:test",
+        "sourceTest": "org.skia.foundation.opentype.OpenTypeFontMgrTtcIndexTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+        "commit": "dce4886b82aaca90bcb0ae15a83e5147679ad560",
+        "artifactRoot": "artifacts/font-complex-shaping-refusal",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "M50-D"
+      },
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/font-complex-shaping-refusal/skia.png",
+      "font": {
+        "source": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Italic.ttf",
+        "textInput": "SHAPE",
+        "shapingMode": "complex-shaping",
+        "glyphDiagnostics": "artifacts/font-complex-shaping-refusal/font-diagnostics.json"
+      },
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/font-complex-shaping-refusal/cpu.png",
+        "diff": "artifacts/font-complex-shaping-refusal/cpu-diff.png",
+        "similarity": 100,
+        "route": {
+          "selectedRoute": "cpu.text.refusal-oracle.complex-shaping",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 18432,
+          "matchingPixels": 18432,
+          "maxChannelDelta": 0,
+          "threshold": 99.95,
+          "status": "pass",
+          "fallbackReason": "none",
+          "command": "rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'",
+          "backend": "CPU"
+        }
+      },
+      "gpu": {
+        "status": "expected-unsupported",
+        "route": {
+          "coverageStrategy": "webgpu.coverage.refuse",
+          "selectedRoute": "webgpu.text.refuse",
+          "pipelineKey": "textRoute=complex-shaping glyphRepresentation=unsupported",
+          "fallbackReason": "font.complex-shaping-requires-explicit-shaper"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/font-complex-shaping-refusal/cpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/font-complex-shaping-refusal/route-cpu.json",
+        "gpu": "artifacts/font-complex-shaping-refusal/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 18432,
+        "matchingPixels": 18432,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md",
+        "kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Italic.ttf",
+        "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/font-diagnostics.json",
+        "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/stats.json"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.font",
+        "feature.text",
+        "route.cpu.text",
+        "route.gpu.expected-unsupported",
+        "reference.cpu-oracle",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported",
+        "risk.font-gated"
       ]
     }
   ]

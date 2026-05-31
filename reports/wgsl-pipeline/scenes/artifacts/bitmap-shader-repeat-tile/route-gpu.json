@@ -7,5 +7,9 @@
   "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat localMatrix=identity state=[blendMode=kSrcOver]",
   "fallbackReason": "none",
   "test": "org.skia.gpu.webgpu.BitmapShaderPaintRectTest#paint shader kRepeat on oversized rect tiles the image",
-  "nonClaim": "Does not claim linear filtering, mipmaps, codecs, color management, or all tile-mode combinations."
+  "nonClaim": "Does not claim linear filtering, mipmaps, codecs, color management, or all tile-mode combinations.",
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterCapture": "m50-adapter-backed-v2",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
 }

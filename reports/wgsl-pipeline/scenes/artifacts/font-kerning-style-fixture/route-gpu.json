@@ -1,0 +1,13 @@
+{
+  "status": "pass",
+  "selectedRoute": "webgpu.text.outline.kerning-style-fixture",
+  "coverageStrategy": "webgpu.coverage.glyph-outline-path",
+  "pipelineKey": "textRoute=kerning-style glyphRepresentation=outline state=[blendMode=kSrcOver]",
+  "fallbackReason": "none",
+  "fontSource": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Bold.ttf",
+  "textInput": "AVATAR",
+  "shapingMode": "simple-kerning-fixture",
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md"
+}

@@ -1,0 +1,10 @@
+{
+  "pixels": 18432,
+  "matchingPixels": 18432,
+  "maxChannelDelta": 0,
+  "threshold": 99.95,
+  "status": "expected-unsupported",
+  "fallbackReason": "font.complex-shaping-requires-explicit-shaper",
+  "command": "rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'",
+  "backend": "inventory"
+}

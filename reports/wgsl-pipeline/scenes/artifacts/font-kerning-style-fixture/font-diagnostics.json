@@ -1,0 +1,19 @@
+{
+  "fontSource": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Bold.ttf",
+  "textInput": "AVATAR",
+  "shapingMode": "simple-kerning-fixture",
+  "glyphCount": 6,
+  "glyphIds": [
+    65,
+    87,
+    67,
+    87,
+    69,
+    87
+  ],
+  "glyphRepresentation": "outline-path",
+  "cpuRoute": "cpu.text.outline.kerning-style",
+  "gpuRoute": "webgpu.text.outline.kerning-style-fixture",
+  "referenceKind": "cpu-oracle",
+  "unsupported": false
+}

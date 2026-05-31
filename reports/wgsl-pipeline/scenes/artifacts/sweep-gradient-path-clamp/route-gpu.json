@@ -7,5 +7,9 @@
   "pipelineKey": "shaderFamily=sweepGradient tile=kClamp coverage=pathConvexFan shape=circle state=[blendMode=kSrcOver]",
   "fallbackReason": "none",
   "test": "org.skia.gpu.webgpu.SweepGradientPathTest#kClamp sweep gradient on a circle path interpolates around the center",
-  "nonClaim": "Does not claim all sweep-gradient tile modes, all gradient families, or broad Path AA support."
+  "nonClaim": "Does not claim all sweep-gradient tile modes, all gradient families, or broad Path AA support.",
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterCapture": "m50-adapter-backed-v2",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
 }

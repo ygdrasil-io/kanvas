@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "selectedRoute": "cpu.text.refusal-oracle.emoji-color-glyph",
+  "fallbackReason": "none",
+  "fontSource": "skia-integration-tests/src/test/resources/fonts/test_glyphs-glyf_colr_1.ttf",
+  "textInput": "EMOJI",
+  "shapingMode": "emoji-color-glyph",
+  "glyphDiagnostics": "artifacts/font-emoji-color-glyph-refusal/font-diagnostics.json",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md"
+}

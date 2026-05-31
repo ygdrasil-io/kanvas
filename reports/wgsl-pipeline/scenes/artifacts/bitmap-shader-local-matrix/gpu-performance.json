@@ -1,74 +1,85 @@
 {
-    "sceneId": "bitmap-shader-local-matrix",
-    "lane": "GPU",
-    "status": "measured",
-    "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
-    "phase": "webgpu-cache-dashboard-row",
-    "sampleCount": 30,
-    "timing": {
-        "medianMs": 0.006417,
-        "p95Ms": 0.007666
-    },
-    "environment": {
-        "host": "Omega",
-        "os": "Mac OS X 26.5 aarch64",
-        "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
-        "backend": "WebGPU cache/timing dashboard benchmark",
-        "adapter": "Apple M2 Max"
-    },
-    "adapter": "Apple M2 Max",
-    "counters": {
-        "routeInvocations": 1,
-        "pipelineCacheHits": 29,
-        "pipelineCacheMisses": 1,
-        "bindGroupCount": 1,
-        "resourceBytes": 1024
-    },
-    "baseline": {
-        "name": "m43-gpu-cache-measured-local",
-        "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae"
-    },
-    "regression": {
-        "label": "unknown"
-    },
-    "gate": {
-        "mode": "reporting-only",
-        "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
-    },
-    "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
-    "route": "webgpu.shader.bitmap.local-matrix",
-    "rawMetrics": "artifacts/bitmap-shader-local-matrix/gpu-performance.json",
-    "rawSamples": [
-        0.006417,
-        0.006541,
-        0.009334,
-        0.006459,
-        0.006959,
-        0.006375,
-        0.007,
-        0.006583,
-        0.006292,
-        0.006583,
-        0.007666,
-        0.006375,
-        0.006542,
-        0.006209,
-        0.006458,
-        0.006292,
-        0.006292,
-        0.006417,
-        0.006292,
-        0.0065,
-        0.006417,
-        0.006209,
-        0.006583,
-        0.006333,
-        0.006791,
-        0.006541,
-        0.00675,
-        0.00625,
-        0.006333,
-        0.00625
-    ],
-    "checksum": 2118653005
+  "sceneId": "bitmap-shader-local-matrix",
+  "lane": "GPU",
+  "status": "measured",
+  "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+  "phase": "webgpu-cache-dashboard-row",
+  "sampleCount": 30,
+  "timing": {
+    "medianMs": 0.006417,
+    "p95Ms": 0.007666
+  },
+  "environment": {
+    "host": "Omega",
+    "os": "Mac OS X 26.5 aarch64",
+    "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+    "backend": "WebGPU cache/timing dashboard benchmark",
+    "adapter": "Apple M2 Max"
+  },
+  "adapter": "Apple M2 Max",
+  "counters": {
+    "routeInvocations": 1,
+    "pipelineCacheHits": 29,
+    "pipelineCacheMisses": 1,
+    "bindGroupCount": 1,
+    "resourceBytes": 1024
+  },
+  "baseline": {
+    "name": "m43-gpu-cache-measured-local",
+    "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae",
+    "id": "m50-gpu-cache-warning-local",
+    "owner": "Kanvas rendering release owner"
+  },
+  "regression": {
+    "label": "unknown"
+  },
+  "gate": {
+    "mode": "warning-only",
+    "owner": "Kanvas rendering release owner",
+    "quarantinePolicy": "adapter or variance mismatch remains visible and non-blocking",
+    "rollbackPolicy": "correctness regression rolls back; performance warning needs owner triage before blocking"
+  },
+  "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
+  "route": "webgpu.shader.bitmap.local-matrix",
+  "rawMetrics": "artifacts/bitmap-shader-local-matrix/gpu-performance.json",
+  "rawSamples": [
+    0.006417,
+    0.006541,
+    0.009334,
+    0.006459,
+    0.006959,
+    0.006375,
+    0.007,
+    0.006583,
+    0.006292,
+    0.006583,
+    0.007666,
+    0.006375,
+    0.006542,
+    0.006209,
+    0.006458,
+    0.006292,
+    0.006292,
+    0.006417,
+    0.006292,
+    0.0065,
+    0.006417,
+    0.006209,
+    0.006583,
+    0.006333,
+    0.006791,
+    0.006541,
+    0.00675,
+    0.00625,
+    0.006333,
+    0.00625
+  ],
+  "checksum": 2118653005,
+  "warmCold": "warm-steady-state",
+  "variancePolicy": {
+    "policy": "warning-only: 15% median / 20% p95 review band",
+    "allowedMedianDeltaPercent": 15,
+    "allowedP95DeltaPercent": 20,
+    "releaseBlocking": false
+  }
 }

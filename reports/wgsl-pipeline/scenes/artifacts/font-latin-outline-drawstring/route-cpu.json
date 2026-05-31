@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "selectedRoute": "cpu.text.outline.simple-latin",
+  "fallbackReason": "none",
+  "fontSource": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+  "textInput": "KANVAS",
+  "shapingMode": "simple-glyph-id-map",
+  "glyphDiagnostics": "artifacts/font-latin-outline-drawstring/font-diagnostics.json",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md"
+}

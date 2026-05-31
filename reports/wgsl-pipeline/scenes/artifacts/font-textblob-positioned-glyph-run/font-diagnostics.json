@@ -1,0 +1,21 @@
+{
+  "fontSource": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Regular.ttf",
+  "textInput": "GLYPH RUN",
+  "shapingMode": "prepositioned-simple-run",
+  "glyphCount": 8,
+  "glyphIds": [
+    71,
+    77,
+    91,
+    83,
+    76,
+    87,
+    91,
+    85
+  ],
+  "glyphRepresentation": "outline-path",
+  "cpuRoute": "cpu.text.outline.positioned-glyph-run",
+  "gpuRoute": "webgpu.text.outline.positioned-glyph-run",
+  "referenceKind": "cpu-oracle",
+  "unsupported": false
+}

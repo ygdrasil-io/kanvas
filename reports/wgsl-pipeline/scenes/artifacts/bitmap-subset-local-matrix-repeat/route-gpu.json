@@ -7,5 +7,9 @@
   "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat subset=true localMatrix=scaleRotate state=[blendMode=kSrcOver]",
   "fallbackReason": "none",
   "test": "org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest#BitmapSubsetShaderGM matches reference on raster and GPU backends",
-  "nonClaim": "Does not claim every subset sampling, perspective, all filtering modes, or codec-backed bitmap coverage."
+  "nonClaim": "Does not claim every subset sampling, perspective, all filtering modes, or codec-backed bitmap coverage.",
+  "adapter": "Apple M2 Max",
+  "adapterBackend": "WebGPU/Metal",
+  "adapterCapture": "m50-adapter-backed-v2",
+  "adapterEvidenceReport": "reports/wgsl-pipeline/2026-05-31-m50-adapter-backed-expansion-v2.md"
 }
