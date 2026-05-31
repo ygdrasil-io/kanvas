@@ -1,0 +1,8 @@
+{
+  "contract": "M52 inventory-derived expected-unsupported refusal; no GPU render artifact is claimed",
+  "coverageStrategy": "webgpu.text.refuse",
+  "fallbackReason": "font.color-glyph-emoji-unsupported",
+  "inventoryId": "skia-gm-coloremojiblendmodes",
+  "pipelineKey": "textRoute=colorEmoji blendModes=true glyphRepresentation=unsupported source=ColoremojiBlendmodesGM",
+  "selectedRoute": "webgpu.text.refuse"
+}
