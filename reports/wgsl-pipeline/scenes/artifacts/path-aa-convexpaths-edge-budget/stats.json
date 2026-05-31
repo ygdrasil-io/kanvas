@@ -1,0 +1,10 @@
+{
+  "pixels": 0,
+  "matchingPixels": 0,
+  "maxChannelDelta": 0,
+  "threshold": 0.0,
+  "backend": "inventory",
+  "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuInventoryTest",
+  "status": "expected-unsupported",
+  "fallbackReason": "coverage.edge-count-exceeded"
+}

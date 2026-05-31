@@ -1,0 +1,11 @@
+{
+  "backend": "CPU",
+  "sceneId": "path-aa-dashing-edge-budget",
+  "status": "pass",
+  "coveragePlan": "PathCoverage(strokeDash=true,aa=true,edgeCountOverBudget=true)",
+  "selectedRoute": "cpu.path-coverage.dashing-oracle",
+  "fallbackReason": "none",
+  "sourceTest": "org.skia.gpu.webgpu.crossbackend.DashingCrossBackendTest",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+  "nonClaim": "Does not claim dash, cap, join, broad stroke, or edge-budget removal support."
+}

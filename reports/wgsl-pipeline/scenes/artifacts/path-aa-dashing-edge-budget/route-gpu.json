@@ -1,0 +1,11 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "path-aa-dashing-edge-budget",
+  "status": "expected-unsupported",
+  "coverageStrategy": "webgpu.coverage.refuse",
+  "pipelineKey": "coverageKind=pathStrokeDashOverflow,pathFillRule=winding,topology=triangleList,source=DashingGM",
+  "fallbackReason": "coverage.edge-count-exceeded",
+  "sourceTest": "org.skia.gpu.webgpu.crossbackend.DashingCrossBackendTest",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+  "nonClaim": "Does not claim dash, cap, join, broad stroke, or edge-budget removal support."
+}

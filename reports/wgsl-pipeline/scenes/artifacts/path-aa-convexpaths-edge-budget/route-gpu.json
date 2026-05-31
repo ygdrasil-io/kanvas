@@ -1,0 +1,11 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "path-aa-convexpaths-edge-budget",
+  "status": "expected-unsupported",
+  "coverageStrategy": "webgpu.coverage.refuse",
+  "pipelineKey": "coverageKind=pathCoverageUnsupported,pathFillRule=winding,topology=triangleList,source=ConvexPathsGM",
+  "fallbackReason": "coverage.edge-count-exceeded",
+  "sourceTest": "org.skia.gpu.webgpu.ConvexPathsWebGpuTest",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+  "nonClaim": "Does not claim ConvexPathsGM support or broad Path AA support; it documents the stable WebGPU edge-budget refusal."
+}

@@ -2178,6 +2178,252 @@
         "maturity.generated-evidence",
         "risk.none"
       ]
+    },
+    {
+      "id": "path-aa-convexpaths-edge-budget",
+      "title": "Path AA ConvexPaths edge-budget refusal",
+      "priority": "P1",
+      "status": "expected-unsupported",
+      "source": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:gpuInventoryTest",
+        "sourceTest": "org.skia.gpu.webgpu.ConvexPathsWebGpuTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+        "commit": "1c7e4678d2ec249a67dc367948929d94f0e4f58c",
+        "artifactRoot": "artifacts/path-aa-convexpaths-edge-budget",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-284"
+      },
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/path-aa-convexpaths-edge-budget/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/path-aa-convexpaths-edge-budget/cpu.png",
+        "diff": "artifacts/path-aa-convexpaths-edge-budget/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "PathCoverage(aa=true,convexPathsSuite=true,edgeCountOverBudget=true)",
+          "selectedRoute": "cpu.path-coverage.convexpaths-oracle",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 0,
+          "matchingPixels": 0,
+          "maxChannelDelta": 0,
+          "threshold": 0.0,
+          "backend": "inventory",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuInventoryTest"
+        }
+      },
+      "gpu": {
+        "status": "expected-unsupported",
+        "route": {
+          "coverageStrategy": "webgpu.coverage.refuse",
+          "pipelineKey": "coverageKind=pathCoverageUnsupported,pathFillRule=winding,topology=triangleList,source=ConvexPathsGM",
+          "fallbackReason": "coverage.edge-count-exceeded"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/path-aa-convexpaths-edge-budget/cpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/path-aa-convexpaths-edge-budget/route-cpu.json",
+        "gpu": "artifacts/path-aa-convexpaths-edge-budget/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 0,
+        "matchingPixels": 0,
+        "maxChannelDelta": 0,
+        "threshold": 0.0
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+        "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/stats.json",
+        ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+        ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+        "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.path-aa",
+        "feature.coverage.aa",
+        "route.cpu.oracle",
+        "route.gpu.expected-unsupported",
+        "reference.cpu-oracle",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported",
+        "risk.edge-budget"
+      ]
+    },
+    {
+      "id": "path-aa-dashing-edge-budget",
+      "title": "Path AA Dashing edge-budget refusal",
+      "priority": "P1",
+      "status": "expected-unsupported",
+      "source": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:gpuInventoryTest",
+        "sourceTest": "org.skia.gpu.webgpu.crossbackend.DashingCrossBackendTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+        "commit": "1c7e4678d2ec249a67dc367948929d94f0e4f58c",
+        "artifactRoot": "artifacts/path-aa-dashing-edge-budget",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-284"
+      },
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/path-aa-dashing-edge-budget/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/path-aa-dashing-edge-budget/cpu.png",
+        "diff": "artifacts/path-aa-dashing-edge-budget/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "PathCoverage(strokeDash=true,aa=true,edgeCountOverBudget=true)",
+          "selectedRoute": "cpu.path-coverage.dashing-oracle",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 0,
+          "matchingPixels": 0,
+          "maxChannelDelta": 0,
+          "threshold": 0.0,
+          "backend": "inventory",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:gpuInventoryTest"
+        }
+      },
+      "gpu": {
+        "status": "expected-unsupported",
+        "route": {
+          "coverageStrategy": "webgpu.coverage.refuse",
+          "pipelineKey": "coverageKind=pathStrokeDashOverflow,pathFillRule=winding,topology=triangleList,source=DashingGM",
+          "fallbackReason": "coverage.edge-count-exceeded"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/path-aa-dashing-edge-budget/cpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/path-aa-dashing-edge-budget/route-cpu.json",
+        "gpu": "artifacts/path-aa-dashing-edge-budget/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 0,
+        "matchingPixels": 0,
+        "maxChannelDelta": 0,
+        "threshold": 0.0
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+        "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/stats.json",
+        ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+        ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+        "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.path-aa",
+        "feature.stroke",
+        "feature.dash",
+        "route.cpu.oracle",
+        "route.gpu.expected-unsupported",
+        "reference.cpu-oracle",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported",
+        "risk.edge-budget"
+      ]
+    },
+    {
+      "id": "image-filter-crop-nonnull-prepass-required",
+      "title": "Image-filter Crop(input=nonNull) pre-pass refusal",
+      "priority": "P1",
+      "status": "expected-unsupported",
+      "source": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "sourceTask": ":gpu-raster:test",
+        "sourceTest": "org.skia.gpu.webgpu.tools.GpuInventoryFailureReportTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+        "commit": "1c7e4678d2ec249a67dc367948929d94f0e4f58c",
+        "artifactRoot": "artifacts/image-filter-crop-nonnull-prepass-required",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "GRA-284"
+      },
+      "referenceKind": "cpu-oracle",
+      "reference": "artifacts/image-filter-crop-nonnull-prepass-required/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/image-filter-crop-nonnull-prepass-required/cpu.png",
+        "diff": "artifacts/image-filter-crop-nonnull-prepass-required/cpu-diff.png",
+        "similarity": 100.0,
+        "route": {
+          "coveragePlan": "ImageFilterGraph(Crop(input=nonNull),requiresChildPrePass=true,outsideSelectedM38Shape=true)",
+          "selectedRoute": "cpu.image-filter.crop-nonnull-reference",
+          "fallbackReason": "none"
+        },
+        "stats": {
+          "pixels": 0,
+          "matchingPixels": 0,
+          "maxChannelDelta": 0,
+          "threshold": 0.0,
+          "backend": "inventory",
+          "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.tools.GpuInventoryFailureReportTest"
+        }
+      },
+      "gpu": {
+        "status": "expected-unsupported",
+        "route": {
+          "coverageStrategy": "webgpu.image-filter.refuse",
+          "pipelineKey": "imageFilter=Crop(input=nonNull),prePass=required,selectedM38Shape=false",
+          "fallbackReason": "image-filter.crop-input-nonnull-prepass-required"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/image-filter-crop-nonnull-prepass-required/cpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
+        "gpu": "artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 0,
+        "matchingPixels": 0,
+        "maxChannelDelta": 0,
+        "threshold": 0.0
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md",
+        "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/stats.json",
+        ".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md",
+        "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
+        "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md"
+      ],
+      "tags": [
+        "source.generated",
+        "feature.image-filter",
+        "feature.crop",
+        "route.cpu.oracle",
+        "route.gpu.expected-unsupported",
+        "reference.cpu-oracle",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     }
   ]
 }
