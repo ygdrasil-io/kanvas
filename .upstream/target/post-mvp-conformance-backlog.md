@@ -39,6 +39,7 @@ Current M40 dashboard state:
 | M47 Remaining Static Evidence Hardening | Convert remaining static pass rows and keep Path AA policy rows visible. | Remaining static pass rows are generated evidence, expected-unsupported Path AA rows remain explicit policy sentinels, and the merged export remains 0 tracked-gap / 0 fail. |
 | M48 Skia Scene Coverage Expansion | Expand from clean dashboard evidence to a representative MEP scene pack. | Add 8-12 selected P0/P1 rows across multiple Skia-relevant families, keep unsupported breadth explicit, and update PM readiness without introducing tracked gaps or failing support claims. |
 | M49 MEP Readiness Gate Toward 60% | Promote the dashboard from local evidence into release-oriented readiness gates and PM packaging. | Add gate invariant spec, CI validation task, portable PM artifact bundle, adapter-backed expansion to at least six rows, non-blocking performance trend gate contract, MEP release checklist, and sprint review. The 60% readiness score may be claimed only if all lanes land with merged evidence. |
+| M50 MEP Readiness Acceleration Toward 80% | Convert M49 gate candidate and front/font specs into executable release evidence. | Required CI ownership, front/browser/accessibility gates, at least 14 adapter-backed rows, first generated font/text evidence pack, automated warning-only performance trends, and sprint review score recalculation. The 80% score may be claimed only if every lane lands with artifacts. |
 
 ## M41 Seed Tickets
 
@@ -362,3 +363,78 @@ These specs are planning and ownership evidence. They do not change the
 Post-MVP Big Target readiness score, which remains 60%, because no new runtime
 support claim, adapter-backed capture, release-owned CI gate, or generated font
 scene row landed with the spec split.
+
+## M50 Plan
+
+M50 should target 80% Post-MVP readiness, but the score is conditional. It is
+not enough to add more spec text. The sprint must produce release-visible,
+executable evidence from the current M49 dashboard gate candidate and the draft
+front/font spec packs.
+
+Target score formula:
+
+| PM area | Current | M50 target | Evidence required |
+|---|---:|---:|---|
+| Evidence foundation | 100% | 100% | Preserve generated dashboard semantics, 0 `tracked-gap`, 0 `fail`, stable fallback policy, and deterministic scene export. |
+| Skia integration coverage | 45% | 65% | Raise adapter-backed rows from 7 to at least 14 and add first generated font/text scene evidence without broad unsupported claims. |
+| CI and release gates | 60% | 85% | Make `pipelineSceneDashboardGate`, PM bundle validation, and non-blocking inventory ownership visible from the accepted release path. |
+| Performance readiness | 35% | 60% | Automate warning-only trend evidence with baseline owner, environment metadata, variance policy, quarantine, and rollback notes. |
+| PM demo and reporting workflow | 45% | 85% | Add front/browser/accessibility QA, image inspection, filters, route/reference notices, and PM bundle attachment. |
+
+Weighted result if all lanes land: 80%.
+
+M50 seed tickets:
+
+- M50-A Required CI ownership for dashboard gate and inventory reporting.
+  Definition of Done: release path runs `pipelineSceneDashboardGate`, archives
+  or links the output, keeps non-blocking inventory visible with an owner, and
+  updates the release checklist with exact job/report paths.
+- M50-B Front evidence gate.
+  Definition of Done: dashboard has in-page image inspection, two-column
+  desktop layout, single-column mobile layout, collapsed artifact lists, filters
+  for status/priority/reference/maturity/adapter/fallback reason,
+  route/reference notices, desktop/mobile screenshots, accessibility report
+  with no critical issue, and PM bundle inclusion.
+- M50-C Adapter-backed scene expansion V2.
+  Definition of Done: at least 14 adapter-backed rows across at least four
+  scene families, every new pass row has reference/CPU/GPU/diff/stats/route
+  diagnostics/adapter metadata, `fallbackReason=none`, and the merged dashboard
+  stays 0 `tracked-gap` / 0 `fail`.
+- M50-D First font/text evidence pack.
+  Definition of Done: at least three generated pass scenes from the existing
+  pure Kotlin OpenType/simple text path, at least two generated
+  expected-unsupported font/text rows with stable fallback reasons, font source
+  and glyph diagnostics recorded, and no external font shortcut.
+- M50-E Performance warning gate.
+  Definition of Done: refreshed measured rows include host/OS/JDK/backend/
+  adapter/warmup/sample/baseline/variance metadata; warning-only trend output is
+  emitted by CI or release automation; owner, quarantine, and rollback policy
+  are documented.
+- M50-F Closeout and score update.
+  Definition of Done: sprint review links tickets, PRs, CI runs, generated
+  dashboard, PM bundle, screenshots, performance output, font evidence, and
+  known limitations; README and target docs move only to the justified score.
+
+Validation baseline:
+
+```bash
+rtk git diff --check
+rtk ./gradlew --no-daemon pipelineSceneDashboard
+rtk ./gradlew --no-daemon pipelineSceneDashboardGate
+rtk ./gradlew --no-daemon pipelinePmBundle
+```
+
+Font/text tickets must also run the focused owning tests, starting with:
+
+```bash
+rtk ./gradlew --no-daemon :kanvas-skia:test --tests 'org.skia.foundation.opentype.*'
+```
+
+M50 must not claim complete MEP, broad Skia parity, broad font/emoji/shaping/
+SDF/LCD/glyph-mask support, or release-blocking performance thresholds. If a
+lane remains documentation-only, the sprint review must publish the lower
+justified score instead of claiming 80%.
+
+Detailed plan:
+
+- `reports/wgsl-pipeline/2026-05-31-m50-80-readiness-sprint-plan.md`.
