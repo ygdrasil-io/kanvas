@@ -1,0 +1,20 @@
+{
+  "sceneId": "m57-aaclip-bounded-grid",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "drawKind": "AaclipGM",
+  "status": "pass",
+  "coverageStrategy": "webgpu.coverage.aa-clip-rect-grid",
+  "selectedRoute": "webgpu.coverage.aaclip-bounded-grid",
+  "pipelineKey": "pathAA=aaclip clip=aaRectGrid op=intersect budget=current source=AaclipGM",
+  "fallbackReason": "none",
+  "edgeBudget": 256,
+  "edgeBudgetReason": "not coverage.edge-count-exceeded",
+  "clipOp": "intersect",
+  "clipShape": "aa-rect-grid",
+  "inverseClip": false,
+  "complexClip": false,
+  "dashPattern": "none",
+  "test": "org.skia.gpu.webgpu.AaclipSceneCaptureTest#aaclip bounded grid renders from adapter backed WebGPU capture",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-promotion.md"
+}

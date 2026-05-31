@@ -37,7 +37,7 @@ The platform must answer five questions for every promoted scene:
 
 ## PM Readiness
 
-Current Post-MVP Big Target readiness for MEP: 96%.
+Current Post-MVP Big Target readiness for MEP: 98%.
 
 This is a PM readiness score for the full target, not an effort estimate and not
 the completion state of the latest Linear sprint. M41-M47 completed the evidence
@@ -49,7 +49,8 @@ pack into generated dashboard evidence, M53 promoted a second 12-row GM
 feature pack, M54 promoted a 10-row hard feature depth pack, M55 added a
 non-blocking performance gate candidate for seven representative rows, and M56
 promoted one corrected sweep-gradient boundary row from expected unsupported to
-adapter-backed pass. The platform is still not complete MEP
+adapter-backed pass, and M57 added one bounded AA clip grid generated support
+row. The platform is still not complete MEP
 scope because release-blocking performance thresholds, broad Skia parity, broad
 font/text coverage, and dependency-gated codec gaps remain outside the selected
 evidence rows.
@@ -92,19 +93,25 @@ by correcting the inventory mapping from two-point conical to
 unsupported because current artifacts do not prove row-specific GPU support.
 M56 moves readiness to 96%, not the 97% stretch target.
 
+M57 promotes one bounded Path AA / clip micro-slice:
+`m57-aaclip-bounded-grid`, mapped to `skia-gm-aaclip`, with generated
+row-specific reference/CPU/GPU/diff/stats artifacts and route diagnostics. Existing
+edge-budget, dash, hairline, stroke-outline, and complex-clip refusals remain
+visible and unchanged. M57 moves readiness to 98%.
+
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
-| Evidence foundation | 25% | M41-M56 complete: generated dashboard, 58 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
-| Skia integration coverage | 25% | M56 promotes one previous expected-unsupported sweep-gradient row to adapter-backed pass while inventory rows remain planning-only outside promoted rows. | 99% |
-| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, PM bundle generation, M54 metadata checks, M55 performance candidate output, and the corrected M56 allowlist. | 98% |
+| Evidence foundation | 25% | M41-M57 complete: generated dashboard, 59 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
+| Skia integration coverage | 25% | M57 adds one bounded AA clip support row while inventory rows remain planning-only outside promoted rows. | 100% |
+| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, PM bundle generation, M54 metadata checks, M55 performance candidate output, the corrected M56 allowlist, and M57 generated evidence. | 99% |
 | Performance readiness | 15% | Seven M55 rows have candidate decisions: 4 measured pass rows, 3 deferred rows, 0 warn, 0 fail-candidate. Thresholds are not release gates. | 80% |
-| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, performance warnings, inventory reports, M52/M53/M54 counters, M55 performance candidate counters, and M56 promotion/limitation evidence. | 99% |
+| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, performance warnings, inventory reports, M52/M53/M54 counters, M55 performance candidate counters, M56 promotion/limitation evidence, and M57 micro-promotion evidence. | 100% |
 
-The resulting weighted readiness is 96%. Evidence-hardening through M47, M48
+The resulting weighted readiness is 98%. Evidence-hardening through M47, M48
 coverage expansion, M49 readiness gating, M50 acceleration, M51 inventory
 visibility, M52 selected inventory promotion, M53 feature promotion, M54
 hard feature depth, M55 performance gate candidate evidence, and M56
-unsupported-to-pass correction are
+unsupported-to-pass correction, and M57 Path AA / clip micro-promotion are
 complete for their selected evidence sets. These are still only parts of the
 larger MEP target.
 
