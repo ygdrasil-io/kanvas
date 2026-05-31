@@ -277,7 +277,16 @@ class WebGpuCoveragePlanSelectorTest {
         val selection = WebGpuCoveragePlanSelector.select(
             drawKind = "simple-filled-path",
             plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
-            pathFacts = WebGpuPathCoverageFacts(isConvex = true, contourCount = 1, edgeCount = 5),
+            pathFacts = WebGpuPathCoverageFacts(
+                isConvex = true,
+                contourCount = 1,
+                edgeCount = 5,
+                pathVerbCount = 5,
+                maxCubicSegmentsPerCubic = 4,
+                dashIntervalCount = 2,
+                clipStackDepth = 1,
+                deviceBounds = FloatRect(3f, 3f, 13f, 13f),
+            ),
         )
 
         assertEquals(WebGpuCoverageStrategy.CpuPreparedConvexFan, selection.strategy)
@@ -290,6 +299,12 @@ class WebGpuCoveragePlanSelectorTest {
             selection.pipelineKeyDump(),
         )
         assertTrue(selection.dump().contains("coverage=PathCoverage(fillType=Winding,aa=true,inverse=false)"))
+        assertTrue(selection.dump().contains("pathVerbCount=5/$WEBGPU_PATH_AA_VERB_BUDGET"))
+        assertTrue(selection.dump().contains("coverageEdgeCount=5/$WEBGPU_PATH_AA_EDGE_BUDGET"))
+        assertTrue(selection.dump().contains("cubicMaxSegmentsPerCubic=4/$WEBGPU_PATH_AA_CUBIC_SEGMENT_BUDGET"))
+        assertTrue(selection.dump().contains("dashIntervalCount=2/$WEBGPU_PATH_AA_DASH_INTERVAL_BUDGET"))
+        assertTrue(selection.dump().contains("clipStackDepth=1/$WEBGPU_PATH_AA_CLIP_STACK_DEPTH_BUDGET"))
+        assertTrue(selection.dump().contains("deviceBounds=3.0,3.0,13.0,13.0"))
         assertTrue(selection.dump().contains("diagnostic=none"))
     }
 
@@ -337,7 +352,137 @@ class WebGpuCoveragePlanSelectorTest {
         assertTrue(selection.diagnostic?.dump()?.contains("backend=GPU") == true)
         assertTrue(selection.diagnostic?.dump()?.contains("action=RefuseDiagnostic(coverage.edge-count-exceeded)") == true)
         assertTrue(selection.dump().contains("coverage.edge-count-exceeded"))
+        assertTrue(selection.dump().contains("coverageEdgeCount=${WEBGPU_PATH_AA_EDGE_BUDGET + 1}/$WEBGPU_PATH_AA_EDGE_BUDGET"))
         assertTrue(selection.pipelineKeyDump().contains("code=[coverageKind=pathCoverageUnsupported]"))
+    }
+
+    @Test
+    fun `aa path verb budget overflow emits stable gpu diagnostic while edge budget remains within limit`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "path-verb-overflow",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET,
+                pathVerbCount = WEBGPU_PATH_AA_VERB_BUDGET + 1,
+                maxCubicSegmentsPerCubic = WEBGPU_PATH_AA_CUBIC_SEGMENT_BUDGET,
+                dashIntervalCount = WEBGPU_PATH_AA_DASH_INTERVAL_BUDGET,
+                clipStackDepth = WEBGPU_PATH_AA_CLIP_STACK_DEPTH_BUDGET,
+                deviceBounds = FloatRect(0f, 0f, WEBGPU_PATH_AA_DEVICE_BOUNDS_BUDGET, 64f),
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
+        assertEquals(StandardCoverageReason.VerbBudgetExceeded, selection.diagnostic?.reason)
+        assertEquals("coverage.verb-budget-exceeded", selection.diagnostic?.reason?.code)
+        assertEquals("webgpu.coverage.refuse", selection.routeIdentifier)
+        assertTrue(selection.dump().contains("pathVerbCount=${WEBGPU_PATH_AA_VERB_BUDGET + 1}/$WEBGPU_PATH_AA_VERB_BUDGET"))
+        assertTrue(selection.dump().contains("coverageEdgeCount=$WEBGPU_PATH_AA_EDGE_BUDGET/$WEBGPU_PATH_AA_EDGE_BUDGET"))
+        assertTrue(selection.dump().contains("coverage.verb-budget-exceeded"))
+    }
+
+    @Test
+    fun `edge budget remains the first refusal when multiple path budgets overflow`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "path-multiple-budget-overflow",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET + 1,
+                pathVerbCount = WEBGPU_PATH_AA_VERB_BUDGET + 1,
+                maxCubicSegmentsPerCubic = WEBGPU_PATH_AA_CUBIC_SEGMENT_BUDGET + 1,
+                dashIntervalCount = WEBGPU_PATH_AA_DASH_INTERVAL_BUDGET + 1,
+                clipStackDepth = WEBGPU_PATH_AA_CLIP_STACK_DEPTH_BUDGET + 1,
+                deviceBounds = FloatRect(0f, 0f, WEBGPU_PATH_AA_DEVICE_BOUNDS_BUDGET + 1f, 64f),
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
+        assertEquals(StandardCoverageReason.EdgeCountExceeded, selection.diagnostic?.reason)
+        assertTrue(selection.dump().contains("coverage.edge-count-exceeded"))
+        assertTrue(selection.dump().contains("pathVerbCount=${WEBGPU_PATH_AA_VERB_BUDGET + 1}/$WEBGPU_PATH_AA_VERB_BUDGET"))
+    }
+
+    @Test
+    fun `non edge budget overflow does not select stroke or mask fallback routes`() {
+        val strokeSelection = WebGpuCoveragePlanSelector.select(
+            drawKind = "path-verb-overflow-stroke-fallback",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET,
+                pathVerbCount = WEBGPU_PATH_AA_VERB_BUDGET + 1,
+                strokeOutlineFallbackEnabled = true,
+            ),
+        )
+        val maskSelection = WebGpuCoveragePlanSelector.select(
+            drawKind = "path-verb-overflow-mask-fallback",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET,
+                pathVerbCount = WEBGPU_PATH_AA_VERB_BUDGET + 1,
+                maskOrAtlasFallbackEnabled = true,
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, strokeSelection.strategy)
+        assertEquals(StandardCoverageReason.VerbBudgetExceeded, strokeSelection.diagnostic?.reason)
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, maskSelection.strategy)
+        assertEquals(StandardCoverageReason.VerbBudgetExceeded, maskSelection.diagnostic?.reason)
+    }
+
+    @Test
+    fun `m60 path budget reasons are emitted after edge budget passes`() {
+        fun selectWithFacts(facts: WebGpuPathCoverageFacts): WebGpuCoverageSelection =
+            WebGpuCoveragePlanSelector.select(
+                drawKind = "path-budget-overflow",
+                plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+                pathFacts = facts,
+            )
+
+        val cubic = selectWithFacts(
+            WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET,
+                maxCubicSegmentsPerCubic = WEBGPU_PATH_AA_CUBIC_SEGMENT_BUDGET + 1,
+            ),
+        )
+        val dash = selectWithFacts(
+            WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET,
+                dashIntervalCount = WEBGPU_PATH_AA_DASH_INTERVAL_BUDGET + 1,
+            ),
+        )
+        val clip = selectWithFacts(
+            WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET,
+                clipStackDepth = WEBGPU_PATH_AA_CLIP_STACK_DEPTH_BUDGET + 1,
+            ),
+        )
+        val bounds = selectWithFacts(
+            WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = WEBGPU_PATH_AA_EDGE_BUDGET,
+                deviceBounds = FloatRect(0f, 0f, WEBGPU_PATH_AA_DEVICE_BOUNDS_BUDGET + 1f, 64f),
+            ),
+        )
+
+        assertEquals(StandardCoverageReason.CubicSegmentBudgetExceeded, cubic.diagnostic?.reason)
+        assertEquals("coverage.cubic-segment-budget-exceeded", cubic.diagnostic?.reason?.code)
+        assertEquals(StandardCoverageReason.DashBudgetExceeded, dash.diagnostic?.reason)
+        assertEquals(StandardCoverageReason.ClipDepthExceeded, clip.diagnostic?.reason)
+        assertEquals(StandardCoverageReason.BoundsBudgetExceeded, bounds.diagnostic?.reason)
     }
 
     @Test
@@ -527,12 +672,17 @@ class WebGpuCoveragePlanSelectorTest {
                 assertEquals("webgpu.coverage.path-convex-fan", path?.routeIdentifier)
                 assertTrue(path?.pipelineKeyDump?.contains("code=[coverageKind=pathConvexFan]") == true)
                 assertFalse(path?.pipelineKeyDump?.contains("3.0") == true)
+                assertTrue(path?.selectionDump?.contains("pathAaBudgets=pathVerbCount=") == true)
+                assertTrue(path?.selectionDump?.contains("coverageEdgeCount=") == true)
+                assertTrue(path?.productionDump?.contains("budgetDiagnostics=pathVerbCount=") == true)
+                assertTrue(path?.productionDump?.contains("deviceBounds=") == true)
 
                 canvas.drawPath(concavePath(), paint)
                 val concave = device.coverageSelectionDiagnosticsForTests()
                 assertEquals("webgpu.coverage.path-stencil-cover", concave?.routeIdentifier)
                 assertTrue(concave?.pipelineKeyDump?.contains("code=[coverageKind=pathStencilCover]") == true)
                 assertTrue(concave?.selectionDump?.contains("diagnostic=none") == true)
+                assertTrue(concave?.selectionDump?.contains("pathAaBudgets=pathVerbCount=") == true)
             }
         }
     }

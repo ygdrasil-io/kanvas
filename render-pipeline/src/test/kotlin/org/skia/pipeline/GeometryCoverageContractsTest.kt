@@ -25,6 +25,14 @@ class GeometryCoverageContractsTest {
         )
         assertEquals("coverage.stencil-cover-unavailable", StandardCoverageReason.StencilCoverUnavailable.code)
         assertEquals("coverage.edge-count-exceeded", StandardCoverageReason.EdgeCountExceeded.code)
+        assertEquals("coverage.verb-budget-exceeded", StandardCoverageReason.VerbBudgetExceeded.code)
+        assertEquals(
+            "coverage.cubic-segment-budget-exceeded",
+            StandardCoverageReason.CubicSegmentBudgetExceeded.code,
+        )
+        assertEquals("coverage.dash-budget-exceeded", StandardCoverageReason.DashBudgetExceeded.code)
+        assertEquals("coverage.clip-depth-exceeded", StandardCoverageReason.ClipDepthExceeded.code)
+        assertEquals("coverage.bounds-budget-exceeded", StandardCoverageReason.BoundsBudgetExceeded.code)
         assertEquals(
             "coverage.stroke-outline-edge-count-exceeded",
             StandardCoverageReason.StrokeOutlineEdgeCountExceeded.code,
