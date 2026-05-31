@@ -37,15 +37,16 @@ The platform must answer five questions for every promoted scene:
 
 ## PM Readiness
 
-Current Post-MVP Big Target readiness for MEP: 85%.
+Current Post-MVP Big Target readiness for MEP: 90%.
 
 This is a PM readiness score for the full target, not an effort estimate and not
 the completion state of the latest Linear sprint. M41-M47 completed the evidence
 foundation, M48 expanded representative Skia integration breadth, M49 turned the
 dashboard into a release-oriented readiness gate candidate, M50 converted that
 candidate plus the front/font specs into executable evidence, M51 exposed the GM
-surface as planning inventory, and M52 promoted a selected 10-row GM inventory
-pack into generated dashboard evidence. The platform is still not complete MEP
+surface as planning inventory, M52 promoted a selected 10-row GM inventory
+pack into generated dashboard evidence, and M53 promoted a second 12-row GM
+feature pack. The platform is still not complete MEP
 scope because release-blocking performance thresholds, broad Skia parity, broad
 font/text coverage, and dependency-gated codec gaps remain outside the selected
 evidence rows.
@@ -61,18 +62,25 @@ reference/CPU/GPU or refusal evidence, diff/stat artifacts, tags, route
 diagnostics, and stable fallback semantics. This moves readiness only for the
 selected generated contracts and does not claim broad Skia GM support.
 
+M53 converts 12 more selected GM candidates into generated dashboard evidence:
+9 `pass` rows and 3 `expected-unsupported` rows across gradient, bitmap/image,
+blend/color-filter, clip/transform/saveLayer, and bounded image-filter
+families. The rows are generated inventory-derived contracts with artifacts and
+route diagnostics; they still do not claim broad Skia GM parity.
+
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
-| Evidence foundation | 25% | M41-M52 complete: generated dashboard, 36 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
-| Skia integration coverage | 25% | M52 promotes 10 selected M51 inventory candidates into generated evidence while the 802-row inventory remains planning-only outside promoted rows. | 82% |
-| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, and PM bundle generation with archived reports. | 85% |
+| Evidence foundation | 25% | M41-M53 complete: generated dashboard, 48 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
+| Skia integration coverage | 25% | M53 promotes 12 selected GM candidates into generated evidence while inventory rows remain planning-only outside promoted rows. | 94% |
+| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, PM bundle generation, and M53 metadata checks. | 90% |
 | Performance readiness | 15% | `pipelinePerformanceTrendWarnings` emits owner, baseline, environment, variance, quarantine, and rollback policy; thresholds are not release gates. | 60% |
-| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, screenshot paths, performance warnings, inventory, inventory gate reports, and M52 selected/promoted/rejected counters. | 90% |
+| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, performance warnings, inventory reports, and M52/M53 selected/promoted/rejected counters. | 95% |
 
-The resulting weighted readiness is 85%. Evidence-hardening through M47, M48
+The resulting weighted readiness is 90%. Evidence-hardening through M47, M48
 coverage expansion, M49 readiness gating, M50 acceleration, M51 inventory
-visibility, and M52 selected inventory promotion are complete for their selected
-evidence sets. These are still only parts of the larger MEP target.
+visibility, M52 selected inventory promotion, and M53 feature promotion are
+complete for their selected evidence sets. These are still only parts of the
+larger MEP target.
 
 | Area | Weight | M50 target | Required movement |
 |---|---:|---:|---|
@@ -366,6 +374,39 @@ M52 PM evidence:
 - `reports/wgsl-pipeline/2026-05-31-m52-inventory-promotion-pack.md`;
 - `reports/wgsl-pipeline/2026-05-31-m52-sprint-review.md`;
 - `reports/wgsl-pipeline/2026-05-31-m52-pm-report.md`.
+
+## M53 GM Feature Promotion Pack v2
+
+M53 promotes a bounded set of 12 selected GM candidates into generated
+dashboard evidence:
+
+- 9 generated `pass` rows;
+- 3 generated `expected-unsupported` rows;
+- 0 `tracked-gap` rows;
+- 0 `fail` rows;
+- 12 top-level `inventoryId` links;
+- PM bundle selected/promoted/rejected counters for M53.
+
+Dashboard after M53:
+
+| Signal | Count |
+|---|---:|
+| Scene rows | 50 |
+| `pass` | 37 |
+| `expected-unsupported` | 13 |
+| `tracked-gap` | 0 |
+| `fail` | 0 |
+| Generated evidence rows | 48 |
+| Static policy rows | 2 |
+| Adapter-backed rows | 33 |
+| Inventory-derived generated rows | 22 |
+
+M53 PM evidence:
+
+- `reports/wgsl-pipeline/2026-05-31-m53-gm-feature-promotion-pack-v2-selection.md`;
+- `reports/wgsl-pipeline/2026-05-31-m53-inventory-promotion-pack.md`;
+- `reports/wgsl-pipeline/2026-05-31-m53-sprint-review.md`;
+- `reports/wgsl-pipeline/2026-05-31-m53-pm-report.md`.
 
 ## Agent Execution Policy
 
