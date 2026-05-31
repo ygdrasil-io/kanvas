@@ -2426,3 +2426,207 @@ tasks.register("pipelineSceneDashboardGateNegativeFixture") {
         logger.lifecycle("Negative fixture proved fallback.support regression detection for scene `$sceneId`: ${reportRoot.resolve("negative-fixture.md").relativeTo(rootDir)}")
     }
 }
+
+tasks.register("pipelinePmBundle") {
+    group = "verification"
+    description = "Builds a portable PM review bundle for the WGSL scene dashboard."
+
+    dependsOn("pipelineSceneDashboardGate")
+
+    val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
+    val generatedExportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
+    val gateReportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scene-gate")
+    val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
+    inputs.dir(dashboardDir)
+    inputs.dir(generatedExportDir)
+    inputs.dir(gateReportDir)
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    outputs.dir(bundleDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val dashboardRoot = dashboardDir.get().asFile
+        val generatedRoot = generatedExportDir.get().asFile
+        val gateRoot = gateReportDir.get().asFile
+        val targetRoot = bundleDir.get().asFile
+        val mergedData = dashboardRoot.resolve("data/scenes.json")
+        if (!mergedData.isFile) {
+            throw GradleException("Missing merged scene dashboard data: ${mergedData.relativeTo(rootDir)}")
+        }
+        if (targetRoot.exists()) {
+            targetRoot.deleteRecursively()
+        }
+        targetRoot.mkdirs()
+
+        val dashboardTarget = targetRoot.resolve("dashboard")
+        dashboardRoot.copyRecursively(dashboardTarget, overwrite = true)
+
+        val generatedManifest = file("reports/wgsl-pipeline/scenes/generated/results.json")
+        if (generatedManifest.isFile) {
+            val generatedManifestTarget = targetRoot.resolve("reports/wgsl-pipeline/scenes/generated/results.json")
+            generatedManifestTarget.parentFile.mkdirs()
+            generatedManifest.copyTo(generatedManifestTarget, overwrite = true)
+        }
+        val generatedExportData = generatedRoot.resolve("data/generated-scenes.json")
+        if (generatedExportData.isFile) {
+            val exportTarget = targetRoot.resolve("generated/data/generated-scenes.json")
+            exportTarget.parentFile.mkdirs()
+            generatedExportData.copyTo(exportTarget, overwrite = true)
+        }
+        if (gateRoot.isDirectory) {
+            gateRoot.copyRecursively(targetRoot.resolve("gate"), overwrite = true)
+        }
+
+        fun collectReferencedPaths(value: Any?, paths: MutableSet<String>) {
+            when (value) {
+                is Map<*, *> -> value.values.forEach { collectReferencedPaths(it, paths) }
+                is Iterable<*> -> value.forEach { collectReferencedPaths(it, paths) }
+                is String -> {
+                    val normalized = value.replace('\\', '/')
+                    if (normalized.startsWith("artifacts/") || normalized.startsWith("data/") || normalized.startsWith("reports/")) {
+                        paths += normalized
+                    }
+                }
+            }
+        }
+
+        val root = JsonSlurper().parse(mergedData) as? Map<*, *>
+            ?: throw GradleException("Merged dashboard root must be a JSON object: ${mergedData.relativeTo(rootDir)}")
+        val scenes = root["scenes"] as? List<*>
+            ?: throw GradleException("Merged dashboard root must contain scenes[]: ${mergedData.relativeTo(rootDir)}")
+        val referencedPaths = mutableSetOf<String>()
+        collectReferencedPaths(root, referencedPaths)
+
+        val unavailable = mutableListOf<Map<String, String>>()
+        referencedPaths.sorted().forEach { path ->
+            when {
+                path.startsWith("artifacts/") || path.startsWith("data/") -> {
+                    val bundled = dashboardTarget.resolve(path)
+                    if (!bundled.exists()) {
+                        unavailable += mapOf("path" to path, "reason" to "Dashboard artifact/data path did not exist in the generated dashboard export.")
+                    }
+                }
+                path.startsWith("reports/") -> {
+                    val source = rootDir.resolve(path)
+                    if (source.isFile) {
+                        val destination = targetRoot.resolve(path)
+                        destination.parentFile.mkdirs()
+                        source.copyTo(destination, overwrite = true)
+                    } else {
+                        unavailable += mapOf("path" to path, "reason" to "Referenced report is not checked in or was generated outside the portable PM bundle scope.")
+                    }
+                }
+            }
+        }
+
+        val statusCounts = scenes
+            .filterIsInstance<Map<*, *>>()
+            .mapNotNull { it["status"] as? String }
+            .groupingBy { it }
+            .eachCount()
+            .toSortedMap()
+        val maturityCounts = scenes
+            .filterIsInstance<Map<*, *>>()
+            .flatMap { scene -> (scene["tags"] as? List<*>)?.filterIsInstance<String>().orEmpty() }
+            .filter { it.startsWith("maturity.") }
+            .groupingBy { it }
+            .eachCount()
+            .toSortedMap()
+        val expectedUnsupported = scenes
+            .filterIsInstance<Map<*, *>>()
+            .filter { it["status"] == "expected-unsupported" }
+            .map { scene ->
+                val gpu = scene["gpu"] as? Map<*, *>
+                val route = gpu?.get("route") as? Map<*, *>
+                mapOf(
+                    "id" to (scene["id"] as? String).orEmpty(),
+                    "fallbackReason" to (route?.get("fallbackReason") as? String).orEmpty(),
+                )
+            }
+        val adapterBacked = scenes
+            .filterIsInstance<Map<*, *>>()
+            .filter { scene -> (scene["tags"] as? List<*>)?.contains("maturity.adapter-backed") == true }
+            .map { scene ->
+                val gpu = scene["gpu"] as? Map<*, *>
+                val stats = gpu?.get("stats") as? Map<*, *>
+                mapOf(
+                    "id" to (scene["id"] as? String).orEmpty(),
+                    "adapter" to (stats?.get("adapter") as? String).orEmpty(),
+                )
+            }
+        val commit = try {
+            providers.exec {
+                commandLine("git", "rev-parse", "HEAD")
+            }.standardOutput.asText.get().trim()
+        } catch (_: Exception) {
+            "unknown"
+        }
+        val timestamp = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).toString()
+        val serveCommand = "python3 -m http.server 8765 --bind 127.0.0.1 --directory build/reports/wgsl-pipeline-pm-bundle/dashboard"
+        val manifest = linkedMapOf<String, Any>(
+            "schemaVersion" to 1,
+            "generatedBy" to "pipelinePmBundle",
+            "generatedAt" to timestamp,
+            "commit" to commit,
+            "generationCommand" to "rtk ./gradlew --no-daemon pipelinePmBundle",
+            "serveCommand" to serveCommand,
+            "dashboardEntry" to "dashboard/index.html",
+            "mergedSceneJson" to "dashboard/data/scenes.json",
+            "generatedResultJson" to "reports/wgsl-pipeline/scenes/generated/results.json",
+            "gateReport" to "gate/scene-dashboard-gate.md",
+            "counters" to linkedMapOf<String, Any>(
+                "total" to scenes.size,
+                "statuses" to statusCounts,
+                "maturity" to maturityCounts,
+                "adapterBacked" to adapterBacked.size,
+                "expectedUnsupported" to expectedUnsupported.size,
+                "unavailableReferences" to unavailable.size,
+            ),
+            "expectedUnsupportedRows" to expectedUnsupported,
+            "adapterBackedRows" to adapterBacked,
+            "knownLimitations" to listOf(
+                "Expected-unsupported rows are planning evidence, not support claims.",
+                "Performance trend warnings remain non-blocking until M49-E defines promotion rules.",
+                "The bundle is a static PM review artifact and does not execute GPU captures.",
+                "Text, glyph masks, font, emoji, codec, arbitrary SkSL, arbitrary image-filter DAG, and broad Path AA support remain outside this bundle's claims.",
+            ),
+            "unavailableReferences" to unavailable,
+        )
+        targetRoot.resolve("manifest.json").writeText(JsonOutput.prettyPrint(JsonOutput.toJson(manifest)) + "\n")
+        targetRoot.resolve("README.md").writeText(
+            buildString {
+                appendLine("# WGSL Pipeline PM Bundle")
+                appendLine()
+                appendLine("Generated by `pipelinePmBundle` at `$timestamp`.")
+                appendLine()
+                appendLine("## Open Locally")
+                appendLine()
+                appendLine("```bash")
+                appendLine(serveCommand)
+                appendLine("```")
+                appendLine()
+                appendLine("Then open `http://127.0.0.1:8765/index.html`.")
+                appendLine()
+                appendLine("## Contents")
+                appendLine()
+                appendLine("- `dashboard/`: self-contained dashboard HTML, merged scene JSON, images, diffs, routes, and stats artifacts.")
+                appendLine("- `manifest.json`: commit, command, counters, expected-unsupported rows, adapter-backed rows, and limitations.")
+                appendLine("- `gate/`: M49 dashboard gate reports from `pipelineSceneDashboardGate`.")
+                appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
+            }
+        )
+        if (unavailable.isNotEmpty()) {
+            targetRoot.resolve("UNAVAILABLE_REFERENCES.md").writeText(
+                buildString {
+                    appendLine("# Unavailable References")
+                    appendLine()
+                    unavailable.forEach { item ->
+                        appendLine("- `${item["path"]}`: ${item["reason"]}")
+                    }
+                }
+            )
+        }
+        logger.lifecycle("Wrote WGSL PM bundle: ${targetRoot.relativeTo(rootDir)}")
+        logger.lifecycle("Serve with: $serveCommand")
+    }
+}
