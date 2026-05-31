@@ -3,6 +3,8 @@
 Date: 2026-05-31
 Linear epic: GRA-317
 Tickets: GRA-318 through GRA-324
+Merged PR: https://github.com/ygdrasil-io/kanvas/pull/1277
+Verified merge commit: `6f174de1`
 
 ## Capability
 
@@ -95,3 +97,6 @@ rtk ./gradlew --no-daemon pipelineSkiaGmInventory pipelineSkiaGmInventoryGate pi
 ```
 
 Result: pass.
+
+Post-merge verification on `master` reran the same validation and confirmed the
+generated dashboard, PM bundle, and Linear closeout counters match this review.
