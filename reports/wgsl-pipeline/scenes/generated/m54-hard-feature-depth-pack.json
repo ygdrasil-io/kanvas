@@ -53,6 +53,35 @@
       "fallbackReason": "image-filter.dag-or-picture-prepass-required",
       "matchingPixels": 0,
       "threshold": 0,
+      "graphDiagnostics": {
+        "schemaVersion": 1,
+        "sceneId": "m54-imagefilters-graph-boundary",
+        "milestoneOwner": "M61 Image Filter DAG V2",
+        "status": "expected-unsupported",
+        "fallbackReason": "image-filter.dag-or-picture-prepass-required",
+        "nodeCount": 4,
+        "nodeBudget": 4,
+        "childrenPerNodeBudget": 2,
+        "intermediateTextureCount": 0,
+        "intermediateTextureBudget": 4,
+        "estimatedIntermediateBytes": 0,
+        "bounds": {
+          "input": {"left": 0, "top": 0, "right": 256, "bottom": 256},
+          "output": {"left": 0, "top": 0, "right": 256, "bottom": 256}
+        },
+        "nodes": [
+          {"id": "source-picture", "kind": "picture-prepass", "inputs": [], "support": "unsupported", "reason": "picture prepass is outside M61 bounded DAG V2"},
+          {"id": "blur", "kind": "blur", "inputs": ["source-picture"], "sigma": 8, "support": "blocked-by-input"},
+          {"id": "matrix-transform", "kind": "matrix-transform-affine", "inputs": ["blur"], "support": "blocked-by-input"},
+          {"id": "compose", "kind": "compose", "inputs": ["matrix-transform"], "support": "blocked-by-input"}
+        ],
+        "passOrder": [],
+        "ownership": {
+          "intermediateTextures": "none allocated because the first node requires picture prepass materialization",
+          "parentSurface": "not owned by image-filter DAG route"
+        },
+        "nonClaim": "Diagnostics only; does not claim arbitrary image-filter DAG, recursive scheduling, or picture prepass support."
+      },
       "nonClaim": "Does not claim arbitrary image-filter DAG support, recursive scheduling, or picture prepass support.",
       "tags": ["source.generated", "source.inventory", "feature.image-filter", "route.cpu.oracle", "route.gpu.expected-unsupported", "reference.cpu-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]
     },

@@ -20,6 +20,7 @@ from typing import Any
 
 PASS_ARTIFACTS = ("skia.png", "cpu.png", "cpu-diff.png", "gpu.png", "gpu-diff.png")
 UNSUPPORTED_ARTIFACTS = ("skia.png", "cpu.png", "cpu-diff.png")
+M61_GRAPH_DIAGNOSTICS_REPORT = "reports/wgsl-pipeline/2026-06-01-m61-image-filter-dag-diagnostics.md"
 
 
 def git_commit(project_root: Path) -> str:
@@ -139,6 +140,12 @@ def materialize_scene(
     stats["derivedFromGeneratedScene"] = base_scene
     write_json(target_root / "stats.json", stats)
 
+    graph_diagnostics = row.get("graphDiagnostics")
+    has_graph_diagnostics = isinstance(graph_diagnostics, dict)
+    if has_graph_diagnostics:
+        write_json(target_root / "graph-diagnostics.json", graph_diagnostics)
+        row["graphDiagnostics"] = f"artifacts/{scene_id}/graph-diagnostics.json"
+
     row["evidence"] = [
         evidence for evidence in row.get("evidence", [])
         if not evidence.startswith("reports/wgsl-pipeline/scenes/artifacts/")
@@ -148,6 +155,9 @@ def materialize_scene(
         f"{output_artifact_prefix}/artifacts/{scene_id}/route-gpu.json",
         f"{output_artifact_prefix}/artifacts/{scene_id}/stats.json",
     ]
+    if has_graph_diagnostics:
+        row["evidence"].append(f"{output_artifact_prefix}/artifacts/{scene_id}/graph-diagnostics.json")
+        row["evidence"].append(M61_GRAPH_DIAGNOSTICS_REPORT)
 
     return row
 
