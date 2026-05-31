@@ -1,0 +1,17 @@
+{
+  "sceneId": "m57-aaclip-bounded-grid",
+  "backend": "CPU",
+  "drawKind": "AaclipGM",
+  "status": "pass",
+  "selectedRoute": "cpu.coverage.aaclip-bounded-grid-oracle",
+  "coveragePlan": "AaclipGM grid: AA clipRect intersect, no inverse clip, no complex clip, no dash",
+  "fallbackReason": "none",
+  "edgeBudget": 256,
+  "edgeBudgetReason": "not coverage.edge-count-exceeded",
+  "clipOp": "intersect",
+  "clipShape": "aa-rect-grid",
+  "inverseClip": false,
+  "complexClip": false,
+  "dashPattern": "none",
+  "sourceReport": "reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-promotion.md"
+}

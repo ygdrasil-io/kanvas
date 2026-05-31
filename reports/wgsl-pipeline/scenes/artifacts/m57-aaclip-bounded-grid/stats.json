@@ -1,0 +1,21 @@
+{
+  "sceneId": "m57-aaclip-bounded-grid",
+  "pixels": 28800,
+  "matchingPixels": 28464,
+  "maxChannelDelta": 178,
+  "threshold": 98.78,
+  "cpuSimilarity": 97.00,
+  "cpuMatchingPixels": 27936,
+  "cpuMaxChannelDelta": 178,
+  "gpuSimilarity": 98.83,
+  "gpuMatchingPixels": 28464,
+  "gpuMaxChannelDelta": 178,
+  "gpuStatus": "pass",
+  "edgeBudget": 256,
+  "edgeBudgetReason": "not coverage.edge-count-exceeded",
+  "clipOp": "intersect",
+  "clipShape": "aa-rect-grid",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.AaclipSceneCaptureTest"
+}

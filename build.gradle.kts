@@ -656,6 +656,36 @@ tasks.register("pipelineM54HardFeatureDepthPack") {
     }
 }
 
+tasks.register("pipelineM57PathAaClipMicroPromotionPack") {
+    group = "verification"
+    description = "Materializes M57 bounded Path AA / clip micro-promotion generated scene rows and artifacts."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m54_hard_feature_depth_pack.py")
+    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json")
+    val sourceArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m57-generated")
+    inputs.file(scriptFile)
+    inputs.file(contractFile)
+    inputs.dir(sourceArtifactDir)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--contract",
+                contractFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineGeneratedSceneExport") {
     group = "verification"
     description = "Materializes generated WGSL scene result artifacts into the dashboard export layout."
@@ -665,14 +695,16 @@ tasks.register("pipelineGeneratedSceneExport") {
     val m52GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m52-generated")
     val m53GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m53-generated")
     val m54GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m54-generated")
+    val m57GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m57-generated")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
-    dependsOn("pipelineM52InventoryPromotionPack", "pipelineM53InventoryPromotionPack", "pipelineM54HardFeatureDepthPack")
+    dependsOn("pipelineM52InventoryPromotionPack", "pipelineM53InventoryPromotionPack", "pipelineM54HardFeatureDepthPack", "pipelineM57PathAaClipMicroPromotionPack")
     inputs.file(manifestFile)
     inputs.dir(sourceDir.dir("generated/artifacts"))
     inputs.dir(sourceDir.dir("artifacts"))
     inputs.dir(m52GeneratedDir)
     inputs.dir(m53GeneratedDir)
     inputs.dir(m54GeneratedDir)
+    inputs.dir(m57GeneratedDir)
     outputs.dir(outputDir)
     outputs.upToDateWhen { false }
 
@@ -682,6 +714,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         val m52GeneratedRoot = m52GeneratedDir.get().asFile
         val m53GeneratedRoot = m53GeneratedDir.get().asFile
         val m54GeneratedRoot = m54GeneratedDir.get().asFile
+        val m57GeneratedRoot = m57GeneratedDir.get().asFile
         val manifest = manifestFile.asFile
         val targetRoot = outputDir.get().asFile
         val validationErrors = mutableListOf<String>()
@@ -724,6 +757,7 @@ tasks.register("pipelineGeneratedSceneExport") {
             val normalized = relativePath.replace('\\', '/')
             return listOf(
                 m54GeneratedRoot.resolve(normalized),
+                m57GeneratedRoot.resolve(normalized),
                 m53GeneratedRoot.resolve(normalized),
                 m52GeneratedRoot.resolve(normalized),
                 generatedSourceRoot.resolve(normalized),
@@ -766,7 +800,16 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
-        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes
+        val m57Manifest = m57GeneratedRoot.resolve("data/m57-generated-scenes.json")
+        val m57Scenes = if (m57Manifest.isFile) {
+            val m57Root = JsonSlurper().parse(m57Manifest) as? Map<*, *>
+                ?: throw GradleException("M57 generated scene manifest root must be a JSON object: ${m57Manifest.relativeTo(rootDir)}")
+            m57Root["scenes"] as? List<*>
+                ?: throw GradleException("M57 generated scene manifest must contain a `scenes` array: ${m57Manifest.relativeTo(rootDir)}")
+        } else {
+            emptyList<Any?>()
+        }
+        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes
         val normalizedScenes = mutableListOf<Any?>()
 
         allGeneratedScenes.forEachIndexed { index, rawScene ->
@@ -844,6 +887,8 @@ tasks.register("pipelineGeneratedSceneExport") {
                 "reports/wgsl-pipeline/scenes/generated/results.json",
                 "build/reports/wgsl-pipeline-m52-generated/data/m52-generated-scenes.json",
                 "build/reports/wgsl-pipeline-m53-generated/data/m53-generated-scenes.json",
+                "build/reports/wgsl-pipeline-m54-generated/data/m54-generated-scenes.json",
+                "build/reports/wgsl-pipeline-m57-generated/data/m57-generated-scenes.json",
             ),
             "scenes" to normalizedScenes,
         )
@@ -3151,6 +3196,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(inventoryGateDir)
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json"))
     outputs.dir(bundleDir)
     outputs.upToDateWhen { false }
@@ -3229,6 +3275,10 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md",
             "reports/wgsl-pipeline/2026-05-31-m56-sprint-review.md",
             "reports/wgsl-pipeline/2026-05-31-m56-pm-report.md",
+            "reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-slice-selection.md",
+            "reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-promotion.md",
+            "reports/wgsl-pipeline/2026-05-31-m57-sprint-review.md",
+            "reports/wgsl-pipeline/2026-05-31-m57-pm-report.md",
         )
         referencedPaths += m56ReportPaths
 
@@ -3317,11 +3367,12 @@ tasks.register("pipelinePmBundle") {
         val m52PromotedRows = promotedRowsFor("pipelineM52InventoryPromotionPack")
         val m53PromotedRows = promotedRowsFor("pipelineM53InventoryPromotionPack")
         val m54PromotedRows = promotedRowsFor("pipelineM54HardFeatureDepthPack")
+        val m57PromotedRows = promotedRowsFor("pipelineM57PathAaClipMicroPromotionPack")
         val promotionValidationErrors = mutableListOf<String>()
         inventoryDerivedScenes
             .filter { scene ->
                 val generation = scene["generation"] as? Map<*, *>
-                generation?.get("derivationTask") in setOf("pipelineM53InventoryPromotionPack", "pipelineM54HardFeatureDepthPack")
+                generation?.get("derivationTask") in setOf("pipelineM53InventoryPromotionPack", "pipelineM54HardFeatureDepthPack", "pipelineM57PathAaClipMicroPromotionPack")
             }
             .forEach { scene ->
                 val sceneId = (scene["id"] as? String).orEmpty()
@@ -3408,6 +3459,29 @@ tasks.register("pipelinePmBundle") {
                     "gpuStatus" to (((scene["gpu"] as? Map<*, *>)?.get("performanceTrend") as? Map<*, *>)?.get("status") as? String).orEmpty(),
                 )
             }
+        val m57ContractFile = rootDir.resolve("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json")
+        val m57Contract = JsonSlurper().parse(m57ContractFile) as? Map<*, *>
+            ?: throw GradleException("M57 contract root must be a JSON object: ${m57ContractFile.relativeTo(rootDir)}")
+        val m57SelectedRows = (m57Contract["selectedCandidateCount"] as? Number)?.toInt()
+            ?: (m57Contract["scenes"] as? List<*>).orEmpty().size
+        val m57RejectedRows = (m57Contract["rejectedRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?.map {
+                mapOf(
+                    "inventoryId" to (it["inventoryId"] as? String).orEmpty(),
+                    "reason" to (it["reason"] as? String).orEmpty(),
+                )
+            }
+            .orEmpty()
+        val m57PreservedUnsupportedRows = (m57Contract["preservedUnsupportedRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?.map {
+                mapOf(
+                    "sceneId" to (it["sceneId"] as? String).orEmpty(),
+                    "fallbackReason" to (it["fallbackReason"] as? String).orEmpty(),
+                )
+            }
+            .orEmpty()
         val m55CandidateFile = performanceWarningsRoot.resolve("m55-performance-gate-candidate.json")
         val m55CandidateReport = if (m55CandidateFile.isFile) {
             JsonSlurper().parse(m55CandidateFile) as? Map<*, *>
@@ -3473,6 +3547,7 @@ tasks.register("pipelinePmBundle") {
             "m52GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json",
             "m53GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json",
             "m54GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json",
+            "m57GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json",
             "gateReport" to "gate/scene-dashboard-gate.md",
             "frontQaReport" to "front-qa/front-qa.md",
             "frontQaJson" to "front-qa/front-qa.json",
@@ -3575,6 +3650,24 @@ tasks.register("pipelinePmBundle") {
                 "pmReport" to "reports/wgsl-pipeline/2026-05-31-m56-pm-report.md",
                 "notice" to "M56 promotes one corrected sweep-gradient row only; image-filter and Path AA shortcuts were rejected because their current artifacts do not prove row-specific GPU support.",
             ),
+            "m57PathAaClipMicroPromotion" to linkedMapOf<String, Any>(
+                "targetReadiness" to 98,
+                "finalReadiness" to 98,
+                "selectedRows" to m57SelectedRows,
+                "promotedRows" to m57PromotedRows.size,
+                "promotedPassRows" to m57PromotedRows.count { it["status"] == "pass" },
+                "promotedExpectedUnsupportedRows" to m57PromotedRows.count { it["status"] == "expected-unsupported" },
+                "preservedUnsupportedRows" to m57PreservedUnsupportedRows,
+                "rejectedRows" to m57RejectedRows.size,
+                "selectionReport" to "reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-slice-selection.md",
+                "promotionReport" to "reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-promotion.md",
+                "sprintReview" to "reports/wgsl-pipeline/2026-05-31-m57-sprint-review.md",
+                "pmReport" to "reports/wgsl-pipeline/2026-05-31-m57-pm-report.md",
+                "contract" to "reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json",
+                "promotedRowsDetail" to m57PromotedRows,
+                "rejectedRowsDetail" to m57RejectedRows,
+                "notice" to "M57 adds one bounded AA clip grid slice only; existing edge-budget, dash, stroke-outline, and complex-clip refusals remain visible.",
+            ),
             "inventoryCounters" to inventorySummary,
             "dashboardInventoryLinks" to dashboardInventoryLinks,
             "expectedUnsupportedRows" to expectedUnsupported,
@@ -3590,6 +3683,7 @@ tasks.register("pipelinePmBundle") {
                 "M54 promotes selected hard feature depth rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, dependency-gated font/codec/emoji substitutes, and release-blocking performance gates remain outside this bundle's claims.",
                 "M55 exposes performance gate candidate evidence only; missing measured lanes are deferred or warned, estimated metrics are not promoted to measured, and performance remains non-blocking.",
                 "M56 promotes one corrected sweep-gradient row only; two-point conical gradients, arbitrary image-filter DAGs, picture prepass support, broad Path AA, dash, stroke, and complex clip remain outside this bundle's claims.",
+                "M57 promotes one bounded AA clip grid slice only; broad aaclip, broad Path AA, dash, cap, join, stroke-outline, complex clip, large clipped paths, and edge-budget increases remain outside this bundle's claims.",
             ),
             "unavailableReferences" to unavailable,
         )

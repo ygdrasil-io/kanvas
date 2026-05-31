@@ -90,6 +90,9 @@ def materialize_scene(
     base_rows: dict[str, dict[str, Any]],
     contract_path: str,
     source_report: str,
+    selected_report: str,
+    generated_by: str,
+    output_evidence_dir: str,
     scene: dict[str, Any],
     commit: str,
 ) -> dict[str, Any]:
@@ -100,10 +103,17 @@ def materialize_scene(
     fallback_reason = scene["fallbackReason"]
     base_row = base_rows.get(base_scene_id)
     if base_row is None:
-        raise SystemExit(f"{scene_id}: base generated scene `{base_scene_id}` is missing")
-    base_generation = base_row.get("generation")
-    if not isinstance(base_generation, dict):
-        raise SystemExit(f"{scene_id}: base generated scene `{base_scene_id}` has no generation trace")
+        if not scene.get("allowArtifactOnlyBase"):
+            raise SystemExit(f"{scene_id}: base generated scene `{base_scene_id}` is missing")
+        base_generation = {
+            "sourceTask": scene.get("sourceTask", ""),
+            "sourceTest": scene.get("sourceTest", ""),
+            "sourceReport": scene.get("sourceReport", source_report),
+        }
+    else:
+        base_generation = base_row.get("generation")
+        if not isinstance(base_generation, dict):
+            raise SystemExit(f"{scene_id}: base generated scene `{base_scene_id}` has no generation trace")
 
     source_root = artifact_root / base_scene_id
     target_root = output_root / "artifacts" / scene_id
@@ -120,21 +130,23 @@ def materialize_scene(
         "selectedRoute": scene["cpuRoute"],
         "fallbackReason": "none",
         "inventoryId": inventory_id,
-        "generatedBy": "pipelineM54HardFeatureDepthPack",
+        "generatedBy": generated_by,
         "derivedFromGeneratedScene": base_scene_id,
         "hardFeatureFamily": scene["family"],
         "nonClaim": scene.get("nonClaim", ""),
     }
+    cpu_route.update(scene.get("cpuRouteDetails", {}))
     gpu_route = {
         "selectedRoute": scene["gpuRoute"],
         "pipelineKey": scene["pipelineKey"],
         "fallbackReason": fallback_reason,
         "inventoryId": inventory_id,
-        "generatedBy": "pipelineM54HardFeatureDepthPack",
+        "generatedBy": generated_by,
         "derivedFromGeneratedScene": base_scene_id,
         "hardFeatureFamily": scene["family"],
         "nonClaim": scene.get("nonClaim", ""),
     }
+    gpu_route.update(scene.get("gpuRouteDetails", {}))
     if status == "pass":
         gpu_route["adapter"] = scene.get("adapter", "Apple M2 Max")
         gpu_route["adapterBackend"] = scene.get("adapterBackend", "WebGPU/Metal")
@@ -144,17 +156,27 @@ def materialize_scene(
     matching_pixels = as_int(scene.get("matchingPixels"), pixels if status == "pass" else 0)
     max_delta = as_int(scene.get("maxChannelDelta"), 0 if status == "pass" else 255)
     threshold = scene.get("threshold", 99.95 if status == "pass" else 0)
+    stats_details = scene.get("statsDetails", {})
+    if not isinstance(stats_details, dict):
+        stats_details = {}
+    cpu_similarity = scene.get("cpuSimilarity", stats_details.get("cpuSimilarity", 100.0 if status == "pass" else 0.0))
+    cpu_matching_pixels = as_int(stats_details.get("cpuMatchingPixels"), pixels if status == "expected-unsupported" else matching_pixels)
+    cpu_max_delta = as_int(stats_details.get("cpuMaxChannelDelta"), 0 if status == "pass" else max_delta)
+    gpu_similarity = scene.get("gpuSimilarity", stats_details.get("gpuSimilarity", 100.0 if status == "pass" else 0.0))
+    cpu_threshold = scene.get("cpuThreshold", stats_details.get("cpuThreshold", threshold))
+    gpu_threshold = scene.get("gpuThreshold", stats_details.get("gpuThreshold", threshold))
     stats = {
         "pixels": pixels,
         "matchingPixels": matching_pixels,
         "maxChannelDelta": max_delta,
         "threshold": threshold,
-        "generatedBy": "pipelineM54HardFeatureDepthPack",
+        "generatedBy": generated_by,
         "inventoryId": inventory_id,
         "status": status,
         "derivedFromGeneratedScene": base_scene_id,
         "hardFeatureFamily": scene["family"],
     }
+    stats.update(stats_details)
     write_json(target_root / "route-cpu.json", cpu_route)
     write_json(target_root / "route-gpu.json", gpu_route)
     write_json(target_root / "stats.json", stats)
@@ -164,7 +186,7 @@ def materialize_scene(
         "status": "pass",
         "image": f"{artifact_prefix}/cpu.png",
         "diff": f"{artifact_prefix}/cpu-diff.png",
-        "similarity": 100.0 if status == "pass" else 0.0,
+        "similarity": cpu_similarity,
         "route": {
             "selectedRoute": scene["cpuRoute"],
             "fallbackReason": "none",
@@ -172,11 +194,11 @@ def materialize_scene(
         },
         "stats": {
             "pixels": pixels,
-            "matchingPixels": pixels if status == "expected-unsupported" else matching_pixels,
-            "maxChannelDelta": 0 if status == "pass" else max_delta,
-            "threshold": threshold,
+            "matchingPixels": cpu_matching_pixels,
+            "maxChannelDelta": cpu_max_delta,
+            "threshold": cpu_threshold,
             "backend": "CPU",
-            "command": "./gradlew --no-daemon pipelineM54HardFeatureDepthPack pipelineSceneDashboard pipelineSceneDashboardGate",
+            "command": f"./gradlew --no-daemon {generated_by} pipelineSceneDashboard pipelineSceneDashboardGate",
         },
     }
     gpu: dict[str, Any] = {
@@ -193,17 +215,17 @@ def materialize_scene(
             {
                 "image": f"{artifact_prefix}/gpu.png",
                 "diff": f"{artifact_prefix}/gpu-diff.png",
-                "similarity": 100.0,
+                "similarity": gpu_similarity,
                 "stats": {
                     "pixels": pixels,
                     "matchingPixels": matching_pixels,
                     "maxChannelDelta": max_delta,
-                    "threshold": threshold,
+                    "threshold": gpu_threshold,
                     "backend": "WebGPU",
-                    "command": "./gradlew --no-daemon pipelineM54HardFeatureDepthPack pipelineSceneDashboard pipelineSceneDashboardGate",
+                    "command": f"./gradlew --no-daemon {generated_by} pipelineSceneDashboard pipelineSceneDashboardGate",
                     "adapter": scene.get("adapter", "Apple M2 Max"),
                     "adapterBackend": scene.get("adapterBackend", "WebGPU/Metal"),
-                    "adapterCapture": "m54-hard-feature-depth-pack",
+                    "adapterCapture": scene.get("adapterCapture", generated_by),
                 },
             }
         )
@@ -238,7 +260,7 @@ def materialize_scene(
         "generation": {
             "mode": "generated",
             "producer": "pipelineGeneratedSceneExport",
-            "derivationTask": "pipelineM54HardFeatureDepthPack",
+            "derivationTask": generated_by,
             "derivationReport": source_report,
             "derivationContract": contract_path,
             "commit": commit,
@@ -270,11 +292,11 @@ def materialize_scene(
         "evidence": [
             source_report,
             contract_path,
-            "reports/wgsl-pipeline/2026-05-31-m54-hard-feature-depth-selection.md",
+            selected_report,
             "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
-            f"build/reports/wgsl-pipeline-m54-generated/artifacts/{scene_id}/route-cpu.json",
-            f"build/reports/wgsl-pipeline-m54-generated/artifacts/{scene_id}/route-gpu.json",
-            f"build/reports/wgsl-pipeline-m54-generated/artifacts/{scene_id}/stats.json",
+            f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/route-cpu.json",
+            f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/route-gpu.json",
+            f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/stats.json",
         ],
         "tags": scene["tags"],
     }
@@ -306,6 +328,12 @@ def main() -> int:
     output_root.mkdir(parents=True)
 
     artifact_root = project_root / contract["artifactSourceRoot"]
+    generated_by = contract.get("generatedBy", "pipelineM54HardFeatureDepthPack")
+    output_evidence_dir = contract.get("outputEvidenceDir", "wgsl-pipeline-m54-generated")
+    selected_report = contract.get(
+        "selectedReport",
+        "reports/wgsl-pipeline/2026-05-31-m54-hard-feature-depth-selection.md",
+    )
     base_rows = load_scene_index(project_root, args.base_generated)
     commit = git_commit(project_root)
     rows = [
@@ -316,6 +344,9 @@ def main() -> int:
             base_rows=base_rows,
             contract_path=args.contract,
             source_report=contract["sourceReport"],
+            selected_report=selected_report,
+            generated_by=generated_by,
+            output_evidence_dir=output_evidence_dir,
             scene=scene,
             commit=commit,
         )
@@ -324,14 +355,17 @@ def main() -> int:
 
     manifest = {
         "schemaVersion": 1,
-        "generatedBy": "pipelineM54HardFeatureDepthPack",
+        "generatedBy": generated_by,
         "source": args.contract,
-        "description": "M54 hard feature depth generated dashboard rows materialized from bounded selected contracts.",
+        "description": contract.get(
+            "outputDescription",
+            "M54 hard feature depth generated dashboard rows materialized from bounded selected contracts.",
+        ),
         "scenes": rows,
     }
-    output_manifest = output_root / "data/m54-generated-scenes.json"
+    output_manifest = output_root / contract.get("outputManifest", "data/m54-generated-scenes.json")
     write_json(output_manifest, manifest)
-    print(f"Wrote M54 hard-feature generated scenes: {output_manifest}")
+    print(f"Wrote {generated_by} generated scenes: {output_manifest}")
     return 0
 
 
