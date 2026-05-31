@@ -596,6 +596,36 @@ tasks.register("pipelineM52InventoryPromotionPack") {
     }
 }
 
+tasks.register("pipelineM53InventoryPromotionPack") {
+    group = "verification"
+    description = "Materializes M53 inventory-derived generated scene rows and artifacts from a declarative contract."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m53_inventory_promotion_pack.py")
+    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json")
+    val sourceArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m53-generated")
+    inputs.file(scriptFile)
+    inputs.file(contractFile)
+    inputs.dir(sourceArtifactDir)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--contract",
+                contractFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineGeneratedSceneExport") {
     group = "verification"
     description = "Materializes generated WGSL scene result artifacts into the dashboard export layout."
@@ -603,12 +633,14 @@ tasks.register("pipelineGeneratedSceneExport") {
     val sourceDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes")
     val manifestFile = sourceDir.file("generated/results.json")
     val m52GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m52-generated")
+    val m53GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m53-generated")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
-    dependsOn("pipelineM52InventoryPromotionPack")
+    dependsOn("pipelineM52InventoryPromotionPack", "pipelineM53InventoryPromotionPack")
     inputs.file(manifestFile)
     inputs.dir(sourceDir.dir("generated/artifacts"))
     inputs.dir(sourceDir.dir("artifacts"))
     inputs.dir(m52GeneratedDir)
+    inputs.dir(m53GeneratedDir)
     outputs.dir(outputDir)
     outputs.upToDateWhen { false }
 
@@ -616,6 +648,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         val sourceRoot = sourceDir.asFile
         val generatedSourceRoot = sourceRoot.resolve("generated")
         val m52GeneratedRoot = m52GeneratedDir.get().asFile
+        val m53GeneratedRoot = m53GeneratedDir.get().asFile
         val manifest = manifestFile.asFile
         val targetRoot = outputDir.get().asFile
         val validationErrors = mutableListOf<String>()
@@ -657,6 +690,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         fun generatedArtifactSource(relativePath: String, allowDirectory: Boolean = false): File? {
             val normalized = relativePath.replace('\\', '/')
             return listOf(
+                m53GeneratedRoot.resolve(normalized),
                 m52GeneratedRoot.resolve(normalized),
                 generatedSourceRoot.resolve(normalized),
                 sourceRoot.resolve(normalized),
@@ -680,7 +714,16 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
-        val allGeneratedScenes = scenes + m52Scenes
+        val m53Manifest = m53GeneratedRoot.resolve("data/m53-generated-scenes.json")
+        val m53Scenes = if (m53Manifest.isFile) {
+            val m53Root = JsonSlurper().parse(m53Manifest) as? Map<*, *>
+                ?: throw GradleException("M53 generated scene manifest root must be a JSON object: ${m53Manifest.relativeTo(rootDir)}")
+            m53Root["scenes"] as? List<*>
+                ?: throw GradleException("M53 generated scene manifest must contain a `scenes` array: ${m53Manifest.relativeTo(rootDir)}")
+        } else {
+            emptyList<Any?>()
+        }
+        val allGeneratedScenes = scenes + m52Scenes + m53Scenes
         val normalizedScenes = mutableListOf<Any?>()
 
         allGeneratedScenes.forEachIndexed { index, rawScene ->
@@ -757,6 +800,7 @@ tasks.register("pipelineGeneratedSceneExport") {
             "source" to listOf(
                 "reports/wgsl-pipeline/scenes/generated/results.json",
                 "build/reports/wgsl-pipeline-m52-generated/data/m52-generated-scenes.json",
+                "build/reports/wgsl-pipeline-m53-generated/data/m53-generated-scenes.json",
             ),
             "scenes" to normalizedScenes,
         )
@@ -2105,6 +2149,9 @@ tasks.register("pipelineSceneDashboardGate") {
             "m52-closed-capped-hairlines-edge-budget" to "coverage.edge-count-exceeded",
             "m52-big-tile-image-filter-dag-refusal" to "image-filter.dag-or-picture-prepass-required",
             "m52-color-emoji-blendmodes-refusal" to "font.color-glyph-emoji-unsupported",
+            "m53-sweep-gradient-clamp" to "gradient.two-point-conical-unsupported",
+            "m53-complexclip-boundary-refusal" to "coverage.complex-clip-path-unsupported",
+            "m53-imagefilters-cropped-boundary" to "image-filter.crop-input-nonnull-prepass-required",
         )
         val staticPathAaSentinels = mapOf(
             "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",
@@ -2744,8 +2791,8 @@ tasks.register("pipelineSkiaGmInventory") {
     val scriptFile = layout.projectDirectory.file("scripts/skia_gm_inventory.py")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val upstreamGmDir = file("/Users/chaos/workspace/kanvas-forge/skia-main/gm")
-    val m52GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m52-generated")
-    dependsOn("pipelineM52InventoryPromotionPack")
+    val generatedSceneDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
+    dependsOn("pipelineGeneratedSceneExport")
     inputs.file(scriptFile)
     inputs.dir(layout.projectDirectory.dir("skia-integration-tests/src/main/kotlin/org/skia/tests"))
     if (upstreamGmDir.isDirectory) {
@@ -2754,7 +2801,7 @@ tasks.register("pipelineSkiaGmInventory") {
     inputs.property("upstreamGmDirPresent", upstreamGmDir.isDirectory)
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/data/scenes.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
-    inputs.file(m52GeneratedDir.map { it.file("data/m52-generated-scenes.json") })
+    inputs.file(generatedSceneDir.map { it.file("data/generated-scenes.json") })
     outputs.dir(outputDir)
     outputs.upToDateWhen { false }
 
@@ -2769,7 +2816,7 @@ tasks.register("pipelineSkiaGmInventory") {
                 "--output-dir",
                 outputDir.get().asFile.relativeTo(rootDir).path,
                 "--dashboard-json",
-                m52GeneratedDir.get().file("data/m52-generated-scenes.json").asFile.relativeTo(rootDir).path,
+                generatedSceneDir.get().file("data/generated-scenes.json").asFile.relativeTo(rootDir).path,
             )
         }.result.get().assertNormalExitValue()
     }
@@ -2826,6 +2873,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
     outputs.dir(bundleDir)
     outputs.upToDateWhen { false }
 
@@ -2961,18 +3009,82 @@ tasks.register("pipelinePmBundle") {
                 scene["inventoryId"] is String ||
                     (scene["tags"] as? List<*>)?.contains("source.inventory") == true
             }
-        val m52PromotedRows = inventoryDerivedScenes.map { scene ->
-            val generation = scene["generation"] as? Map<*, *>
-            mapOf(
-                "id" to (scene["id"] as? String).orEmpty(),
-                "inventoryId" to (scene["inventoryId"] as? String).orEmpty(),
-                "status" to (scene["status"] as? String).orEmpty(),
-                "sourceReport" to (generation?.get("sourceReport") as? String).orEmpty(),
-                "derivedFromGeneratedScene" to (generation?.get("derivedFromGeneratedScene") as? String).orEmpty(),
-                "derivationTask" to (generation?.get("derivationTask") as? String).orEmpty(),
-                "derivationContract" to (generation?.get("derivationContract") as? String).orEmpty(),
+        fun promotedRowsFor(derivationTask: String): List<Map<String, String>> = inventoryDerivedScenes
+            .filter { scene ->
+                val generation = scene["generation"] as? Map<*, *>
+                generation?.get("derivationTask") == derivationTask
+            }
+            .map { scene ->
+                val generation = scene["generation"] as? Map<*, *>
+                mapOf(
+                    "id" to (scene["id"] as? String).orEmpty(),
+                    "inventoryId" to (scene["inventoryId"] as? String).orEmpty(),
+                    "status" to (scene["status"] as? String).orEmpty(),
+                    "sourceReport" to (generation?.get("sourceReport") as? String).orEmpty(),
+                    "derivedFromGeneratedScene" to (generation?.get("derivedFromGeneratedScene") as? String).orEmpty(),
+                    "derivationTask" to (generation?.get("derivationTask") as? String).orEmpty(),
+                    "derivationContract" to (generation?.get("derivationContract") as? String).orEmpty(),
+                )
+            }
+        val m52PromotedRows = promotedRowsFor("pipelineM52InventoryPromotionPack")
+        val m53PromotedRows = promotedRowsFor("pipelineM53InventoryPromotionPack")
+        val m53ValidationErrors = mutableListOf<String>()
+        inventoryDerivedScenes
+            .filter { scene ->
+                val generation = scene["generation"] as? Map<*, *>
+                generation?.get("derivationTask") == "pipelineM53InventoryPromotionPack"
+            }
+            .forEach { scene ->
+                val sceneId = (scene["id"] as? String).orEmpty()
+                val generation = scene["generation"] as? Map<*, *>
+                val inventoryId = scene["inventoryId"] as? String
+                val tags = (scene["tags"] as? List<*>)?.filterIsInstance<String>().orEmpty()
+                val routeDiagnostics = scene["routeDiagnostics"] as? Map<*, *>
+                val cpu = scene["cpu"] as? Map<*, *>
+                val gpu = scene["gpu"] as? Map<*, *>
+                val gpuRoute = gpu?.get("route") as? Map<*, *>
+                val status = scene["status"] as? String
+                if (inventoryId.isNullOrBlank()) m53ValidationErrors += "$sceneId: missing inventoryId"
+                if (!tags.contains("source.inventory")) m53ValidationErrors += "$sceneId: missing source.inventory tag"
+                if ((generation?.get("sourceReport") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing generation.sourceReport"
+                if ((generation?.get("derivationContract") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing generation.derivationContract"
+                if ((routeDiagnostics?.get("cpu") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing CPU route diagnostics"
+                if ((routeDiagnostics?.get("gpu") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing GPU route diagnostics"
+                if (status == "pass") {
+                    if ((gpu?.get("image") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: pass row missing GPU image"
+                    if ((gpu?.get("diff") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: pass row missing GPU diff"
+                    if ((gpuRoute?.get("fallbackReason") as? String) != "none") m53ValidationErrors += "$sceneId: pass row fallbackReason must be none"
+                }
+                if (status == "expected-unsupported") {
+                    val fallback = gpuRoute?.get("fallbackReason") as? String
+                    if (fallback.isNullOrBlank() || fallback == "none") {
+                        m53ValidationErrors += "$sceneId: expected-unsupported row missing stable fallback reason"
+                    }
+                }
+                if ((cpu?.get("image") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing CPU image"
+                if ((cpu?.get("diff") as? String).isNullOrBlank()) m53ValidationErrors += "$sceneId: missing CPU diff"
+            }
+        if (m53ValidationErrors.isNotEmpty()) {
+            throw GradleException(
+                buildString {
+                    appendLine("M53 inventory promotion validation failed:")
+                    m53ValidationErrors.sorted().forEach { appendLine("- $it") }
+                }
             )
         }
+        val m53ContractFile = rootDir.resolve("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json")
+        val m53Contract = JsonSlurper().parse(m53ContractFile) as? Map<*, *>
+            ?: throw GradleException("M53 contract root must be a JSON object: ${m53ContractFile.relativeTo(rootDir)}")
+        val m53SelectedRows = (m53Contract["scenes"] as? List<*>).orEmpty().size
+        val m53RejectedRows = (m53Contract["rejectedRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?.map {
+                mapOf(
+                    "inventoryId" to (it["inventoryId"] as? String).orEmpty(),
+                    "reason" to (it["reason"] as? String).orEmpty(),
+                )
+            }
+            .orEmpty()
         val m52RejectedRows = listOf(
             mapOf("inventoryId" to "skia-gm-animatedgif", "reason" to "Codec/animation dependency remains gated."),
             mapOf("inventoryId" to "skia-gm-animcodecplayerexif", "reason" to "Codec/EXIF dependency remains gated."),
@@ -3016,6 +3128,7 @@ tasks.register("pipelinePmBundle") {
             "generatedSourceJson" to "reports/wgsl-pipeline/scenes/generated/results.json",
             "generatedResultJson" to "generated/data/generated-scenes.json",
             "m52GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json",
+            "m53GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json",
             "gateReport" to "gate/scene-dashboard-gate.md",
             "frontQaReport" to "front-qa/front-qa.md",
             "frontQaJson" to "front-qa/front-qa.json",
@@ -3049,6 +3162,17 @@ tasks.register("pipelinePmBundle") {
                 "rejectedRowsDetail" to m52RejectedRows,
                 "notice" to "M52 inventory promotion rows are generated dashboard evidence for narrow scene contracts only; unpromoted inventory rows remain planning evidence.",
             ),
+            "m53InventoryPromotion" to linkedMapOf<String, Any>(
+                "selectedRows" to m53SelectedRows,
+                "promotedRows" to m53PromotedRows.size,
+                "promotedPassRows" to m53PromotedRows.count { it["status"] == "pass" },
+                "promotedExpectedUnsupportedRows" to m53PromotedRows.count { it["status"] == "expected-unsupported" },
+                "rejectedRows" to m53RejectedRows.size,
+                "selectedReport" to "reports/wgsl-pipeline/2026-05-31-m53-gm-feature-promotion-pack-v2-selection.md",
+                "promotedRowsDetail" to m53PromotedRows,
+                "rejectedRowsDetail" to m53RejectedRows,
+                "notice" to "M53 inventory promotion rows are generated dashboard evidence for narrow scene contracts only; unpromoted inventory rows remain planning evidence.",
+            ),
             "inventoryCounters" to inventorySummary,
             "dashboardInventoryLinks" to dashboardInventoryLinks,
             "expectedUnsupportedRows" to expectedUnsupported,
@@ -3060,6 +3184,7 @@ tasks.register("pipelinePmBundle") {
                 "The bundle is a static PM review artifact and does not execute GPU captures.",
                 "The M50 font/text rows prove selected simple OpenType evidence and explicit refusals only; broad font, emoji, shaping, SDF, LCD, glyph-mask, codec, arbitrary SkSL, arbitrary image-filter DAG, and broad Path AA support remain outside this bundle's claims.",
                 "M52 promoted 10 inventory-derived rows; the rows prove only their generated scene contracts and do not turn M51 inventory status into broad Skia GM support.",
+                "M53 promotes selected GM feature rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, font, codec, emoji, shaping, SDF, LCD, and glyph-mask support remain outside this bundle's claims.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -3088,6 +3213,7 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- `inventory/`: M51 Skia GM inventory JSON and Markdown. Inventory rows are not support claims.")
                 appendLine("- `inventory-gate/`: M51 inventory validation reports and mismatch snapshot.")
                 appendLine("- M52 inventory promotion counters live in `manifest.json` under `m52InventoryPromotion`.")
+                appendLine("- M53 inventory promotion counters live in `manifest.json` under `m53InventoryPromotion`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
         )

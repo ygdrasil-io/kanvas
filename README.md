@@ -10,7 +10,7 @@ GPU backend.
 
 Last updated: 2026-05-31
 
-Post-MVP Big Target readiness for MEP: 85%.
+Post-MVP Big Target readiness for MEP: 90%.
 
 This percentage is a PM readiness score for the full Post-MVP target, not an
 effort estimate and not the completion state of the last sprint. It moves only
@@ -25,8 +25,9 @@ Current PM interpretation: M41-M47 built the evidence foundation, M48 expanded
 representative Skia integration breadth, M49 promoted the dashboard into a
 release-oriented readiness gate candidate, M50 converted that candidate plus the
 front/font specs into executable evidence, M51 made the full Skia GM/sample
-surface release-visible as inventory, and M52 promoted 10 selected inventory
-candidates into generated dashboard evidence. The platform is still not
+surface release-visible as inventory, M52 promoted 10 selected inventory
+candidates into generated dashboard evidence, and M53 promoted a second
+12-row GM feature pack. The platform is still not
 complete MEP scope: performance thresholds remain warning-only, broad Skia
 parity is not claimed, and dependency-gated text/font/codec gaps remain visible
 outside the selected evidence rows.
@@ -41,15 +42,22 @@ M52 inventory promotion is complete for a 10-row selected pack: 7 generated
 and fallback semantics. This does not broaden Skia GM support beyond those
 generated scene contracts.
 
+M53 GM feature promotion is complete for a 12-row selected pack: 9 generated
+`pass` rows and 3 generated `expected-unsupported` rows across gradient,
+bitmap/image, blend/color-filter, clip/transform/saveLayer, and bounded
+image-filter families. The final M53 dashboard has 50 rows, 37 pass, 13
+expected-unsupported, 0 tracked-gap, 0 fail, 48 generated rows, 2 static policy
+rows, 33 adapter-backed rows, and 22 inventory-derived generated rows.
+
 | PM area | Weight | Status | Progress | Evidence / remaining work |
 |---|---:|---|---:|---|
-| Evidence foundation | 25% | Done through M52 | 100% | Generated dashboard, 36 generated rows, 0 tracked-gap, 0 fail, release gate report |
-| Skia integration coverage | 25% | Adapter-backed + inventory-promoted | 82% | M52 promotes 10 selected M51 candidates into generated evidence while M51 inventory remains planning-only |
-| CI and release gates | 20% | Release-visible gate | 85% | `wgsl_scene_dashboard_release_gate` runs dashboard gate, performance warnings, and PM bundle with archived reports |
+| Evidence foundation | 25% | Done through M53 | 100% | Generated dashboard, 48 generated rows, 0 tracked-gap, 0 fail, release gate report |
+| Skia integration coverage | 25% | Adapter-backed + inventory-promoted | 94% | M53 promotes 12 selected GM candidates into generated evidence while inventory remains planning-only outside promoted rows |
+| CI and release gates | 20% | Release-visible gate | 90% | `wgsl_scene_dashboard_release_gate` runs dashboard gate, performance warnings, PM bundle, and M53 metadata checks |
 | Performance readiness | 15% | Warning-only automation | 60% | `pipelinePerformanceTrendWarnings` emits owner, baseline, variance, quarantine, and rollback policy without blocking thresholds |
-| PM demo and reporting workflow | 15% | PM bundle + front QA + inventory promotion | 90% | `pipelinePmBundle` includes manifest, dashboard, artifacts, front QA, screenshot paths, gate, performance warnings, inventory, inventory gate reports, and M52 selected/promoted/rejected counters |
+| PM demo and reporting workflow | 15% | PM bundle + front QA + inventory promotion | 95% | `pipelinePmBundle` includes manifest, dashboard, artifacts, front QA, gate, performance warnings, inventory reports, and M52/M53 selected/promoted/rejected counters |
 
-Weighted PM readiness: 85% after rounding.
+Weighted PM readiness: 90% after rounding.
 
 | Track | Status | Progress | Evidence |
 |---|---|---:|---|
@@ -67,6 +75,7 @@ Weighted PM readiness: 85% after rounding.
 | MEP readiness acceleration toward 80% | Done | 100% | M50 adds required CI ownership, front QA gate, 17 adapter-backed rows, first generated font/text evidence pack, performance warning automation, and score closeout |
 | Skia GM inventory coverage | Done | 100% | M51 inventories 437 upstream GM C++ files and 751 Kotlin GM sources into 802 rows, exposes inventory in the PM bundle, validates it, and selects 34 M52+ candidates without changing support claims |
 | GM inventory promotion pack | Done | 100% | M52 promotes 10 selected candidates into generated dashboard evidence: 7 pass rows, 3 expected-unsupported rows, 0 tracked-gap, 0 fail |
+| GM feature promotion pack v2 | Done | 100% | M53 promotes 12 selected candidates into generated dashboard evidence: 9 pass rows, 3 expected-unsupported rows, 0 tracked-gap, 0 fail |
 
 Evidence-hardening readiness is 100% through M47:
 all static pass rows have generated evidence, and the only remaining static rows
@@ -144,6 +153,9 @@ Active Post-MVP evidence:
 - M51 proposed sprint: [reports/wgsl-pipeline/2026-05-31-m51-skia-gm-inventory-sprint-plan.md](reports/wgsl-pipeline/2026-05-31-m51-skia-gm-inventory-sprint-plan.md)
 - M51 sprint review: [reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md)
 - M51 PM report: [reports/wgsl-pipeline/2026-05-31-m51-pm-report.md](reports/wgsl-pipeline/2026-05-31-m51-pm-report.md)
+- M52 PM report: [reports/wgsl-pipeline/2026-05-31-m52-pm-report.md](reports/wgsl-pipeline/2026-05-31-m52-pm-report.md)
+- M53 sprint review: [reports/wgsl-pipeline/2026-05-31-m53-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m53-sprint-review.md)
+- M53 PM report: [reports/wgsl-pipeline/2026-05-31-m53-pm-report.md](reports/wgsl-pipeline/2026-05-31-m53-pm-report.md)
 
 ## MVP Roadmap
 
@@ -284,6 +296,10 @@ Closed post-MVP milestones:
   generated rows, 38 dashboard rows total, 28 pass, 10 expected-unsupported, 0
   tracked-gap, 0 fail, 36 generated rows, 24 adapter-backed rows, and an 85% PM
   readiness score.
+- M53: closed the GM feature promotion pack v2 with 12 additional
+  inventory-derived generated rows, 50 dashboard rows total, 37 pass, 13
+  expected-unsupported, 0 tracked-gap, 0 fail, 48 generated rows, 33
+  adapter-backed rows, and a 90% PM readiness score.
 - Front specs: split the evidence dashboard, PM reporting, accessibility, and
   front quality-gate target under `.upstream/specs/front/`; this documents
   current M49 behavior and future gates, but does not change rendering support.

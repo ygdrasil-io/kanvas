@@ -209,11 +209,13 @@ jobs:
       - name: Run full GPU inventory (non-blocking)
         # Keep the full adapter-backed inventory runnable for failure
         # classification and PM triage while smoke remains the required
-        # merge gate.
+        # merge gate. Step-level continue-on-error keeps the PR check green
+        # while preserving JUnit XML and classification artifacts.
+        continue-on-error: true
         run: ./gradlew --no-daemon :gpu-raster:gpuInventoryTest
 
       - name: Upload GPU inventory debug images
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gpu-inventory-debug-images
