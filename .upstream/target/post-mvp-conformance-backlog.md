@@ -299,24 +299,24 @@ generated scene dashboard, including required invariants, CI-friendly validation
 portable PM artifact bundles, release readiness checklist, and performance gate
 design.
 
-## M49 Plan
+## M49 Closeout
 
-M49 starts from the M48 dashboard state: 23 rows, 18 pass, 5
+M49 started from the M48 dashboard state: 23 rows, 18 pass, 5
 expected-unsupported, 0 tracked-gap, 0 fail, 21 generated-evidence rows, 2
 static policy rows, and 2 adapter-backed rows.
 
-The sprint target is ambitious: move Post-MVP Big Target readiness from 40% to
-about 60% if, and only if, the milestone lands multiple release-relevant lanes:
+M49 moved Post-MVP Big Target readiness from 40% to 60% because all required
+release-relevant lanes landed with merged evidence:
 
 | PM area | Start | M49 target | Required evidence |
 |---|---:|---:|---|
-| Evidence foundation | 100% | 100% | Preserve 0 tracked-gap / 0 fail and stable generated dashboard semantics. |
-| Skia integration coverage | 35% | 45% | Add adapter-backed proof for selected high-value pass rows, reaching at least 6 adapter-backed rows. |
-| CI and release gates | 10% | 60% | Add CI-friendly dashboard validation and release-gate policy. |
-| Performance readiness | 15% | 35% | Define and report a non-blocking measured-performance trend gate. |
-| PM demo and reporting workflow | 15% | 45% | Generate a portable PM bundle with manifest, counters, artifacts, known limitations, and serve instructions. |
+| Evidence foundation | 100% | 100% | Preserved 0 tracked-gap / 0 fail and stable generated dashboard semantics. |
+| Skia integration coverage | 35% | 45% | Added adapter-backed proof for selected high-value pass rows, reaching 7 adapter-backed rows. |
+| CI and release gates | 10% | 60% | Added CI-friendly dashboard validation and release-gate policy through `pipelineSceneDashboardGate`. |
+| Performance readiness | 15% | 35% | Defined a non-blocking measured-performance trend gate contract. |
+| PM demo and reporting workflow | 15% | 45% | Generated a portable PM bundle with manifest, counters, artifacts, known limitations, and serve instructions. |
 
-Planned tickets:
+Completed tickets:
 
 - M49-A gate invariant spec;
 - M49-B CI validation task;
@@ -326,5 +326,22 @@ Planned tickets:
 - M49-F MEP release readiness checklist;
 - M49-G sprint review and score update.
 
-The detailed sprint plan is
-`reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md`.
+Final counters: 23 rows, 18 pass, 5 expected-unsupported, 0 tracked-gap, 0 fail,
+21 generated-evidence rows, 2 static policy rows, 7 adapter-backed rows, and 0
+unavailable references in the portable PM bundle manifest.
+
+The detailed sprint plan and closeout are:
+
+- `reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md`;
+- `reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md`.
+
+Remaining MEP work after M49:
+
+- wire the dashboard gate into required CI ownership where appropriate;
+- keep non-blocking GPU inventory reporting stable and owned;
+- approve performance baselines, variance policy, environment eligibility, and
+  rollback behavior before any release-blocking performance threshold;
+- expand scene families only with adapter-backed captures and stable fallback
+  diagnostics;
+- keep text/font/glyph/emoji/codec gaps dependency-gated until real deliveries
+  land.
