@@ -122,9 +122,13 @@ def materialize_scene(
         copy_required(source_root / artifact, target_root / artifact, scene_id, artifact)
 
     copy_performance = bool(scene.get("copyPerformance"))
+    performance_source_scene_id = scene.get("performanceSourceScene", base_scene_id)
+    if not isinstance(performance_source_scene_id, str) or not performance_source_scene_id:
+        performance_source_scene_id = base_scene_id
+    performance_source_root = artifact_root / performance_source_scene_id
     if copy_performance:
         for artifact in PERFORMANCE_ARTIFACTS:
-            copy_required(source_root / artifact, target_root / artifact, scene_id, artifact)
+            copy_required(performance_source_root / artifact, target_root / artifact, scene_id, artifact)
 
     cpu_route = {
         "selectedRoute": scene["cpuRoute"],
@@ -231,23 +235,27 @@ def materialize_scene(
         )
 
     if copy_performance:
-        base_cpu_perf = (base_row.get("cpu") or {}).get("performanceTrend")
-        base_gpu_perf = (base_row.get("gpu") or {}).get("performanceTrend")
+        if performance_source_scene_id == base_scene_id:
+            base_cpu_perf = (base_row.get("cpu") or {}).get("performanceTrend")
+            base_gpu_perf = (base_row.get("gpu") or {}).get("performanceTrend")
+        else:
+            base_cpu_perf = json.loads((performance_source_root / "cpu-performance.json").read_text())
+            base_gpu_perf = json.loads((performance_source_root / "gpu-performance.json").read_text())
         if not isinstance(base_cpu_perf, dict) or base_cpu_perf.get("status") != "measured":
-            raise SystemExit(f"{scene_id}: requested CPU performance copy from non-measured base `{base_scene_id}`")
+            raise SystemExit(f"{scene_id}: requested CPU performance copy from non-measured source `{performance_source_scene_id}`")
         if not isinstance(base_gpu_perf, dict) or base_gpu_perf.get("status") != "measured":
-            raise SystemExit(f"{scene_id}: requested GPU performance copy from non-measured base `{base_scene_id}`")
+            raise SystemExit(f"{scene_id}: requested GPU performance copy from non-measured source `{performance_source_scene_id}`")
         cpu["performanceTrend"] = rewrite_performance(
             base_cpu_perf,
             scene_id=scene_id,
             lane="cpu",
-            source_scene_id=base_scene_id,
+            source_scene_id=performance_source_scene_id,
         )
         gpu["performanceTrend"] = rewrite_performance(
             base_gpu_perf,
             scene_id=scene_id,
             lane="gpu",
-            source_scene_id=base_scene_id,
+            source_scene_id=performance_source_scene_id,
         )
 
     row: dict[str, Any] = {
