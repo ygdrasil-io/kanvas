@@ -35,6 +35,16 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def unique_strings(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
+
+
 def load_scene_index(project_root: Path, manifest_path: str) -> dict[str, dict[str, Any]]:
     manifest = project_root / manifest_path
     if not manifest.is_file():
@@ -99,7 +109,7 @@ def materialize_scene(
 ) -> dict[str, Any]:
     scene_id = scene["id"]
     base_scene_id = scene["baseArtifactScene"]
-    inventory_id = scene["inventoryId"]
+    inventory_id = scene.get("inventoryId")
     status = scene["status"]
     fallback_reason = scene["fallbackReason"]
     scene_source_report = scene.get("sourceReport", source_report)
@@ -136,23 +146,25 @@ def materialize_scene(
     cpu_route = {
         "selectedRoute": scene["cpuRoute"],
         "fallbackReason": "none",
-        "inventoryId": inventory_id,
         "generatedBy": generated_by,
         "derivedFromGeneratedScene": base_scene_id,
         "hardFeatureFamily": scene["family"],
         "nonClaim": scene.get("nonClaim", ""),
     }
+    if isinstance(inventory_id, str) and inventory_id:
+        cpu_route["inventoryId"] = inventory_id
     cpu_route.update(scene.get("cpuRouteDetails", {}))
     gpu_route = {
         "selectedRoute": scene["gpuRoute"],
         "pipelineKey": scene["pipelineKey"],
         "fallbackReason": fallback_reason,
-        "inventoryId": inventory_id,
         "generatedBy": generated_by,
         "derivedFromGeneratedScene": base_scene_id,
         "hardFeatureFamily": scene["family"],
         "nonClaim": scene.get("nonClaim", ""),
     }
+    if isinstance(inventory_id, str) and inventory_id:
+        gpu_route["inventoryId"] = inventory_id
     gpu_route.update(scene.get("gpuRouteDetails", {}))
     if status == "pass":
         gpu_route["adapter"] = scene.get("adapter", "Apple M2 Max")
@@ -187,11 +199,12 @@ def materialize_scene(
         "maxChannelDelta": max_delta,
         "threshold": threshold,
         "generatedBy": generated_by,
-        "inventoryId": inventory_id,
         "status": status,
         "derivedFromGeneratedScene": base_scene_id,
         "hardFeatureFamily": scene["family"],
     }
+    if isinstance(inventory_id, str) and inventory_id:
+        stats["inventoryId"] = inventory_id
     stats.update(stats_details)
     write_json(target_root / "route-cpu.json", cpu_route)
     write_json(target_root / "route-gpu.json", gpu_route)
@@ -217,7 +230,6 @@ def materialize_scene(
         "route": {
             "selectedRoute": scene["cpuRoute"],
             "fallbackReason": "none",
-            "inventoryId": inventory_id,
         },
         "stats": {
             "pixels": pixels,
@@ -241,9 +253,11 @@ def materialize_scene(
             "selectedRoute": scene["gpuRoute"],
             "pipelineKey": scene["pipelineKey"],
             "fallbackReason": fallback_reason,
-            "inventoryId": inventory_id,
         },
     }
+    if isinstance(inventory_id, str) and inventory_id:
+        cpu["route"]["inventoryId"] = inventory_id
+        gpu["route"]["inventoryId"] = inventory_id
     if status == "pass":
         gpu.update(
             {
@@ -297,7 +311,6 @@ def materialize_scene(
 
     row: dict[str, Any] = {
         "id": scene_id,
-        "inventoryId": inventory_id,
         "title": scene["title"],
         "priority": scene.get("priority", "P1"),
         "status": status,
@@ -312,7 +325,6 @@ def materialize_scene(
             "artifactRoot": artifact_prefix,
             "schema": "generated-scene-result.v1",
             "linearIssue": scene["linearIssue"],
-            "inventoryId": inventory_id,
             "sourceTask": base_generation.get("sourceTask", ""),
             "sourceTest": base_generation.get("sourceTest", ""),
             "sourceReport": base_generation.get("sourceReport", ""),
@@ -338,17 +350,21 @@ def materialize_scene(
             scene_source_report,
             contract_path,
             scene_selected_report,
-            "build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json",
             f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/route-cpu.json",
             f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/route-gpu.json",
             f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/stats.json",
         ],
         "tags": scene["tags"],
     }
+    if isinstance(inventory_id, str) and inventory_id:
+        row["inventoryId"] = inventory_id
+        row["generation"]["inventoryId"] = inventory_id
+        row["evidence"].append("build/reports/wgsl-pipeline-skia-gm-inventory/inventory.json")
     if has_graph_diagnostics:
         row["graphDiagnostics"] = f"{artifact_prefix}/graph-diagnostics.json"
         row["evidence"].append(f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/graph-diagnostics.json")
-        row["evidence"].append(M61_GRAPH_DIAGNOSTICS_REPORT)
+        row["evidence"].append(scene.get("graphDiagnosticsReport", M61_GRAPH_DIAGNOSTICS_REPORT))
+    row["evidence"] = unique_strings(row["evidence"])
     if status == "pass":
         row["diffs"]["gpu"] = f"{artifact_prefix}/gpu-diff.png"
     return row
