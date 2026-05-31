@@ -38,6 +38,7 @@ Current M40 dashboard state:
 | M46 Generated Evidence Expansion | Convert high-value static pass rows to generated evidence. | At least five additional dashboard rows are generated from test/report outputs, merged export remains 0 tracked-gap / 0 fail, and remaining static rows are explicitly listed with owners. |
 | M47 Remaining Static Evidence Hardening | Convert remaining static pass rows and keep Path AA policy rows visible. | Remaining static pass rows are generated evidence, expected-unsupported Path AA rows remain explicit policy sentinels, and the merged export remains 0 tracked-gap / 0 fail. |
 | M48 Skia Scene Coverage Expansion | Expand from clean dashboard evidence to a representative MEP scene pack. | Add 8-12 selected P0/P1 rows across multiple Skia-relevant families, keep unsupported breadth explicit, and update PM readiness without introducing tracked gaps or failing support claims. |
+| M49 MEP Readiness Gate Toward 60% | Promote the dashboard from local evidence into release-oriented readiness gates and PM packaging. | Add gate invariant spec, CI validation task, portable PM artifact bundle, adapter-backed expansion to at least six rows, non-blocking performance trend gate contract, MEP release checklist, and sprint review. The 60% readiness score may be claimed only if all lanes land with merged evidence. |
 
 ## M41 Seed Tickets
 
@@ -297,3 +298,33 @@ Recommended next milestone: M49 should focus on CI and release gates for the
 generated scene dashboard, including required invariants, CI-friendly validation,
 portable PM artifact bundles, release readiness checklist, and performance gate
 design.
+
+## M49 Plan
+
+M49 starts from the M48 dashboard state: 23 rows, 18 pass, 5
+expected-unsupported, 0 tracked-gap, 0 fail, 21 generated-evidence rows, 2
+static policy rows, and 2 adapter-backed rows.
+
+The sprint target is ambitious: move Post-MVP Big Target readiness from 40% to
+about 60% if, and only if, the milestone lands multiple release-relevant lanes:
+
+| PM area | Start | M49 target | Required evidence |
+|---|---:|---:|---|
+| Evidence foundation | 100% | 100% | Preserve 0 tracked-gap / 0 fail and stable generated dashboard semantics. |
+| Skia integration coverage | 35% | 45% | Add adapter-backed proof for selected high-value pass rows, reaching at least 6 adapter-backed rows. |
+| CI and release gates | 10% | 60% | Add CI-friendly dashboard validation and release-gate policy. |
+| Performance readiness | 15% | 35% | Define and report a non-blocking measured-performance trend gate. |
+| PM demo and reporting workflow | 15% | 45% | Generate a portable PM bundle with manifest, counters, artifacts, known limitations, and serve instructions. |
+
+Planned tickets:
+
+- M49-A gate invariant spec;
+- M49-B CI validation task;
+- M49-C portable PM artifact bundle;
+- M49-D adapter-backed expansion;
+- M49-E performance trend gate contract;
+- M49-F MEP release readiness checklist;
+- M49-G sprint review and score update.
+
+The detailed sprint plan is
+`reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md`.

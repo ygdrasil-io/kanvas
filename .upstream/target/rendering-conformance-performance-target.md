@@ -127,6 +127,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | M46 | Generated Evidence Expansion | Convert the next high-value static dashboard rows to generated evidence while keeping zero tracked gaps and zero failing support claims. |
 | M47 | Remaining Static Evidence Hardening | Convert remaining static pass rows to generated evidence and keep Path AA expected-unsupported rows explicit as policy evidence. |
 | M48 | MEP Scene Coverage Expansion | Add representative P0/P1 Skia scene breadth across paint, clip, transform, bitmap, gradient, Path AA, and image-filter planning rows. |
+| M49 | MEP Readiness Gate Toward 60% | Promote the generated dashboard into CI/release gating, add a portable PM artifact bundle, design non-blocking performance trend gates, and broaden adapter-backed proof enough to justify a stretch 60% PM readiness score if all lanes land. |
 
 ## Current Baseline
 
@@ -182,6 +183,32 @@ The current expected unsupported rows are:
 - `path-aa-dashing-edge-budget` with `coverage.edge-count-exceeded`;
 - `image-filter-crop-nonnull-prepass-required` with
   `image-filter.crop-input-nonnull-prepass-required`.
+
+## M49 Proposed Target
+
+M49 should not be treated as "more rows only". Its purpose is to make the
+current dashboard usable as a MEP readiness gate.
+
+The M49 stretch target is to move Post-MVP Big Target readiness from 40% to
+about 60%. That score is only defensible if the milestone improves all of these
+areas:
+
+- CI and release gates move from 10% to roughly 60% through a validation task
+  that fails on support-claim regressions, duplicate ids, missing generated
+  artifacts, unsupported rows without stable fallback reasons, and accidental
+  `tracked-gap` / `fail` rows;
+- PM demo and reporting workflow moves from 15% to roughly 45% through a
+  portable bundle with dashboard HTML, scene JSON, generated result JSON,
+  artifacts, manifest, known limitations, and a repeatable serve command;
+- performance readiness moves from 15% to roughly 35% through a non-blocking
+  trend gate contract for measured payloads, including host/JDK/backend/adapter
+  eligibility and variance policy;
+- Skia integration coverage moves from 35% to roughly 45% through additional
+  adapter-backed proof for selected high-value pass rows, not broad new family
+  claims.
+
+The supporting sprint plan is
+`reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md`.
 
 ## Agent Execution Policy
 

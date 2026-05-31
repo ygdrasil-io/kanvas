@@ -47,6 +47,7 @@ Weighted PM readiness: 40% after rounding.
 | Static-to-generated evidence expansion | Done | 100% | M46 converted five additional rows |
 | Remaining static evidence hardening | Done | 100% | M47 converted remaining static pass rows and validated Path AA policy rows |
 | MEP scene coverage expansion | Done | 100% | M48 added 7 generated support rows and 3 expected-unsupported breadth rows |
+| MEP readiness gate toward 60% | Proposed | 0% | M49 should promote dashboard evidence into CI/release gates, portable PM reporting, non-blocking performance trends, and broader adapter-backed proof |
 
 Evidence-hardening readiness is 100% through M47:
 all static pass rows have generated evidence, and the only remaining static rows
@@ -86,6 +87,7 @@ Active Post-MVP evidence:
 - M48 scene pack: [reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md](reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md)
 - M48 support evidence: [reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md](reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md), [reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md](reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md)
 - M48 unsupported breadth: [reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md](reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md)
+- M49 proposed sprint: [reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md](reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md)
 
 ## MVP Roadmap
 
