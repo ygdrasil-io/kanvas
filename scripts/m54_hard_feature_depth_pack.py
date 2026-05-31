@@ -171,6 +171,15 @@ def materialize_scene(
     gpu_similarity = scene.get("gpuSimilarity", stats_details.get("gpuSimilarity", 100.0 if status == "pass" else 0.0))
     cpu_threshold = scene.get("cpuThreshold", stats_details.get("cpuThreshold", threshold))
     gpu_threshold = scene.get("gpuThreshold", stats_details.get("gpuThreshold", threshold))
+
+    def parity_status(similarity: Any, parity_threshold: Any, artifact_status: str) -> str:
+        if artifact_status != "produced":
+            return "not-produced"
+        try:
+            return "meets-threshold" if float(similarity) >= float(parity_threshold) else "below-threshold"
+        except (TypeError, ValueError):
+            return "unavailable"
+
     stats = {
         "pixels": pixels,
         "matchingPixels": matching_pixels,
@@ -190,9 +199,16 @@ def materialize_scene(
     artifact_prefix = f"artifacts/{scene_id}"
     cpu: dict[str, Any] = {
         "status": "pass",
+        "artifactStatus": "produced",
         "image": f"{artifact_prefix}/cpu.png",
         "diff": f"{artifact_prefix}/cpu-diff.png",
         "similarity": cpu_similarity,
+        "referenceParity": {
+            "status": parity_status(cpu_similarity, cpu_threshold, "produced"),
+            "similarity": cpu_similarity,
+            "threshold": cpu_threshold,
+            "referenceKind": scene["referenceKind"],
+        },
         "route": {
             "selectedRoute": scene["cpuRoute"],
             "fallbackReason": "none",
@@ -209,6 +225,13 @@ def materialize_scene(
     }
     gpu: dict[str, Any] = {
         "status": status,
+        "artifactStatus": "not-exported",
+        "referenceParity": {
+            "status": parity_status(gpu_similarity, gpu_threshold, "not-exported"),
+            "similarity": gpu_similarity,
+            "threshold": gpu_threshold,
+            "referenceKind": scene["referenceKind"],
+        },
         "route": {
             "selectedRoute": scene["gpuRoute"],
             "pipelineKey": scene["pipelineKey"],
@@ -222,6 +245,13 @@ def materialize_scene(
                 "image": f"{artifact_prefix}/gpu.png",
                 "diff": f"{artifact_prefix}/gpu-diff.png",
                 "similarity": gpu_similarity,
+                "artifactStatus": "produced",
+                "referenceParity": {
+                    "status": parity_status(gpu_similarity, gpu_threshold, "produced"),
+                    "similarity": gpu_similarity,
+                    "threshold": gpu_threshold,
+                    "referenceKind": scene["referenceKind"],
+                },
                 "stats": {
                     "pixels": pixels,
                     "matchingPixels": matching_pixels,

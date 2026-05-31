@@ -2471,6 +2471,8 @@ tasks.register("pipelineSceneDashboardGate") {
             }
         }
 
+        fun Map<*, *>?.number(field: String): Double? = (this?.get(field) as? Number)?.toDouble()
+
         fun requireStats(sceneId: String, owner: Map<*, *>?, prefix: String) {
             val stats = owner?.map("stats")
             if (stats == null) {
@@ -2599,6 +2601,17 @@ tasks.register("pipelineSceneDashboardGate") {
             requireString(sceneId, cpu, "diff", "fields.pass", "cpu.diff")
             validateRoute(sceneId, cpu, "cpu")
             requireStats(sceneId, cpu, "cpu")
+            val cpuSimilarity = (cpu?.get("similarity") as? Number)?.toDouble()
+                ?: cpu?.map("referenceParity").number("similarity")
+            val cpuThreshold = cpu?.map("referenceParity").number("threshold")
+                ?: cpu?.map("stats").number("threshold")
+            if (cpu?.string("status") == "pass" && cpuSimilarity != null && cpuThreshold != null && cpuSimilarity < cpuThreshold) {
+                warn(
+                    sceneId,
+                    "parity.cpu-below-threshold",
+                    "cpu.status=pass means artifact production here; CPU reference parity is $cpuSimilarity < $cpuThreshold",
+                )
+            }
             validatePerformanceTrend(sceneId, cpu, "cpu")
 
             val gpuStatus = requireString(sceneId, gpu, "status", "gpu.status", "gpu.status")
