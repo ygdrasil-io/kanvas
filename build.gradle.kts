@@ -2583,7 +2583,9 @@ tasks.register("pipelinePerformanceTrendWarnings") {
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
     val reportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-performance-warnings")
+    val m55CandidateSource = layout.projectDirectory.file("reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json")
     inputs.dir(dashboardDir)
+    inputs.file(m55CandidateSource)
     outputs.dir(reportDir)
     outputs.upToDateWhen { false }
 
@@ -2707,6 +2709,227 @@ tasks.register("pipelinePerformanceTrendWarnings") {
                 if (warnings.isEmpty()) appendLine("None.") else warnings.sorted().forEach { appendLine("- $it") }
             }
         )
+        val candidateFile = m55CandidateSource.asFile
+        if (candidateFile.isFile) {
+            val candidateRoot = JsonSlurper().parse(candidateFile) as? Map<*, *>
+                ?: throw GradleException("M55 candidate root must be a JSON object: ${candidateFile.relativeTo(rootDir)}")
+            val candidatePolicy = candidateRoot.map("policy").orEmpty()
+            val selectedRows = (candidateRoot["selectedRows"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
+            val excludedRows = (candidateRoot["excludedRows"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
+            val sceneById = scenes
+                .filterIsInstance<Map<*, *>>()
+                .associateBy { it.string("id").orEmpty() }
+
+            fun laneCandidate(
+                selected: Map<*, *>,
+                scene: Map<*, *>?,
+                laneKey: String,
+                laneName: String,
+            ): Map<String, Any> {
+                val sceneId = selected.string("sceneId").orEmpty()
+                val laneConfig = selected.map(laneKey).orEmpty()
+                val expectedDecision = laneConfig.string("decision") ?: selected.string("decision").orEmpty()
+                val deferredReason = laneConfig.string("deferredReason")
+                val trend = scene?.map(laneKey)?.map("performanceTrend")
+                val trendStatus = trend?.string("status") ?: "unavailable"
+                val baseline = trend?.map("baseline").orEmpty()
+                val environment = trend?.map("environment").orEmpty()
+                val timing = trend?.map("timing").orEmpty()
+                val gate = trend?.map("gate").orEmpty()
+                val regression = trend?.map("regression").orEmpty()
+                val sampleCount = (trend?.get("sampleCount") as? Number).asIntOrZero()
+                val missing = mutableListOf<String>()
+                if (expectedDecision == "deferred") {
+                    return linkedMapOf<String, Any>(
+                        "sceneId" to sceneId,
+                        "lane" to laneName,
+                        "status" to "deferred",
+                        "payloadStatus" to trendStatus,
+                        "decision" to expectedDecision,
+                        "reason" to (deferredReason ?: "Measurement deferred by M55 selection policy."),
+                        "sampleCount" to sampleCount,
+                        "baseline" to (baseline.string("id") ?: baseline.string("name") ?: "unavailable"),
+                    )
+                }
+                if (trend == null) {
+                    return linkedMapOf<String, Any>(
+                        "sceneId" to sceneId,
+                        "lane" to laneName,
+                        "status" to "warn",
+                        "payloadStatus" to "missing",
+                        "decision" to expectedDecision,
+                        "reason" to "Selected row has no `$laneKey.performanceTrend` payload.",
+                        "sampleCount" to 0,
+                        "baseline" to "unavailable",
+                    )
+                }
+                if (trendStatus != "measured") {
+                    return linkedMapOf<String, Any>(
+                        "sceneId" to sceneId,
+                        "lane" to laneName,
+                        "status" to "warn",
+                        "payloadStatus" to trendStatus,
+                        "decision" to expectedDecision,
+                        "reason" to "Selected row expected measured data but payload status is `$trendStatus`.",
+                        "sampleCount" to sampleCount,
+                        "baseline" to (baseline.string("id") ?: baseline.string("name") ?: "unavailable"),
+                    )
+                }
+                if (environment.string("host").isNullOrBlank()) missing += "environment.host"
+                if (environment.string("jdk").isNullOrBlank()) missing += "environment.jdk"
+                if (environment.string("backend").isNullOrBlank()) missing += "environment.backend"
+                if (laneKey == "gpu" && environment.string("adapter").isNullOrBlank()) missing += "environment.adapter"
+                if (sampleCount <= 0) missing += "sampleCount"
+                if ((timing["medianMs"] as? Number) == null) missing += "timing.medianMs"
+                if ((timing["p95Ms"] as? Number) == null) missing += "timing.p95Ms"
+                if ((baseline.string("id") ?: baseline.string("name")).isNullOrBlank()) missing += "baseline.id|name"
+                if (baseline.string("owner").isNullOrBlank() && candidatePolicy.string("baselineOwner").isNullOrBlank()) {
+                    missing += "baseline.owner"
+                }
+                val regressionLabel = regression.string("label").orEmpty()
+                val laneStatus = when {
+                    missing.isNotEmpty() -> "warn"
+                    regressionLabel == "regressed" -> "fail-candidate"
+                    else -> "pass"
+                }
+                val reason = when (laneStatus) {
+                    "pass" -> "Measured payload is complete for M55 candidate reporting and remains non-blocking."
+                    "fail-candidate" -> "Measured payload is marked regressed; M55 reports this without failing Gradle."
+                    else -> "Measured payload is missing required candidate metadata: ${missing.joinToString(", ")}."
+                }
+                return linkedMapOf<String, Any>(
+                    "sceneId" to sceneId,
+                    "lane" to laneName,
+                    "status" to laneStatus,
+                    "payloadStatus" to trendStatus,
+                    "decision" to expectedDecision,
+                    "reason" to reason,
+                    "sampleCount" to sampleCount,
+                    "baseline" to (baseline.string("id") ?: baseline.string("name") ?: "unavailable"),
+                    "baselineOwner" to (baseline.string("owner") ?: candidatePolicy.string("baselineOwner").orEmpty()),
+                    "regressionLabel" to regressionLabel,
+                    "gateMode" to (gate.string("mode") ?: gate.string("status") ?: "reporting-only"),
+                    "medianMs" to ((timing["medianMs"] as? Number)?.toDouble() ?: 0.0),
+                    "p95Ms" to ((timing["p95Ms"] as? Number)?.toDouble() ?: 0.0),
+                )
+            }
+
+            val candidateRows = selectedRows.map { selected ->
+                val sceneId = selected.string("sceneId").orEmpty()
+                val scene = sceneById[sceneId]
+                val laneRows = listOf(
+                    laneCandidate(selected, scene, "cpu", "CPU"),
+                    laneCandidate(selected, scene, "gpu", "GPU/cache"),
+                )
+                val laneStatuses = laneRows.map { it["status"] as String }
+                val rowStatus = when {
+                    laneStatuses.contains("fail-candidate") -> "fail-candidate"
+                    laneStatuses.contains("warn") -> "warn"
+                    laneStatuses.all { it == "deferred" } -> "deferred"
+                    laneStatuses.contains("deferred") -> "warn"
+                    else -> "pass"
+                }
+                linkedMapOf<String, Any>(
+                    "sceneId" to sceneId,
+                    "family" to selected.string("family").orEmpty(),
+                    "baselineRole" to selected.string("baselineRole").orEmpty(),
+                    "owner" to selected.string("owner").orEmpty(),
+                    "decision" to selected.string("decision").orEmpty(),
+                    "varianceRisk" to selected.string("varianceRisk").orEmpty(),
+                    "status" to rowStatus,
+                    "lanes" to laneRows,
+                )
+            }
+            val candidateStatusCounts = candidateRows
+                .map { it["status"] as String }
+                .groupingBy { it }
+                .eachCount()
+                .toSortedMap()
+            val laneStatusCounts = candidateRows
+                .flatMap { it["lanes"] as List<*> }
+                .filterIsInstance<Map<*, *>>()
+                .mapNotNull { it["status"] as? String }
+                .groupingBy { it }
+                .eachCount()
+                .toSortedMap()
+            val candidatePayload = linkedMapOf(
+                "schemaVersion" to 1,
+                "generatedBy" to "pipelinePerformanceTrendWarnings",
+                "source" to candidateFile.relativeTo(rootDir).path,
+                "dashboardSource" to dataFile.relativeTo(rootDir).path,
+                "mode" to "non-blocking",
+                "releaseBlocking" to false,
+                "policy" to candidatePolicy,
+                "counters" to linkedMapOf(
+                    "selectedRows" to candidateRows.size,
+                    "excludedRows" to excludedRows.size,
+                    "status" to candidateStatusCounts,
+                    "laneStatus" to laneStatusCounts,
+                    "passRows" to (candidateStatusCounts["pass"] ?: 0),
+                    "warnRows" to (candidateStatusCounts["warn"] ?: 0),
+                    "failCandidateRows" to (candidateStatusCounts["fail-candidate"] ?: 0),
+                    "deferredRows" to (candidateStatusCounts["deferred"] ?: 0),
+                ),
+                "rows" to candidateRows,
+                "excludedRows" to excludedRows.map {
+                    mapOf(
+                        "sceneId" to it.string("sceneId").orEmpty(),
+                        "reason" to it.string("reason").orEmpty(),
+                    )
+                },
+            )
+            reportRoot.resolve("m55-performance-gate-candidate.json")
+                .writeText(JsonOutput.prettyPrint(JsonOutput.toJson(candidatePayload)) + "\n")
+            reportRoot.resolve("m55-performance-gate-candidate.md").writeText(
+                buildString {
+                    appendLine("# M55 Performance Gate Candidate")
+                    appendLine()
+                    appendLine("Task: `pipelinePerformanceTrendWarnings`")
+                    appendLine("Source: `${candidateFile.relativeTo(rootDir)}`")
+                    appendLine("Mode: non-blocking; no Gradle or release gate is enabled in M55.")
+                    appendLine()
+                    appendLine("## Counters")
+                    appendLine()
+                    appendLine("| Counter | Value |")
+                    appendLine("|---|---:|")
+                    appendLine("| Selected rows | ${candidateRows.size} |")
+                    appendLine("| Excluded rows | ${excludedRows.size} |")
+                    appendLine("| Pass rows | ${candidateStatusCounts["pass"] ?: 0} |")
+                    appendLine("| Warn rows | ${candidateStatusCounts["warn"] ?: 0} |")
+                    appendLine("| Fail-candidate rows | ${candidateStatusCounts["fail-candidate"] ?: 0} |")
+                    appendLine("| Deferred rows | ${candidateStatusCounts["deferred"] ?: 0} |")
+                    appendLine()
+                    appendLine("## Rows")
+                    appendLine()
+                    appendLine("| Scene | Family | Status | Decision | Owner | Variance risk |")
+                    appendLine("|---|---|---|---|---|---|")
+                    candidateRows.forEach { row ->
+                        appendLine("| `${row["sceneId"]}` | ${row["family"]} | `${row["status"]}` | `${row["decision"]}` | ${row["owner"]} | ${row["varianceRisk"]} |")
+                    }
+                    appendLine()
+                    appendLine("## Lanes")
+                    appendLine()
+                    appendLine("| Scene | Lane | Status | Payload | Samples | Baseline | Reason |")
+                    appendLine("|---|---|---|---|---:|---|---|")
+                    candidateRows.forEach { row ->
+                        @Suppress("UNCHECKED_CAST")
+                        (row["lanes"] as List<Map<String, Any>>).forEach { lane ->
+                            appendLine("| `${lane["sceneId"]}` | ${lane["lane"]} | `${lane["status"]}` | `${lane["payloadStatus"]}` | ${lane["sampleCount"]} | `${lane["baseline"]}` | ${lane["reason"]} |")
+                        }
+                    }
+                    appendLine()
+                    appendLine("## Excluded Rows")
+                    appendLine()
+                    if (excludedRows.isEmpty()) {
+                        appendLine("None.")
+                    } else {
+                        excludedRows.forEach { row ->
+                            appendLine("- `${row.string("sceneId").orEmpty()}`: ${row.string("reason").orEmpty()}")
+                        }
+                    }
+                }
+            )
+        }
         logger.lifecycle("Wrote M50 performance warning report: ${reportRoot.resolve("performance-warnings.md").relativeTo(rootDir)}")
     }
 }
@@ -2929,6 +3152,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(inventoryGateDir)
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json"))
     outputs.dir(bundleDir)
     outputs.upToDateWhen { false }
 
@@ -3177,6 +3401,26 @@ tasks.register("pipelinePmBundle") {
                     "gpuStatus" to (((scene["gpu"] as? Map<*, *>)?.get("performanceTrend") as? Map<*, *>)?.get("status") as? String).orEmpty(),
                 )
             }
+        val m55CandidateFile = performanceWarningsRoot.resolve("m55-performance-gate-candidate.json")
+        val m55CandidateReport = if (m55CandidateFile.isFile) {
+            JsonSlurper().parse(m55CandidateFile) as? Map<*, *>
+                ?: throw GradleException("M55 candidate report must be a JSON object: ${m55CandidateFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
+        val m55CandidateCounters = (m55CandidateReport["counters"] as? Map<*, *>).orEmpty()
+        val m55CandidateRows = (m55CandidateReport["rows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?.map {
+                mapOf(
+                    "id" to (it["sceneId"] as? String).orEmpty(),
+                    "family" to (it["family"] as? String).orEmpty(),
+                    "status" to (it["status"] as? String).orEmpty(),
+                    "decision" to (it["decision"] as? String).orEmpty(),
+                    "owner" to (it["owner"] as? String).orEmpty(),
+                )
+            }
+            .orEmpty()
         val m52RejectedRows = listOf(
             mapOf("inventoryId" to "skia-gm-animatedgif", "reason" to "Codec/animation dependency remains gated."),
             mapOf("inventoryId" to "skia-gm-animcodecplayerexif", "reason" to "Codec/EXIF dependency remains gated."),
@@ -3231,6 +3475,8 @@ tasks.register("pipelinePmBundle") {
             ),
             "performanceWarningReport" to "performance/performance-warnings.md",
             "performanceWarningJson" to "performance/performance-warnings.json",
+            "m55PerformanceGateCandidateReport" to "performance/m55-performance-gate-candidate.md",
+            "m55PerformanceGateCandidateJson" to "performance/m55-performance-gate-candidate.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -3280,6 +3526,25 @@ tasks.register("pipelinePmBundle") {
                 "rejectedRowsDetail" to m54RejectedRows,
                 "notice" to "M54 hard feature depth rows are generated dashboard evidence for narrow selected scene contracts only; performance payloads remain warning-only.",
             ),
+            "m55PerformanceGateCandidate" to linkedMapOf<String, Any>(
+                "selectedRows" to ((m55CandidateCounters["selectedRows"] as? Number)?.toInt() ?: m55CandidateRows.size),
+                "excludedRows" to ((m55CandidateCounters["excludedRows"] as? Number)?.toInt() ?: 0),
+                "passRows" to ((m55CandidateCounters["passRows"] as? Number)?.toInt() ?: 0),
+                "warnRows" to ((m55CandidateCounters["warnRows"] as? Number)?.toInt() ?: 0),
+                "failCandidateRows" to ((m55CandidateCounters["failCandidateRows"] as? Number)?.toInt() ?: 0),
+                "deferredRows" to ((m55CandidateCounters["deferredRows"] as? Number)?.toInt() ?: 0),
+                "statusCounters" to (m55CandidateCounters["status"] ?: emptyMap<String, Any>()),
+                "laneStatusCounters" to (m55CandidateCounters["laneStatus"] ?: emptyMap<String, Any>()),
+                "selectedRowsDetail" to m55CandidateRows,
+                "selectionContract" to "reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json",
+                "selectionReport" to "reports/wgsl-pipeline/2026-05-31-m55-performance-gate-candidate-selection.md",
+                "baselinePayloadReport" to "reports/wgsl-pipeline/2026-05-31-m55-official-performance-baseline-payloads.md",
+                "candidateReport" to "performance/m55-performance-gate-candidate.md",
+                "candidateJson" to "performance/m55-performance-gate-candidate.json",
+                "policyReport" to "reports/wgsl-pipeline/2026-05-31-m55-quarantine-rebaseline-rollback-policy.md",
+                "releaseBlocking" to false,
+                "notice" to "M55 exposes a strict performance gate candidate only; no release-blocking performance gate is enabled.",
+            ),
             "inventoryCounters" to inventorySummary,
             "dashboardInventoryLinks" to dashboardInventoryLinks,
             "expectedUnsupportedRows" to expectedUnsupported,
@@ -3293,6 +3558,7 @@ tasks.register("pipelinePmBundle") {
                 "M52 promoted 10 inventory-derived rows; the rows prove only their generated scene contracts and do not turn M51 inventory status into broad Skia GM support.",
                 "M53 promotes selected GM feature rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, font, codec, emoji, shaping, SDF, LCD, and glyph-mask support remain outside this bundle's claims.",
                 "M54 promotes selected hard feature depth rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, dependency-gated font/codec/emoji substitutes, and release-blocking performance gates remain outside this bundle's claims.",
+                "M55 exposes performance gate candidate evidence only; missing measured lanes are deferred or warned, estimated metrics are not promoted to measured, and performance remains non-blocking.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -3318,6 +3584,7 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- `gate/`: M50 dashboard gate reports from `pipelineSceneDashboardGate`.")
                 appendLine("- `front-qa/`: PM dashboard front QA report and browser screenshot paths.")
                 appendLine("- `performance/`: warning-only M50 performance trend report and policy.")
+                appendLine("- M55 performance gate candidate counters live in `manifest.json` under `m55PerformanceGateCandidate`; reports are bundled under `performance/`.")
                 appendLine("- `inventory/`: M51 Skia GM inventory JSON and Markdown. Inventory rows are not support claims.")
                 appendLine("- `inventory-gate/`: M51 inventory validation reports and mismatch snapshot.")
                 appendLine("- M52 inventory promotion counters live in `manifest.json` under `m52InventoryPromotion`.")
