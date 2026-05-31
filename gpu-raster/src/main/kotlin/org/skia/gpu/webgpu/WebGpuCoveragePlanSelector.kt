@@ -7,10 +7,16 @@ import org.skia.pipeline.CoveragePlan
 import org.skia.pipeline.CoveragePlanAdapter
 import org.skia.pipeline.DiagnosticReason
 import org.skia.pipeline.FallbackPlan
+import org.skia.pipeline.FloatRect
 import org.skia.pipeline.PathFillType
 import org.skia.pipeline.StandardCoverageReason
 
 public const val WEBGPU_PATH_AA_EDGE_BUDGET: Int = 256
+public const val WEBGPU_PATH_AA_VERB_BUDGET: Int = 96
+public const val WEBGPU_PATH_AA_CUBIC_SEGMENT_BUDGET: Int = 16
+public const val WEBGPU_PATH_AA_DASH_INTERVAL_BUDGET: Int = 8
+public const val WEBGPU_PATH_AA_CLIP_STACK_DEPTH_BUDGET: Int = 4
+public const val WEBGPU_PATH_AA_DEVICE_BOUNDS_BUDGET: Float = 2048f
 
 public enum class WebGpuCoverageStrategy {
     AnalyticRect,
@@ -236,9 +242,48 @@ public data class WebGpuPathCoverageFacts(
     val isConvex: Boolean,
     val contourCount: Int,
     val edgeCount: Int,
+    val pathVerbCount: Int? = null,
+    val maxCubicSegmentsPerCubic: Int? = null,
+    val dashIntervalCount: Int? = null,
+    val clipStackDepth: Int? = null,
+    val deviceBounds: FloatRect? = null,
     val maskOrAtlasFallbackEnabled: Boolean = false,
     val strokeOutlineFallbackEnabled: Boolean = false,
-)
+) {
+    public fun budgetDiagnostics(): WebGpuPathAaBudgetDiagnostics =
+        WebGpuPathAaBudgetDiagnostics(
+            pathVerbCount = pathVerbCount,
+            coverageEdgeCount = edgeCount,
+            maxCubicSegmentsPerCubic = maxCubicSegmentsPerCubic,
+            dashIntervalCount = dashIntervalCount,
+            clipStackDepth = clipStackDepth,
+            deviceBounds = deviceBounds,
+        )
+}
+
+public data class WebGpuPathAaBudgetDiagnostics(
+    val pathVerbCount: Int?,
+    val pathVerbBudget: Int = WEBGPU_PATH_AA_VERB_BUDGET,
+    val coverageEdgeCount: Int,
+    val coverageEdgeBudget: Int = WEBGPU_PATH_AA_EDGE_BUDGET,
+    val maxCubicSegmentsPerCubic: Int?,
+    val cubicSegmentBudget: Int = WEBGPU_PATH_AA_CUBIC_SEGMENT_BUDGET,
+    val dashIntervalCount: Int?,
+    val dashIntervalBudget: Int = WEBGPU_PATH_AA_DASH_INTERVAL_BUDGET,
+    val clipStackDepth: Int?,
+    val clipStackDepthBudget: Int = WEBGPU_PATH_AA_CLIP_STACK_DEPTH_BUDGET,
+    val deviceBounds: FloatRect?,
+    val deviceBoundsBudget: Float = WEBGPU_PATH_AA_DEVICE_BOUNDS_BUDGET,
+) {
+    public fun dump(): String =
+        "pathVerbCount=${pathVerbCount ?: "n/a"}/$pathVerbBudget;" +
+            "coverageEdgeCount=$coverageEdgeCount/$coverageEdgeBudget;" +
+            "cubicMaxSegmentsPerCubic=${maxCubicSegmentsPerCubic ?: "n/a"}/$cubicSegmentBudget;" +
+            "dashIntervalCount=${dashIntervalCount ?: "n/a"}/$dashIntervalBudget;" +
+            "clipStackDepth=${clipStackDepth ?: "n/a"}/$clipStackDepthBudget;" +
+            "deviceBounds=${deviceBounds?.let { "${it.left},${it.top},${it.right},${it.bottom}" } ?: "n/a"};" +
+            "deviceBoundsMaxSize=${deviceBounds?.let { maxOf(it.right - it.left, it.bottom - it.top) } ?: "n/a"}/$deviceBoundsBudget"
+}
 
 public data class WebGpuCoverageDiagnostic(
     val backend: BackendKind,
@@ -258,6 +303,7 @@ public data class WebGpuCoverageSelection(
     val pipelineAxes: List<SkWebGpuDevice.PipelineKeyClassification>,
     val routeIdentifier: String,
     val diagnostic: WebGpuCoverageDiagnostic?,
+    val budgetDiagnostics: WebGpuPathAaBudgetDiagnostics? = null,
 ) {
     public fun pipelineKeyDump(): String =
         canonicalPipelineKeyIdentity(pipelineAxes).dump()
@@ -269,6 +315,7 @@ public data class WebGpuCoverageSelection(
         appendLine("route=$routeIdentifier")
         appendLine("coverage=${dumpCoveragePlan(coveragePlan)}")
         appendLine("clip=${dumpClipInteraction(clipInteraction)}")
+        appendLine("pathAaBudgets=${budgetDiagnostics?.dump() ?: "n/a"}")
         appendLine("pipelineAxes=${pipelineKeyDump()}")
         appendLine("diagnostic=${diagnostic?.dump() ?: "none"}")
     }.trimEnd()
@@ -395,6 +442,7 @@ public object WebGpuCoveragePlanSelector {
         ),
         routeIdentifier = route,
         diagnostic = null,
+        budgetDiagnostics = null,
     )
 
     private fun pathStrategy(
@@ -407,25 +455,29 @@ public object WebGpuCoveragePlanSelector {
         if (facts == null) {
             return unsupported(drawKind, plan, clipInteraction, lowering, StandardCoverageReason.StencilCoverUnavailable)
         }
-        if (plan.aa && facts.edgeCount > WEBGPU_PATH_AA_EDGE_BUDGET) {
-            if (facts.strokeOutlineFallbackEnabled) {
+        val budgetDiagnostics = facts.budgetDiagnostics()
+        val budgetReason = pathBudgetExceededReason(facts)
+        if (plan.aa && budgetReason != null) {
+            if (budgetReason == StandardCoverageReason.EdgeCountExceeded && facts.strokeOutlineFallbackEnabled) {
                 return supportedPath(
                     drawKind = drawKind,
                     strategy = WebGpuCoverageStrategy.PathAaStrokePrimitive,
                     plan = plan,
                     clipInteraction = clipInteraction,
                     lowering = lowering,
+                    budgetDiagnostics = budgetDiagnostics,
                     coverageKind = "pathAaStrokePrimitive",
                     route = "webgpu.coverage.path-aa-stroke-primitive",
                 )
             }
-            return if (facts.maskOrAtlasFallbackEnabled) {
+            return if (budgetReason == StandardCoverageReason.EdgeCountExceeded && facts.maskOrAtlasFallbackEnabled) {
                 supportedPath(
                     drawKind = drawKind,
                     strategy = WebGpuCoverageStrategy.CoverageMaskOrAtlasFallback,
                     plan = plan,
                     clipInteraction = clipInteraction,
                     lowering = lowering,
+                    budgetDiagnostics = budgetDiagnostics,
                     coverageKind = "pathMaskOrAtlas",
                     route = "webgpu.coverage.path-mask-or-atlas",
                 )
@@ -435,8 +487,9 @@ public object WebGpuCoveragePlanSelector {
                     plan = plan,
                     clipInteraction = clipInteraction,
                     lowering = lowering,
-                    reason = StandardCoverageReason.EdgeCountExceeded,
+                    reason = budgetReason,
                     pipelineAxes = pathPipelineAxes("pathCoverageUnsupported", plan),
+                    budgetDiagnostics = budgetDiagnostics,
                 )
             }
         }
@@ -448,6 +501,7 @@ public object WebGpuCoveragePlanSelector {
                 plan = plan,
                 clipInteraction = clipInteraction,
                 lowering = lowering,
+                budgetDiagnostics = budgetDiagnostics,
                 coverageKind = "pathConvexFan",
                 route = "webgpu.coverage.path-convex-fan",
             )
@@ -458,10 +512,29 @@ public object WebGpuCoveragePlanSelector {
                 plan = plan,
                 clipInteraction = clipInteraction,
                 lowering = lowering,
+                budgetDiagnostics = budgetDiagnostics,
                 coverageKind = "pathStencilCover",
                 route = "webgpu.coverage.path-stencil-cover",
             )
         }
+    }
+
+    private fun pathBudgetExceededReason(facts: WebGpuPathCoverageFacts): StandardCoverageReason? = when {
+        facts.edgeCount > WEBGPU_PATH_AA_EDGE_BUDGET -> StandardCoverageReason.EdgeCountExceeded
+        facts.pathVerbCount != null && facts.pathVerbCount > WEBGPU_PATH_AA_VERB_BUDGET ->
+            StandardCoverageReason.VerbBudgetExceeded
+        facts.maxCubicSegmentsPerCubic != null &&
+            facts.maxCubicSegmentsPerCubic > WEBGPU_PATH_AA_CUBIC_SEGMENT_BUDGET ->
+            StandardCoverageReason.CubicSegmentBudgetExceeded
+        facts.dashIntervalCount != null && facts.dashIntervalCount > WEBGPU_PATH_AA_DASH_INTERVAL_BUDGET ->
+            StandardCoverageReason.DashBudgetExceeded
+        facts.clipStackDepth != null && facts.clipStackDepth > WEBGPU_PATH_AA_CLIP_STACK_DEPTH_BUDGET ->
+            StandardCoverageReason.ClipDepthExceeded
+        facts.deviceBounds != null && maxOf(
+            facts.deviceBounds.right - facts.deviceBounds.left,
+            facts.deviceBounds.bottom - facts.deviceBounds.top,
+        ) > WEBGPU_PATH_AA_DEVICE_BOUNDS_BUDGET -> StandardCoverageReason.BoundsBudgetExceeded
+        else -> null
     }
 
     private fun supportedPath(
@@ -470,6 +543,7 @@ public object WebGpuCoveragePlanSelector {
         plan: CoveragePlan.PathCoverage,
         clipInteraction: ClipInteraction,
         lowering: CoverageLoweringResult,
+        budgetDiagnostics: WebGpuPathAaBudgetDiagnostics,
         coverageKind: String,
         route: String,
     ): WebGpuCoverageSelection = WebGpuCoverageSelection(
@@ -481,6 +555,7 @@ public object WebGpuCoveragePlanSelector {
         pipelineAxes = pathPipelineAxes(coverageKind, plan),
         routeIdentifier = route,
         diagnostic = null,
+        budgetDiagnostics = budgetDiagnostics,
     )
 
     private fun pathPipelineAxes(
@@ -511,6 +586,7 @@ public object WebGpuCoveragePlanSelector {
         lowering: CoverageLoweringResult,
         reason: DiagnosticReason,
         pipelineAxes: List<SkWebGpuDevice.PipelineKeyClassification> = emptyList(),
+        budgetDiagnostics: WebGpuPathAaBudgetDiagnostics? = null,
     ): WebGpuCoverageSelection = WebGpuCoverageSelection(
         drawKind = drawKind,
         strategy = WebGpuCoverageStrategy.RefuseDiagnostic,
@@ -524,6 +600,7 @@ public object WebGpuCoveragePlanSelector {
             reason = reason,
             action = FallbackPlan.RefuseDiagnostic(reason.code),
         ),
+        budgetDiagnostics = budgetDiagnostics,
     )
 
     private fun unsupportedClipReason(clip: ClipInteraction): DiagnosticReason? = when (clip) {
