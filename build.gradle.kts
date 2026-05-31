@@ -906,6 +906,9 @@ tasks.register("pipelineMeasuredCpuPerformance") {
     outputs.files(
         outputRoot.file("src-over-stack/cpu-performance.json"),
         outputRoot.file("bitmap-shader-local-matrix/cpu-performance.json"),
+        outputRoot.file("solid-rect/cpu-performance.json"),
+        outputRoot.file("linear-gradient-rect/cpu-performance.json"),
+        outputRoot.file("m54-simple-aa-clip/cpu-performance.json"),
     )
     outputs.upToDateWhen { false }
 
@@ -994,6 +997,56 @@ tasks.register("pipelineMeasuredCpuPerformance") {
             return pixels.fold(0) { acc, value -> acc * 31 + value }
         }
 
+        fun solidRectWorkload(): Int {
+            val width = 64
+            val pixels = IntArray(width * width)
+            val fill = 0xff3366cc.toInt()
+            for (y in 8 until 56) {
+                for (x in 6 until 58) {
+                    pixels[y * width + x] = fill
+                }
+            }
+            return pixels.fold(0) { acc, value -> acc * 31 + value }
+        }
+
+        fun linearGradientRectWorkload(): Int {
+            val width = 64
+            val pixels = IntArray(width * width)
+            for (y in 10 until 50) {
+                for (x in 2 until 62) {
+                    val t = ((x - 2) * 255) / 59
+                    val r = 255 - t
+                    val g = (64 + (t / 2)).coerceAtMost(255)
+                    val b = t
+                    pixels[y * width + x] = (0xff shl 24) or (r shl 16) or (g shl 8) or b
+                }
+            }
+            return pixels.fold(0) { acc, value -> acc * 31 + value }
+        }
+
+        fun simpleAaClipWorkload(): Int {
+            val width = 64
+            val pixels = IntArray(width * width)
+            val src = 0xcc00a8ff.toInt()
+            val cx = 32.0
+            val cy = 32.0
+            val radius = 21.0
+            for (y in 0 until width) {
+                for (x in 0 until width) {
+                    val dx = x + 0.5 - cx
+                    val dy = y + 0.5 - cy
+                    val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+                    val coverage = (radius + 0.5 - distance).coerceIn(0.0, 1.0)
+                    if (coverage > 0.0) {
+                        val alpha = (((src ushr 24) * coverage) + 0.5).toInt().coerceIn(0, 255)
+                        val coveredSrc = (alpha shl 24) or (src and 0x00ffffff)
+                        pixels[y * width + x] = srcOver(coveredSrc, pixels[y * width + x])
+                    }
+                }
+            }
+            return pixels.fold(0) { acc, value -> acc * 31 + value }
+        }
+
         fun measure(samples: Int, warmups: Int, workload: () -> Int): CpuMeasurement {
             var checksum = 0
             repeat(warmups) { checksum = checksum xor workload() }
@@ -1044,6 +1097,39 @@ tasks.register("pipelineMeasuredCpuPerformance") {
                 ),
                 workload = ::bitmapLocalMatrixWorkload,
             ),
+            CpuSceneBenchmark(
+                sceneId = "solid-rect",
+                route = "cpu.descriptor.coverage-plan.solid-rect",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pixels" to 4096,
+                    "filledPixels" to 2496,
+                    "coveragePlanCount" to 1,
+                ),
+                workload = ::solidRectWorkload,
+            ),
+            CpuSceneBenchmark(
+                sceneId = "linear-gradient-rect",
+                route = "cpu.shader.linear-gradient.rect",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pixels" to 4096,
+                    "shaderStages" to 1,
+                    "coveragePlanCount" to 1,
+                ),
+                workload = ::linearGradientRectWorkload,
+            ),
+            CpuSceneBenchmark(
+                sceneId = "m54-simple-aa-clip",
+                route = "cpu.coverage.simple-aa-clip-oracle",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pixels" to 4096,
+                    "clipCoverageSamples" to 4096,
+                    "coveragePlanCount" to 1,
+                ),
+                workload = ::simpleAaClipWorkload,
+            ),
         )
 
         benchmarks.forEach { benchmark ->
@@ -1062,14 +1148,20 @@ tasks.register("pipelineMeasuredCpuPerformance") {
                 "environment" to environment,
                 "counters" to benchmark.counters,
                 "baseline" to mapOf(
-                    "name" to "m43-cpu-measured-local",
+                    "name" to if (benchmark.sceneId in setOf("solid-rect", "linear-gradient-rect", "m54-simple-aa-clip")) {
+                        "m59-cpu-measured-local"
+                    } else {
+                        "m43-cpu-measured-local"
+                    },
                     "commit" to baselineCommit,
+                    "owner" to "Kanvas rendering release owner",
                 ),
                 "regression" to mapOf(
                     "label" to "unknown",
                 ),
                 "gate" to mapOf(
                     "mode" to "reporting-only",
+                    "owner" to "Kanvas rendering release owner",
                     "reason" to "M43 measured CPU metrics do not gate CI until budget and rollback policy exist",
                 ),
                 "route" to benchmark.route,
@@ -1093,6 +1185,9 @@ tasks.register("pipelineMeasuredGpuPerformance") {
     outputs.files(
         outputRoot.file("src-over-stack/gpu-performance.json"),
         outputRoot.file("bitmap-shader-local-matrix/gpu-performance.json"),
+        outputRoot.file("solid-rect/gpu-performance.json"),
+        outputRoot.file("linear-gradient-rect/gpu-performance.json"),
+        outputRoot.file("m54-simple-aa-clip/gpu-performance.json"),
     )
     outputs.upToDateWhen { false }
 
@@ -1155,6 +1250,42 @@ tasks.register("pipelineMeasuredGpuPerformance") {
                     "pipelineCacheMisses" to 1,
                     "bindGroupCount" to 1,
                     "resourceBytes" to 1024,
+                ),
+            ),
+            GpuCacheBenchmark(
+                sceneId = "solid-rect",
+                route = "webgpu.coverage.analytic-rect",
+                pipelineKey = "coverageKind=analyticRect",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pipelineCacheHits" to 29,
+                    "pipelineCacheMisses" to 1,
+                    "bindGroupCount" to 1,
+                    "resourceBytes" to 4096,
+                ),
+            ),
+            GpuCacheBenchmark(
+                sceneId = "linear-gradient-rect",
+                route = "webgpu.generated.linear-gradient.rect",
+                pipelineKey = "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pipelineCacheHits" to 29,
+                    "pipelineCacheMisses" to 1,
+                    "bindGroupCount" to 1,
+                    "resourceBytes" to 4096,
+                ),
+            ),
+            GpuCacheBenchmark(
+                sceneId = "m54-simple-aa-clip",
+                route = "webgpu.coverage.simple-aa-clip.bounded",
+                pipelineKey = "clip=simpleAA coverage=analyticConvex budget=current source=SimpleAaclipGM",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pipelineCacheHits" to 29,
+                    "pipelineCacheMisses" to 1,
+                    "bindGroupCount" to 1,
+                    "resourceBytes" to 4096,
                 ),
             ),
         )
@@ -1224,14 +1355,20 @@ tasks.register("pipelineMeasuredGpuPerformance") {
                 "adapter" to adapter,
                 "counters" to benchmark.counters,
                 "baseline" to mapOf(
-                    "name" to "m43-gpu-cache-measured-local",
+                    "name" to if (benchmark.sceneId in setOf("solid-rect", "linear-gradient-rect", "m54-simple-aa-clip")) {
+                        "m59-gpu-cache-measured-local"
+                    } else {
+                        "m43-gpu-cache-measured-local"
+                    },
                     "commit" to baselineCommit,
+                    "owner" to "Kanvas rendering release owner",
                 ),
                 "regression" to mapOf(
                     "label" to "unknown",
                 ),
                 "gate" to mapOf(
                     "mode" to "reporting-only",
+                    "owner" to "Kanvas rendering release owner",
                     "reason" to "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist",
                 ),
                 "pipelineKey" to benchmark.pipelineKey,
@@ -2980,13 +3117,13 @@ tasks.register("pipelinePerformanceTrendWarnings") {
 
 tasks.register("pipelinePerformanceReleaseGate") {
     group = "verification"
-    description = "Runs the M58 measured-row-only performance release gate."
+    description = "Runs the M59 measured-row performance release gate."
 
     dependsOn("pipelineSceneDashboard")
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
     val reportDir = layout.buildDirectory.dir("reports/wgsl-pipeline-performance-release-gate")
-    val gateContract = layout.projectDirectory.file("reports/wgsl-pipeline/performance/m58-performance-release-gate.json")
+    val gateContract = layout.projectDirectory.file("reports/wgsl-pipeline/performance/m59-performance-release-gate.json")
     inputs.dir(dashboardDir)
     inputs.file(gateContract)
     outputs.dir(reportDir)
@@ -3004,7 +3141,7 @@ tasks.register("pipelinePerformanceReleaseGate") {
         val scenes = dashboard["scenes"] as? List<*>
             ?: throw GradleException("Performance release gate dashboard must contain scenes[]: ${dataFile.relativeTo(rootDir)}")
         val contract = JsonSlurper().parse(contractFile) as? Map<*, *>
-            ?: throw GradleException("M58 performance release gate contract must be a JSON object: ${contractFile.relativeTo(rootDir)}")
+            ?: throw GradleException("M59 performance release gate contract must be a JSON object: ${contractFile.relativeTo(rootDir)}")
 
         fun Map<*, *>.map(field: String): Map<*, *>? = this[field] as? Map<*, *>
         fun Map<*, *>.string(field: String): String? = this[field] as? String
@@ -3051,14 +3188,15 @@ tasks.register("pipelinePerformanceReleaseGate") {
             val missing = mutableListOf<String>()
 
             if (trendStatus != "measured") {
+                val status = if (releaseBlocking) "fail" else "not-measured"
                 return linkedMapOf<String, Any>(
                     "sceneId" to sceneId,
                     "lane" to laneName,
-                    "status" to "not-measured",
-                    "releaseBlocking" to false,
+                    "status" to status,
+                    "releaseBlocking" to releaseBlocking,
                     "payloadStatus" to trendStatus,
                     "reason" to (laneContract.string("deferredReason")
-                        ?: "Payload status is `$trendStatus`; M58 does not treat estimated or missing metrics as release-blocking measured evidence."),
+                        ?: "Payload status is `$trendStatus`; M59 does not treat estimated or missing metrics as release-blocking measured evidence."),
                     "sampleCount" to sampleCount,
                     "baseline" to (baseline.string("id") ?: baseline.string("name") ?: "unavailable"),
                     "medianMs" to (medianMs ?: 0.0),
@@ -3076,7 +3214,7 @@ tasks.register("pipelinePerformanceReleaseGate") {
                     "releaseBlocking" to false,
                     "payloadStatus" to trendStatus,
                     "reason" to (laneContract.string("deferredReason")
-                        ?: "Measured payload is present but this M58 contract does not select the lane for release blocking."),
+                        ?: "Measured payload is present but this M59 contract does not select the lane for release blocking."),
                     "sampleCount" to sampleCount,
                     "baseline" to (baseline.string("id") ?: baseline.string("name") ?: "unavailable"),
                     "medianMs" to (medianMs ?: 0.0),
@@ -3117,7 +3255,7 @@ tasks.register("pipelinePerformanceReleaseGate") {
             val reason = when {
                 missing.isNotEmpty() -> "Measured release-blocking lane is missing required metadata: ${missing.joinToString(", ")}."
                 thresholdFailures.isNotEmpty() -> "Measured release-blocking lane is outside threshold policy: ${thresholdFailures.joinToString(", ")}."
-                else -> "Measured release-blocking lane is within M58 thresholds."
+                else -> "Measured release-blocking lane is within M59 thresholds."
             }
             return linkedMapOf<String, Any>(
                 "sceneId" to sceneId,
@@ -3180,7 +3318,7 @@ tasks.register("pipelinePerformanceReleaseGate") {
             "generatedBy" to "pipelinePerformanceReleaseGate",
             "source" to contractFile.relativeTo(rootDir).path,
             "dashboardSource" to dataFile.relativeTo(rootDir).path,
-            "mode" to "release-blocking-measured-rows-only",
+            "mode" to "release-blocking-m59-final-measured-target",
             "releaseBlocking" to true,
             "negativeFixture" to negativeFixture,
             "policy" to policy,
@@ -3204,16 +3342,16 @@ tasks.register("pipelinePerformanceReleaseGate") {
                 )
             },
         )
-        reportRoot.resolve("m58-performance-release-gate.json")
+        reportRoot.resolve("m59-performance-release-gate.json")
             .writeText(JsonOutput.prettyPrint(JsonOutput.toJson(payload)) + "\n")
-        reportRoot.resolve("m58-performance-release-gate.md").writeText(
+        reportRoot.resolve("m59-performance-release-gate.md").writeText(
             buildString {
-                appendLine("# M58 Performance Release Gate")
+                appendLine("# M59 Performance Release Gate")
                 appendLine()
                 appendLine("Task: `pipelinePerformanceReleaseGate`")
                 appendLine("Source: `${contractFile.relativeTo(rootDir)}`")
                 appendLine("Dashboard source: `${dataFile.relativeTo(rootDir)}`")
-                appendLine("Mode: release-blocking for selected measured lanes only.")
+                appendLine("Mode: release-blocking for the final M59 selected measured target.")
                 appendLine()
                 appendLine("## Counters")
                 appendLine()
@@ -3265,15 +3403,15 @@ tasks.register("pipelinePerformanceReleaseGate") {
         if (blockingFailures.isNotEmpty()) {
             throw GradleException(
                 buildString {
-                    appendLine("M58 performance release gate failed:")
+                    appendLine("M59 performance release gate failed:")
                     blockingFailures.forEach { lane ->
                         appendLine("- ${lane["sceneId"]}/${lane["lane"]}: ${lane["reason"]}")
                     }
-                    appendLine("See ${reportRoot.resolve("m58-performance-release-gate.md").relativeTo(rootDir)}")
+                    appendLine("See ${reportRoot.resolve("m59-performance-release-gate.md").relativeTo(rootDir)}")
                 }
             )
         }
-        logger.lifecycle("Wrote M58 performance release gate report: ${reportRoot.resolve("m58-performance-release-gate.md").relativeTo(rootDir)}")
+        logger.lifecycle("Wrote M59 performance release gate report: ${reportRoot.resolve("m59-performance-release-gate.md").relativeTo(rootDir)}")
     }
 }
 
@@ -3505,7 +3643,7 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json"))
-    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m58-performance-release-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m59-performance-release-gate.json"))
     outputs.dir(bundleDir)
     outputs.upToDateWhen { false }
 
@@ -3596,6 +3734,11 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-05-31-m58-sprint-review.md",
             "reports/wgsl-pipeline/2026-05-31-m58-pm-report.md",
             "reports/wgsl-pipeline/2026-05-31-m58-non-claims.md",
+            "reports/wgsl-pipeline/2026-05-31-m59-performance-gap-decision.md",
+            "reports/wgsl-pipeline/2026-05-31-m59-performance-release-gate-selection.md",
+            "reports/wgsl-pipeline/2026-05-31-m59-pm-report.md",
+            "reports/wgsl-pipeline/2026-05-31-m59-sprint-review.md",
+            "reports/wgsl-pipeline/2026-05-31-m59-non-claims.md",
         )
         referencedPaths += m56ReportPaths
 
@@ -3819,15 +3962,15 @@ tasks.register("pipelinePmBundle") {
                 )
             }
             .orEmpty()
-        val m58ReleaseGateFile = performanceReleaseGateRoot.resolve("m58-performance-release-gate.json")
-        val m58ReleaseGateReport = if (m58ReleaseGateFile.isFile) {
-            JsonSlurper().parse(m58ReleaseGateFile) as? Map<*, *>
-                ?: throw GradleException("M58 performance release gate report must be a JSON object: ${m58ReleaseGateFile.relativeTo(rootDir)}")
+        val m59ReleaseGateFile = performanceReleaseGateRoot.resolve("m59-performance-release-gate.json")
+        val m59ReleaseGateReport = if (m59ReleaseGateFile.isFile) {
+            JsonSlurper().parse(m59ReleaseGateFile) as? Map<*, *>
+                ?: throw GradleException("M59 performance release gate report must be a JSON object: ${m59ReleaseGateFile.relativeTo(rootDir)}")
         } else {
             emptyMap<String, Any>()
         }
-        val m58ReleaseGateCounters = (m58ReleaseGateReport["counters"] as? Map<*, *>).orEmpty()
-        val m58ReleaseGateRows = (m58ReleaseGateReport["rows"] as? List<*>)
+        val m59ReleaseGateCounters = (m59ReleaseGateReport["counters"] as? Map<*, *>).orEmpty()
+        val m59ReleaseGateRows = (m59ReleaseGateReport["rows"] as? List<*>)
             ?.filterIsInstance<Map<*, *>>()
             ?.map {
                 mapOf(
@@ -3895,8 +4038,8 @@ tasks.register("pipelinePmBundle") {
             "performanceWarningJson" to "performance/performance-warnings.json",
             "m55PerformanceGateCandidateReport" to "performance/m55-performance-gate-candidate.md",
             "m55PerformanceGateCandidateJson" to "performance/m55-performance-gate-candidate.json",
-            "m58PerformanceReleaseGateReport" to "performance-release-gate/m58-performance-release-gate.md",
-            "m58PerformanceReleaseGateJson" to "performance-release-gate/m58-performance-release-gate.json",
+            "m59PerformanceReleaseGateReport" to "performance-release-gate/m59-performance-release-gate.md",
+            "m59PerformanceReleaseGateJson" to "performance-release-gate/m59-performance-release-gate.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -3965,28 +4108,28 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M55 exposes a strict performance gate candidate only; no release-blocking performance gate is enabled.",
             ),
-            "m58PerformanceReleaseGate" to linkedMapOf<String, Any>(
-                "selectedRows" to ((m58ReleaseGateCounters["selectedRows"] as? Number)?.toInt() ?: m58ReleaseGateRows.size),
-                "excludedRows" to ((m58ReleaseGateCounters["excludedRows"] as? Number)?.toInt() ?: 0),
-                "passRows" to ((m58ReleaseGateCounters["passRows"] as? Number)?.toInt() ?: 0),
-                "failRows" to ((m58ReleaseGateCounters["failRows"] as? Number)?.toInt() ?: 0),
-                "notMeasuredRows" to ((m58ReleaseGateCounters["notMeasuredRows"] as? Number)?.toInt() ?: 0),
-                "measuredBlockingLanes" to ((m58ReleaseGateCounters["measuredBlockingLanes"] as? Number)?.toInt() ?: 0),
-                "notMeasuredLanes" to ((m58ReleaseGateCounters["notMeasuredLanes"] as? Number)?.toInt() ?: 0),
-                "blockingFailures" to ((m58ReleaseGateCounters["blockingFailures"] as? Number)?.toInt() ?: 0),
-                "statusCounters" to (m58ReleaseGateCounters["status"] ?: emptyMap<String, Any>()),
-                "laneStatusCounters" to (m58ReleaseGateCounters["laneStatus"] ?: emptyMap<String, Any>()),
-                "selectedRowsDetail" to m58ReleaseGateRows,
-                "selectionContract" to "reports/wgsl-pipeline/performance/m58-performance-release-gate.json",
-                "selectionReport" to "reports/wgsl-pipeline/2026-05-31-m58-performance-release-gate-selection.md",
+            "m59PerformanceReleaseGate" to linkedMapOf<String, Any>(
+                "selectedRows" to ((m59ReleaseGateCounters["selectedRows"] as? Number)?.toInt() ?: m59ReleaseGateRows.size),
+                "excludedRows" to ((m59ReleaseGateCounters["excludedRows"] as? Number)?.toInt() ?: 0),
+                "passRows" to ((m59ReleaseGateCounters["passRows"] as? Number)?.toInt() ?: 0),
+                "failRows" to ((m59ReleaseGateCounters["failRows"] as? Number)?.toInt() ?: 0),
+                "notMeasuredRows" to ((m59ReleaseGateCounters["notMeasuredRows"] as? Number)?.toInt() ?: 0),
+                "measuredBlockingLanes" to ((m59ReleaseGateCounters["measuredBlockingLanes"] as? Number)?.toInt() ?: 0),
+                "notMeasuredLanes" to ((m59ReleaseGateCounters["notMeasuredLanes"] as? Number)?.toInt() ?: 0),
+                "blockingFailures" to ((m59ReleaseGateCounters["blockingFailures"] as? Number)?.toInt() ?: 0),
+                "statusCounters" to (m59ReleaseGateCounters["status"] ?: emptyMap<String, Any>()),
+                "laneStatusCounters" to (m59ReleaseGateCounters["laneStatus"] ?: emptyMap<String, Any>()),
+                "selectedRowsDetail" to m59ReleaseGateRows,
+                "selectionContract" to "reports/wgsl-pipeline/performance/m59-performance-release-gate.json",
+                "selectionReport" to "reports/wgsl-pipeline/2026-05-31-m59-performance-release-gate-selection.md",
                 "thresholdPolicy" to "reports/wgsl-pipeline/2026-05-31-m58-performance-threshold-policy.md",
-                "releaseGateReport" to "performance-release-gate/m58-performance-release-gate.md",
-                "releaseGateJson" to "performance-release-gate/m58-performance-release-gate.json",
-                "sprintReview" to "reports/wgsl-pipeline/2026-05-31-m58-sprint-review.md",
-                "pmReport" to "reports/wgsl-pipeline/2026-05-31-m58-pm-report.md",
-                "nonClaims" to "reports/wgsl-pipeline/2026-05-31-m58-non-claims.md",
+                "releaseGateReport" to "performance-release-gate/m59-performance-release-gate.md",
+                "releaseGateJson" to "performance-release-gate/m59-performance-release-gate.json",
+                "sprintReview" to "reports/wgsl-pipeline/2026-05-31-m59-sprint-review.md",
+                "pmReport" to "reports/wgsl-pipeline/2026-05-31-m59-pm-report.md",
+                "nonClaims" to "reports/wgsl-pipeline/2026-05-31-m59-non-claims.md",
                 "releaseBlocking" to true,
-                "notice" to "M58 blocks only selected measured lanes with missing required measured metadata or explicit threshold breaches; estimated and missing metrics remain visible but are not treated as release-blocking measured evidence.",
+                "notice" to "M59 blocks every selected final-target lane with missing required measured metadata or explicit threshold breaches; estimated and missing metrics remain visible but are not treated as measured evidence.",
             ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
@@ -4043,7 +4186,7 @@ tasks.register("pipelinePmBundle") {
                 "M53 promotes selected GM feature rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, font, codec, emoji, shaping, SDF, LCD, and glyph-mask support remain outside this bundle's claims.",
                 "M54 promotes selected hard feature depth rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, dependency-gated font/codec/emoji substitutes, and release-blocking performance gates remain outside this bundle's claims.",
                 "M55 exposes performance gate candidate evidence only; missing measured lanes are deferred or warned, estimated metrics are not promoted to measured, and performance remains non-blocking.",
-                "M58 adds a narrow release-blocking performance gate only for selected measured lanes; estimated and missing metrics are reported as not measured and are not release-blocking measured evidence.",
+                "M59 closes the selected performance target with measured CPU and GPU/cache payloads for all seven rows; estimated and missing metrics are still rejected as measured evidence.",
                 "M56 promotes one corrected sweep-gradient row only; two-point conical gradients, arbitrary image-filter DAGs, picture prepass support, broad Path AA, dash, stroke, and complex clip remain outside this bundle's claims.",
                 "M57 promotes one bounded AA clip grid slice only; broad aaclip, broad Path AA, dash, cap, join, stroke-outline, complex clip, large clipped paths, and edge-budget increases remain outside this bundle's claims.",
             ),
@@ -4072,8 +4215,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- `front-qa/`: PM dashboard front QA report and browser screenshot paths.")
                 appendLine("- `performance/`: warning-only M50 performance trend report and policy.")
                 appendLine("- M55 performance gate candidate counters live in `manifest.json` under `m55PerformanceGateCandidate`; reports are bundled under `performance/`.")
-                appendLine("- `performance-release-gate/`: M58 measured-row-only release gate JSON and Markdown reports.")
-                appendLine("- M58 performance release gate counters live in `manifest.json` under `m58PerformanceReleaseGate`.")
+                appendLine("- `performance-release-gate/`: M59 measured final-target release gate JSON and Markdown reports.")
+                appendLine("- M59 performance release gate counters live in `manifest.json` under `m59PerformanceReleaseGate`.")
                 appendLine("- `inventory/`: M51 Skia GM inventory JSON and Markdown. Inventory rows are not support claims.")
                 appendLine("- `inventory-gate/`: M51 inventory validation reports and mismatch snapshot.")
                 appendLine("- M52 inventory promotion counters live in `manifest.json` under `m52InventoryPromotion`.")

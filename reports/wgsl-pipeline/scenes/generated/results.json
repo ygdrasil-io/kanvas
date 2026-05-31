@@ -1561,6 +1561,79 @@
           "threshold": 99.95,
           "backend": "CPU",
           "command": "rtk ./gradlew --no-daemon :kanvas-skia:pipelineConformanceTest --tests org.skia.core.SkBitmapDescriptorCoverageOracleTest"
+        },
+        "performanceTrend": {
+          "sceneId": "solid-rect",
+          "lane": "CPU",
+          "status": "measured",
+          "command": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
+          "phase": "cpu-dashboard-row",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.017416,
+            "p95Ms": 0.078167
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "CPU scalar Kotlin dashboard benchmark",
+            "vector": "not used"
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pixels": 4096,
+            "filledPixels": 2496,
+            "coveragePlanCount": 1
+          },
+          "baseline": {
+            "name": "m59-cpu-measured-local",
+            "commit": "7378c5989d257a82a38f34256d5b8e10c2186a4e",
+            "owner": "Kanvas rendering release owner"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "gate": {
+            "mode": "reporting-only",
+            "owner": "Kanvas rendering release owner",
+            "reason": "M43 measured CPU metrics do not gate CI until budget and rollback policy exist"
+          },
+          "route": "cpu.descriptor.coverage-plan.solid-rect",
+          "rawMetrics": "artifacts/solid-rect/cpu-performance.json",
+          "rawSamples": [
+            0.078084,
+            0.078083,
+            0.076917,
+            0.077584,
+            0.078167,
+            0.077541,
+            0.085666,
+            0.02225,
+            0.016,
+            0.018792,
+            0.016209,
+            0.019125,
+            0.018791,
+            0.019416,
+            0.016375,
+            0.014375,
+            0.020791,
+            0.014917,
+            0.017416,
+            0.014542,
+            0.017709,
+            0.015,
+            0.022125,
+            0.014042,
+            0.014459,
+            0.016584,
+            0.014084,
+            0.014625,
+            0.015083,
+            0.014791
+          ],
+          "checksum": 219041792
         }
       },
       "gpu": {
@@ -1581,6 +1654,82 @@
           "backend": "WebGPU",
           "adapter": "Apple M2 Max",
           "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.SolidRectSceneCaptureTest"
+        },
+        "performanceTrend": {
+          "sceneId": "solid-rect",
+          "lane": "GPU",
+          "status": "measured",
+          "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+          "phase": "webgpu-cache-dashboard-row",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.005,
+            "p95Ms": 0.010125
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "WebGPU cache/timing dashboard benchmark",
+            "adapter": "Apple M2 Max"
+          },
+          "adapter": "Apple M2 Max",
+          "counters": {
+            "routeInvocations": 1,
+            "pipelineCacheHits": 29,
+            "pipelineCacheMisses": 1,
+            "bindGroupCount": 1,
+            "resourceBytes": 4096
+          },
+          "baseline": {
+            "name": "m59-gpu-cache-measured-local",
+            "commit": "7378c5989d257a82a38f34256d5b8e10c2186a4e",
+            "owner": "Kanvas rendering release owner"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "gate": {
+            "mode": "reporting-only",
+            "owner": "Kanvas rendering release owner",
+            "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
+          },
+          "pipelineKey": "coverageKind=analyticRect",
+          "route": "webgpu.coverage.analytic-rect",
+          "rawMetrics": "artifacts/solid-rect/gpu-performance.json",
+          "rawSamples": [
+            0.005,
+            0.004917,
+            0.005167,
+            0.004958,
+            0.004875,
+            0.005125,
+            0.010125,
+            0.004833,
+            0.010209,
+            0.005709,
+            0.005209,
+            0.004834,
+            0.005834,
+            0.005167,
+            0.004791,
+            0.007,
+            0.005083,
+            0.004833,
+            0.005083,
+            0.005208,
+            0.004875,
+            0.004833,
+            0.00575,
+            0.004875,
+            0.004833,
+            0.0075,
+            0.004917,
+            0.004792,
+            0.005084,
+            0.004792
+          ],
+          "checksum": -756117914
         }
       },
       "diffs": {
@@ -1612,7 +1761,9 @@
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SolidRectSceneCaptureTest.kt",
         "reports/wgsl-pipeline/2026-05-30-m46-static-to-generated-inventory.md",
         "reports/wgsl-pipeline/2026-05-30-m46-solid-rect-generated-evidence.md",
-        "reports/wgsl-pipeline/scenes/generated/results.json"
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/scenes/artifacts/solid-rect/cpu-performance.json",
+        "reports/wgsl-pipeline/scenes/artifacts/solid-rect/gpu-performance.json"
       ],
       "tags": [
         "source.generated",
@@ -1628,7 +1779,7 @@
       "generation": {
         "mode": "generated",
         "producer": "pipelineGeneratedSceneExport",
-        "sourceTask": ":gpu-raster:test",
+        "sourceTask": ":gpu-raster:test; pipelineMeasuredCpuPerformance; pipelineMeasuredGpuPerformance",
         "sourceTest": "org.skia.gpu.webgpu.SolidRectSceneCaptureTest",
         "sourceReport": "reports/wgsl-pipeline/2026-05-30-m46-solid-rect-generated-evidence.md",
         "commit": "8371f87efbfbcccd36af7826cf08d0a1abd8f799",
@@ -2181,11 +2332,22 @@
           "command": "Static oracle aligned to LinearGradientRectTest plus GeneratedLinearGradientWgslTest"
         },
         "performanceTrend": {
-          "status": "estimated",
+          "sceneId": "linear-gradient-rect",
+          "lane": "CPU",
+          "status": "measured",
+          "command": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
+          "phase": "cpu-dashboard-row",
           "sampleCount": 30,
           "timing": {
-            "medianMs": 0.035,
-            "p95Ms": 0.046
+            "medianMs": 0.015875,
+            "p95Ms": 0.168417
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "CPU scalar Kotlin dashboard benchmark",
+            "vector": "not used"
           },
           "counters": {
             "routeInvocations": 1,
@@ -2194,15 +2356,53 @@
             "coveragePlanCount": 1
           },
           "baseline": {
-            "name": "m40-cpu-static-seed",
-            "commit": "97dcd3b23c66fa1c05711c23a6f0e20ae26e126c"
+            "name": "m59-cpu-measured-local",
+            "commit": "7378c5989d257a82a38f34256d5b8e10c2186a4e",
+            "owner": "Kanvas rendering release owner"
           },
           "regression": {
             "label": "unknown"
           },
-          "environment": "macOS local static dashboard seed; informational until native CPU benchmark harness lands",
+          "gate": {
+            "mode": "reporting-only",
+            "owner": "Kanvas rendering release owner",
+            "reason": "M43 measured CPU metrics do not gate CI until budget and rollback policy exist"
+          },
           "route": "cpu.shader.linear-gradient.rect",
-          "rawMetrics": "artifacts/linear-gradient-rect/cpu-performance.json"
+          "rawMetrics": "artifacts/linear-gradient-rect/cpu-performance.json",
+          "rawSamples": [
+            0.1705,
+            0.168417,
+            0.162292,
+            0.157833,
+            0.162708,
+            0.161,
+            0.0295,
+            0.052958,
+            0.042417,
+            0.022625,
+            0.046667,
+            0.032417,
+            0.01625,
+            0.015833,
+            0.022666,
+            0.015917,
+            0.01575,
+            0.015541,
+            0.015708,
+            0.01575,
+            0.015542,
+            0.015666,
+            0.0155,
+            0.015833,
+            0.015666,
+            0.015875,
+            0.015667,
+            0.0155,
+            0.015625,
+            0.015791
+          ],
+          "checksum": -2141801432
         }
       },
       "gpu": {
@@ -2228,12 +2428,24 @@
           "adapterEvidenceCommit": "48c351b826bf6ed8b7d5725a41209d9010cbc6e1"
         },
         "performanceTrend": {
-          "status": "estimated",
+          "sceneId": "linear-gradient-rect",
+          "lane": "GPU",
+          "status": "measured",
+          "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+          "phase": "webgpu-cache-dashboard-row",
           "sampleCount": 30,
           "timing": {
-            "medianMs": 0.09,
-            "p95Ms": 0.128
+            "medianMs": 0.004875,
+            "p95Ms": 0.005375
           },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "WebGPU cache/timing dashboard benchmark",
+            "adapter": "Apple M2 Max"
+          },
+          "adapter": "Apple M2 Max",
           "counters": {
             "routeInvocations": 1,
             "pipelineCacheHits": 29,
@@ -2242,17 +2454,54 @@
             "resourceBytes": 4096
           },
           "baseline": {
-            "name": "m40-gpu-cache-static-seed",
-            "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
+            "name": "m59-gpu-cache-measured-local",
+            "commit": "7378c5989d257a82a38f34256d5b8e10c2186a4e",
+            "owner": "Kanvas rendering release owner"
           },
           "regression": {
             "label": "unknown"
           },
-          "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
-          "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
+          "gate": {
+            "mode": "reporting-only",
+            "owner": "Kanvas rendering release owner",
+            "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
+          },
           "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
           "route": "webgpu.generated.linear-gradient.rect",
-          "rawMetrics": "artifacts/linear-gradient-rect/gpu-performance.json"
+          "rawMetrics": "artifacts/linear-gradient-rect/gpu-performance.json",
+          "rawSamples": [
+            0.005,
+            0.00475,
+            0.004916,
+            0.004917,
+            0.004792,
+            0.00525,
+            0.004959,
+            0.004791,
+            0.005167,
+            0.004792,
+            0.004958,
+            0.004875,
+            0.00475,
+            0.004875,
+            0.005041,
+            0.004667,
+            0.004834,
+            0.006334,
+            0.005,
+            0.004959,
+            0.005125,
+            0.004833,
+            0.004833,
+            0.00475,
+            0.005375,
+            0.004833,
+            0.00475,
+            0.004958,
+            0.00475,
+            0.004875
+          ],
+          "checksum": -1866223815
         }
       },
       "diffs": {
@@ -2279,12 +2528,14 @@
         "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/gpu-performance.json",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/LinearGradientRectTest.kt",
         "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/tools/GeneratedLinearGradientWgslTest.kt",
-        "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md"
+        "reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md",
+        "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/cpu-performance.json",
+        "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/gpu-performance.json"
       ],
       "generation": {
         "mode": "generated",
         "producer": "pipelineGeneratedSceneExport",
-        "sourceTask": ":gpu-raster:test",
+        "sourceTask": ":gpu-raster:test; pipelineMeasuredCpuPerformance; pipelineMeasuredGpuPerformance",
         "sourceTest": "org.skia.gpu.webgpu.LinearGradientRectTest + org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgslTest",
         "sourceReport": "reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md",
         "commit": "74d34d868223f17e5a176127339bdc53c8f5eca8",

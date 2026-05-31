@@ -48,6 +48,7 @@ Current M40 dashboard state:
 | M56 Unsupported-to-Pass Feature Scene Pack | Partial: one prior expected-unsupported row becomes generated pass evidence. | Promoted `m53-sweep-gradient-clamp` by correcting it to `skia-gm-sweepgradient`, kept two-point conical, image-filter DAG, and Path AA/clip blockers explicit, exposed M56 evidence in the PM bundle, and raised readiness to 96% instead of the 97% stretch target. |
 | M57 Path AA / Clip Micro-Promotion | Done: one bounded AA clip subcase becomes generated pass evidence. | Promoted `m57-aaclip-bounded-grid` as a generated `skia-gm-aaclip` bounded-grid support row, kept edge-budget, dash, hairline, stroke-outline, and complex-clip blockers explicit, exposed M57 evidence in the PM bundle, and raised readiness to 98% without broad Path AA claims. |
 | M58 Performance Release Gate | Done for measured lanes: selected measured performance evidence becomes release-blocking. | Added `pipelinePerformanceReleaseGate`, selected the four measured M55 rows for CPU and GPU/cache thresholds, reported three not-measured rows without blocking, exposed M58 counters in the PM bundle, and raised readiness to 99% without promoting estimated or missing metrics. |
+| M59 Close Performance Measurement Gap | Done: final selected performance target has measured lanes only. | Added measured CPU and GPU/cache payloads for `solid-rect`, `linear-gradient-rect`, and `m54-simple-aa-clip`, gated 7 selected rows and 14 measured lanes, reported 0 not-measured rows and 0 blocking failures, exposed M59 counters in the PM bundle, and raised readiness to 100% without promoting estimated or missing metrics. |
 
 ## M41 Seed Tickets
 
@@ -883,3 +884,45 @@ Detailed reports:
 - `reports/wgsl-pipeline/2026-05-31-m58-pm-report.md`.
 - `reports/wgsl-pipeline/2026-05-31-m58-non-claims.md`.
 - `reports/wgsl-pipeline/performance/m58-performance-release-gate.json`.
+
+## M59 Outcome
+
+Closed on 2026-05-31 by
+`reports/wgsl-pipeline/2026-05-31-m59-sprint-review.md`.
+
+M59 closes the final selected performance target by adding measured CPU and
+GPU/cache payloads for the three rows that M58 still reported as
+`not-measured`: `solid-rect`, `linear-gradient-rect`, and
+`m54-simple-aa-clip`.
+
+Final M59 gate counters:
+
+| Signal | Count |
+|---|---:|
+| Selected rows | 7 |
+| Pass rows | 7 |
+| Not-measured rows | 0 |
+| Measured release-blocking lanes | 14 |
+| Not-measured lanes | 0 |
+| Blocking failures | 0 |
+
+M59 final score:
+
+| PM area | M58 | M59 | Reason |
+|---|---:|---:|---|
+| Evidence foundation | 100% | 100% | Dashboard evidence remains generated, clean, and validated. |
+| Skia integration coverage | 100% | 100% | No rendering support expansion is claimed. |
+| CI and release gates | 100% | 100% | `pipelinePerformanceReleaseGate` blocks every selected final-target lane with missing metadata or threshold breaches. |
+| Performance readiness | 95% | 100% | All seven selected rows now have measured CPU and GPU/cache lanes. |
+| PM demo and reporting workflow | 100% | 100% | PM bundle exposes M59 counters, reports, JSON, and non-claims. |
+
+Weighted final score: 100%.
+
+Detailed reports:
+
+- `reports/wgsl-pipeline/2026-05-31-m59-performance-gap-decision.md`.
+- `reports/wgsl-pipeline/2026-05-31-m59-performance-release-gate-selection.md`.
+- `reports/wgsl-pipeline/2026-05-31-m59-sprint-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m59-pm-report.md`.
+- `reports/wgsl-pipeline/2026-05-31-m59-non-claims.md`.
+- `reports/wgsl-pipeline/performance/m59-performance-release-gate.json`.
