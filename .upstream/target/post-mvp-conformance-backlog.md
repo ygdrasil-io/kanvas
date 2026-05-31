@@ -343,5 +343,22 @@ Remaining MEP work after M49:
   rollback behavior before any release-blocking performance threshold;
 - expand scene families only with adapter-backed captures and stable fallback
   diagnostics;
+- accept and implement the front spec gates for dashboard UX, PM reporting,
+  image inspection, browser checks, and accessibility;
 - keep text/font/glyph/emoji/codec gaps dependency-gated until real deliveries
-  land.
+  land, then promote font scenes only with generated CPU/GPU/refusal evidence.
+
+## Front And Font Spec Split
+
+After M49, two draft spec packs were added:
+
+- `.upstream/specs/front/` for dashboard UX, PM reporting workflow,
+  accessibility, image/artifact browsing, and front quality gates;
+- `.upstream/specs/font/` for pure Kotlin OpenType, simple text,
+  explicit shaping, glyph rendering, glyph-mask handoff, color fonts, emoji,
+  and font validation.
+
+These specs are planning and ownership evidence. They do not change the
+Post-MVP Big Target readiness score, which remains 60%, because no new runtime
+support claim, adapter-backed capture, release-owned CI gate, or generated font
+scene row landed with the spec split.

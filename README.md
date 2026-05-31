@@ -26,7 +26,10 @@ representative Skia integration breadth, and M49 promoted the dashboard into a
 release-oriented readiness gate candidate with portable PM reporting and broader
 adapter-backed proof. The platform is still not complete MEP scope: performance
 thresholds remain non-blocking, dependency-gated text/font/codec gaps remain out
-of scope, and broader scene families still need adapter-backed captures.
+of scope, and broader scene families still need adapter-backed captures. The
+latest front and font spec packs document those next surfaces, but they are
+spec-only and do not change the readiness score until implementation evidence
+lands.
 
 | PM area | Weight | Status | Progress | Evidence / remaining work |
 |---|---:|---|---:|---|
@@ -49,6 +52,8 @@ Weighted PM readiness: 60% after rounding.
 | Remaining static evidence hardening | Done | 100% | M47 converted remaining static pass rows and validated Path AA policy rows |
 | MEP scene coverage expansion | Done | 100% | M48 added 7 generated support rows and 3 expected-unsupported breadth rows |
 | MEP readiness gate toward 60% | Done | 100% | M49 promoted dashboard evidence into a CI gate candidate, portable PM bundle, non-blocking performance trend contract, release checklist, and 7 adapter-backed rows |
+| Front evidence experience specs | Draft spec complete | 100% | `front/` documents dashboard UX, PM workflow, accessibility, and quality gates without changing rendering claims |
+| Font and text evidence specs | Draft spec complete | 100% | `font/` documents OpenType, shaping, glyph rendering, color fonts, emoji, and validation boundaries without clearing dependency-gated rows |
 
 Evidence-hardening readiness is 100% through M47:
 all static pass rows have generated evidence, and the only remaining static rows
@@ -80,13 +85,18 @@ What remains before MEP:
   variance, environment, and rollback policy are owned;
 - publish or host the PM demo/report flow beyond the generated portable local
   bundle;
+- turn the draft front specs into accepted UI/browser/accessibility gates when
+  the implementation and review workflow are owned;
 - close dependency-gated text/font/glyph/emoji/codec gaps through real
-  deliveries, not substitutes.
+  deliveries, not substitutes, then promote font scenes with generated
+  CPU/GPU/refusal evidence.
 
 Active Post-MVP evidence:
 
 - target doc: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
 - backlog: [.upstream/target/post-mvp-conformance-backlog.md](.upstream/target/post-mvp-conformance-backlog.md)
+- front specs: [.upstream/specs/front/README.md](.upstream/specs/front/README.md)
+- font specs: [.upstream/specs/font/README.md](.upstream/specs/font/README.md)
 - dashboard source: [reports/wgsl-pipeline/scenes/](reports/wgsl-pipeline/scenes/)
 - generated demo: `rtk ./gradlew --no-daemon pipelineSceneDashboard`
 - M46 review: [reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m46-sprint-review.md)
@@ -124,6 +134,8 @@ Active execution source:
 - Architecture target: [.upstream/target/high-performance-wgsl-pipeline-target.md](.upstream/target/high-performance-wgsl-pipeline-target.md)
 - Post-MVP big target: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
 - Post-MVP conformance backlog: [.upstream/target/post-mvp-conformance-backlog.md](.upstream/target/post-mvp-conformance-backlog.md)
+- Front evidence specs: [.upstream/specs/front/README.md](.upstream/specs/front/README.md)
+- Font and text specs: [.upstream/specs/font/README.md](.upstream/specs/font/README.md)
 - Linear/agent methodology: [.upstream/target/linear-agent-methodology.md](.upstream/target/linear-agent-methodology.md)
 
 | Block | Scope | Status | Weight | Progress | MVP evidence gate |
@@ -232,6 +244,13 @@ Closed post-MVP milestones:
 - M49/GRA-287: closed the readiness gate sprint with a CI gate candidate,
   portable PM bundle, non-blocking performance trend contract, release
   checklist, 7 adapter-backed rows, and a 60% PM readiness score.
+- Front specs: split the evidence dashboard, PM reporting, accessibility, and
+  front quality-gate target under `.upstream/specs/front/`; this documents
+  current M49 behavior and future gates, but does not change rendering support.
+- Font specs: split font/text/glyph/emoji validation under
+  `.upstream/specs/font/`; this documents the current pure Kotlin OpenType and
+  simple text baseline, plus dependency-gated rows, but does not clear those
+  gaps without implementation evidence.
 
 Sprint reviews:
 [reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md](reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md)
