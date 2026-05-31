@@ -46,7 +46,10 @@ the current dashboard into a release-oriented readiness gate candidate with
 portable PM reporting, broader adapter-backed proof, and an explicit
 non-blocking performance trend contract. The platform is still not complete MEP
 scope because release-blocking performance thresholds, broader scene families,
-production CI ownership, and dependency-gated text/font/codec gaps remain.
+production CI ownership, and dependency-gated text/font/codec gaps remain. The
+front and font spec packs now document the next PM-facing and text/glyph
+surfaces, but they are draft/spec-only and do not increase PM readiness without
+new gates, captures, or generated evidence.
 
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
@@ -67,7 +70,10 @@ Before MEP, Kanvas still needs:
 - required-CI ownership for the dashboard gate and non-blocking inventory;
 - performance trends with approved release thresholds;
 - hosted or release-owned PM reporting beyond the portable local bundle;
-- dependency-gated text/font/glyph/emoji/codec deliveries, not substitutes.
+- acceptance of front UX/browser/accessibility gates backed by generated
+  dashboard evidence;
+- dependency-gated text/font/glyph/emoji/codec deliveries, not substitutes,
+  followed by generated font scene evidence.
 
 ## Evidence Levels
 
@@ -128,6 +134,8 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | M47 | Remaining Static Evidence Hardening | Convert remaining static pass rows to generated evidence and keep Path AA expected-unsupported rows explicit as policy evidence. |
 | M48 | MEP Scene Coverage Expansion | Add representative P0/P1 Skia scene breadth across paint, clip, transform, bitmap, gradient, Path AA, and image-filter planning rows. |
 | M49 | MEP Readiness Gate Toward 60% | Completed: promoted the generated dashboard into a CI gate candidate, added a portable PM artifact bundle, defined non-blocking performance trend gates, and broadened adapter-backed proof enough to justify a 60% PM readiness score. |
+| Spec split | Front Evidence Experience | Draft spec pack added for dashboard UX, image inspection, PM bundle workflow, accessibility, and quality gates. Spec-only; no score movement. |
+| Spec split | Font And Text Evidence | Draft spec pack added for pure Kotlin OpenType, shaping, glyph rendering, color fonts, emoji, and font conformance. Spec-only; dependency-gated rows remain gated. |
 
 ## Current Baseline
 
@@ -176,6 +184,11 @@ M48 and M49 support, refusal, and readiness evidence is linked from:
 - `reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md`;
 - `reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md`.
 
+Draft follow-up spec packs:
+
+- `.upstream/specs/front/README.md`;
+- `.upstream/specs/font/README.md`.
+
 The two static rows remain deliberate Path AA policy sentinels, not unowned
 conversion debt. M48 adds three generated expected-unsupported breadth rows so
 future planning sees the high-value unsupported surface area instead of hiding
@@ -218,6 +231,22 @@ The supporting sprint plan and closeout are:
 - `reports/wgsl-pipeline/2026-05-31-m49-60-readiness-sprint-plan.md`;
 - `reports/wgsl-pipeline/2026-05-31-m49-sprint-review.md`.
 
+## Front And Font Spec Split
+
+After M49, the target gained two draft spec packs:
+
+- `.upstream/specs/front/`, covering the evidence dashboard UX, PM bundle,
+  image inspection, filters, accessibility, and front quality gates;
+- `.upstream/specs/font/`, covering portable OpenType, `SkFont`,
+  `SkTypeface`, `SkFontMgr`, explicit `SkShaper`, glyph rendering, color
+  fonts, emoji, and font conformance.
+
+These specs improve planning quality and ownership boundaries, but they do not
+change the 60% PM readiness score. The score only moves when the documented
+front or font work produces release-relevant evidence: accepted gates,
+adapter-backed captures, generated scene rows, stable refusal rows, or PM
+artifacts.
+
 ## Agent Execution Policy
 
 Agents working on M41+ must:
@@ -226,6 +255,10 @@ Agents working on M41+ must:
   before modifying dashboard generation or scene evidence;
 - read `.upstream/specs/wgsl-pipeline/12-benchmark-harness-and-performance-gates.md`
   before modifying performance fields, benchmark output, or regression gates;
+- read `.upstream/specs/front/README.md` before modifying dashboard UX,
+  artifact browsing, PM bundle behavior, or front quality gates;
+- read `.upstream/specs/font/README.md` before modifying font, text, glyph,
+  shaping, color-font, emoji, or font conformance behavior;
 - keep `reports/wgsl-pipeline/scenes/data/scenes.json` machine-readable and
   deterministic;
 - keep fallback reasons stable and visible;
