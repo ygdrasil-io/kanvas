@@ -10,7 +10,7 @@ GPU backend.
 
 Last updated: 2026-05-31
 
-Post-MVP Big Target readiness for MEP: 96%.
+Post-MVP Big Target readiness for MEP: 98%.
 
 This percentage is a PM readiness score for the full Post-MVP target, not an
 effort estimate and not the completion state of the last sprint. It moves only
@@ -28,9 +28,10 @@ front/font specs into executable evidence, M51 made the full Skia GM/sample
 surface release-visible as inventory, M52 promoted 10 selected inventory
 candidates into generated dashboard evidence, M53 promoted a second 12-row GM
 feature pack, M54 promoted a 10-row hard feature depth pack, M55 added a
-non-blocking performance gate candidate for seven representative rows, and M56
+non-blocking performance gate candidate for seven representative rows, M56
 promoted one incorrectly classified sweep-gradient boundary row into a real
-adapter-backed `pass` row. The platform is still not
+adapter-backed `pass` row, and M57 adds one bounded AA clip grid slice as
+row-specific generated `pass` evidence. The platform is still not
 complete MEP scope: performance thresholds remain warning-only, broad Skia
 parity is not claimed, and dependency-gated text/font/codec gaps remain visible
 outside the selected evidence rows.
@@ -75,15 +76,25 @@ The final M56 dashboard has 60 rows, 46 pass, 14 expected-unsupported, 0
 tracked-gap, 0 fail, 58 generated rows, 2 static policy rows, 42 adapter-backed
 rows, and 32 inventory-derived generated rows.
 
+M57 Path AA / clip micro-promotion is complete: `m57-aaclip-bounded-grid`
+adds a bounded `skia-gm-aaclip` AA clip grid slice as a generated `pass` row
+with row-specific CPU/GPU/reference/diff/stats artifacts and route diagnostics. Existing
+edge-budget, dash, stroke-outline, hairline, and complex-clip refusals remain
+visible and unchanged.
+
+The final M57 dashboard has 61 rows, 47 pass, 14 expected-unsupported, 0
+tracked-gap, 0 fail, 59 generated rows, 2 static policy rows, 43 adapter-backed
+rows, and 33 inventory-derived generated rows.
+
 | PM area | Weight | Status | Progress | Evidence / remaining work |
 |---|---:|---|---:|---|
-| Evidence foundation | 25% | Done through M56 | 100% | Generated dashboard, 58 generated rows, 0 tracked-gap, 0 fail, release gate report |
-| Skia integration coverage | 25% | Adapter-backed + one unsupported-to-pass correction | 99% | M56 promotes one previous expected-unsupported sweep-gradient row to adapter-backed pass while keeping image-filter and Path AA blockers explicit |
-| CI and release gates | 20% | Release-visible candidate | 98% | `wgsl_scene_dashboard_release_gate` runs dashboard gate, performance warnings, PM bundle, M54 metadata checks, M55 performance candidate output, and M56 corrected allowlist |
+| Evidence foundation | 25% | Done through M57 | 100% | Generated dashboard, 59 generated rows, 0 tracked-gap, 0 fail, release gate report |
+| Skia integration coverage | 25% | Adapter-backed + bounded Path AA / clip micro-promotion | 100% | M57 adds one bounded AA clip support row while keeping image-filter and broad Path AA blockers explicit |
+| CI and release gates | 20% | Release-visible candidate | 99% | `wgsl_scene_dashboard_release_gate` runs dashboard gate, performance warnings, PM bundle, M54 metadata checks, M55 performance candidate output, M56 corrected allowlist, and M57 generated evidence |
 | Performance readiness | 15% | Non-blocking gate candidate | 80% | Seven M55 rows have candidate decisions: 4 measured pass rows, 3 deferred rows, 0 warn, 0 fail-candidate; thresholds remain non-blocking |
-| PM demo and reporting workflow | 15% | PM bundle + front QA + M56 counters | 99% | `pipelinePmBundle` includes manifest, dashboard, artifacts, front QA, gate, performance warnings, inventory reports, M52/M53/M54 counters, M55 performance candidate counters, and M56 promotion/limitation evidence |
+| PM demo and reporting workflow | 15% | PM bundle + front QA + M57 counters | 100% | `pipelinePmBundle` includes manifest, dashboard, artifacts, front QA, gate, performance warnings, inventory reports, M52/M53/M54 counters, M55 performance candidate counters, M56 promotion/limitation evidence, and M57 micro-promotion evidence |
 
-Weighted PM readiness: 96% after rounding.
+Weighted PM readiness: 98% after rounding.
 
 | Track | Status | Progress | Evidence |
 |---|---|---:|---|
@@ -105,6 +116,7 @@ Weighted PM readiness: 96% after rounding.
 | Hard feature depth pack | Done | 100% | M54 promotes 10 selected hard-feature rows into generated dashboard evidence: 8 pass rows, 2 expected-unsupported rows, 0 tracked-gap, 0 fail |
 | Performance gate candidate | Done | 100% | M55 selects 7 representative rows, emits non-blocking pass/deferred/warn/fail-candidate output, exposes PM bundle counters, and keeps release-blocking performance disabled |
 | Unsupported-to-pass feature scene pack | Partial | 50% | M56 promotes 1 row to pass, rejects unsafe image-filter and Path AA shortcuts, and moves readiness to 96% instead of the 97% stretch target |
+| Path AA / clip micro-promotion | Done | 100% | M57 promotes one bounded `aaclip` grid slice to generated adapter-backed pass evidence while preserving all broad Path AA / clip refusals |
 
 Evidence-hardening readiness is 100% through M47:
 all static pass rows have generated evidence, and the only remaining static rows
@@ -353,6 +365,10 @@ Closed post-MVP milestones:
   sweep-gradient promotion, 60 dashboard rows total, 46 pass, 14
   expected-unsupported, 0 tracked-gap, 0 fail, 42 adapter-backed rows, explicit
   image-filter and Path AA rejection reports, and a 96% PM readiness score.
+- M57: closed a bounded Path AA / clip micro-promotion with 1 generated
+  `aaclip` grid pass row, 61 dashboard rows total, 47 pass, 14
+  expected-unsupported, 0 tracked-gap, 0 fail, 43 adapter-backed rows, preserved
+  broad Path AA / clip refusals, and a 98% PM readiness score.
 - Front specs: split the evidence dashboard, PM reporting, accessibility, and
   front quality-gate target under `.upstream/specs/front/`; this documents
   current M49 behavior and future gates, but does not change rendering support.

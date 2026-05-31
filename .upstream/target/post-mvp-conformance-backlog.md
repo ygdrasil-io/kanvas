@@ -46,6 +46,7 @@ Current M40 dashboard state:
 | M54 Hard Feature Depth Pack | Done: selected hard feature rows deepen generated evidence. | Promoted 10 inventory-derived generated rows across bounded image-filter v2, Path AA / clip depth, and runtime / paint composition, documented selected/promoted/rejected candidates, attached 2 warning-only measured performance payloads, kept 0 tracked-gap and 0 fail, exposed M54 counters in the PM bundle, and raised readiness to 93% without broad support claims. |
 | M55 Performance Gate Candidate | Done: warning-only performance evidence becomes release-readable candidate evidence. | Selected 7 representative rows, emitted non-blocking pass/deferred/warn/fail-candidate candidate output, documented baseline payload decisions plus quarantine/rebaseline/rollback policy, exposed M55 counters in the PM bundle, kept dashboard support counters unchanged, and raised readiness to 95% without enabling a release-blocking performance gate. |
 | M56 Unsupported-to-Pass Feature Scene Pack | Partial: one prior expected-unsupported row becomes generated pass evidence. | Promoted `m53-sweep-gradient-clamp` by correcting it to `skia-gm-sweepgradient`, kept two-point conical, image-filter DAG, and Path AA/clip blockers explicit, exposed M56 evidence in the PM bundle, and raised readiness to 96% instead of the 97% stretch target. |
+| M57 Path AA / Clip Micro-Promotion | Done: one bounded AA clip subcase becomes generated pass evidence. | Promoted `m57-aaclip-bounded-grid` as a generated `skia-gm-aaclip` bounded-grid support row, kept edge-budget, dash, hairline, stroke-outline, and complex-clip blockers explicit, exposed M57 evidence in the PM bundle, and raised readiness to 98% without broad Path AA claims. |
 
 ## M41 Seed Tickets
 
@@ -773,6 +774,55 @@ Detailed reports:
 
 - `reports/wgsl-pipeline/2026-05-31-m56-unsupported-to-pass-selection.md`.
 - `reports/wgsl-pipeline/2026-05-31-m56-gra334-image-filter-promotion-decision.md`.
+- `reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m56-sprint-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m56-pm-report.md`.
+
+## M57 Outcome
+
+Closed on 2026-05-31 by
+`reports/wgsl-pipeline/2026-05-31-m57-sprint-review.md`.
+
+M57 targeted a bounded Path AA / clip micro-promotion without converting any
+existing broad refusal row. It landed one `skia-gm-aaclip` bounded-grid slice as
+generated adapter-backed pass evidence.
+
+Final dashboard after M57:
+
+| Signal | Count |
+|---|---:|
+| Scene rows | 61 |
+| `pass` | 47 |
+| `expected-unsupported` | 14 |
+| `tracked-gap` | 0 |
+| `fail` | 0 |
+| Generated evidence rows | 59 |
+| Static policy rows | 2 |
+| Adapter-backed rows | 43 |
+| Inventory-derived generated rows | 33 |
+
+M57 final score:
+
+| PM area | M56 | M57 | Reason |
+|---|---:|---:|---|
+| Evidence foundation | 100% | 100% | Dashboard evidence remains generated, clean, and validated. |
+| Skia integration coverage | 99% | 100% | One bounded AA clip inventory-derived support row is added. |
+| CI and release gates | 98% | 99% | The scene gate and PM bundle expose M57 generated evidence and policy preservation. |
+| Performance readiness | 80% | 80% | No release-blocking performance change. |
+| PM demo and reporting workflow | 99% | 100% | PM bundle exposes M57 counters, reports, and non-claims. |
+
+Weighted final score: 98%.
+
+M57 does not claim broad `aaclip`, broad Path AA, dash/cap/join,
+stroke-outline, complex clip, large clipped path, or a WebGPU edge-budget
+increase.
+
+Detailed reports:
+
+- `reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-slice-selection.md`.
+- `reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-promotion.md`.
+- `reports/wgsl-pipeline/2026-05-31-m57-sprint-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m57-pm-report.md`.
 - `reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md`.
 - `reports/wgsl-pipeline/2026-05-31-m56-sprint-review.md`.
 - `reports/wgsl-pipeline/2026-05-31-m56-pm-report.md`.
