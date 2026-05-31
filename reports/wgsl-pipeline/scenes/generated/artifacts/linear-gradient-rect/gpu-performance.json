@@ -1,29 +1,76 @@
 {
-  "sceneId": "linear-gradient-rect",
-  "lane": "GPU",
-  "status": "estimated",
-  "sampleCount": 30,
-  "timing": {
-    "medianMs": 0.09,
-    "p95Ms": 0.128
-  },
-  "counters": {
-    "routeInvocations": 1,
-    "pipelineCacheHits": 29,
-    "pipelineCacheMisses": 1,
-    "bindGroupCount": 1,
-    "resourceBytes": 4096
-  },
-  "baseline": {
-    "name": "m40-gpu-cache-static-seed",
-    "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
-  },
-  "regression": {
-    "label": "unknown"
-  },
-  "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
-  "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
-  "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
-  "route": "webgpu.generated.linear-gradient.rect",
-  "rawMetrics": "artifacts/linear-gradient-rect/gpu-performance.json"
+    "sceneId": "linear-gradient-rect",
+    "lane": "GPU",
+    "status": "measured",
+    "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+    "phase": "webgpu-cache-dashboard-row",
+    "sampleCount": 30,
+    "timing": {
+        "medianMs": 0.004875,
+        "p95Ms": 0.005375
+    },
+    "environment": {
+        "host": "Omega",
+        "os": "Mac OS X 26.5 aarch64",
+        "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+        "backend": "WebGPU cache/timing dashboard benchmark",
+        "adapter": "Apple M2 Max"
+    },
+    "adapter": "Apple M2 Max",
+    "counters": {
+        "routeInvocations": 1,
+        "pipelineCacheHits": 29,
+        "pipelineCacheMisses": 1,
+        "bindGroupCount": 1,
+        "resourceBytes": 4096
+    },
+    "baseline": {
+        "name": "m59-gpu-cache-measured-local",
+        "commit": "7378c5989d257a82a38f34256d5b8e10c2186a4e",
+        "owner": "Kanvas rendering release owner"
+    },
+    "regression": {
+        "label": "unknown"
+    },
+    "gate": {
+        "mode": "reporting-only",
+        "owner": "Kanvas rendering release owner",
+        "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
+    },
+    "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
+    "route": "webgpu.generated.linear-gradient.rect",
+    "rawMetrics": "artifacts/linear-gradient-rect/gpu-performance.json",
+    "rawSamples": [
+        0.005,
+        0.00475,
+        0.004916,
+        0.004917,
+        0.004792,
+        0.00525,
+        0.004959,
+        0.004791,
+        0.005167,
+        0.004792,
+        0.004958,
+        0.004875,
+        0.00475,
+        0.004875,
+        0.005041,
+        0.004667,
+        0.004834,
+        0.006334,
+        0.005,
+        0.004959,
+        0.005125,
+        0.004833,
+        0.004833,
+        0.00475,
+        0.005375,
+        0.004833,
+        0.00475,
+        0.004958,
+        0.00475,
+        0.004875
+    ],
+    "checksum": -1866223815
 }

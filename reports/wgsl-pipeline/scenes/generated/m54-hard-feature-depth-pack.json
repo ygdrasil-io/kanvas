@@ -64,6 +64,8 @@
       "status": "pass",
       "linearIssue": "GRA-320",
       "baseArtifactScene": "analytic-aa-convex",
+      "copyPerformance": true,
+      "performanceSourceScene": "m54-simple-aa-clip",
       "referenceKind": "cpu-oracle",
       "cpuRoute": "cpu.coverage.simple-aa-clip-oracle",
       "gpuRoute": "webgpu.coverage.simple-aa-clip.bounded",
