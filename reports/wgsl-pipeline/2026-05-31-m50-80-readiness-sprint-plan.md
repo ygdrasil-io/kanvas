@@ -2,8 +2,8 @@
 
 Date: 2026-05-31
 Status: Proposed
-Target: `.upstream/target/rendering-conformance-performance-target.md`
-Backlog: `.upstream/target/post-mvp-conformance-backlog.md`
+Target: `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
+Backlog: `archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md`
 
 ## Goal
 

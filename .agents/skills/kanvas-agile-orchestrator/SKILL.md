@@ -34,7 +34,10 @@ Runs the complete agile loop in sequence:
 
 ### Light — `mode: light`
 
-Process just the next available ticket (equivalent to the task-prompt.md workflow):
+Process just the next available ticket. For historical M0-M11 context, the old
+executor prompt lives at
+`archives/target-closeout-2026-05-31/task-prompt-m0-m11.md`; do not treat it
+as the active workflow for M60+.
 
 1. Find the next non-closed milestone/ticket in M0→M11 order
 2. Check Definition of Ready

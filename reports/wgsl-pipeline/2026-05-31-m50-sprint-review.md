@@ -1,7 +1,7 @@
 # M50 Sprint Review: MEP Readiness Acceleration Toward 80%
 
 Date: 2026-05-31
-Target: `.upstream/target/rendering-conformance-performance-target.md`
+Target: `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
 
 ## Result
 

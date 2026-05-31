@@ -1,0 +1,119 @@
+# 05 PM Demo And Release Candidate
+
+Status: Draft
+Target: `.upstream/target/skia-like-realtime-renderer-target.md`
+
+## Purpose
+
+The new target needs PM demos that show real rendering progress. Static
+dashboard evidence remains necessary, but it is no longer sufficient once the
+goal includes real-time rendering.
+
+## Demo Levels
+
+| Level | Purpose | Required by |
+|---|---|---|
+| Static evidence dashboard | Review support/refusal claims and diffs. | Every milestone. |
+| Interactive web/local demo | Inspect live scene behavior and telemetry. | M65 onward. |
+| Native/demo app | Product-style runtime proof. | M68. |
+| Release candidate package | Final PM and engineering sign-off. | M70. |
+
+## M68 Native Real-Time Demo
+
+### Required Scene Content
+
+The demo must include:
+
+- animated transform;
+- Path AA/stroke/clip content;
+- image or bitmap sampling;
+- at least one image-filter DAG if M61 is complete;
+- simple text/glyph rendering if M62 is complete;
+- blend/color filter grid if M63 is complete;
+- runtime effect controls if M64 is complete;
+- telemetry overlay.
+
+### Controls
+
+- play/pause;
+- reset;
+- zoom/pan or transform slider;
+- feature toggles;
+- route/debug overlay toggle;
+- export current frame evidence.
+
+### Evidence
+
+The demo must emit:
+
+- screenshot or frame PNG;
+- telemetry JSON;
+- route summary JSON;
+- PM report Markdown;
+- known limitations.
+
+## M70 Release Candidate Renderer
+
+### Release Candidate Criteria
+
+- API surface for the demo/runtime is documented.
+- CI correctness gates pass.
+- Performance gates pass or quarantine with owner-approved rationale.
+- PM demo is reproducible.
+- Dashboard and runtime evidence agree on support/refusal status.
+- Known limitations are explicit.
+- No archived backlog row is treated as active work.
+
+### PM Scorecard
+
+The release candidate should report:
+
+| Area | Evidence |
+|---|---|
+| Feature breadth | Supported/refused family counters. |
+| Fidelity | Diff burn-down and representative comparisons. |
+| Real-time | Frame time/FPS and resource telemetry. |
+| Performance | P0 gate status and quarantine list. |
+| Operability | How to run demo, regenerate dashboard, inspect artifacts. |
+
+## PM Language
+
+Use this framing:
+
+> Kanvas is expanding from a verified evidence platform into a real-time
+> Skia-like renderer. Each milestone adds real rendering capability, keeps
+> unsupported areas visible, and shows progress through both generated evidence
+> and interactive demos.
+
+Avoid:
+
+- "full Skia parity";
+- "all Path AA";
+- "all image filters";
+- "all text";
+- "runtime effects compatible with arbitrary SkSL";
+- "GPU faster than CPU" without measured evidence.
+
+## Open PM Questions
+
+Closed decisions to confirm:
+
+1. First live demo platform:
+   - selected: Kadre desktop windowing from `ygdrasil-io/poc-koreos`;
+   - integration mode while unpublished: git submodule;
+   - optional later evidence: browser-hosted WebGPU, if a milestone asks for
+     it explicitly.
+2. Frame target:
+   - recommended: 60 FPS target, 30 FPS warning;
+   - alternative: 60 FPS release-blocking for curated scenes;
+   - alternative: reporting-only for the first runtime milestone.
+3. First text scope:
+   - recommended: Latin/simple glyph masks;
+   - alternative: add shaping early;
+   - alternative: defer text until after filters/path work.
+
+Open question:
+
+- What flagship PM scene best represents Kanvas: a technical conformance grid,
+  a document/editor canvas, a creative animated scene, or another product-like
+  example?

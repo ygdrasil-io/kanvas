@@ -2,8 +2,8 @@
 
 Date: 2026-05-31
 Status: Proposed
-Parent target: `.upstream/target/rendering-conformance-performance-target.md`
-Backlog: `.upstream/target/post-mvp-conformance-backlog.md`
+Parent target: `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
+Backlog: `archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md`
 Starting point: M48 sprint review
 
 ## Goal

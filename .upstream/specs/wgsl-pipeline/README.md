@@ -19,10 +19,12 @@ produces coverage, the paint pipeline consumes coverage.
   `.upstream/target/high-performance-wgsl-pipeline-target.md`
 - Execution method:
   `.upstream/target/linear-agent-methodology.md`
-- Post-MVP conformance target:
-  `.upstream/target/rendering-conformance-performance-target.md`
-- Post-MVP conformance backlog:
-  `.upstream/target/post-mvp-conformance-backlog.md`
+- Active post-MEP target:
+  `.upstream/target/skia-like-realtime-renderer-target.md`
+- Historical MEP conformance target:
+  `archives/target-closeout-2026-05-31/rendering-conformance-performance-target.md`
+- Historical MEP conformance backlog:
+  `archives/target-closeout-2026-05-31/post-mvp-conformance-backlog.md`
 - Linear project:
   `Kanvas - WGSL Pipeline Target`, milestones M0-M11
 - Geometry handoff:

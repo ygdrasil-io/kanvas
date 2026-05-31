@@ -1,8 +1,9 @@
 # Benchmark Harness And Performance Gates
 
 Status: Draft
-Target: `.upstream/target/rendering-conformance-performance-target.md`
-Milestone: M43 -- Real Benchmark Harness
+Target: `.upstream/target/skia-like-realtime-renderer-target.md`
+Historical milestone: M43 -- Real Benchmark Harness
+Current role: delivered benchmark infrastructure retained by the active target.
 
 ## Purpose
 
