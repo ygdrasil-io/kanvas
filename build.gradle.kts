@@ -686,6 +686,36 @@ tasks.register("pipelineM57PathAaClipMicroPromotionPack") {
     }
 }
 
+tasks.register("pipelineM60NestedClipPathAaPromotionPack") {
+    group = "verification"
+    description = "Materializes M60 bounded nested clip Path AA generated scene rows and artifacts."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m54_hard_feature_depth_pack.py")
+    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json")
+    val sourceArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m60-generated")
+    inputs.file(scriptFile)
+    inputs.file(contractFile)
+    inputs.dir(sourceArtifactDir)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--contract",
+                contractFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineGeneratedSceneExport") {
     group = "verification"
     description = "Materializes generated WGSL scene result artifacts into the dashboard export layout."
@@ -696,8 +726,15 @@ tasks.register("pipelineGeneratedSceneExport") {
     val m53GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m53-generated")
     val m54GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m54-generated")
     val m57GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m57-generated")
+    val m60GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m60-generated")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
-    dependsOn("pipelineM52InventoryPromotionPack", "pipelineM53InventoryPromotionPack", "pipelineM54HardFeatureDepthPack", "pipelineM57PathAaClipMicroPromotionPack")
+    dependsOn(
+        "pipelineM52InventoryPromotionPack",
+        "pipelineM53InventoryPromotionPack",
+        "pipelineM54HardFeatureDepthPack",
+        "pipelineM57PathAaClipMicroPromotionPack",
+        "pipelineM60NestedClipPathAaPromotionPack",
+    )
     inputs.file(manifestFile)
     inputs.dir(sourceDir.dir("generated/artifacts"))
     inputs.dir(sourceDir.dir("artifacts"))
@@ -705,6 +742,7 @@ tasks.register("pipelineGeneratedSceneExport") {
     inputs.dir(m53GeneratedDir)
     inputs.dir(m54GeneratedDir)
     inputs.dir(m57GeneratedDir)
+    inputs.dir(m60GeneratedDir)
     outputs.dir(outputDir)
     outputs.upToDateWhen { false }
 
@@ -715,6 +753,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         val m53GeneratedRoot = m53GeneratedDir.get().asFile
         val m54GeneratedRoot = m54GeneratedDir.get().asFile
         val m57GeneratedRoot = m57GeneratedDir.get().asFile
+        val m60GeneratedRoot = m60GeneratedDir.get().asFile
         val manifest = manifestFile.asFile
         val targetRoot = outputDir.get().asFile
         val validationErrors = mutableListOf<String>()
@@ -756,6 +795,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         fun generatedArtifactSource(relativePath: String, allowDirectory: Boolean = false): File? {
             val normalized = relativePath.replace('\\', '/')
             return listOf(
+                m60GeneratedRoot.resolve(normalized),
                 m54GeneratedRoot.resolve(normalized),
                 m57GeneratedRoot.resolve(normalized),
                 m53GeneratedRoot.resolve(normalized),
@@ -809,7 +849,16 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
-        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes
+        val m60Manifest = m60GeneratedRoot.resolve("data/m60-generated-scenes.json")
+        val m60Scenes = if (m60Manifest.isFile) {
+            val m60Root = JsonSlurper().parse(m60Manifest) as? Map<*, *>
+                ?: throw GradleException("M60 generated scene manifest root must be a JSON object: ${m60Manifest.relativeTo(rootDir)}")
+            m60Root["scenes"] as? List<*>
+                ?: throw GradleException("M60 generated scene manifest must contain a `scenes` array: ${m60Manifest.relativeTo(rootDir)}")
+        } else {
+            emptyList<Any?>()
+        }
+        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes + m60Scenes
         val normalizedScenes = mutableListOf<Any?>()
 
         allGeneratedScenes.forEachIndexed { index, rawScene ->
@@ -2378,6 +2427,7 @@ tasks.register("pipelineSceneDashboardGate") {
             "m53-imagefilters-cropped-boundary" to "image-filter.crop-input-nonnull-prepass-required",
             "m54-imagefilters-graph-boundary" to "image-filter.dag-or-picture-prepass-required",
             "m54-dash-circle-boundary" to "coverage.edge-count-exceeded",
+            "m60-bounded-nested-rrect-clip" to "coverage.nested-clip-visual-parity-below-threshold",
         )
         val staticPathAaSentinels = mapOf(
             "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",
