@@ -57,7 +57,7 @@ Weighted readiness after M49: 60.25%, rounded to 60%.
 | GRA-291 | M49-D adapter-backed expansion | #1268 | `658c962c5b4e5408c8e568211cd4ee0187fb4b83` | `reports/wgsl-pipeline/2026-05-31-m49-adapter-backed-expansion.md` |
 | GRA-292 | M49-E performance trend gate contract | #1269 | `8a55f4bfd658f2c4a593516bb343d4ac24400b8b` | `reports/wgsl-pipeline/2026-05-31-m49-performance-trend-gate-contract.md` |
 | GRA-293 | M49-F MEP release readiness checklist | #1270 | `9b41a49ba7da134ed8a80ea6fa518b10b0b95fea` | `reports/wgsl-pipeline/2026-05-31-m49-mep-release-readiness-checklist.md` |
-| GRA-294 | M49-G sprint review and score update | TBD | TBD | This review plus README, target, and backlog sync. |
+| GRA-294 | M49-G sprint review and score update | #1271 | `6b88fde54ceeed1743f1c1648d88cb9dc18387d3` | This review plus README, target, and backlog sync. |
 
 ## Validation Evidence
 
