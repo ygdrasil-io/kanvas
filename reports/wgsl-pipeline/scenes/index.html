@@ -187,6 +187,15 @@
       min-height: 132px;
       display: grid;
       grid-template-rows: auto 1fr auto;
+      color: inherit;
+      text-decoration: none;
+      cursor: zoom-in;
+    }
+
+    .visual-panel:hover,
+    .visual-panel:focus-visible {
+      outline: 2px solid rgba(36, 92, 69, 0.34);
+      outline-offset: 2px;
     }
 
     .visual-panel strong {
@@ -236,6 +245,75 @@
 
     .visual-panel.reference {
       grid-column: 1 / -1;
+    }
+
+    .image-dialog {
+      width: min(1100px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px);
+      border: 1px solid var(--line);
+      padding: 0;
+      background: var(--panel);
+      color: var(--ink);
+      box-shadow: 0 30px 100px rgba(23, 33, 28, 0.32);
+    }
+
+    .image-dialog::backdrop {
+      background: rgba(23, 33, 28, 0.64);
+    }
+
+    .image-dialog header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 10px;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      padding: 12px;
+    }
+
+    .image-dialog h2 {
+      margin: 0;
+      font-size: 1rem;
+      overflow-wrap: anywhere;
+    }
+
+    .dialog-button,
+    .dialog-link {
+      border: 1px solid var(--line);
+      background: #fffaf0;
+      color: var(--accent);
+      padding: 8px 10px;
+      font: 700 0.72rem/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+    }
+
+    .dialog-body {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .dialog-body img {
+      width: 100%;
+      max-height: calc(100vh - 170px);
+      object-fit: contain;
+      image-rendering: pixelated;
+      background:
+        linear-gradient(45deg, rgba(23, 33, 28, 0.06) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(23, 33, 28, 0.06) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(23, 33, 28, 0.06) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(23, 33, 28, 0.06) 75%);
+      background-size: 18px 18px;
+      background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+    }
+
+    .dialog-path {
+      margin: 0;
+      color: var(--muted);
+      font: 0.78rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow-wrap: anywhere;
     }
 
     .artifact-details {
@@ -469,10 +547,27 @@
       <code>analytic-aa-convex</code>.
     </section>
   </main>
+  <dialog id="image-dialog" class="image-dialog" aria-labelledby="image-dialog-title">
+    <header>
+      <h2 id="image-dialog-title">Image preview</h2>
+      <a id="image-dialog-raw" class="dialog-link" href="#" target="_blank" rel="noopener">Open raw</a>
+      <button id="image-dialog-close" class="dialog-button" type="button">Close</button>
+    </header>
+    <div class="dialog-body">
+      <img id="image-dialog-img" alt="">
+      <p id="image-dialog-path" class="dialog-path"></p>
+    </div>
+  </dialog>
 
   <script>
     const scenesRoot = document.getElementById('scenes');
     const emptyState = document.getElementById('empty');
+    const imageDialog = document.getElementById('image-dialog');
+    const imageDialogTitle = document.getElementById('image-dialog-title');
+    const imageDialogImage = document.getElementById('image-dialog-img');
+    const imageDialogPath = document.getElementById('image-dialog-path');
+    const imageDialogRaw = document.getElementById('image-dialog-raw');
+    const imageDialogClose = document.getElementById('image-dialog-close');
     const filterControls = {
       status: document.getElementById('status-filter'),
       priority: document.getElementById('priority-filter'),
@@ -521,7 +616,7 @@
         `;
       }
       return `
-        <a class="visual-panel ${extraClass}" href="${path}">
+        <a class="visual-panel ${extraClass}" href="${path}" data-image-preview="${path}" data-image-label="${label}">
           <strong>${label}</strong>
           <img src="${path}" alt="${label}">
           <span>${path}</span>
@@ -706,6 +801,32 @@
         </article>
       `;
     }
+
+    function openImageDialog(path, label) {
+      imageDialogTitle.textContent = label || 'Image preview';
+      imageDialogImage.src = path;
+      imageDialogImage.alt = label || path;
+      imageDialogPath.textContent = path;
+      imageDialogRaw.href = path;
+      imageDialog.showModal();
+      imageDialogClose.focus();
+    }
+
+    imageDialogClose.addEventListener('click', () => imageDialog.close());
+    imageDialog.addEventListener('click', (event) => {
+      if (event.target === imageDialog) {
+        imageDialog.close();
+      }
+    });
+    imageDialog.addEventListener('close', () => {
+      imageDialogImage.removeAttribute('src');
+    });
+    scenesRoot.addEventListener('click', (event) => {
+      const link = event.target.closest('[data-image-preview]');
+      if (!link) return;
+      event.preventDefault();
+      openImageDialog(link.dataset.imagePreview, link.dataset.imageLabel);
+    });
 
     fetch('data/scenes.json', { cache: 'no-store' })
       .then((response) => {
