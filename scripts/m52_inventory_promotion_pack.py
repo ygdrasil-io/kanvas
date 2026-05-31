@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Materialize M52 inventory-derived dashboard evidence from a contract file.
+"""Materialize inventory-derived dashboard evidence from a contract file.
 
-The M52 pack is a promotion layer over existing generated dashboard evidence:
+The promotion pack is a layer over existing generated dashboard evidence:
 each selected inventory row must name a generated base scene. This task verifies
 that base row, carries forward its real generation trace, and writes a distinct
-inventory-derived row plus build-local artifacts. It must not invent M52 tests or
+inventory-derived row plus build-local artifacts. It must not invent tests or
 turn inventory-only rows into support claims.
 """
 
@@ -87,6 +87,9 @@ def materialize_scene(
     base_rows: dict[str, dict[str, Any]],
     scene_contract: dict[str, Any],
     commit: str,
+    derivation_task: str,
+    derivation_contract: str,
+    output_artifact_prefix: str,
 ) -> dict[str, Any]:
     row = json.loads(json.dumps(scene_contract["row"]))
     scene_id = row["id"]
@@ -116,21 +119,21 @@ def materialize_scene(
     generation["sourceReport"] = base_generation.get("sourceReport", "")
     generation["artifactRoot"] = f"artifacts/{scene_id}"
     generation["derivedFromGeneratedScene"] = base_scene
-    generation["derivationTask"] = "pipelineM52InventoryPromotionPack"
-    generation["derivationContract"] = "reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json"
+    generation["derivationTask"] = derivation_task
+    generation["derivationContract"] = derivation_contract
 
     route_cpu = dict(row["cpu"]["route"])
-    route_cpu["generatedBy"] = "pipelineM52InventoryPromotionPack"
+    route_cpu["generatedBy"] = derivation_task
     route_cpu["derivedFromGeneratedScene"] = base_scene
     write_json(target_root / "route-cpu.json", route_cpu)
 
     route_gpu = dict(row["gpu"]["route"])
-    route_gpu["generatedBy"] = "pipelineM52InventoryPromotionPack"
+    route_gpu["generatedBy"] = derivation_task
     route_gpu["derivedFromGeneratedScene"] = base_scene
     write_json(target_root / "route-gpu.json", route_gpu)
 
     stats = dict(row["stats"])
-    stats["generatedBy"] = "pipelineM52InventoryPromotionPack"
+    stats["generatedBy"] = derivation_task
     stats["inventoryId"] = row["inventoryId"]
     stats["status"] = status
     stats["derivedFromGeneratedScene"] = base_scene
@@ -140,10 +143,10 @@ def materialize_scene(
         evidence for evidence in row.get("evidence", [])
         if not evidence.startswith("reports/wgsl-pipeline/scenes/artifacts/")
     ] + [
-        "reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json",
-        f"build/reports/wgsl-pipeline-m52-generated/artifacts/{scene_id}/route-cpu.json",
-        f"build/reports/wgsl-pipeline-m52-generated/artifacts/{scene_id}/route-gpu.json",
-        f"build/reports/wgsl-pipeline-m52-generated/artifacts/{scene_id}/stats.json",
+        derivation_contract,
+        f"{output_artifact_prefix}/artifacts/{scene_id}/route-cpu.json",
+        f"{output_artifact_prefix}/artifacts/{scene_id}/route-gpu.json",
+        f"{output_artifact_prefix}/artifacts/{scene_id}/stats.json",
     ]
 
     return row
@@ -164,13 +167,15 @@ def main() -> int:
         "--base-generated",
         default="reports/wgsl-pipeline/scenes/generated/results.json",
     )
+    parser.add_argument("--generated-by", default="pipelineM52InventoryPromotionPack")
+    parser.add_argument("--output-manifest", default="data/m52-generated-scenes.json")
     args = parser.parse_args()
 
     project_root = Path(args.project_root).resolve()
     contract_path = project_root / args.contract
     output_root = project_root / args.output_dir
     if not contract_path.is_file():
-        raise SystemExit(f"Missing M52 promotion contract: {contract_path}")
+        raise SystemExit(f"Missing promotion contract: {contract_path}")
 
     contract = json.loads(contract_path.read_text())
     source_artifact_root = project_root / contract["artifactSourceRoot"]
@@ -191,19 +196,23 @@ def main() -> int:
             base_rows=base_rows,
             scene_contract=scene_contract,
             commit=commit,
+            derivation_task=args.generated_by,
+            derivation_contract=args.contract,
+            output_artifact_prefix=args.output_dir,
         )
         for scene_contract in contract["scenes"]
     ]
 
     manifest = {
         "schemaVersion": 1,
-        "generatedBy": "pipelineM52InventoryPromotionPack",
+        "generatedBy": args.generated_by,
         "source": args.contract,
-        "description": "M52 inventory-derived generated dashboard rows materialized from a declarative contract.",
+        "description": "Inventory-derived generated dashboard rows materialized from a declarative contract.",
         "scenes": scenes,
     }
-    write_json(output_root / "data" / "m52-generated-scenes.json", manifest)
-    print(f"Wrote M52 inventory promotion generated scenes: {output_root / 'data' / 'm52-generated-scenes.json'}")
+    output_manifest = output_root / args.output_manifest
+    write_json(output_manifest, manifest)
+    print(f"Wrote inventory promotion generated scenes: {output_manifest}")
     return 0
 
 

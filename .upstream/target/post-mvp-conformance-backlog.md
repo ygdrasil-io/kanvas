@@ -42,6 +42,7 @@ Current M40 dashboard state:
 | M50 MEP Readiness Acceleration Toward 80% | Convert M49 gate candidate and front/font specs into executable release evidence. | Required CI ownership, front/browser/accessibility gates, at least 14 adapter-backed rows, first generated font/text evidence pack, automated warning-only performance trends, and sprint review score recalculation. The 80% score may be claimed only if every lane lands with artifacts. |
 | M51 Skia GM Inventory Coverage | Done: full Skia GM/sample surface is visible before broad scene promotion. | Generated deterministic inventory JSON/Markdown for 437 upstream GM C++ files and 751 Kotlin GM sources, classified 802 inventory rows, exposed inventory in the PM bundle, added inventory validation, and produced a 34-row M52+ promotion candidate backlog without changing support claims. |
 | M52 GM Inventory Promotion Pack | Done: selected M51 candidates become generated dashboard evidence. | Promoted 10 inventory-derived generated rows, documented selected/promoted/rejected candidates, kept 0 tracked-gap and 0 fail, exposed M52 counters in the PM bundle, and raised readiness to 85% without broad Skia GM support claims. |
+| M53 GM Feature Promotion Pack v2 | Done: a second selected GM feature pack becomes generated dashboard evidence. | Promoted 12 inventory-derived generated rows across five visual families, documented selected/promoted/rejected candidates, kept 0 tracked-gap and 0 fail, exposed M53 counters in the PM bundle, and raised readiness to 90% without broad Skia GM support claims. |
 
 ## M41 Seed Tickets
 
@@ -555,3 +556,58 @@ Detailed reports:
 - `reports/wgsl-pipeline/2026-05-31-m51-skia-gm-inventory-sprint-plan.md`.
 - `reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md`.
 - `reports/wgsl-pipeline/2026-05-31-m51-pm-report.md`.
+
+## M53 Outcome
+
+Closed on 2026-05-31 by
+`reports/wgsl-pipeline/2026-05-31-m53-sprint-review.md`.
+
+M53 promoted a second bounded 12-row GM feature pack into generated dashboard
+evidence:
+
+| Signal | Count |
+|---|---:|
+| Selected inventory candidates | 12 |
+| Promoted generated dashboard rows | 12 |
+| Generated `pass` rows | 9 |
+| Generated `expected-unsupported` rows | 3 |
+| Rejected/deferred candidates documented | 6 |
+| `tracked-gap` | 0 |
+| `fail` | 0 |
+
+Final dashboard after M53:
+
+| Signal | Count |
+|---|---:|
+| Scene rows | 50 |
+| `pass` | 37 |
+| `expected-unsupported` | 13 |
+| `tracked-gap` | 0 |
+| `fail` | 0 |
+| Generated evidence rows | 48 |
+| Static policy rows | 2 |
+| Adapter-backed rows | 33 |
+| Inventory-derived generated rows | 22 |
+
+M53 final score:
+
+| PM area | M52 | M53 | Reason |
+|---|---:|---:|---|
+| Evidence foundation | 100% | 100% | Dashboard generation and gates remain green with 0 tracked-gap and 0 fail. |
+| Skia integration coverage | 82% | 94% | 12 more selected GM candidates now have generated evidence or stable generated refusals across five families. |
+| CI and release gates | 85% | 90% | M53 metadata validation and expected-unsupported policy entries are additive. |
+| Performance readiness | 60% | 60% | No performance threshold change. |
+| PM demo and reporting workflow | 90% | 95% | PM bundle exposes selected/promoted/rejected M52 and M53 counters and limitations. |
+
+Weighted final score: 90%.
+
+M53 does not claim broad Skia GM support, does not clear unpromoted inventory
+rows, and does not clear dependency-gated font, codec, emoji, shaping, SDF, LCD,
+glyph-mask, arbitrary image-filter DAG, arbitrary SkSL, or broad Path AA gaps.
+
+Detailed reports:
+
+- `reports/wgsl-pipeline/2026-05-31-m53-gm-feature-promotion-pack-v2-selection.md`.
+- `reports/wgsl-pipeline/2026-05-31-m53-inventory-promotion-pack.md`.
+- `reports/wgsl-pipeline/2026-05-31-m53-sprint-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m53-pm-report.md`.
