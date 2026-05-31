@@ -37,7 +37,7 @@ The platform must answer five questions for every promoted scene:
 
 ## PM Readiness
 
-Current Post-MVP Big Target readiness for MEP: 93%.
+Current Post-MVP Big Target readiness for MEP: 95%.
 
 This is a PM readiness score for the full target, not an effort estimate and not
 the completion state of the latest Linear sprint. M41-M47 completed the evidence
@@ -46,7 +46,8 @@ dashboard into a release-oriented readiness gate candidate, M50 converted that
 candidate plus the front/font specs into executable evidence, M51 exposed the GM
 surface as planning inventory, M52 promoted a selected 10-row GM inventory
 pack into generated dashboard evidence, M53 promoted a second 12-row GM
-feature pack, and M54 promoted a 10-row hard feature depth pack. The platform is still not complete MEP
+feature pack, M54 promoted a 10-row hard feature depth pack, and M55 added a
+non-blocking performance gate candidate for seven representative rows. The platform is still not complete MEP
 scope because release-blocking performance thresholds, broad Skia parity, broad
 font/text coverage, and dependency-gated codec gaps remain outside the selected
 evidence rows.
@@ -76,18 +77,24 @@ inventory-derived contracts with artifacts and route diagnostics; they still do
 not claim broad Skia GM parity, broad arbitrary image-filter DAG support, broad
 Path AA support, or release-blocking performance gates.
 
+M55 adds a strict non-blocking performance gate candidate for seven selected
+rows. Four rows have measured CPU and GPU/cache candidate payloads, three rows
+are explicitly deferred with stable reasons, and the generated candidate report
+has 0 `warn` and 0 `fail-candidate`. The PM bundle exposes M55 candidate
+counters and limitations. No performance gate becomes release-blocking.
+
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
-| Evidence foundation | 25% | M41-M54 complete: generated dashboard, 58 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
+| Evidence foundation | 25% | M41-M55 complete: generated dashboard, 58 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
 | Skia integration coverage | 25% | M54 promotes 10 selected hard-feature rows into generated evidence while inventory rows remain planning-only outside promoted rows. | 98% |
-| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, PM bundle generation, and M54 metadata checks. | 95% |
-| Performance readiness | 15% | Two M54 rows carry measured warning-only payloads; thresholds are not release gates. | 65% |
-| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, performance warnings, inventory reports, and M52/M53/M54 selected/promoted/rejected counters. | 98% |
+| CI and release gates | 20% | `wgsl_scene_dashboard_release_gate` runs `pipelineSceneDashboardGate`, warning-only performance output, PM bundle generation, M54 metadata checks, and M55 performance candidate output. | 97% |
+| Performance readiness | 15% | Seven M55 rows have candidate decisions: 4 measured pass rows, 3 deferred rows, 0 warn, 0 fail-candidate. Thresholds are not release gates. | 80% |
+| PM demo and reporting workflow | 15% | `pipelinePmBundle` includes dashboard, data, artifacts, limitations, gate output, front QA, performance warnings, inventory reports, M52/M53/M54 counters, and M55 performance candidate counters. | 99% |
 
-The resulting weighted readiness is 93%. Evidence-hardening through M47, M48
+The resulting weighted readiness is 95%. Evidence-hardening through M47, M48
 coverage expansion, M49 readiness gating, M50 acceleration, M51 inventory
 visibility, M52 selected inventory promotion, M53 feature promotion, and M54
-hard feature depth are
+hard feature depth, plus M55 performance gate candidate evidence, are
 complete for their selected evidence sets. These are still only parts of the
 larger MEP target.
 
@@ -173,6 +180,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | Spec split | Font And Text Evidence | Draft spec pack added for pure Kotlin OpenType, shaping, glyph rendering, color fonts, emoji, and font conformance. Spec-only; dependency-gated rows remain gated. |
 | M50 | MEP Readiness Acceleration Toward 80% | Completed: converted M49 gate candidate and front/font specs into required CI ownership, front QA evidence, broader adapter-backed captures, first generated font/text scene pack, performance warning automation, and score recalculation. |
 | M51 | Skia GM Inventory Coverage | Completed: inventories upstream GM C++ files and Kotlin GM sources, classifies every row, exposes the inventory through PM/release artifacts, validates required fields, and produces the next promotion backlog without claiming broad support. |
+| M55 | Performance Gate Candidate | Completed: selects seven representative rows, emits non-blocking pass/deferred/warn/fail-candidate output, exposes PM bundle counters, and documents quarantine/rebaseline/rollback policy without enabling a release-blocking performance gate. |
 
 ## Current Baseline
 
@@ -452,6 +460,44 @@ M54 PM evidence:
 - `reports/wgsl-pipeline/2026-05-31-m54-pm-bundle-counters-and-gates.md`;
 - `reports/wgsl-pipeline/2026-05-31-m54-sprint-review.md`;
 - `reports/wgsl-pipeline/2026-05-31-m54-pm-report.md`.
+
+## M55 Performance Gate Candidate
+
+M55 promotes performance evidence from warning-only visibility to a
+release-readable candidate report without making it release-blocking:
+
+- 7 selected representative rows;
+- 4 candidate `pass` rows with measured CPU and GPU/cache payloads;
+- 3 candidate `deferred` rows with stable reasons;
+- 0 candidate `warn` rows;
+- 0 candidate `fail-candidate` rows;
+- 8 measured pass lanes;
+- 6 deferred lanes;
+- PM bundle counters under `m55PerformanceGateCandidate`.
+
+Dashboard support counters remain unchanged after M55:
+
+| Signal | Count |
+|---|---:|
+| Scene rows | 60 |
+| `pass` | 45 |
+| `expected-unsupported` | 15 |
+| `tracked-gap` | 0 |
+| `fail` | 0 |
+| Generated evidence rows | 58 |
+| Static policy rows | 2 |
+| Adapter-backed rows | 41 |
+| Inventory-derived generated rows | 32 |
+
+M55 PM evidence:
+
+- `reports/wgsl-pipeline/2026-05-31-m55-performance-gate-candidate-selection.md`;
+- `reports/wgsl-pipeline/2026-05-31-m55-official-performance-baseline-payloads.md`;
+- `reports/wgsl-pipeline/2026-05-31-m55-quarantine-rebaseline-rollback-policy.md`;
+- `reports/wgsl-pipeline/2026-05-31-m55-sprint-review.md`;
+- `reports/wgsl-pipeline/2026-05-31-m55-pm-report.md`;
+- `reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json`;
+- `build/reports/wgsl-pipeline-performance-warnings/m55-performance-gate-candidate.md`.
 
 ## Agent Execution Policy
 
