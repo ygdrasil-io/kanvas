@@ -167,7 +167,7 @@ M48 and M49 support, refusal, and readiness evidence is linked from:
 - `reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md`;
 - `reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md`;
 - `reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md`;
-- `reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md`.
+- `reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md`;
 - `reports/wgsl-pipeline/2026-05-31-m49-dashboard-gate-invariants.md`;
 - `reports/wgsl-pipeline/2026-05-31-m49-ci-dashboard-validation-task.md`;
 - `reports/wgsl-pipeline/2026-05-31-m49-portable-pm-bundle.md`;

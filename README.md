@@ -184,7 +184,7 @@ Current scene dashboard:
 - generated output: `build/reports/wgsl-pipeline-scenes/index.html`
 - target doc: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
 
-Current dashboard evidence after M48 scene coverage expansion:
+Current dashboard evidence after M49 readiness gating:
 
 | Signal | Count | Meaning |
 |---|---:|---|
@@ -195,7 +195,7 @@ Current dashboard evidence after M48 scene coverage expansion:
 | `fail` | 0 | No dashboard row is currently a failing support claim. |
 | `maturity.generated-evidence` | 21 | M41, M46, M47, and M48 generated rows, including P0 captures, Path AA stroke, image-filter DAG, SrcOver stack, runtime-effect, clip, bitmap local-matrix, and M48 scene-pack evidence. |
 | `maturity.static-evidence` | 2 | Remaining rows are explicit Path AA expected-unsupported policy evidence. |
-| `maturity.adapter-backed` | 2 | P0 GPU captures on named adapter. |
+| `maturity.adapter-backed` | 7 | P0 captures plus M49-selected bitmap, gradient, blend, bitmap-shader, and clip rows on named adapter. |
 | CPU/GPU perf `measured` | 2 each | M43 benchmark payloads, reporting-only until CI gate policy is approved. |
 
 Closed post-MVP milestones:
