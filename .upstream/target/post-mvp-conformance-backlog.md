@@ -505,3 +505,4 @@ Detailed reports:
 
 - `reports/wgsl-pipeline/2026-05-31-m51-skia-gm-inventory-sprint-plan.md`.
 - `reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md`.
+- `reports/wgsl-pipeline/2026-05-31-m51-pm-report.md`.

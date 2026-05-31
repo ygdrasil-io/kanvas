@@ -322,6 +322,11 @@ M51 moved readiness from 80% to 82% by landing:
 M51 does not claim every Skia GM is supported, does not weaken the scene
 dashboard gate, and must not hide untriaged or dependency-gated rows.
 
+M51 PM evidence:
+
+- `reports/wgsl-pipeline/2026-05-31-m51-sprint-review.md`;
+- `reports/wgsl-pipeline/2026-05-31-m51-pm-report.md`.
+
 ## Agent Execution Policy
 
 Agents working on M41+ must:
