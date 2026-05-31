@@ -22,20 +22,18 @@
     },
     {
       "id": "m53-sweep-gradient-clamp",
-      "inventoryId": "skia-gm-gradients2ptconical",
-      "title": "M53 sweep gradient clamp proxy for conical boundary",
+      "inventoryId": "skia-gm-sweepgradient",
+      "title": "M53 sweep gradient clamp path subset",
       "family": "gradients",
-      "status": "expected-unsupported",
-      "linearIssue": "GRA-312",
+      "status": "pass",
+      "linearIssue": "GRA-335",
       "baseArtifactScene": "sweep-gradient-path-clamp",
       "referenceKind": "test-oracle",
-      "cpuRoute": "cpu.gradient.conical-boundary-oracle",
-      "gpuRoute": "webgpu.gradient.two-point-conical.expected-unsupported",
-      "pipelineKey": "shader=twoPointConicalGradient source=Gradients2PtConicalGM",
-      "fallbackReason": "gradient.two-point-conical-unsupported",
-      "matchingPixels": 0,
-      "threshold": 0,
-      "tags": ["source.generated", "source.inventory", "feature.gradient.conical", "route.cpu.oracle", "route.gpu.expected-unsupported", "reference.test-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "cpuRoute": "cpu.shader.sweep-gradient.path-aa-oracle",
+      "gpuRoute": "webgpu.generated.sweep-gradient.path-aa",
+      "pipelineKey": "shaderFamily=sweepGradient tile=kClamp coverage=pathConvexFan shape=circle source=SweepGradientGM",
+      "fallbackReason": "none",
+      "tags": ["source.generated", "source.inventory", "feature.gradient.sweep", "feature.path-aa", "feature.coverage.aa", "route.cpu.oracle", "route.gpu.webgpu", "reference.test-oracle", "maturity.generated-evidence", "maturity.adapter-backed", "risk.none"]
     },
     {
       "id": "m53-bitmap-premul-alpha",
@@ -198,6 +196,7 @@
     {"inventoryId": "skia-gm-runtimeimagefilter", "reason": "Runtime image-filter support needs a descriptor-backed slice; no SkSL/VM rebuild."},
     {"inventoryId": "skia-gm-shadertext3", "reason": "Text/glyph rendering remains dependency-gated."},
     {"inventoryId": "skia-gm-dftext", "reason": "SDF glyph backend remains gated."},
+    {"inventoryId": "skia-gm-gradients2ptconical", "reason": "Two-point conical gradient remains outside the sweep-gradient clamp scene contract."},
     {"inventoryId": "skia-gm-dashcubics", "reason": "Broad dashed cubic coverage remains edge-budget gated."}
   ]
 }

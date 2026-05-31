@@ -2192,7 +2192,6 @@ tasks.register("pipelineSceneDashboardGate") {
             "m52-closed-capped-hairlines-edge-budget" to "coverage.edge-count-exceeded",
             "m52-big-tile-image-filter-dag-refusal" to "image-filter.dag-or-picture-prepass-required",
             "m52-color-emoji-blendmodes-refusal" to "font.color-glyph-emoji-unsupported",
-            "m53-sweep-gradient-clamp" to "gradient.two-point-conical-unsupported",
             "m53-complexclip-boundary-refusal" to "coverage.complex-clip-path-unsupported",
             "m53-imagefilters-cropped-boundary" to "image-filter.crop-input-nonnull-prepass-required",
             "m54-imagefilters-graph-boundary" to "image-filter.dag-or-picture-prepass-required",
@@ -3224,6 +3223,14 @@ tasks.register("pipelinePmBundle") {
             ?: throw GradleException("Merged dashboard root must contain scenes[]: ${mergedData.relativeTo(rootDir)}")
         val referencedPaths = mutableSetOf<String>()
         collectReferencedPaths(root, referencedPaths)
+        val m56ReportPaths = listOf(
+            "reports/wgsl-pipeline/2026-05-31-m56-unsupported-to-pass-selection.md",
+            "reports/wgsl-pipeline/2026-05-31-m56-gra334-image-filter-promotion-decision.md",
+            "reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md",
+            "reports/wgsl-pipeline/2026-05-31-m56-sprint-review.md",
+            "reports/wgsl-pipeline/2026-05-31-m56-pm-report.md",
+        )
+        referencedPaths += m56ReportPaths
 
         val unavailable = mutableListOf<Map<String, String>>()
         referencedPaths.sorted().forEach { path ->
@@ -3545,6 +3552,29 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M55 exposes a strict performance gate candidate only; no release-blocking performance gate is enabled.",
             ),
+            "m56UnsupportedToPass" to linkedMapOf<String, Any>(
+                "targetReadiness" to 97,
+                "finalReadiness" to 96,
+                "promotedRows" to listOf("m53-sweep-gradient-clamp"),
+                "promotedFromExpectedUnsupported" to 1,
+                "requiredPromotionsForStretchTarget" to 2,
+                "rejectedOrDeferredRows" to listOf(
+                    "m53-imagefilters-cropped-boundary",
+                    "m54-imagefilters-graph-boundary",
+                    "m54-dash-circle-boundary",
+                    "m53-complexclip-boundary-refusal",
+                    "m52-big-tile-image-filter-dag-refusal",
+                    "font-emoji-color-glyph-refusal",
+                    "font-complex-shaping-refusal",
+                    "m52-color-emoji-blendmodes-refusal",
+                ),
+                "selectionReport" to "reports/wgsl-pipeline/2026-05-31-m56-unsupported-to-pass-selection.md",
+                "imageFilterDecisionReport" to "reports/wgsl-pipeline/2026-05-31-m56-gra334-image-filter-promotion-decision.md",
+                "pathAaClipReviewReport" to "reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md",
+                "sprintReview" to "reports/wgsl-pipeline/2026-05-31-m56-sprint-review.md",
+                "pmReport" to "reports/wgsl-pipeline/2026-05-31-m56-pm-report.md",
+                "notice" to "M56 promotes one corrected sweep-gradient row only; image-filter and Path AA shortcuts were rejected because their current artifacts do not prove row-specific GPU support.",
+            ),
             "inventoryCounters" to inventorySummary,
             "dashboardInventoryLinks" to dashboardInventoryLinks,
             "expectedUnsupportedRows" to expectedUnsupported,
@@ -3559,6 +3589,7 @@ tasks.register("pipelinePmBundle") {
                 "M53 promotes selected GM feature rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, font, codec, emoji, shaping, SDF, LCD, and glyph-mask support remain outside this bundle's claims.",
                 "M54 promotes selected hard feature depth rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, dependency-gated font/codec/emoji substitutes, and release-blocking performance gates remain outside this bundle's claims.",
                 "M55 exposes performance gate candidate evidence only; missing measured lanes are deferred or warned, estimated metrics are not promoted to measured, and performance remains non-blocking.",
+                "M56 promotes one corrected sweep-gradient row only; two-point conical gradients, arbitrary image-filter DAGs, picture prepass support, broad Path AA, dash, stroke, and complex clip remain outside this bundle's claims.",
             ),
             "unavailableReferences" to unavailable,
         )
