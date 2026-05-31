@@ -48,6 +48,11 @@ is still not complete MEP scope because release-blocking performance thresholds,
 broad Skia parity, broad font/text coverage, and dependency-gated codec gaps
 remain outside the selected evidence rows.
 
+The next proposed sprint is M51. Its job is to make the full Skia GM/sample
+surface visible as inventory before adding many more support rows. Inventory
+visibility can improve planning readiness, but it does not count as rendered
+support without generated reference/CPU/GPU/refusal artifacts.
+
 | Area | Weight | Current state | Progress |
 |---|---:|---|---:|
 | Evidence foundation | 25% | M41-M50 complete: generated dashboard, 26 generated rows, 0 tracked-gap, 0 fail, and a release gate report. | 100% |
@@ -142,6 +147,7 @@ claim needs rendered evidence or a documented CPU-only non-goal.
 | Spec split | Front Evidence Experience | Draft spec pack added for dashboard UX, image inspection, PM bundle workflow, accessibility, and quality gates. Spec-only; no score movement. |
 | Spec split | Font And Text Evidence | Draft spec pack added for pure Kotlin OpenType, shaping, glyph rendering, color fonts, emoji, and font conformance. Spec-only; dependency-gated rows remain gated. |
 | M50 | MEP Readiness Acceleration Toward 80% | Completed: converted M49 gate candidate and front/font specs into required CI ownership, front QA evidence, broader adapter-backed captures, first generated font/text scene pack, performance warning automation, and score recalculation. |
+| M51 | Skia GM Inventory Coverage | Proposed: inventory upstream GM C++ files and Kotlin GM sources, classify every row, expose the inventory through PM/release artifacts, and produce the next promotion backlog without claiming broad support. |
 
 ## Current Baseline
 
@@ -283,6 +289,37 @@ M50 moved the target from 60% to 80% by landing five executable lanes:
 
 M50 does not claim complete MEP, broad Skia parity, broad font/emoji/shaping
 support, or release-blocking performance thresholds.
+
+## M51 Proposed Objective
+
+M51 should create the bridge from the selected M50 dashboard to broad Skia GM
+coverage. The output should be an inventory layer, not hundreds of new support
+rows.
+
+Planning baseline:
+
+- upstream Skia GM C++ files: 437 local `gm/*.cpp` files;
+- Kotlin GM source files: 751 local `*GM.kt` files under
+  `skia-integration-tests/src/main/kotlin/org/skia/tests/`.
+
+The counts are expected to differ because one upstream file may define multiple
+variants and Kotlin may split or generate wrappers. M51 must report those
+mismatches explicitly.
+
+M51 may move readiness from 80% to about 82% only if it lands:
+
+- deterministic inventory JSON and Markdown;
+- status taxonomy for promoted, candidate, expected-unsupported,
+  dependency-gated, not-triaged, non-rendering/utility, and duplicate/variant
+  rows;
+- PM bundle links and filters for inventory status, family, upstream source,
+  and Kotlin source presence;
+- inventory gate that fails duplicate ids and missing required fields;
+- M52 promotion candidate backlog with 25-40 high-value scenes across multiple
+  rendering families.
+
+M51 must not claim every Skia GM is supported, must not weaken the scene
+dashboard gate, and must not hide untriaged or dependency-gated rows.
 
 ## Agent Execution Policy
 
