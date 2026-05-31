@@ -10,7 +10,7 @@ GPU backend.
 
 Last updated: 2026-05-31
 
-Post-MVP Big Target readiness for MEP: 35%.
+Post-MVP Big Target readiness for MEP: 40%.
 
 This percentage is a PM readiness score for the full Post-MVP target, not an
 effort estimate and not the completion state of the last sprint. It moves only
@@ -21,21 +21,21 @@ The MVP is complete. The big target is now the Kanvas Rendering Conformance &
 Performance Platform: a generated evidence system that turns CPU/GPU rendering
 tests into PM-readable progress and engineering-actionable proof.
 
-Current PM interpretation: M41-M47 built the evidence foundation, but the
-platform is not yet MEP-ready. The dashboard is cleaner and more generated than
-before, yet the production path still needs broader Skia integration coverage,
-real CI gates, wider scene breadth, stronger performance tracking, and a
-deployable demo/report workflow.
+Current PM interpretation: M41-M47 built the evidence foundation, and M48
+expanded representative Skia integration breadth from the narrow 15% baseline to
+35%. The platform is still not MEP-ready: CI gates, performance trends, and a
+deployable demo/report workflow remain early, and broader Skia coverage still
+needs more families and adapter-backed proof.
 
 | PM area | Weight | Status | Progress | Evidence / remaining work |
 |---|---:|---|---:|---|
-| Evidence foundation | 25% | Done through M47 | 100% | Generated dashboard, 11 generated rows, 0 tracked-gap, 0 fail |
-| Skia integration coverage | 25% | Early | 15% | Selected scenes exist, but coverage is still narrow and not representative enough for MEP |
+| Evidence foundation | 25% | Done through M48 | 100% | Generated dashboard, 21 generated rows, 0 tracked-gap, 0 fail |
+| Skia integration coverage | 25% | Expanded | 35% | M48 added 10 selected rows across paint, clip, transform, bitmap, gradient, Path AA, and image-filter breadth while keeping unsupported scope explicit |
 | CI and release gates | 20% | Early | 10% | Dashboard generation is validated, but promotion/performance gates are not yet release-grade |
 | Performance readiness | 15% | Early | 15% | M43 measured payloads exist, but trends remain reporting-only |
 | PM demo and reporting workflow | 15% | Prototype | 15% | Static dashboard works locally; deployable and repeatable PM workflow still missing |
 
-Weighted PM readiness: 35% after rounding.
+Weighted PM readiness: 40% after rounding.
 
 | Track | Status | Progress | Evidence |
 |---|---|---:|---|
@@ -46,10 +46,18 @@ Weighted PM readiness: 35% after rounding.
 | Bounded image-filter DAG support | Done | 100% | M45 selected DAG subset |
 | Static-to-generated evidence expansion | Done | 100% | M46 converted five additional rows |
 | Remaining static evidence hardening | Done | 100% | M47 converted remaining static pass rows and validated Path AA policy rows |
+| MEP scene coverage expansion | Done | 100% | M48 added 7 generated support rows and 3 expected-unsupported breadth rows |
 
 Evidence-hardening readiness is 100% through M47:
 all static pass rows have generated evidence, and the only remaining static rows
 are explicit Path AA expected-unsupported policy sentinels.
+
+M48 coverage expansion is complete for the selected scene pack: the dashboard now
+has 23 rows, 18 pass, 5 expected-unsupported, 0 tracked-gap, 0 fail, 21 generated
+rows, 2 static rows, and 2 adapter-backed rows. This justifies moving Skia
+integration coverage from 15% to 35%, but not higher, because CI gates,
+performance thresholds, broad adapter-backed captures, text/font/codec coverage,
+and a repeatable PM demo workflow remain outside this milestone.
 
 What remains before MEP:
 
@@ -74,6 +82,10 @@ Active Post-MVP evidence:
 - M47 review: [reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md](reports/wgsl-pipeline/2026-05-31-m47-sprint-review.md)
 - M47 inventory: [reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md](reports/wgsl-pipeline/2026-05-31-m47-remaining-static-evidence-inventory.md)
 - M47 Path AA policy validation: [reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md](reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md)
+- M48 taxonomy: [reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md](reports/wgsl-pipeline/2026-05-31-m48-mep-skia-scene-taxonomy.md)
+- M48 scene pack: [reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md](reports/wgsl-pipeline/2026-05-31-m48-p0-p1-scene-pack-selection.md)
+- M48 support evidence: [reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md](reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md), [reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md](reports/wgsl-pipeline/2026-05-31-m48-bitmap-gradient-generated-evidence.md)
+- M48 unsupported breadth: [reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md](reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md)
 
 ## MVP Roadmap
 
@@ -153,16 +165,16 @@ Current scene dashboard:
 - generated output: `build/reports/wgsl-pipeline-scenes/index.html`
 - target doc: [.upstream/target/rendering-conformance-performance-target.md](.upstream/target/rendering-conformance-performance-target.md)
 
-Current dashboard evidence after M47 closeout:
+Current dashboard evidence after M48 scene coverage expansion:
 
 | Signal | Count | Meaning |
 |---|---:|---|
-| Scene rows | 13 | Static and generated rows merged by `pipelineSceneDashboard`. |
-| `pass` | 11 | Reference, CPU, GPU, diff, stats, and route evidence exist for the selected scene. |
+| Scene rows | 23 | Static and generated rows merged by `pipelineSceneDashboard`. |
+| `pass` | 18 | Reference, CPU, GPU, diff, stats, and route evidence exist for the selected support scene. |
 | `tracked-gap` | 0 | P0 adapter-backed capture gaps were closed by M42 and GRA-222. |
-| `expected-unsupported` | 2 | GPU intentionally refuses the scene with a stable fallback reason. |
+| `expected-unsupported` | 5 | GPU intentionally refuses the scene with a stable fallback reason. |
 | `fail` | 0 | No dashboard row is currently a failing support claim. |
-| `maturity.generated-evidence` | 11 | M41, M46, and M47 generated rows, including P0 captures, Path AA stroke, image-filter DAG, SrcOver stack, runtime-effect, clip, and bitmap local-matrix evidence. |
+| `maturity.generated-evidence` | 21 | M41, M46, M47, and M48 generated rows, including P0 captures, Path AA stroke, image-filter DAG, SrcOver stack, runtime-effect, clip, bitmap local-matrix, and M48 scene-pack evidence. |
 | `maturity.static-evidence` | 2 | Remaining rows are explicit Path AA expected-unsupported policy evidence. |
 | `maturity.adapter-backed` | 2 | P0 GPU captures on named adapter. |
 | CPU/GPU perf `measured` | 2 each | M43 benchmark payloads, reporting-only until CI gate policy is approved. |
@@ -186,6 +198,16 @@ Closed post-MVP milestones:
 - M47/GRA-278: closed the sprint with 11 generated rows and 2 static policy rows;
 - GRA-221: added scene tags, exact-tag filtering, tag search, and
   feature/maturity/risk aggregates.
+- M48/GRA-280: defined the MEP scene taxonomy and readiness rule for moving
+  Skia integration coverage beyond 15%;
+- M48/GRA-281: selected 10 P0/P1 rows for the M48 scene pack;
+- M48/GRA-282: added four generated paint, blend, clip, and transform support
+  rows;
+- M48/GRA-283: added three generated bitmap and gradient support rows;
+- M48/GRA-284: added three explicit expected-unsupported Path AA/image-filter
+  breadth rows;
+- M48/GRA-285: synced PM dashboard counters and readiness after the M48 scene
+  pack landed.
 
 Sprint reviews:
 [reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md](reports/wgsl-pipeline/2026-05-28-m41-m45-sprint-review.md)
