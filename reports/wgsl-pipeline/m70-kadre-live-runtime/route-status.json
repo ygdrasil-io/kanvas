@@ -1,0 +1,68 @@
+{
+  "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+  "capture": {
+    "imagePath": null,
+    "realNativeReadback": false,
+    "reason": "m70.native-readback-not-available",
+    "status": "unavailable"
+  },
+  "claimLevel": "selected-present-call-demo",
+  "generatedAt": "2026-06-01T15:29:18Z",
+  "generatedBy": "scripts/m70_kadre_live_runtime_evidence.py",
+  "linearIssues": [
+    "FOR-60",
+    "FOR-61",
+    "FOR-62",
+    "FOR-63",
+    "FOR-64",
+    "FOR-65"
+  ],
+  "m69SmokeCompatibility": {
+    "presentedFrames": 3,
+    "reason": "m69.kadre-native-presented-frames",
+    "status": "native-runnable"
+  },
+  "mode": "demo",
+  "nativePresented": false,
+  "nonClaims": [
+    "M70-A proves one selected Kadre native demo route only, with status determined by surface evidence.",
+    "If every surface status is timeout, M70-A proves present-call completion only, not confirmed native presentation.",
+    "Broad Kanvas display-list replay is not claimed.",
+    "Native capture remains unavailable unless capture.realNativeReadback is true.",
+    "Frame timing is reporting-only and not a release-grade FPS gate."
+  ],
+  "presentCallCompleted": true,
+  "presentedFrames": 12,
+  "reason": "m70.kadre-present-call-completed-timeout-only",
+  "releaseBlocking": false,
+  "requestedFrames": 12,
+  "runtimeTelemetry": {
+    "gatePhase": "reportingOnly",
+    "lane": "frame.kadre-windowed",
+    "measuredP50Ms": 8.0323,
+    "measuredP95Ms": 9.7476,
+    "measuredSampleCount": 9,
+    "measuredWorstMs": 9.7476,
+    "reportingOnly": true,
+    "surfaceStatusCount": 12,
+    "totalSampleCount": 12,
+    "warmupFrameCount": 3
+  },
+  "sceneId": "m70-a-kanvas-owned-kadre-native-scene",
+  "schemaVersion": 1,
+  "status": "degraded",
+  "surface": {
+    "format": "BGRA8Unorm",
+    "height": 420,
+    "width": 640
+  },
+  "surfaceStatusSummary": {
+    "deviceLost": 0,
+    "lost": 0,
+    "outOfMemory": 0,
+    "outdated": 0,
+    "success": 0,
+    "timeout": 12
+  },
+  "warmupFrames": 3
+}

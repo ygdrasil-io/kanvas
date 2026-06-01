@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "generatedBy": "kadre-runtime:M69KadreNativeSmoke",
+  "route": "kadre.native.windowed.wgpu4",
+  "mode": "demo",
+  "gatePhase": "reportingOnly",
+  "reportingOnly": true,
+  "sceneContract": {
+    "id": "m70-a-kanvas-owned-kadre-native-scene",
+    "version": 1,
+    "owner": "kanvas",
+    "milestone": "M70-A",
+    "claim": "Kanvas-owned runtime scene contract executed through a bounded Kadre native WebGPU present-call loop",
+    "wgslSource": "runtime-generated-from-kanvas-owned-scene-contract"
+  },
+  "status": "degraded",
+  "reason": "m70.kadre-present-call-completed-timeout-only",
+  "nativePresented": false,
+  "presentCallCompleted": true,
+  "requestedFrames": 12,
+  "warmupFrames": 3,
+  "presentedFrames": 12,
+  "redrawEvents": 12,
+  "surface": {
+    "width": 640,
+    "height": 420,
+    "format": "BGRA8Unorm"
+  },
+  "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+  "cpuReference": {
+    "source": "kanvas-skia SkBitmap/SkCanvas",
+    "checksum": -5176167521326809762,
+    "nonTransparentPixels": 5520
+  },
+  "frameTiming": {
+    "firstFrameMs": 34.8281,
+    "averageFrameMs": 9.1228,
+    "warmupFrameCount": 3,
+    "measuredSampleCount": 9,
+    "measuredP50Ms": 8.0323,
+    "measuredP95Ms": 9.7476,
+    "measuredWorstMs": 9.7476,
+    "gatePhase": "reportingOnly",
+    "reportingOnly": true,
+    "nativeTimingClaim": "present-call-duration-only"
+  },
+  "runtimeTelemetry": {
+    "lane": "frame.kadre-windowed",
+    "gatePhase": "reportingOnly",
+    "reportingOnly": true,
+    "warmupFrameCount": 3,
+    "measuredSampleCount": 9,
+    "measuredP50Ms": 8.0323,
+    "measuredP95Ms": 9.7476,
+    "measuredWorstMs": 9.7476,
+    "totalSampleCount": 12,
+    "surfaceStatusCount": 12
+  },
+  "capture": {
+    "status": "unavailable",
+    "reason": "m70.native-readback-not-available",
+    "imagePath": null,
+    "realNativeReadback": false
+  },
+  "surfaceStatusSummary": {
+    "success": 0,
+    "timeout": 12,
+    "lost": 0,
+    "outdated": 0,
+    "outOfMemory": 0,
+    "deviceLost": 0
+  },
+  "surfaceStatuses": ["timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout"],
+  "linearIssues": ["FOR-61", "FOR-62", "FOR-64"],
+  "nonClaims": [
+    "This run proves bounded Kadre native window present-call execution for the M70-A Kanvas-owned scene contract.",
+    "If every surface status is timeout, the run proves present-call completion only, not confirmed native presentation.",
+    "It does not prove broad Kanvas display-list replay, native readback capture, or input-driven interaction yet.",
+    "Timing is reporting-only present-call duration telemetry, not a release-grade FPS gate."
+  ],
+  "error": null
+}

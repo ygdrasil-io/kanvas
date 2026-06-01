@@ -15,7 +15,7 @@ product target is broader: make Kanvas render more of the practical Skia CPU
 surface while building a measured real-time WebGPU lane with live telemetry,
 feature diagnostics, and PM-visible demos.
 
-New target readiness is approximately 62% after the M69 native Kadre continuation. This is intentionally lower
+New target readiness is approximately 64% after the M70-A Kadre live-runtime slice. This is intentionally lower
 than the completed MEP score because the scope has expanded from evidence
 infrastructure to feature breadth, fidelity, runtime behavior, and release
 operability. The score is based on counted denominators in the target doc, not
@@ -25,11 +25,11 @@ manual sprint estimates.
 |---|---:|---:|---|
 | Rendering feature breadth | 30% | 60% | Path AA, bounded image-filter DAG, text/font, color/blend/color-filter, and registered runtime-effect evidence now have selected generated contracts; broad layers and fallbacks remain incomplete. |
 | Skia-like fidelity | 20% | 50% | M66 raises selected GM/reference evidence to 50/100 rows. Only 37/100 are Skia-comparable today; CPU-oracle rows are breadth/refusal evidence until comparable Skia references land. |
-| Real-time runtime | 20% | 65% | M65 adds a reporting-only headless runtime smoke lane, M68 verifies the Kadre source-build bridge, and M69 now runs a bounded standalone Kadre/AppKit/Metal WebGPU present loop with 3 presented frames. Native input, broad Kanvas display-list replay, and screenshot capture remain incomplete. |
-| Performance and cache readiness | 15% | 40% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry and adds family budgets plus quarantine/rebaseline fixture. M69 native timing is present-call duration only, not a release-grade FPS gate. |
-| PM/demo operability | 15% | 100% | PM bundle now includes M65 runtime smoke, M66 counters, M67 performance tiering, M68 Kadre bridge/demo evidence, and M69 native Kadre present evidence. |
+| Real-time runtime | 20% | 72% | M65 adds a reporting-only headless runtime smoke lane, M68 verifies the Kadre source-build bridge, M69 runs a bounded native Kadre/WebGPU present loop, and M70-A adds a PM-visible Kadre demo task for one selected Kanvas-owned scene contract. The checked-in M70-A sample is timeout-only at the surface status level, so it proves present-call completion rather than confirmed native presentation. Native input, broad display-list replay, and native capture remain incomplete. |
+| Performance and cache readiness | 15% | 45% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry and adds family budgets plus quarantine/rebaseline fixture. M70-A adds reporting-only `frame.kadre-windowed` telemetry with warmup/measured samples, but no release-grade FPS gate. |
+| PM/demo operability | 15% | 100% | PM bundle now includes M65 runtime smoke, M66 counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 native Kadre present evidence, and M70-A live-runtime demo evidence. |
 
-Weighted PM readiness for the new target: **62%**.
+Weighted PM readiness for the new target: **64%**.
 
 Active planning entry points:
 
@@ -50,6 +50,7 @@ Active planning entry points:
 | M67 | Performance Tiering | `frame.headless-webgpu` candidate gate, family budgets, and deterministic quarantine fixture are generated and bundled. |
 | M68 | Native Real-Time Demo | Kadre source-build bridge and flagship scene inputs are generated; native windowed launch is blocked until the Kanvas/Kadre host adapter lands. |
 | M69 | Kanvas/Kadre Host Adapter V1 | Host adapter contract, route smoke, first scene route, PM bundle counters, and a bounded standalone native Kadre/WebGPU present loop are generated. |
+| M70-A | Kadre Live Runtime V1 | PM-visible Kadre demo command, one selected Kanvas-owned native scene contract, reporting-only frame telemetry, and truthful capture-unavailable evidence are generated. |
 | M70 | Release Candidate Renderer | Renderer API, runtime, demos, CI gates, and known limitations are frozen for RC. |
 
 ## Completed MEP Evidence Target (Historical)
