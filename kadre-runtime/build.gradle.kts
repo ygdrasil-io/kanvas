@@ -198,3 +198,17 @@ tasks.register<JavaExec>("pipelineM83DisplayListReplay") {
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m83-display-list-replay"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM84NativeFrameTimingCandidate") {
+    group = "verification"
+    description = "Generates M84 native Kadre frame timing candidate evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M84NativeFrameTimingCandidateKt")
+    args(
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+        rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m84-native-frame-timing").asFile.absolutePath,
+    )
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo.json"))
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m84-native-frame-timing"))
+    outputs.upToDateWhen { false }
+}

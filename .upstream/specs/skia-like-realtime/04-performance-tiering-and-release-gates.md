@@ -131,6 +131,39 @@ Rollback is required when:
 Every release-blocking gate must have at least one negative fixture that proves
 the failure path. The fixture must not mutate checked-in baseline data.
 
+## M84 Native Frame Timing Candidate
+
+M84 is the first `frame.kadre-windowed` timing candidate slice after the native
+Kadre display-list replay evidence. It may serialize measured native samples,
+but it must remain candidate/reporting-only until the owning release gate accepts
+variance, adapter eligibility, resource telemetry, and an end-to-end frame-time
+claim.
+
+Required M84 payload fields:
+
+- lane `frame.kadre-windowed`;
+- gate phase `candidate-reporting-only`;
+- `releaseBlocking=false`;
+- `countedAsMeasuredGate=false`;
+- warmup frame count;
+- measured sample count;
+- p50, p95, and worst observed native timing;
+- host OS/architecture;
+- JDK version;
+- adapter information;
+- estimated and missing metric counters;
+- cache-counter fields, even when their source is a placeholder;
+- quarantine reasons;
+- negative fixture status and reason.
+
+M84 may report `measuredPayload.status=measured` only when the serialized
+samples are present and positive. That does not mean the metric counts as a
+release gate. The counted release-gate flag must stay false until a later
+milestone promotes the lane.
+
+The M84 negative fixture must use a too-low p95 threshold, report
+`expected-fail`, keep a stable reason, and never rewrite checked-in baselines.
+
 ## Acceptance
 
 - P0 frame demo has measured telemetry.

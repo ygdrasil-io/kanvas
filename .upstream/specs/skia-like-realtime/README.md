@@ -12,7 +12,8 @@ a packaged Kadre demo.
 
 ## Scope
 
-The pack covers M60-M70:
+The pack covers M60-M84 and continues to be extended by later runtime/display-list
+sprints:
 
 | Spec | Scope |
 |---|---|
@@ -57,6 +58,8 @@ The pack covers M60-M70:
 | M68 Native Real-Time Demo | `02`, `05` | Runnable live demo with animation, controls, and PM report export. |
 | M69 Fidelity Hardening | `03`, `04` | Visual diff burn-down across promoted families. |
 | M70 Release Candidate Renderer | all | Renderer RC with API, demos, CI gates, and known limitations. |
+| M71-M83 Runtime/display-list replay evidence | `02`, `04`, `05` | Kadre frame clock, bounded replay scenes, native artifacts, input/resize telemetry, and one bounded display-list route become PM evidence without broad SkCanvas replay claims. |
+| M84 Native Frame Timing Candidate Gate | `04`, `05` | `frame.kadre-windowed` timing is serialized as candidate/reporting-only evidence with quarantine and a negative fixture, not a release-blocking FPS gate. |
 
 ## Definition Of Done For Any Future Milestone
 
