@@ -6,15 +6,55 @@
   "gatePhase": "reportingOnly",
   "reportingOnly": true,
   "sceneContract": {
-    "id": "m70-a-kanvas-owned-kadre-native-scene",
+    "id": "m72-solid-rect-replay-v1",
     "version": 1,
     "owner": "kanvas",
-    "milestone": "M70-A/M71",
-    "claim": "Kanvas-owned runtime scene contract executed through a bounded Kadre native WebGPU present-call loop",
-    "wgslSource": "runtime-generated-from-kanvas-owned-scene-contract"
+    "milestone": "M70-A/M71/M72",
+    "claim": "Selected Kanvas replay scene contract executed through a bounded Kadre native WebGPU present-call loop",
+    "wgslSource": "runtime-generated-from-selected-kadre-replay-scene"
+  },
+  "sceneReplay": {
+    "id": "m72-solid-rect-replay-v1",
+    "title": "M72 solid-rect replay",
+    "source": "kanvas-replay-data",
+    "sourceSceneId": "solid-rect",
+    "version": 1,
+    "claimLevel": "single-scene-replay-contract",
+    "commandSource": "typed-kadre-runtime-replay-contract",
+    "gpuExecution": "wgsl-generated-from-kadre-replay-scene",
+    "cpuReferenceSource": "kanvas-skia SkBitmap/SkCanvas replay of same selected commands",
+    "fallbackPolicy": "refuse-unsupported-replay-command",
+    "sourceEvidence": {
+      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#solid-rect",
+      "cpuRoute": "cpu.descriptor.coverage-plan.solid-rect",
+      "gpuRoute": "webgpu.coverage.analytic-rect",
+      "pipelineKey": "coverageKind=analyticRect"
+    },
+    "commandCounters": {
+      "total": 2,
+      "supported": 2,
+      "unsupported": 0,
+      "backgroundClear": 1,
+      "fillRect": 1,
+      "animatedFillRect": 0
+    },
+    "unsupportedCommands": [],
+    "commands": [
+      {
+        "label": "solid-rect",
+        "family": "fillRect",
+        "supported": true,
+        "x": 0.2000,
+        "y": 0.2200,
+        "width": 0.5800,
+        "height": 0.5000,
+        "dx": 0.0000
+      }
+
+    ]
   },
   "status": "native-runnable",
-  "reason": "m70.kadre-native-demo-presented-frames",
+  "reason": "m72.kadre-single-scene-replay-presented-frames",
   "nativePresented": true,
   "presentCallCompleted": true,
   "requestedFrames": 180,
@@ -29,17 +69,17 @@
   "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
   "cpuReference": {
     "source": "kanvas-skia SkBitmap/SkCanvas",
-    "checksum": -5176167521326809762,
+    "checksum": 6278179505048423371,
     "nonTransparentPixels": 5520
   },
   "frameTiming": {
-    "firstFrameMs": 31.5808,
-    "averageFrameMs": 8.3248,
+    "firstFrameMs": 33.0318,
+    "averageFrameMs": 8.3433,
     "warmupFrameCount": 30,
     "measuredSampleCount": 150,
-    "measuredP50Ms": 8.5569,
-    "measuredP95Ms": 9.0486,
-    "measuredWorstMs": 9.5996,
+    "measuredP50Ms": 8.4843,
+    "measuredP95Ms": 9.5840,
+    "measuredWorstMs": 10.0245,
     "gatePhase": "reportingOnly",
     "reportingOnly": true,
     "nativeTimingClaim": "present-call-duration-only"
@@ -53,9 +93,9 @@
     "autonomousFrameCount": 359,
     "warmupFrameCount": 30,
     "measuredSampleCount": 150,
-    "measuredP50Ms": 8.5569,
-    "measuredP95Ms": 9.0486,
-    "measuredWorstMs": 9.5996,
+    "measuredP50Ms": 8.4843,
+    "measuredP95Ms": 9.5840,
+    "measuredWorstMs": 10.0245,
     "totalSampleCount": 180,
     "surfaceStatusCount": 180
   },
@@ -69,8 +109,8 @@
     "width": 640,
     "height": 420,
     "format": "RGBA8Unorm",
-    "bytes": 24852,
-    "checksum": 612123934947085355,
+    "bytes": 3300,
+    "checksum": 828073766954355235,
     "nonTransparentPixels": 268800,
     "error": null
   },
@@ -89,10 +129,11 @@
     "normalizedTimeoutAsSuccess": true,
     "reason": "wgpu-native v27 reports SuccessOptimal as raw status 1; wgpu4k maps raw 1 to SurfaceTextureStatus.timeout"
   },
-  "linearIssues": ["FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78"],
+  "linearIssues": ["FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83"],
   "nonClaims": [
-    "This run proves bounded Kadre native window present-call execution for the M70-A Kanvas-owned scene contract.",
+    "This run proves bounded Kadre native window present-call execution for the selected M72 `solid-rect` replay contract.",
     "M71 proves the demo route requests frames from Kadre/AppKit ControlFlow.Poll instead of relying on pointer/input events to wake the run loop.",
+    "M72 proves one selected Kanvas replay scene contract only; broad display-list replay is still outside the claim.",
     "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
     "Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.",
     "The capture artifact is an offscreen wgpu4k native texture readback of the same scene contract, not a system screenshot of the presented window.",
