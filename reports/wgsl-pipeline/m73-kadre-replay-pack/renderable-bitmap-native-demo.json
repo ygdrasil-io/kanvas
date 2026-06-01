@@ -9,7 +9,7 @@
     "id": "m73-bitmap-rect-nearest-replay-v1",
     "version": 1,
     "owner": "kanvas",
-    "milestone": "M70-A/M71/M72/M73",
+    "milestone": "M70-A/M71/M72/M73/M74",
     "claim": "Selected Kanvas replay scene contract executed through a bounded Kadre native WebGPU present-call loop",
     "wgslSource": "runtime-generated-from-selected-kadre-replay-scene"
   },
@@ -295,13 +295,13 @@
     "nonTransparentPixels": 5520
   },
   "frameTiming": {
-    "firstFrameMs": 169.0310,
-    "averageFrameMs": 21.0871,
+    "firstFrameMs": 36.3123,
+    "averageFrameMs": 9.5286,
     "warmupFrameCount": 0,
     "measuredSampleCount": 12,
-    "measuredP50Ms": 7.7924,
-    "measuredP95Ms": 169.0310,
-    "measuredWorstMs": 169.0310,
+    "measuredP50Ms": 7.7771,
+    "measuredP95Ms": 36.3123,
+    "measuredWorstMs": 36.3123,
     "gatePhase": "reportingOnly",
     "reportingOnly": true,
     "nativeTimingClaim": "present-call-duration-only"
@@ -315,9 +315,9 @@
     "autonomousFrameCount": 23,
     "warmupFrameCount": 0,
     "measuredSampleCount": 12,
-    "measuredP50Ms": 7.7924,
-    "measuredP95Ms": 169.0310,
-    "measuredWorstMs": 169.0310,
+    "measuredP50Ms": 7.7771,
+    "measuredP95Ms": 36.3123,
+    "measuredWorstMs": 36.3123,
     "totalSampleCount": 12,
     "surfaceStatusCount": 12
   },
@@ -351,11 +351,12 @@
     "normalizedTimeoutAsSuccess": true,
     "reason": "wgpu-native v27 reports SuccessOptimal as raw status 1; wgpu4k maps raw 1 to SurfaceTextureStatus.timeout"
   },
-  "linearIssues": ["FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83", "FOR-84", "FOR-85", "FOR-86", "FOR-87", "FOR-88", "FOR-89"],
+  "linearIssues": ["FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83", "FOR-84", "FOR-85", "FOR-86", "FOR-87", "FOR-88", "FOR-89", "FOR-90", "FOR-105", "FOR-106", "FOR-107", "FOR-108", "FOR-109"],
   "nonClaims": [
     "This run proves bounded Kadre native window present-call execution for one selected M73 replay-pack scene contract.",
     "M71 proves the demo route requests frames from Kadre/AppKit ControlFlow.Poll instead of relying on pointer/input events to wake the run loop.",
     "M72 proves one selected Kanvas replay scene contract; M73 expands that to a small typed replay-pack registry only.",
+    "M74 moves the replay registry into a closed typed command model and preserves M73 behavior; it is an implementation foundation sprint, not a new broad rendering-support claim.",
     "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
     "Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.",
     "The capture artifact is an offscreen wgpu4k native texture readback of the same scene contract, not a system screenshot of the presented window.",
