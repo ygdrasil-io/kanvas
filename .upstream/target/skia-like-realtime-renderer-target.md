@@ -82,13 +82,13 @@ corresponding denominator and is linked from the sprint report.
 
 Weighted starting readiness: approximately 25%.
 
-Current readiness after the M70-B/C Kadre native surface and readback slice: approximately 65%.
+Current readiness after the M71 Kadre autonomous frame-clock slice: approximately 66%.
 
 | Area | Weight | Current count | Current progress | Movement |
 |---|---:|---:|---:|---|
 | Rendering feature breadth | 30% | 6/10 | 60% | M66 normalizes selected rows across existing families without adding a new counted family denominator. |
 | Skia-like fidelity | 20% | 50/100 selected rows, 37/100 Skia-comparable minimum | 50% selected evidence | M66 adds 19 selected support/refusal rows with `referenceKind`; 6 are `skia-upstream`, 6 `test-oracle`, and 7 `cpu-oracle`. CPU-oracle rows do not automatically count as Skia-comparable fidelity. |
-| Real-time runtime | 20% | 7.5/10 | 75% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane; M68 adds Kadre source-build bridge evidence; M69 adds a bounded Kadre/AppKit/Metal WebGPU present loop; M70-A adds a PM-visible demo task; M70-B/C confirm normalized surface-success evidence and produce a real wgpu4k offscreen texture readback artifact for one selected Kanvas-owned scene contract. Native input, broad Kanvas display-list replay, and window-surface screenshot/readback remain incomplete. |
+| Real-time runtime | 20% | 8/10 | 80% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane; M68 adds Kadre source-build bridge evidence; M69 adds a bounded Kadre/AppKit/Metal WebGPU present loop; M70-A adds a PM-visible demo task; M70-B/C confirm normalized surface-success evidence and produce a real wgpu4k offscreen texture readback artifact for one selected Kanvas-owned scene contract; M71 drives that selected route with Kadre/AppKit `ControlFlow.Poll` instead of relying on mouse/input events to wake the loop. Native input, broad Kanvas display-list replay, and window-surface screenshot/readback remain incomplete. |
 | Performance and cache readiness | 15% | 9/20 | 45% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry, adds one measured family budget, and proves deterministic quarantine/rebaseline behavior. M70-A adds reporting-only `frame.kadre-windowed` telemetry with warmup/measured samples; it is not a release-grade FPS gate. |
 | PM/demo operability | 15% | 20/20 | 100% | PM bundle includes M65 runtime telemetry/artifacts, M66 family/reference counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 host adapter smoke artifacts, M69 native Kadre present evidence, and M70-A/B/C live-runtime/readback demo evidence. |
 
@@ -107,6 +107,7 @@ Expected milestone deltas are capped until evidence lands:
 | M68 | Native Kadre demo package | +8% |
 | M69 | Kanvas/Kadre host adapter and bounded native present loop | +6% |
 | M70-A/B/C | Live Kadre demo, surface semantics, native readback | +1% |
+| M71 | Autonomous Kadre frame clock | +2% |
 | M70 | Release-candidate closure | Remaining counted evidence only |
 
 ## Milestones
@@ -126,6 +127,7 @@ Expected milestone deltas are capped until evidence lands:
 | M70-A | Kadre Live Runtime V1 | Add a PM-visible Kadre demo command, one selected Kanvas-owned scene contract, reporting-only `frame.kadre-windowed` telemetry, and PM bundle evidence. |
 | M70-B | Kadre Surface Success | Audit Kadre/wgpu4k surface status semantics and keep raw API status separate from normalized native presentation evidence. |
 | M70-C | Kadre Native Readback | Produce or precisely block a real native readback artifact for the selected Kadre scene contract; the current implementation uses wgpu4k offscreen texture readback, not a window screenshot. |
+| M71 | Kadre Autonomous Frame Clock | Make the selected live Kadre demo advance from an explicit Kadre/AppKit frame clock rather than pointer/input wakeups, and expose the clock source in PM telemetry. |
 | M70 | Release Candidate Renderer | Freeze API, runtime, PM demo, CI gates, and known limitations for a renderer release candidate. |
 
 ## Dependency DAG

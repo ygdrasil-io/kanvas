@@ -15,7 +15,7 @@ product target is broader: make Kanvas render more of the practical Skia CPU
 surface while building a measured real-time WebGPU lane with live telemetry,
 feature diagnostics, and PM-visible demos.
 
-New target readiness is approximately 65% after the M70-B/C Kadre native surface and readback slice. This is intentionally lower
+New target readiness is approximately 66% after the M71 Kadre autonomous frame-clock slice. This is intentionally lower
 than the completed MEP score because the scope has expanded from evidence
 infrastructure to feature breadth, fidelity, runtime behavior, and release
 operability. The score is based on counted denominators in the target doc, not
@@ -25,11 +25,11 @@ manual sprint estimates.
 |---|---:|---:|---|
 | Rendering feature breadth | 30% | 60% | Path AA, bounded image-filter DAG, text/font, color/blend/color-filter, and registered runtime-effect evidence now have selected generated contracts; broad layers and fallbacks remain incomplete. |
 | Skia-like fidelity | 20% | 50% | M66 raises selected GM/reference evidence to 50/100 rows. Only 37/100 are Skia-comparable today; CPU-oracle rows are breadth/refusal evidence until comparable Skia references land. |
-| Real-time runtime | 20% | 75% | M65 adds a reporting-only headless runtime smoke lane, M68 verifies the Kadre source-build bridge, M69 runs a bounded native Kadre/WebGPU present loop, M70-A adds a PM-visible Kadre demo task, and M70-B/C confirm normalized native surface success plus a produced wgpu4k offscreen texture readback for one selected Kanvas-owned scene contract. Native input, broad display-list replay, and window-surface screenshot/readback remain incomplete. |
+| Real-time runtime | 20% | 80% | M65 adds a reporting-only headless runtime smoke lane, M68 verifies the Kadre source-build bridge, M69 runs a bounded native Kadre/WebGPU present loop, M70-A adds a PM-visible Kadre demo task, M70-B/C confirm normalized native surface success plus a produced wgpu4k offscreen texture readback, and M71 drives the selected route from Kadre/AppKit `ControlFlow.Poll` instead of pointer/input wakeups. Native input, broad display-list replay, and window-surface screenshot/readback remain incomplete. |
 | Performance and cache readiness | 15% | 45% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry and adds family budgets plus quarantine/rebaseline fixture. M70-A adds reporting-only `frame.kadre-windowed` telemetry with warmup/measured samples, but no release-grade FPS gate. |
 | PM/demo operability | 15% | 100% | PM bundle now includes M65 runtime smoke, M66 counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 native Kadre present evidence, and M70-A/B/C live-runtime/readback demo evidence. |
 
-Weighted PM readiness for the new target: **65%**.
+Weighted PM readiness for the new target: **66%**.
 
 Active planning entry points:
 
@@ -53,6 +53,7 @@ Active planning entry points:
 | M70-A | Kadre Live Runtime V1 | PM-visible Kadre demo command, one selected Kanvas-owned native scene contract, and reporting-only frame telemetry are generated. |
 | M70-B | Kadre Surface Success | Native surface status semantics are audited and the PM route distinguishes raw wgpu4k API status from normalized presentation evidence. |
 | M70-C | Kadre Native Readback | A real wgpu4k native offscreen texture readback PNG is generated for the selected scene contract and bundled for PM review. |
+| M71 | Kadre Autonomous Frame Clock | The selected Kadre live demo route advances through a Kadre/AppKit `ControlFlow.Poll` frame clock instead of requiring mouse or input events to wake the loop. |
 | M70 | Release Candidate Renderer | Renderer API, runtime, demos, CI gates, and known limitations are frozen for RC. |
 
 ## Completed MEP Evidence Target (Historical)

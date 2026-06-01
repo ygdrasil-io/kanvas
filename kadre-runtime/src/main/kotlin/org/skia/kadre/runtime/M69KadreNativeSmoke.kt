@@ -50,6 +50,7 @@ import org.graphiks.kadre.EventLoop
 import org.graphiks.kadre.PhysicalSize
 import org.graphiks.kadre.WindowAttributes
 import org.graphiks.kadre.WindowId
+import org.graphiks.kadre.core.ControlFlow
 import org.graphiks.kadre.core.RawWindowHandle
 import org.graphiks.kadre.core.Window
 import org.graphiks.kadre.core.WindowEvent
@@ -232,6 +233,9 @@ internal data class RuntimeTelemetry(
     val gatePhase: String = REPORTING_ONLY_GATE_PHASE,
     val reportingOnly: Boolean = true,
     val lane: String = "frame.kadre-windowed",
+    val frameClockSource: String,
+    val autonomousFrameClock: Boolean,
+    val autonomousFrameCount: Int,
     val warmupFrameCount: Int,
     val measuredSampleCount: Int,
     val measuredP50Ms: Double?,
@@ -245,6 +249,9 @@ internal data class RuntimeTelemetry(
         appendLine("$indent  \"lane\": ${lane.json()},")
         appendLine("$indent  \"gatePhase\": ${gatePhase.json()},")
         appendLine("$indent  \"reportingOnly\": $reportingOnly,")
+        appendLine("$indent  \"frameClockSource\": ${frameClockSource.json()},")
+        appendLine("$indent  \"autonomousFrameClock\": $autonomousFrameClock,")
+        appendLine("$indent  \"autonomousFrameCount\": $autonomousFrameCount,")
         appendLine("$indent  \"warmupFrameCount\": $warmupFrameCount,")
         appendLine("$indent  \"measuredSampleCount\": $measuredSampleCount,")
         appendLine("$indent  \"measuredP50Ms\": ${measuredP50Ms?.formatJsonNumber() ?: "null"},")
@@ -270,6 +277,7 @@ internal class M69KadreNativeSmokeApp(
     private var adapterInfo: String? = null
     private var redrawEvents = 0
     private var presentedFrames = 0
+    private var autonomousFrameRequests = 0
     private var completed = false
     private val frameDurationsMs = mutableListOf<Double>()
     private val surfaceStatuses = mutableListOf<String>()
@@ -333,14 +341,14 @@ internal class M69KadreNativeSmokeApp(
                 ?: CompositeAlphaMode.Auto
             configureSurface(win.innerSize)
             adapter.close()
-            win.requestRedraw()
+            requestNextFrame(eventLoop)
         }.onFailure { error ->
             completeBlocked(eventLoop, "m69.kadre-native-initialization-failed", error.message ?: error.toString())
         }
     }
 
     override fun aboutToWait(eventLoop: ActiveEventLoop) {
-        if (!completed) window?.requestRedraw()
+        if (!completed) requestNextFrame(eventLoop)
     }
 
     override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
@@ -431,8 +439,16 @@ internal class M69KadreNativeSmokeApp(
         if (presentedFrames >= config.frames) {
             completeNative(eventLoop)
         } else {
-            window?.requestRedraw()
+            requestNextFrame(eventLoop)
         }
+    }
+
+    private fun requestNextFrame(eventLoop: ActiveEventLoop) {
+        if (config.autonomousFrameClock) {
+            eventLoop.setControlFlow(ControlFlow.Poll)
+            autonomousFrameRequests++
+        }
+        window?.requestRedraw()
     }
 
     private fun createScenePipeline(
@@ -616,13 +632,14 @@ internal class M69KadreNativeSmokeApp(
                 cpuReferenceNonTransparentPixels = cpuReference.second,
                 firstFrameMs = frameDurationsMs.firstOrNull(),
                 averageFrameMs = frameDurationsMs.takeIf { it.isNotEmpty() }?.average(),
-                telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size),
+                telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size, autonomousFrameRequests),
                 surfaceStatuses = surfaceStatuses.toList(),
                 surfaceApiStatuses = surfaceApiStatuses.toList(),
                 capture = capture,
             )
         )
         releaseResources()
+        eventLoop.setControlFlow(ControlFlow.Wait)
         eventLoop.exit()
     }
 
@@ -651,7 +668,7 @@ internal class M69KadreNativeSmokeApp(
                 cpuReferenceNonTransparentPixels = cpuReference.second,
                 firstFrameMs = frameDurationsMs.firstOrNull(),
                 averageFrameMs = frameDurationsMs.takeIf { it.isNotEmpty() }?.average(),
-                telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size),
+                telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size, autonomousFrameRequests),
                 surfaceStatuses = surfaceStatuses.toList(),
                 surfaceApiStatuses = surfaceApiStatuses.toList(),
                 capture = unavailableCapture(size.width, size.height),
@@ -659,6 +676,7 @@ internal class M69KadreNativeSmokeApp(
             )
         )
         releaseResources()
+        eventLoop.setControlFlow(ControlFlow.Wait)
         eventLoop.exit()
     }
 
@@ -743,7 +761,17 @@ private val NativeSmokeConfig.windowTitle: String
         "Kanvas M69 - Kadre native smoke"
     }
 
-private fun configMilestone(mode: String): String = if (mode == "demo") "M70-A" else "M69"
+private val NativeSmokeConfig.autonomousFrameClock: Boolean
+    get() = mode == "demo"
+
+private val NativeSmokeConfig.frameClockSource: String
+    get() = if (autonomousFrameClock) {
+        "kadre.appkit.control-flow-poll"
+    } else {
+        "kadre.appkit.event-driven-request-redraw"
+    }
+
+private fun configMilestone(mode: String): String = if (mode == "demo") "M70-A/M71" else "M69"
 
 private fun configSceneClaim(mode: String): String = if (mode == "demo") {
     "Kanvas-owned runtime scene contract executed through a bounded Kadre native WebGPU present-call loop"
@@ -752,7 +780,7 @@ private fun configSceneClaim(mode: String): String = if (mode == "demo") {
 }
 
 private fun configLinearIssues(mode: String): List<String> = if (mode == "demo") {
-    listOf("FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73")
+    listOf("FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78")
 } else {
     listOf("FOR-56", "FOR-57", "FOR-58", "FOR-59")
 }
@@ -760,6 +788,7 @@ private fun configLinearIssues(mode: String): List<String> = if (mode == "demo")
 private fun configNonClaims(mode: String): List<String> = if (mode == "demo") {
     listOf(
         "This run proves bounded Kadre native window present-call execution for the M70-A Kanvas-owned scene contract.",
+        "M71 proves the demo route requests frames from Kadre/AppKit ControlFlow.Poll instead of relying on pointer/input events to wake the run loop.",
         "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
         "Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.",
         "The capture artifact is an offscreen wgpu4k native texture readback of the same scene contract, not a system screenshot of the presented window.",
@@ -849,9 +878,17 @@ private fun renderCpuReference(width: Int, height: Int): Pair<Long, Int> {
     return checksum to nonTransparent
 }
 
-private fun buildTelemetry(config: NativeSmokeConfig, frameDurationsMs: List<Double>, surfaceStatusCount: Int): RuntimeTelemetry {
+private fun buildTelemetry(
+    config: NativeSmokeConfig,
+    frameDurationsMs: List<Double>,
+    surfaceStatusCount: Int,
+    autonomousFrameRequests: Int = 0,
+): RuntimeTelemetry {
     val measured = frameDurationsMs.drop(config.warmupFrames.coerceAtMost(frameDurationsMs.size))
     return RuntimeTelemetry(
+        frameClockSource = config.frameClockSource,
+        autonomousFrameClock = config.autonomousFrameClock,
+        autonomousFrameCount = autonomousFrameRequests,
         warmupFrameCount = frameDurationsMs.size.coerceAtMost(config.warmupFrames),
         measuredSampleCount = measured.size,
         measuredP50Ms = measured.percentile(0.50),
