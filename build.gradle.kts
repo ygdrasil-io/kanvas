@@ -992,6 +992,9 @@ tasks.register("pipelineM69KadreHostAdapterSmoke") {
     group = "verification"
     description = "Generates M69 Kanvas/Kadre host adapter smoke evidence and a concrete native/headless route status."
     mustRunAfter("pipelineM65RuntimeSmoke")
+    if (providers.gradleProperty("kanvasRunNativeKadreSmoke").map(String::toBoolean).getOrElse(false)) {
+        dependsOn(":kadre-runtime:runM69KadreNativeSmoke")
+    }
 
     val scriptFile = layout.projectDirectory.file("scripts/m69_kadre_host_adapter_smoke.py")
     val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m69-kadre-host-adapter")
@@ -1000,6 +1003,7 @@ tasks.register("pipelineM69KadreHostAdapterSmoke") {
     inputs.file(layout.projectDirectory.file("settings.gradle.kts"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m69-kadre-native"))
     outputs.dir(outputDir)
     outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m69-kadre-host-adapter-smoke.md"))
     outputs.upToDateWhen { false }
@@ -4281,6 +4285,7 @@ tasks.register("pipelinePmBundle") {
     val m67PerformanceNegativeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/performance/m67-performance-tiering-negative")
     val m68KadreDemoDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m68-kadre-demo")
     val m69KadreHostAdapterDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m69-kadre-host-adapter")
+    val m69KadreNativeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m69-kadre-native")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4295,6 +4300,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m67PerformanceNegativeDir)
     inputs.dir(m68KadreDemoDir)
     inputs.dir(m69KadreHostAdapterDir)
+    inputs.dir(m69KadreNativeDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4326,6 +4332,7 @@ tasks.register("pipelinePmBundle") {
         val m67PerformanceNegativeRoot = m67PerformanceNegativeDir.asFile
         val m68KadreDemoRoot = m68KadreDemoDir.asFile
         val m69KadreHostAdapterRoot = m69KadreHostAdapterDir.asFile
+        val m69KadreNativeRoot = m69KadreNativeDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4377,6 +4384,9 @@ tasks.register("pipelinePmBundle") {
         }
         if (m69KadreHostAdapterRoot.isDirectory) {
             m69KadreHostAdapterRoot.copyRecursively(targetRoot.resolve("runtime/m69-kadre-host-adapter"), overwrite = true)
+        }
+        if (m69KadreNativeRoot.isDirectory) {
+            m69KadreNativeRoot.copyRecursively(targetRoot.resolve("runtime/m69-kadre-native"), overwrite = true)
         }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
@@ -4836,6 +4846,13 @@ tasks.register("pipelinePmBundle") {
         } else {
             emptyMap<String, Any>()
         }
+        val m69NativeSmokeFile = m69KadreNativeRoot.resolve("native-smoke.json")
+        val m69NativeSmokeReport = if (m69NativeSmokeFile.isFile) {
+            JsonSlurper().parse(m69NativeSmokeFile) as? Map<*, *>
+                ?: throw GradleException("M69 native smoke must be a JSON object: ${m69NativeSmokeFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -4938,6 +4955,7 @@ tasks.register("pipelinePmBundle") {
             "m69KadreHostAdapterSceneRouteJson" to "runtime/m69-kadre-host-adapter/scene-route.json",
             "m69KadreHostAdapterTelemetryJson" to "runtime/m69-kadre-host-adapter/telemetry.json",
             "m69KadreHostAdapterBridgeSmokeJson" to "runtime/m69-kadre-host-adapter/bridge-smoke.json",
+            "m69KadreNativeSmokeJson" to "runtime/m69-kadre-native/native-smoke.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -5076,6 +5094,9 @@ tasks.register("pipelinePmBundle") {
                 "routeReason" to ((m69RouteStatusReport["reason"] as? String).orEmpty()),
                 "nativePresented" to (m69RouteStatusReport["nativePresented"] as? Boolean ?: false),
                 "nativePresentationReason" to ((m69RouteStatusReport["nativePresentationReason"] as? String).orEmpty()),
+                "nativeSmokeStatus" to ((m69NativeSmokeReport["status"] as? String).orEmpty()),
+                "nativeSmokeRoute" to ((m69NativeSmokeReport["route"] as? String).orEmpty()),
+                "nativeSmokePresentedFrames" to ((m69NativeSmokeReport["presentedFrames"] as? Number)?.toInt() ?: 0),
                 "hostContractCapabilities" to m69Capabilities.keys.map { it.toString() }.sorted(),
                 "routes" to m69Routes.keys.map { it.toString() }.sorted(),
                 "sceneId" to ((m69SceneRouteReport["sceneId"] as? String).orEmpty()),
@@ -5088,8 +5109,9 @@ tasks.register("pipelinePmBundle") {
                 "sceneRouteJson" to "runtime/m69-kadre-host-adapter/scene-route.json",
                 "telemetryJson" to "runtime/m69-kadre-host-adapter/telemetry.json",
                 "bridgeSmokeJson" to "runtime/m69-kadre-host-adapter/bridge-smoke.json",
+                "nativeSmokeJson" to "runtime/m69-kadre-native/native-smoke.json",
                 "releaseBlocking" to false,
-                "notice" to "M69 turns the M68 generic blocker into a concrete headless-bridge route. It audits the Kanvas/Kadre host adapter contract and first scene route, but still does not claim native-presented Kanvas pixels.",
+                "notice" to "M69 now runs a Kadre native windowed WebGPU present loop for a bounded standalone WGSL scene when the host supports AppKit/Metal. Native timing is present-call duration only; Kanvas display-list replay and input-driven interaction remain future work.",
             ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
@@ -5169,7 +5191,7 @@ tasks.register("pipelinePmBundle") {
                 "M66 promotes a cumulative GM/reference wave only where generated artifacts, routes, stats, and referenceKind provenance exist; inventory-only candidates still do not count as support.",
                 "M67 adds a frame gate candidate and family budget inventory from M65 headless/offscreen telemetry; only one family is measured and native Kadre timing remains reporting-only.",
                 "M68 verifies Kadre source-build bridge evidence and flagship scene inputs, but native Kanvas/Kadre window presentation remains blocked until a host adapter exists.",
-                "M69 verifies the Kanvas/Kadre host adapter contract and headless bridge route only; native Kadre-presented Kanvas pixels, native input loop, and native present timing remain outside the claim.",
+                "M69 verifies a Kadre native WebGPU present loop for a bounded standalone WGSL scene; native screenshot capture, input loop, Kanvas display-list replay, and release-grade FPS remain outside the claim.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -5211,7 +5233,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- `runtime/m68-kadre-demo/`: M68 Kadre source-build bridge smoke, host-contract audit, route summary, flagship scene inputs, and telemetry overlay sample.")
                 appendLine("- M68 Kadre demo counters live in `manifest.json` under `m68KadreDemo`; native launch remains blocked until the Kanvas/Kadre host adapter is implemented.")
                 appendLine("- `runtime/m69-kadre-host-adapter/`: M69 host adapter contract, route status, first scene route, bridge smoke, and telemetry.")
-                appendLine("- M69 Kadre host adapter counters live in `manifest.json` under `m69KadreHostAdapter`; native presentation remains an explicit non-claim.")
+                appendLine("- `runtime/m69-kadre-native/`: M69 Kadre native AppKit/Metal smoke evidence with presented frame counters.")
+                appendLine("- M69 Kadre host adapter counters live in `manifest.json` under `m69KadreHostAdapter`; native timing remains present-call duration only.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
