@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "slots": [
+    {
+      "artifacts": {
+        "finalFrame": "artifacts/baseline-final-frame.png",
+        "firstFrame": "artifacts/baseline-first-frame.png"
+      },
+      "linearIssue": "FOR-36",
+      "refusalReason": "none",
+      "runtimeRoute": "headless.offscreen.smoke-renderer.v1",
+      "slot": "baseline",
+      "sourceEvidence": [],
+      "status": "pass",
+      "telemetrySummary": {
+        "averageFps": 109.92,
+        "averageFrameMs": 9.0978,
+        "cpuPlanningMedianMs": 0.19,
+        "cpuUpdateMedianMs": 0.12,
+        "finalFrame": {
+          "nonBackgroundPixels": 24570,
+          "nonblank": true,
+          "pixels": 24576,
+          "sha256": "853a2cb56c1b705ae1ef4d2a5296295e428da07aefdf2a01de45c1abde7c242a",
+          "transparentPixels": 0
+        },
+        "firstFrame": {
+          "nonBackgroundPixels": 24570,
+          "nonblank": true,
+          "pixels": 24576,
+          "sha256": "cdba7f2c428d54ea37a2116ea007d2d6f2530bab17443c67df0acb6ccc3b59b2",
+          "transparentPixels": 0
+        },
+        "frames": 120,
+        "medianFrameMs": 9.0764,
+        "offscreenRenderMedianMs": 8.7664,
+        "p95FrameMs": 9.3875
+      },
+      "title": "M65 baseline transform smoke"
+    },
+    {
+      "artifacts": {
+        "finalFrame": "artifacts/m63-final-frame.png",
+        "firstFrame": "artifacts/m63-first-frame.png"
+      },
+      "linearIssue": "FOR-36",
+      "refusalReason": "m65.runtime-display-list-replay-not-wired",
+      "runtimeRoute": "headless.offscreen.slot-preview",
+      "slot": "m63",
+      "sourceEvidence": [
+        {
+          "bytes": 137,
+          "exists": true,
+          "height": 32,
+          "nonBackgroundPixels": 256,
+          "nonblank": true,
+          "nonblankProbe": "decoded-png-rgba",
+          "path": "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/gpu.png",
+          "pixels": 1024,
+          "sha256": "c37283520074b58a5455843207466b7de7033134dc9f62c1da83d76c3c495f14",
+          "transparentPixels": 0,
+          "width": 32
+        },
+        {
+          "bytes": 858,
+          "exists": true,
+          "nonblankProbe": "not-pixel-artifact",
+          "path": "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/route-gpu.json",
+          "sha256": "b598db8a9855a2331507cef9a2b3035f4def8c8a7e37836415836b1708dc7462"
+        }
+      ],
+      "status": "expected-unsupported",
+      "telemetrySummary": {
+        "averageFps": 76.56,
+        "averageFrameMs": 13.0621,
+        "cpuPlanningMedianMs": 0.19,
+        "cpuUpdateMedianMs": 0.12,
+        "finalFrame": {
+          "nonBackgroundPixels": 24575,
+          "nonblank": true,
+          "pixels": 24576,
+          "sha256": "267073f2fb367c29c2fd6e23cc65d9eaab8615cab076c4a88384fc7d38d517f9",
+          "transparentPixels": 0
+        },
+        "firstFrame": {
+          "nonBackgroundPixels": 24575,
+          "nonblank": true,
+          "pixels": 24576,
+          "sha256": "f2b8839c2c39b406810180729737f836a19a76bdb8dcdfa42f1999fcf52de248",
+          "transparentPixels": 0
+        },
+        "frames": 120,
+        "medianFrameMs": 13.0396,
+        "offscreenRenderMedianMs": 12.7331,
+        "p95FrameMs": 13.3563
+      },
+      "title": "M63 color/blend scene slot"
+    },
+    {
+      "artifacts": {
+        "finalFrame": "artifacts/m64-final-frame.png",
+        "firstFrame": "artifacts/m64-first-frame.png"
+      },
+      "linearIssue": "FOR-36",
+      "refusalReason": "m65.runtime-display-list-replay-not-wired",
+      "runtimeRoute": "headless.offscreen.slot-preview",
+      "slot": "m64",
+      "sourceEvidence": [
+        {
+          "bytes": 226,
+          "exists": true,
+          "height": 64,
+          "nonBackgroundPixels": 4095,
+          "nonblank": true,
+          "nonblankProbe": "decoded-png-rgba",
+          "path": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu.png",
+          "pixels": 4096,
+          "sha256": "bc49aef6c774aa66f6aada0222479c0f8f91035be6b45d76d7681298609c654c",
+          "transparentPixels": 0,
+          "width": 64
+        },
+        {
+          "bytes": 922,
+          "exists": true,
+          "nonblankProbe": "not-pixel-artifact",
+          "path": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json",
+          "sha256": "c360be8d6a31ac933f100f6eabfd02df7bc6bfc7adaf482ac5fe857cddc95aa9"
+        }
+      ],
+      "status": "expected-unsupported",
+      "telemetrySummary": {
+        "averageFps": 79.05,
+        "averageFrameMs": 12.651,
+        "cpuPlanningMedianMs": 0.19,
+        "cpuUpdateMedianMs": 0.12,
+        "finalFrame": {
+          "nonBackgroundPixels": 24574,
+          "nonblank": true,
+          "pixels": 24576,
+          "sha256": "01fbf7a57473ed19d0c6b00d359a4899bcca6cc82b9eb536ac9a0f7f6c86f433",
+          "transparentPixels": 0
+        },
+        "firstFrame": {
+          "nonBackgroundPixels": 24574,
+          "nonblank": true,
+          "pixels": 24576,
+          "sha256": "44125022159256ab3e00e3398b08f6c430fcbbe370d5a4fd51e7d498a8be98b6",
+          "transparentPixels": 0
+        },
+        "frames": 120,
+        "medianFrameMs": 12.6438,
+        "offscreenRenderMedianMs": 12.3324,
+        "p95FrameMs": 12.8879
+      },
+      "title": "M64 registered runtime-effect scene slot"
+    }
+  ]
+}

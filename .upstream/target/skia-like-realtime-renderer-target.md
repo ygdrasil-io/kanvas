@@ -82,15 +82,15 @@ corresponding denominator and is linked from the sprint report.
 
 Weighted starting readiness: approximately 25%.
 
-Current readiness after M64 closeout: approximately 39%.
+Current readiness after M65/M66 closeout: approximately 53%.
 
 | Area | Weight | Current count | Current progress | Movement |
 |---|---:|---:|---:|---|
-| Rendering feature breadth | 30% | 6/10 | 60% | M64 adds selected registered runtime-effect evidence and stable arbitrary-SkSL/missing-WGSL refusal boundaries. |
-| Skia-like fidelity | 20% | 31/100 | 31% | M64 adds one supported descriptor-backed runtime-effect reference/oracle row without broad SkSL or runtime-effect family parity claims. |
-| Real-time runtime | 20% | 1/10 | 10% | Runtime-effect parameter metadata is now available for the future live Kadre lane, but no Kadre/frame-loop capability landed in M64. |
-| Performance and cache readiness | 15% | 7/20 | 35% | No new measured performance/cache gate denominator landed in M64. |
-| PM/demo operability | 15% | 11/20 | 55% | PM dashboard now exposes graph/glyph diagnostics plus M63/M64 refusal boundaries. |
+| Rendering feature breadth | 30% | 6/10 | 60% | M66 normalizes selected rows across existing families without adding a new counted family denominator. |
+| Skia-like fidelity | 20% | 50/100 selected rows, 37/100 Skia-comparable minimum | 50% selected evidence | M66 adds 19 selected support/refusal rows with `referenceKind`; 6 are `skia-upstream`, 6 `test-oracle`, and 7 `cpu-oracle`. CPU-oracle rows do not automatically count as Skia-comparable fidelity. |
+| Real-time runtime | 20% | 4/10 | 40% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane with frame loop evidence, full-redraw invalidation diagnostics, nonblank frame artifacts, and exportable telemetry. Live Kadre presentation remains blocked with `m65.kadre-host-not-wired`. |
+| Performance and cache readiness | 15% | 7/20 | 35% | M65 telemetry is reporting-only and M66 does not add release-blocking performance/cache gates. |
+| PM/demo operability | 15% | 16/20 | 80% | PM bundle includes M65 runtime telemetry/artifacts plus M66 family/reference counters and reports. Hosted/live demo packaging and release-candidate workflow remain incomplete. |
 
 Expected milestone deltas are capped until evidence lands:
 
