@@ -62,7 +62,7 @@ import org.skia.foundation.SkPaint
 private const val DEFAULT_WIDTH = 640
 private const val DEFAULT_HEIGHT = 420
 private const val M69_SCENE_CONTRACT_ID = "m69-first-kanvas-kadre-host-adapter-scene"
-private const val M70_SCENE_CONTRACT_ID = "m70-a-kanvas-owned-kadre-native-scene"
+private const val M72_SCENE_CONTRACT_ID = "m72-solid-rect-replay-v1"
 private const val SCENE_CONTRACT_VERSION = 1
 private const val SCENE_CONTRACT_OWNER = "kanvas"
 private const val REPORTING_ONLY_GATE_PHASE = "reportingOnly"
@@ -76,6 +76,106 @@ internal data class NativeSmokeConfig(
     val sceneContractId: String = M69_SCENE_CONTRACT_ID,
     val sceneContractVersion: Int = SCENE_CONTRACT_VERSION,
     val captureOutput: Path? = null,
+)
+
+internal data class ReplayColor(val r: Double, val g: Double, val b: Double, val a: Double = 1.0) {
+    fun toWgslVec3(): String = "vec3<f32>(${r.wgsl()}, ${g.wgsl()}, ${b.wgsl()})"
+    fun toArgb(): Int {
+        val ai = (a.coerceIn(0.0, 1.0) * 255.0).toInt()
+        val ri = (r.coerceIn(0.0, 1.0) * 255.0).toInt()
+        val gi = (g.coerceIn(0.0, 1.0) * 255.0).toInt()
+        val bi = (b.coerceIn(0.0, 1.0) * 255.0).toInt()
+        return (ai shl 24) or (ri shl 16) or (gi shl 8) or bi
+    }
+}
+
+internal data class ReplayRect(
+    val label: String,
+    val x: Double,
+    val y: Double,
+    val width: Double,
+    val height: Double,
+    val color: ReplayColor,
+    val animated: Boolean = false,
+    val dx: Double = 0.0,
+) {
+    fun toJson(indent: String): String = buildString {
+        appendLine("{")
+        appendLine("$indent  \"label\": ${label.json()},")
+        appendLine("$indent  \"family\": ${(if (animated) "animatedFillRect" else "fillRect").json()},")
+        appendLine("$indent  \"supported\": true,")
+        appendLine("$indent  \"x\": ${x.formatJsonNumber()},")
+        appendLine("$indent  \"y\": ${y.formatJsonNumber()},")
+        appendLine("$indent  \"width\": ${width.formatJsonNumber()},")
+        appendLine("$indent  \"height\": ${height.formatJsonNumber()},")
+        appendLine("$indent  \"dx\": ${dx.formatJsonNumber()}")
+        append("$indent}")
+    }
+}
+
+internal data class ReplaySceneEvidence(
+    val id: String,
+    val title: String,
+    val source: String,
+    val sourceSceneId: String,
+    val version: Int,
+    val commandSource: String,
+    val background: ReplayColor,
+    val rects: List<ReplayRect>,
+    val unsupportedCommands: List<String> = emptyList(),
+) {
+    val totalCommandCount: Int get() = 1 + rects.size + unsupportedCommands.size
+    val supportedCommandCount: Int get() = 1 + rects.size
+    val unsupportedCommandCount: Int get() = unsupportedCommands.size
+    val fillRectCount: Int get() = rects.count { !it.animated }
+    val animatedFillRectCount: Int get() = rects.count { it.animated }
+
+    fun toJson(indent: String): String = buildString {
+        appendLine("{")
+        appendLine("$indent  \"id\": ${id.json()},")
+        appendLine("$indent  \"title\": ${title.json()},")
+        appendLine("$indent  \"source\": ${source.json()},")
+        appendLine("$indent  \"sourceSceneId\": ${sourceSceneId.json()},")
+        appendLine("$indent  \"version\": $version,")
+        appendLine("$indent  \"claimLevel\": \"single-scene-replay-contract\",")
+        appendLine("$indent  \"commandSource\": ${commandSource.json()},")
+        appendLine("$indent  \"gpuExecution\": \"wgsl-generated-from-kadre-replay-scene\",")
+        appendLine("$indent  \"cpuReferenceSource\": \"kanvas-skia SkBitmap/SkCanvas replay of same selected commands\",")
+        appendLine("$indent  \"fallbackPolicy\": \"refuse-unsupported-replay-command\",")
+        appendLine("$indent  \"sourceEvidence\": {")
+        appendLine("$indent    \"dashboardRow\": \"reports/wgsl-pipeline/scenes/generated/results.json#solid-rect\",")
+        appendLine("$indent    \"cpuRoute\": \"cpu.descriptor.coverage-plan.solid-rect\",")
+        appendLine("$indent    \"gpuRoute\": \"webgpu.coverage.analytic-rect\",")
+        appendLine("$indent    \"pipelineKey\": \"coverageKind=analyticRect\"")
+        appendLine("$indent  },")
+        appendLine("$indent  \"commandCounters\": {")
+        appendLine("$indent    \"total\": $totalCommandCount,")
+        appendLine("$indent    \"supported\": $supportedCommandCount,")
+        appendLine("$indent    \"unsupported\": $unsupportedCommandCount,")
+        appendLine("$indent    \"backgroundClear\": 1,")
+        appendLine("$indent    \"fillRect\": $fillRectCount,")
+        appendLine("$indent    \"animatedFillRect\": $animatedFillRectCount")
+        appendLine("$indent  },")
+        appendLine("$indent  \"unsupportedCommands\": [${unsupportedCommands.joinToString(", ") { it.json() }}],")
+        appendLine("$indent  \"commands\": [")
+        appendLine(rects.joinToString(",\n") { "$indent    ${it.toJson("$indent    ")}" })
+        appendLine()
+        appendLine("$indent  ]")
+        append("$indent}")
+    }
+}
+
+private val M72_REPLAY_SCENE = ReplaySceneEvidence(
+    id = M72_SCENE_CONTRACT_ID,
+    title = "M72 solid-rect replay",
+    source = "kanvas-replay-data",
+    sourceSceneId = "solid-rect",
+    version = 1,
+    commandSource = "typed-kadre-runtime-replay-contract",
+    background = ReplayColor(0.03, 0.035, 0.045),
+    rects = listOf(
+        ReplayRect("solid-rect", 0.20, 0.22, 0.58, 0.50, ReplayColor(0.17, 0.48, 0.90)),
+    ),
 )
 
 internal data class NativeCaptureResult(
@@ -133,6 +233,7 @@ internal data class NativeSmokeResult(
     val firstFrameMs: Double?,
     val averageFrameMs: Double?,
     val telemetry: RuntimeTelemetry,
+    val replayScene: ReplaySceneEvidence? = null,
     val surfaceStatuses: List<String>,
     val surfaceApiStatuses: List<String> = emptyList(),
     val capture: NativeCaptureResult = unavailableCapture(DEFAULT_WIDTH, DEFAULT_HEIGHT),
@@ -154,8 +255,9 @@ internal data class NativeSmokeResult(
             appendLine("    \"owner\": ${SCENE_CONTRACT_OWNER.json()},")
             appendLine("    \"milestone\": ${configMilestone(mode).json()},")
             appendLine("    \"claim\": ${configSceneClaim(mode).json()},")
-            appendLine("    \"wgslSource\": \"runtime-generated-from-kanvas-owned-scene-contract\"")
+            appendLine("    \"wgslSource\": ${configWgslSource(mode).json()}")
             appendLine("  },")
+            appendLine("  \"sceneReplay\": ${replayScene?.toJson("  ") ?: "null"},")
             appendLine("  \"status\": ${status.json()},")
             appendLine("  \"reason\": ${reason.json()},")
             appendLine("  \"nativePresented\": $nativePresented,")
@@ -282,7 +384,8 @@ internal class M69KadreNativeSmokeApp(
     private val frameDurationsMs = mutableListOf<Double>()
     private val surfaceStatuses = mutableListOf<String>()
     private val surfaceApiStatuses = mutableListOf<String>()
-    private val cpuReference = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+    private val replayScene = config.replayScene
+    private val cpuReference = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT, replayScene)
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
         runCatching {
@@ -295,6 +398,14 @@ internal class M69KadreNativeSmokeApp(
                 )
             )
             window = win
+            if (config.mode == "demo" && replayScene == null) {
+                completeBlocked(
+                    eventLoop,
+                    "m72.kadre-replay-scene-unsupported",
+                    "Unsupported Kadre replay scene contract: ${config.sceneContractId}",
+                )
+                return
+            }
             val handle = win.rawWindowHandle
             if (handle !is RawWindowHandle.AppKit) {
                 completeBlocked(eventLoop, "m69.kadre-native-appkit-required", "Unsupported Kadre window handle: $handle")
@@ -457,7 +568,9 @@ internal class M69KadreNativeSmokeApp(
         targetFormat: GPUTextureFormat,
     ): GPURenderPipeline {
         val phase = (frameIndex % 60) / 60.0
-        val shaderModule = gpuDevice.createShaderModule(ShaderModuleDescriptor(code = firstSceneWgsl(phase)))
+        val shaderModule = gpuDevice.createShaderModule(
+            ShaderModuleDescriptor(code = replayScene?.toWgsl(phase) ?: firstSceneWgsl(phase))
+        )
         val pipeline = gpuDevice.createRenderPipeline(
             RenderPipelineDescriptor(
                 vertex = VertexState(module = shaderModule, entryPoint = "vs_main"),
@@ -633,6 +746,7 @@ internal class M69KadreNativeSmokeApp(
                 firstFrameMs = frameDurationsMs.firstOrNull(),
                 averageFrameMs = frameDurationsMs.takeIf { it.isNotEmpty() }?.average(),
                 telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size, autonomousFrameRequests),
+                replayScene = replayScene,
                 surfaceStatuses = surfaceStatuses.toList(),
                 surfaceApiStatuses = surfaceApiStatuses.toList(),
                 capture = capture,
@@ -669,6 +783,7 @@ internal class M69KadreNativeSmokeApp(
                 firstFrameMs = frameDurationsMs.firstOrNull(),
                 averageFrameMs = frameDurationsMs.takeIf { it.isNotEmpty() }?.average(),
                 telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size, autonomousFrameRequests),
+                replayScene = replayScene,
                 surfaceStatuses = surfaceStatuses.toList(),
                 surfaceApiStatuses = surfaceApiStatuses.toList(),
                 capture = unavailableCapture(size.width, size.height),
@@ -724,7 +839,7 @@ private fun parseArgs(args: Array<String>): NativeSmokeConfig {
         frames = frames.coerceAtLeast(1),
         mode = normalizedMode,
         warmupFrames = warmupFrames.coerceAtLeast(0).coerceAtMost(frames.coerceAtLeast(1)),
-        sceneContractId = sceneContractId ?: if (normalizedMode == "demo") M70_SCENE_CONTRACT_ID else M69_SCENE_CONTRACT_ID,
+        sceneContractId = sceneContractId ?: if (normalizedMode == "demo") M72_SCENE_CONTRACT_ID else M69_SCENE_CONTRACT_ID,
         sceneContractVersion = sceneContractVersion.coerceAtLeast(1),
         captureOutput = captureOutput
             ?: if (normalizedMode == "demo") {
@@ -742,21 +857,21 @@ private fun writeResult(path: Path, result: NativeSmokeResult) {
 
 private val NativeSmokeConfig.presentedReason: String
     get() = if (mode == "demo") {
-        "m70.kadre-native-demo-presented-frames"
+        "m72.kadre-single-scene-replay-presented-frames"
     } else {
         "m69.kadre-native-presented-frames"
     }
 
 private val NativeSmokeConfig.timeoutOnlyReason: String
     get() = if (mode == "demo") {
-        "m70.kadre-present-call-completed-timeout-only"
+        "m72.kadre-single-scene-replay-present-call-completed-timeout-only"
     } else {
         "m69.kadre-present-call-completed-timeout-only"
     }
 
 private val NativeSmokeConfig.windowTitle: String
     get() = if (mode == "demo") {
-        "Kanvas M70-A - Kadre native demo"
+        "Kanvas M72 - Kadre replay demo"
     } else {
         "Kanvas M69 - Kadre native smoke"
     }
@@ -771,24 +886,34 @@ private val NativeSmokeConfig.frameClockSource: String
         "kadre.appkit.event-driven-request-redraw"
     }
 
-private fun configMilestone(mode: String): String = if (mode == "demo") "M70-A/M71" else "M69"
+private val NativeSmokeConfig.replayScene: ReplaySceneEvidence?
+    get() = if (mode == "demo" && sceneContractId == M72_SCENE_CONTRACT_ID) M72_REPLAY_SCENE else null
+
+private fun configMilestone(mode: String): String = if (mode == "demo") "M70-A/M71/M72" else "M69"
 
 private fun configSceneClaim(mode: String): String = if (mode == "demo") {
-    "Kanvas-owned runtime scene contract executed through a bounded Kadre native WebGPU present-call loop"
+    "Selected Kanvas replay scene contract executed through a bounded Kadre native WebGPU present-call loop"
 } else {
     "M69 bounded standalone WGSL native present smoke; broad Kanvas display-list replay is not claimed"
 }
 
+private fun configWgslSource(mode: String): String = if (mode == "demo") {
+    "runtime-generated-from-selected-kadre-replay-scene"
+} else {
+    "runtime-generated-from-kadre-native-smoke-scene"
+}
+
 private fun configLinearIssues(mode: String): List<String> = if (mode == "demo") {
-    listOf("FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78")
+    listOf("FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83")
 } else {
     listOf("FOR-56", "FOR-57", "FOR-58", "FOR-59")
 }
 
 private fun configNonClaims(mode: String): List<String> = if (mode == "demo") {
     listOf(
-        "This run proves bounded Kadre native window present-call execution for the M70-A Kanvas-owned scene contract.",
+        "This run proves bounded Kadre native window present-call execution for the selected M72 `solid-rect` replay contract.",
         "M71 proves the demo route requests frames from Kadre/AppKit ControlFlow.Poll instead of relying on pointer/input events to wake the run loop.",
+        "M72 proves one selected Kanvas replay scene contract only; broad display-list replay is still outside the claim.",
         "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
         "Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.",
         "The capture artifact is an offscreen wgpu4k native texture readback of the same scene contract, not a system screenshot of the presented window.",
@@ -856,16 +981,28 @@ private fun SurfaceTextureStatus.toEvidenceStatus(): String =
         else -> name
     }
 
-private fun renderCpuReference(width: Int, height: Int): Pair<Long, Int> {
+private fun renderCpuReference(width: Int, height: Int, replayScene: ReplaySceneEvidence? = null): Pair<Long, Int> {
     val bitmap = SkBitmap(width, height)
-    bitmap.eraseColor(0xFF0A0D12.toInt())
+    val background = replayScene?.background ?: ReplayColor(0.04, 0.05, 0.07)
+    bitmap.eraseColor(background.toArgb())
     val canvas = SkCanvas(bitmap)
-    val blue = SkPaint().apply { color = 0xFF2C7BE5.toInt(); isAntiAlias = true }
-    val green = SkPaint().apply { color = 0xFF38B000.toInt(); isAntiAlias = true }
-    val red = SkPaint().apply { color = 0xFFE84A5F.toInt(); isAntiAlias = true }
-    canvas.drawRect(SkRect.MakeXYWH(36f, 42f, width * 0.62f, height * 0.32f), blue)
-    canvas.drawRect(SkRect.MakeXYWH(width * 0.38f, height * 0.35f, width * 0.46f, height * 0.42f), green)
-    canvas.drawRect(SkRect.MakeXYWH(width * 0.12f, height * 0.62f, width * 0.32f, height * 0.22f), red)
+    val rects = replayScene?.rects ?: listOf(
+        ReplayRect("blue-panel", 0.06, 0.10, 0.62, 0.32, ReplayColor(0.17, 0.48, 0.90)),
+        ReplayRect("green-panel", 0.38, 0.35, 0.46, 0.42, ReplayColor(0.22, 0.69, 0.00)),
+        ReplayRect("red-panel", 0.12, 0.62, 0.32, 0.22, ReplayColor(0.91, 0.29, 0.37)),
+    )
+    rects.forEach { rect ->
+        val paint = SkPaint().apply { color = rect.color.toArgb(); isAntiAlias = true }
+        canvas.drawRect(
+            SkRect.MakeXYWH(
+                (rect.x * width).toFloat(),
+                (rect.y * height).toFloat(),
+                (rect.width * width).toFloat(),
+                (rect.height * height).toFloat(),
+            ),
+            paint,
+        )
+    }
     var checksum = 1469598103934665603L
     var nonTransparent = 0
     for (y in 0 until height step 7) {
@@ -876,6 +1013,52 @@ private fun renderCpuReference(width: Int, height: Int): Pair<Long, Int> {
         }
     }
     return checksum to nonTransparent
+}
+
+private fun ReplaySceneEvidence.toWgsl(phase: Double): String {
+    val rectTests = rects.mapIndexed { index, rect ->
+        val x = if (rect.animated) "${rect.x.wgsl()} + ${rect.dx.wgsl()} * phase" else rect.x.wgsl()
+        val y = rect.y.wgsl()
+        val width = rect.width.wgsl()
+        val height = rect.height.wgsl()
+        val color = rect.color.toWgslVec3()
+        """
+        let rect$index = select(0.0, 1.0, in.uv.x >= $x && in.uv.x <= ($x + $width) && in.uv.y >= $y && in.uv.y <= ($y + $height));
+        color = mix(color, $color, rect$index);
+        """.trimIndent()
+    }.joinToString("\n    ")
+
+    return """
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    var positions = array<vec2<f32>, 6>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>(-1.0,  1.0),
+        vec2<f32>(-1.0,  1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>( 1.0,  1.0),
+    );
+    let p = positions[vertexIndex];
+    var out: VertexOutput;
+    out.position = vec4<f32>(p, 0.0, 1.0);
+    out.uv = p * 0.5 + vec2<f32>(0.5, 0.5);
+    return out;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let phase: f32 = ${phase.wgsl()};
+    var color = ${background.toWgslVec3()};
+    $rectTests
+    return vec4<f32>(color, 1.0);
+}
+""".trimIndent()
 }
 
 private fun buildTelemetry(
@@ -958,6 +1141,8 @@ private fun String.json(): String =
     }
 
 private fun Double.formatJsonNumber(): String = "%.4f".format(java.util.Locale.US, this)
+
+private fun Double.wgsl(): String = "%.6ff".format(java.util.Locale.US, this)
 
 fun main(args: Array<String>) {
     val config = parseArgs(args)
