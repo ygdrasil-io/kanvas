@@ -4296,6 +4296,7 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM78ClipReplay")
     mustRunAfter(":kadre-runtime:pipelineM79BitmapReplay")
     mustRunAfter(":kadre-runtime:pipelineM80SharedReplayOracle")
+    mustRunAfter(":kadre-runtime:pipelineM81NativeFrameCapture")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4330,6 +4331,7 @@ tasks.register("pipelinePmBundle") {
     val m78ClipReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m78-clip-replay")
     val m79BitmapReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m79-bitmap-replay")
     val m80SharedReplayOracleDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m80-shared-replay-oracle")
+    val m81NativeFrameCaptureDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m81-native-frame-capture")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4353,6 +4355,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m78ClipReplayDir)
     inputs.dir(m79BitmapReplayDir)
     inputs.dir(m80SharedReplayOracleDir)
+    inputs.dir(m81NativeFrameCaptureDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4394,6 +4397,7 @@ tasks.register("pipelinePmBundle") {
         val m78ClipReplayRoot = m78ClipReplayDir.asFile
         val m79BitmapReplayRoot = m79BitmapReplayDir.asFile
         val m80SharedReplayOracleRoot = m80SharedReplayOracleDir.asFile
+        val m81NativeFrameCaptureRoot = m81NativeFrameCaptureDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4472,6 +4476,9 @@ tasks.register("pipelinePmBundle") {
         }
         if (m80SharedReplayOracleRoot.isDirectory) {
             m80SharedReplayOracleRoot.copyRecursively(targetRoot.resolve("runtime/m80-shared-replay-oracle"), overwrite = true)
+        }
+        if (m81NativeFrameCaptureRoot.isDirectory) {
+            m81NativeFrameCaptureRoot.copyRecursively(targetRoot.resolve("runtime/m81-native-frame-capture"), overwrite = true)
         }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
@@ -5337,11 +5344,80 @@ tasks.register("pipelinePmBundle") {
         ) {
             throw GradleException(
                 "M80 shared replay oracle evidence counters are invalid: " +
-                    "sceneCount=$m80SceneCount renderableSceneCount=$m80RenderableSceneCount " +
+                "sceneCount=$m80SceneCount renderableSceneCount=$m80RenderableSceneCount " +
                     "expectedUnsupportedSceneCount=$m80ExpectedUnsupportedSceneCount " +
                     "failedSceneCount=$m80FailedSceneCount failedValidationRowCount=$m80FailedValidationRowCount " +
                     "validationRows=${m80ValidationRows.size}",
             )
+        }
+        val m81NativeFrameCaptureFile = m81NativeFrameCaptureRoot.resolve("evidence.json")
+        val m81NativeFrameCapture = if (m81NativeFrameCaptureFile.isFile) {
+            JsonSlurper().parse(m81NativeFrameCaptureFile) as? Map<*, *>
+                ?: throw GradleException("M81 native frame capture evidence must be a JSON object: ${m81NativeFrameCaptureFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
+        fun m81String(field: String): String = (m81NativeFrameCapture[field] as? String).orEmpty()
+        fun m81Int(field: String): Int = (m81NativeFrameCapture[field] as? Number)?.toInt() ?: 0
+        fun m81Bool(field: String): Boolean = (m81NativeFrameCapture[field] as? Boolean) ?: false
+        val m81Capture = (m81NativeFrameCapture["capture"] as? Map<*, *>).orEmpty()
+        val m81Surface = (m81NativeFrameCapture["surface"] as? Map<*, *>).orEmpty()
+        val m81Adapter = (m81NativeFrameCapture["adapter"] as? Map<*, *>).orEmpty()
+        val m81UnsupportedReasons = (m81NativeFrameCapture["unsupportedCaptureReasons"] as? List<*>)
+            ?.map { it.toString() }
+            .orEmpty()
+        val m81ArtifactPaths = (m81NativeFrameCapture["artifactPaths"] as? List<*>)
+            ?.map { it.toString() }
+            .orEmpty()
+        val m81ValidationRows = (m81NativeFrameCapture["validationRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        if (m81NativeFrameCapture.isNotEmpty()) {
+            val m81CaptureStatus = m81String("captureStatus")
+            val m81CaptureReason = (m81Capture["reason"] as? String).orEmpty()
+            val m81CaptureImage = (m81Capture["imagePath"] as? String).orEmpty()
+            val m81ProducedOffscreen = m81CaptureStatus == "offscreen-texture-readback-produced"
+            val m81ProducedWindow = m81CaptureStatus == "window-surface-readback-produced"
+            val m81Refused = m81CaptureStatus.startsWith("refused-")
+            if (m81String("packId") != "m81-native-frame-capture-v1" || (!m81ProducedOffscreen && !m81ProducedWindow && !m81Refused)) {
+                throw GradleException("M81 native frame capture evidence has unexpected pack id or empty capture status: ${m81NativeFrameCaptureFile.relativeTo(rootDir)}")
+            }
+            if (m81ArtifactPaths.isEmpty()) {
+                throw GradleException("M81 native frame capture evidence missing frame count or artifacts: ${m81NativeFrameCaptureFile.relativeTo(rootDir)}")
+            }
+            m81ArtifactPaths.forEach { artifactPath ->
+                val sourceArtifact = rootDir.resolve(artifactPath)
+                val bundledArtifact = targetRoot.resolve(artifactPath.removePrefix("reports/wgsl-pipeline/"))
+                if (!sourceArtifact.isFile && !bundledArtifact.isFile && !targetRoot.resolve(artifactPath).isFile) {
+                    throw GradleException("M81 native frame capture evidence references missing artifact `$artifactPath`: ${m81NativeFrameCaptureFile.relativeTo(rootDir)}")
+                }
+            }
+            if (m81ValidationRows.isEmpty() || m81ValidationRows.any { it["status"] != "pass" }) {
+                throw GradleException("M81 native frame capture evidence has missing or non-pass validation rows: ${m81NativeFrameCaptureFile.relativeTo(rootDir)}")
+            }
+            if (m81ProducedOffscreen) {
+                if (
+                    !m81Bool("realNativeOffscreenTextureReadback") ||
+                    m81Bool("realNativeWindowSurfaceReadback") ||
+                    m81CaptureReason != "m70.native-offscreen-texture-readback" ||
+                    m81CaptureImage !in m81ArtifactPaths ||
+                    !rootDir.resolve(m81CaptureImage).isFile ||
+                    (m81Capture["width"] as? Number)?.toInt()?.takeIf { it > 0 } == null ||
+                    (m81Capture["height"] as? Number)?.toInt()?.takeIf { it > 0 } == null ||
+                    (m81Capture["nonTransparentPixels"] as? Number)?.toInt()?.takeIf { it > 0 } == null
+                ) {
+                    throw GradleException("M81 offscreen capture evidence is internally inconsistent: ${m81NativeFrameCaptureFile.relativeTo(rootDir)}")
+                }
+            }
+            if (m81ProducedWindow) {
+                throw GradleException("M81 must not claim window-surface readback until a source capture explicitly proves it: ${m81NativeFrameCaptureFile.relativeTo(rootDir)}")
+            }
+            if ("m81.window-surface-readback-not-implemented" !in m81UnsupportedReasons) {
+                throw GradleException("M81 native frame capture evidence missing stable window-surface refusal reason: ${m81NativeFrameCaptureFile.relativeTo(rootDir)}")
+            }
+            if (m81Refused && m81UnsupportedReasons.isEmpty()) {
+                throw GradleException("M81 refused capture evidence must include stable refusal reasons: ${m81NativeFrameCaptureFile.relativeTo(rootDir)}")
+            }
         }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
@@ -5472,6 +5548,8 @@ tasks.register("pipelinePmBundle") {
             "m79BitmapReplayJson" to "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json",
             "m80SharedReplayOracleMarkdown" to "reports/wgsl-pipeline/m80-shared-replay-oracle/evidence.md",
             "m80SharedReplayOracleJson" to "reports/wgsl-pipeline/m80-shared-replay-oracle/evidence.json",
+            "m81NativeFrameCaptureMarkdown" to "runtime/m81-native-frame-capture/evidence.md",
+            "m81NativeFrameCaptureJson" to "runtime/m81-native-frame-capture/evidence.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -5773,6 +5851,28 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M80 routes bounded replay CPU reference facts through a shared typed oracle result for native smoke, tests, and M75-M79 evidence. It is reference hardening only and does not add broad SkCanvas/display-list replay or new readiness points.",
             ),
+            "m81NativeFrameCapture" to linkedMapOf<String, Any>(
+                "status" to m81String("captureStatus").ifBlank { "not-generated" },
+                "packId" to m81String("packId").ifBlank { "m81-native-frame-capture-v1" },
+                "frameCount" to m81Int("frameCount"),
+                "requestedFrameCount" to m81Int("requestedFrameCount"),
+                "nativePresented" to m81Bool("nativePresented"),
+                "realNativeOffscreenTextureReadback" to m81Bool("realNativeOffscreenTextureReadback"),
+                "realNativeWindowSurfaceReadback" to m81Bool("realNativeWindowSurfaceReadback"),
+                "unsupportedCaptureCount" to m81Int("unsupportedCaptureCount"),
+                "unsupportedCaptureReasons" to m81UnsupportedReasons,
+                "artifactPaths" to m81ArtifactPaths,
+                "adapterBackend" to ((m81Adapter["backend"] as? String).orEmpty()),
+                "adapterInfo" to ((m81Adapter["info"] as? String).orEmpty()),
+                "surfaceFormat" to ((m81Surface["format"] as? String).orEmpty()),
+                "captureFormat" to ((m81Capture["format"] as? String).orEmpty()),
+                "captureImage" to ((m81Capture["imagePath"] as? String).orEmpty()),
+                "captureReason" to ((m81Capture["reason"] as? String).orEmpty()),
+                "report" to "runtime/m81-native-frame-capture/evidence.md",
+                "evidenceJson" to "runtime/m81-native-frame-capture/evidence.json",
+                "releaseBlocking" to false,
+                "notice" to "M81 packages current M69/M70 Kadre/WebGPU frame artifact evidence for PM review. The produced image is a wgpu4k native offscreen texture readback, not a system screenshot or window-surface readback; unsupported window capture remains explicit.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -5859,6 +5959,7 @@ tasks.register("pipelinePmBundle") {
                 "M78 verifies bounded ClipRect intersect replay scenes and one complex clip refusal. It does not add rounded clips, path clips, difference clips, saveLayer clip stacks, arbitrary SkCanvas clip replay, or broad clip-stack support.",
                 "M79 verifies bounded fixture-backed BitmapRect replay scenes with nearest/linear samplers and one unsupported mipmap sampler refusal. It does not add arbitrary SkImage, codec decode, texture atlas, mipmap, tile-mode, or color-managed image support.",
                 "M80 hardens the bounded replay CPU reference behind a shared typed oracle result. It does not add broad SkCanvas/display-list replay or any new rendering breadth.",
+                "M81 packages native frame artifact capture evidence for PM review, but the current produced image remains a wgpu4k native offscreen texture readback. Window-surface screenshot/readback is still unsupported and refused with m81.window-surface-readback-not-implemented.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -5917,6 +6018,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M79 bitmap replay counters live in `manifest.json` under `m79BitmapReplay`; unsupported mipmap/texture sampler paths remain stable refusals.")
                 appendLine("- `runtime/m80-shared-replay-oracle/`: M80 shared replay CPU oracle evidence JSON and Markdown.")
                 appendLine("- M80 shared replay oracle counters live in `manifest.json` under `m80SharedReplayOracle`; this is reference hardening, not broad display-list replay or new readiness.")
+                appendLine("- `runtime/m81-native-frame-capture/`: M81 native frame artifact capture evidence JSON and Markdown when `:kadre-runtime:pipelineM81NativeFrameCapture` has been run.")
+                appendLine("- M81 native frame capture counters live in `manifest.json` under `m81NativeFrameCapture`; the current image is offscreen texture readback evidence, not window-surface readback.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }

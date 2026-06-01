@@ -1,0 +1,101 @@
+{
+    "schemaVersion": 1,
+    "generatedBy": "kadre-runtime:M81NativeFrameCapture",
+    "linearIssues": [
+        "FOR-97",
+        "FOR-139",
+        "FOR-140",
+        "FOR-141",
+        "FOR-142",
+        "FOR-143"
+    ],
+    "packId": "m81-native-frame-capture-v1",
+    "claimLevel": "native-frame-artifact-capture-evidence",
+    "readinessDelta": 0,
+    "captureStatus": "offscreen-texture-readback-produced",
+    "nativePresented": true,
+    "frameCount": 180,
+    "requestedFrameCount": 180,
+    "realNativeWindowSurfaceReadback": false,
+    "realNativeOffscreenTextureReadback": true,
+    "unsupportedCaptureCount": 1,
+    "unsupportedCaptureReasons": [
+        "m81.window-surface-readback-not-implemented"
+    ],
+    "artifactPaths": [
+        "reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png",
+        "reports/wgsl-pipeline/m70-kadre-native/native-demo.json",
+        "reports/wgsl-pipeline/m70-kadre-live-runtime/route-status.json",
+        "reports/wgsl-pipeline/m69-kadre-native/native-smoke.json",
+        "reports/wgsl-pipeline/m81-native-frame-capture/evidence.json",
+        "reports/wgsl-pipeline/m81-native-frame-capture/evidence.md"
+    ],
+    "hostPlatform": {
+        "osName": "Mac OS X",
+        "osVersion": "26.5",
+        "osArch": "aarch64",
+        "javaVersion": "25.0.1"
+    },
+    "adapter": {
+        "info": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+        "backend": "wgpu4k-native"
+    },
+    "surface": {
+        "width": 640,
+        "height": 420,
+        "format": "BGRA8Unorm"
+    },
+    "capture": {
+        "status": "produced",
+        "reason": "m70.native-offscreen-texture-readback",
+        "source": "wgpu4k-native-offscreen-texture-rendered-from-kadre-scene-contract",
+        "imagePath": "reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png",
+        "format": "RGBA8Unorm",
+        "width": 640,
+        "height": 420,
+        "bytes": 5649,
+        "checksum": -1532881463102611126,
+        "nonTransparentPixels": 268800,
+        "realNativeReadback": true,
+        "windowSurfaceReadback": false
+    },
+    "sourceEvidence": {
+        "nativeDemoJson": "reports/wgsl-pipeline/m70-kadre-native/native-demo.json",
+        "routeStatusJson": "reports/wgsl-pipeline/m70-kadre-live-runtime/route-status.json",
+        "nativeSmokeJson": "reports/wgsl-pipeline/m69-kadre-native/native-smoke.json",
+        "routeStatus": "native-runnable",
+        "routeReason": "m73.kadre-replay-pack-selected-scene-presented-frames",
+        "m69NativeSmokeStatus": "native-runnable",
+        "m69NativeSmokePresentedFrames": 3,
+        "routeCaptureStatus": "produced",
+        "routeCaptureReason": "m70.native-offscreen-texture-readback"
+    },
+    "validationRows": [
+        {
+            "id": "m81.capture-status-schema",
+            "status": "pass",
+            "assertion": "M81 evidence exposes capture status, frame count, artifacts, host/platform, adapter, surface, and capture mode fields."
+        },
+        {
+            "id": "m81.offscreen-readback-truthfulness",
+            "status": "pass",
+            "assertion": "M81 preserves M70-C as wgpu4k offscreen texture readback evidence when present, otherwise reports a stable refusal."
+        },
+        {
+            "id": "m81.window-surface-refusal",
+            "status": "pass",
+            "assertion": "Window-surface screenshot/readback remains unsupported unless a source capture explicitly proves it."
+        },
+        {
+            "id": "m81.refusal-taxonomy",
+            "status": "pass",
+            "assertion": "M81 serializes stable refusal reasons for ineligible capture paths."
+        }
+    ],
+    "nonClaims": [
+        "M81 does not claim system screenshot capture or window-surface readback.",
+        "M81 re-publishes current M69/M70 Kadre/WebGPU evidence for PM review; it does not run a new native capture path inside pipelinePmBundle.",
+        "The current produced PNG is a wgpu4k native offscreen texture readback of the selected scene contract.",
+        "Native timing remains reporting-only and is not a release-grade FPS gate."
+    ]
+}
