@@ -4293,6 +4293,7 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM75ReplayPackEvidence")
     mustRunAfter(":kadre-runtime:pipelineM76GeneratedMetadataReplay")
     mustRunAfter(":kadre-runtime:pipelineM77BlendAlphaReplay")
+    mustRunAfter(":kadre-runtime:pipelineM78ClipReplay")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4324,6 +4325,7 @@ tasks.register("pipelinePmBundle") {
     val m75ReplayPackEvidenceDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m75-kadre-replay-pack")
     val m76GeneratedMetadataReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m76-generated-metadata-replay")
     val m77BlendAlphaReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m77-blend-alpha-replay")
+    val m78ClipReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m78-clip-replay")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4344,6 +4346,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m75ReplayPackEvidenceDir)
     inputs.dir(m76GeneratedMetadataReplayDir)
     inputs.dir(m77BlendAlphaReplayDir)
+    inputs.dir(m78ClipReplayDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4382,6 +4385,7 @@ tasks.register("pipelinePmBundle") {
         val m75ReplayPackEvidenceRoot = m75ReplayPackEvidenceDir.asFile
         val m76GeneratedMetadataReplayRoot = m76GeneratedMetadataReplayDir.asFile
         val m77BlendAlphaReplayRoot = m77BlendAlphaReplayDir.asFile
+        val m78ClipReplayRoot = m78ClipReplayDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4452,6 +4456,9 @@ tasks.register("pipelinePmBundle") {
         if (m77BlendAlphaReplayRoot.isDirectory) {
             m77BlendAlphaReplayRoot.copyRecursively(targetRoot.resolve("runtime/m77-blend-alpha-replay"), overwrite = true)
         }
+        if (m78ClipReplayRoot.isDirectory) {
+            m78ClipReplayRoot.copyRecursively(targetRoot.resolve("runtime/m78-clip-replay"), overwrite = true)
+        }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
         }
@@ -4516,6 +4523,8 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.json",
             "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.md",
             "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json",
+            "reports/wgsl-pipeline/m78-clip-replay/evidence.md",
+            "reports/wgsl-pipeline/m78-clip-replay/evidence.json",
         )
         referencedPaths += m56ReportPaths
 
@@ -5003,6 +5012,77 @@ tasks.register("pipelinePmBundle") {
                     "expectedUnsupportedSceneCount=$m77ExpectedUnsupportedSceneCount failedSceneCount=$m77FailedSceneCount",
             )
         }
+        val m78ClipReplayFile = m78ClipReplayRoot.resolve("evidence.json")
+        val m78ClipReplay = if (m78ClipReplayFile.isFile) {
+            JsonSlurper().parse(m78ClipReplayFile) as? Map<*, *>
+                ?: throw GradleException("M78 clip replay evidence must be a JSON object: ${m78ClipReplayFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M78 clip replay evidence: ${m78ClipReplayFile.relativeTo(rootDir)}")
+        }
+        fun m78String(field: String): String =
+            (m78ClipReplay[field] as? String)
+                ?.takeIf { it.isNotBlank() }
+                ?: throw GradleException("M78 clip replay evidence missing string `$field`: ${m78ClipReplayFile.relativeTo(rootDir)}")
+        fun m78Int(field: String): Int =
+            (m78ClipReplay[field] as? Number)?.toInt()
+                ?: throw GradleException("M78 clip replay evidence missing numeric `$field`: ${m78ClipReplayFile.relativeTo(rootDir)}")
+        val m78SceneCount = m78Int("sceneCount")
+        val m78RenderableSceneCount = m78Int("renderableSceneCount")
+        val m78ExpectedUnsupportedSceneCount = m78Int("expectedUnsupportedSceneCount")
+        val m78FailedSceneCount = m78Int("failedSceneCount")
+        val m78ClipRectCommandCount = m78Int("clipRectCommandCount")
+        val m78ClipIntersectCommandCount = m78Int("clipIntersectCommandCount")
+        val m78UnsupportedClipReason = m78String("unsupportedClipReason")
+        if (m78String("packId") != "m78-clip-replay-v1" || m78UnsupportedClipReason != "m78.clip.unsupported-complex-clip") {
+            throw GradleException("M78 clip replay evidence has unexpected pack id or unsupported reason: ${m78ClipReplayFile.relativeTo(rootDir)}")
+        }
+        val m78Scenes = (m78ClipReplay["scenes"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?: throw GradleException("M78 clip replay evidence missing scenes[]: ${m78ClipReplayFile.relativeTo(rootDir)}")
+        val m78ScenesById = m78Scenes.associateBy { it["id"] as? String }
+        listOf(
+            "m78-clipped-solid-rect-replay-v1",
+            "m78-clipped-alpha-gradient-replay-v1",
+            "m78-complex-clip-refusal-v1",
+        ).forEach { sceneId ->
+            if (m78ScenesById[sceneId] == null) {
+                throw GradleException("M78 clip replay evidence missing scene `$sceneId`: ${m78ClipReplayFile.relativeTo(rootDir)}")
+            }
+        }
+        listOf("m78-clipped-solid-rect-replay-v1", "m78-clipped-alpha-gradient-replay-v1").forEach { sceneId ->
+            val scene = m78ScenesById.getValue(sceneId)
+            if (scene["status"] != "renderable") {
+                throw GradleException("M78 renderable scene `$sceneId` is not renderable: ${m78ClipReplayFile.relativeTo(rootDir)}")
+            }
+            val sceneContract = scene["sceneContract"] as? Map<*, *>
+                ?: throw GradleException("M78 scene `$sceneId` missing sceneContract: ${m78ClipReplayFile.relativeTo(rootDir)}")
+            val commands = sceneContract["commands"] as? List<*>
+                ?: throw GradleException("M78 scene `$sceneId` missing sceneContract.commands[]: ${m78ClipReplayFile.relativeTo(rootDir)}")
+            val clipCommands = commands.filterIsInstance<Map<*, *>>().filter { it["family"] == "clipRect" && it["operation"] == "intersect" }
+            if (clipCommands.isEmpty()) {
+                throw GradleException("M78 scene `$sceneId` missing ClipRect intersect command details: ${m78ClipReplayFile.relativeTo(rootDir)}")
+            }
+        }
+        val m78UnsupportedScene = m78ScenesById.getValue("m78-complex-clip-refusal-v1")
+        if (m78UnsupportedScene["status"] != "expected-unsupported" || m78UnsupportedScene["reason"] != m78UnsupportedClipReason) {
+            throw GradleException("M78 unsupported clip scene has unexpected status/reason: ${m78ClipReplayFile.relativeTo(rootDir)}")
+        }
+        if (
+            m78SceneCount < 3 ||
+            m78RenderableSceneCount < 2 ||
+            m78ExpectedUnsupportedSceneCount < 1 ||
+            m78ClipRectCommandCount < 2 ||
+            m78ClipIntersectCommandCount < 2 ||
+            m78FailedSceneCount != 0
+        ) {
+            throw GradleException(
+                "M78 clip replay evidence counters are invalid: " +
+                    "sceneCount=$m78SceneCount renderableSceneCount=$m78RenderableSceneCount " +
+                    "expectedUnsupportedSceneCount=$m78ExpectedUnsupportedSceneCount " +
+                    "clipRectCommandCount=$m78ClipRectCommandCount clipIntersectCommandCount=$m78ClipIntersectCommandCount " +
+                    "failedSceneCount=$m78FailedSceneCount",
+            )
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5126,6 +5206,8 @@ tasks.register("pipelinePmBundle") {
             "m76GeneratedMetadataReplayJson" to "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.json",
             "m77BlendAlphaReplayMarkdown" to "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.md",
             "m77BlendAlphaReplayJson" to "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json",
+            "m78ClipReplayMarkdown" to "reports/wgsl-pipeline/m78-clip-replay/evidence.md",
+            "m78ClipReplayJson" to "reports/wgsl-pipeline/m78-clip-replay/evidence.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -5370,6 +5452,24 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M77 makes SrcOver and partial alpha explicit for bounded Kadre replay scenes and preserves unsupported blend modes as stable refusals. It does not add arbitrary blend modes or broad display-list replay.",
             ),
+            "m78ClipReplay" to linkedMapOf<String, Any>(
+                "status" to m78String("claimLevel"),
+                "packId" to m78String("packId"),
+                "sceneCount" to m78SceneCount,
+                "renderableSceneCount" to m78RenderableSceneCount,
+                "expectedUnsupportedSceneCount" to m78ExpectedUnsupportedSceneCount,
+                "failedSceneCount" to m78FailedSceneCount,
+                "clipRectCommandCount" to m78ClipRectCommandCount,
+                "clipIntersectCommandCount" to m78ClipIntersectCommandCount,
+                "srcOverCommandCount" to m78Int("srcOverCommandCount"),
+                "partialAlphaCommandCount" to m78Int("partialAlphaCommandCount"),
+                "unsupportedClipReason" to m78String("unsupportedClipReason"),
+                "readinessDelta" to m78Int("readinessDelta"),
+                "report" to "reports/wgsl-pipeline/m78-clip-replay/evidence.md",
+                "evidenceJson" to "reports/wgsl-pipeline/m78-clip-replay/evidence.json",
+                "releaseBlocking" to false,
+                "notice" to "M78 adds bounded ClipRect intersect replay evidence for simple rect-fill scenes and preserves complex clip refusals. It does not add rounded clips, path clips, difference clips, saveLayer clip stacks, arbitrary SkCanvas clip replay, or broad clip-stack support.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -5453,6 +5553,7 @@ tasks.register("pipelinePmBundle") {
                 "M75 verifies deterministic multi-scene replay-pack evidence with per-scene CPU reference checksums and selected native/readback facts. It is evidence aggregation only and does not add broad display-list replay, arbitrary op streams, or release-grade runtime timing.",
                 "M76 verifies a selected generated-metadata to replay-contract bridge for known bounded templates and stable refusals. It does not add arbitrary generated scene replay, broad display-list replay, or new feature-family support.",
                 "M77 verifies bounded SrcOver partial-alpha replay scenes and one unsupported blend-mode refusal. It does not add arbitrary blend modes, layer compositing, or broad display-list replay.",
+                "M78 verifies bounded ClipRect intersect replay scenes and one complex clip refusal. It does not add rounded clips, path clips, difference clips, saveLayer clip stacks, arbitrary SkCanvas clip replay, or broad clip-stack support.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -5505,6 +5606,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M76 metadata replay counters live in `manifest.json` under `m76GeneratedMetadataReplay`; this maps known bounded metadata only and keeps unsupported metadata as stable refusals.")
                 appendLine("- `runtime/m77-blend-alpha-replay/`: M77 bounded SrcOver partial-alpha replay evidence JSON and Markdown.")
                 appendLine("- M77 blend/alpha replay counters live in `manifest.json` under `m77BlendAlphaReplay`; unsupported blend modes remain stable refusals.")
+                appendLine("- `runtime/m78-clip-replay/`: M78 bounded ClipRect intersect replay evidence JSON and Markdown.")
+                appendLine("- M78 clip replay counters live in `manifest.json` under `m78ClipReplay`; complex rounded/path/difference clips remain stable refusals.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }

@@ -160,6 +160,72 @@ class ReplaySceneRegistryTest {
         assertContains(unsupported.toJson("  "), "\"unsupportedCommands\": [\"m77.unsupported-blend-mode.kMultiply\"]")
     }
 
+    @Test
+    fun m78ClipReplayCoversClipRectCountsAndComplexClipRefusal() {
+        val evidence = buildClipReplayEvidence()
+        val json = evidence.toJson()
+
+        assertEquals(3, evidence.sceneCount)
+        assertEquals(2, evidence.renderableSceneCount)
+        assertEquals(1, evidence.expectedUnsupportedSceneCount)
+        assertEquals(0, evidence.failedSceneCount)
+        assertEquals(3, evidence.clipRectCommandCount)
+        assertEquals(3, evidence.clipIntersectCommandCount)
+        assertEquals(3, evidence.srcOverCommandCount)
+        assertEquals(2, evidence.partialAlphaCommandCount)
+        assertContains(json, "\"packId\": \"m78-clip-replay-v1\"")
+        assertContains(json, "\"linearIssues\": [\"FOR-94\", \"FOR-124\", \"FOR-125\", \"FOR-126\", \"FOR-127\", \"FOR-128\"]")
+        assertContains(json, "\"id\": \"m78-clipped-solid-rect-replay-v1\"")
+        assertContains(json, "\"id\": \"m78-clipped-alpha-gradient-replay-v1\"")
+        assertContains(json, "\"id\": \"m78-complex-clip-refusal-v1\"")
+        assertContains(json, "\"unsupportedClipReason\": \"m78.clip.unsupported-complex-clip\"")
+        assertContains(json, "\"oracle\": \"clip-rect-intersect-sampled-reference\"")
+    }
+
+    @Test
+    fun m78SceneCommandsExposeClipBoundsOperationAndCpuOracleFacts() {
+        val solidClip = M78_CLIP_REPLAY_SCENES.single { it.id == "m78-clipped-solid-rect-replay-v1" }
+        val alphaClip = M78_CLIP_REPLAY_SCENES.single { it.id == "m78-clipped-alpha-gradient-replay-v1" }
+        val unsupported = M78_CLIP_REPLAY_SCENES.single { it.id == "m78-complex-clip-refusal-v1" }
+
+        assertEquals("renderable", solidClip.status)
+        assertEquals(3, solidClip.totalCommandCount)
+        assertEquals(1, solidClip.clipRectCommandCount)
+        assertEquals(1, solidClip.clipIntersectCommandCount)
+        assertEquals(1, solidClip.fillRectCount)
+        assertEquals(1, solidClip.srcOverCommandCount)
+        assertContains(solidClip.toJson("  "), "\"family\": \"clipRect\"")
+        assertContains(solidClip.toJson("  "), "\"operation\": \"intersect\"")
+        assertContains(solidClip.toJson("  "), "\"left\": 0.2400")
+        assertContains(solidClip.toJson("  "), "\"right\": 0.7200")
+
+        assertEquals(2, alphaClip.clipRectCommandCount)
+        assertEquals(2, alphaClip.fillRectCount)
+        assertEquals(2, alphaClip.partialAlphaCommandCount)
+        assertContains(alphaClip.toWgsl(0.0), "in.uv.x >= 0.180000f")
+        assertContains(alphaClip.toWgsl(0.0), "in.uv.y < 0.680000f")
+        assertContains(alphaClip.toWgsl(0.0), "in.uv.x < (0.080000f + 0.840000f)")
+
+        val cpuReference = renderCpuReference(640, 420, solidClip)
+        assertEquals(true, cpuReference.first != 0L)
+        assertEquals(true, cpuReference.second > 0)
+
+        assertEquals("expected-unsupported", unsupported.status)
+        assertEquals(1, unsupported.unsupportedCommandCount)
+        assertEquals(listOf("m78.clip.unsupported-complex-clip"), unsupported.unsupportedCommands)
+        assertContains(unsupported.toJson("  "), "\"unsupportedCommands\": [\"m78.clip.unsupported-complex-clip\"]")
+    }
+
+    @Test
+    fun m78ReplayScenesAreSelectableByLiveReplayRegistry() {
+        val replayScenes = replayScenesById()
+
+        assertEquals(M73_REPLAY_SCENES.size + M77_BLEND_ALPHA_REPLAY_SCENES.size + M78_CLIP_REPLAY_SCENES.size, replayScenes.size)
+        assertEquals("renderable", requireNotNull(replayScenes["m78-clipped-solid-rect-replay-v1"]).status)
+        assertEquals("renderable", requireNotNull(replayScenes["m78-clipped-alpha-gradient-replay-v1"]).status)
+        assertEquals("expected-unsupported", requireNotNull(replayScenes["m78-complex-clip-refusal-v1"]).status)
+    }
+
     private fun m76ManifestFixture(): String = """
         {
           "scenes": [
