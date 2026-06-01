@@ -1,13 +1,22 @@
 {
   "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
   "capture": {
-    "imagePath": null,
-    "realNativeReadback": false,
-    "reason": "m70.native-readback-not-available",
-    "status": "unavailable"
+    "bytes": 24995,
+    "checksum": 6163118118789142747,
+    "error": null,
+    "format": "RGBA8Unorm",
+    "height": 420,
+    "imagePath": "reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png",
+    "nonTransparentPixels": 268800,
+    "realNativeReadback": true,
+    "reason": "m70.native-offscreen-texture-readback",
+    "source": "wgpu4k-native-offscreen-texture-rendered-from-kadre-scene-contract",
+    "status": "produced",
+    "width": 640,
+    "windowSurfaceReadback": false
   },
-  "claimLevel": "selected-present-call-demo",
-  "generatedAt": "2026-06-01T15:29:18Z",
+  "claimLevel": "selected-native-demo",
+  "generatedAt": "2026-06-01T16:27:26Z",
   "generatedBy": "scripts/m70_kadre_live_runtime_evidence.py",
   "linearIssues": [
     "FOR-60",
@@ -15,7 +24,15 @@
     "FOR-62",
     "FOR-63",
     "FOR-64",
-    "FOR-65"
+    "FOR-65",
+    "FOR-66",
+    "FOR-67",
+    "FOR-68",
+    "FOR-69",
+    "FOR-70",
+    "FOR-71",
+    "FOR-72",
+    "FOR-73"
   ],
   "m69SmokeCompatibility": {
     "presentedFrames": 3,
@@ -23,26 +40,27 @@
     "status": "native-runnable"
   },
   "mode": "demo",
-  "nativePresented": false,
+  "nativePresented": true,
   "nonClaims": [
-    "M70-A proves one selected Kadre native demo route only, with status determined by surface evidence.",
-    "If every surface status is timeout, M70-A proves present-call completion only, not confirmed native presentation.",
+    "M70-A/B/C prove one selected Kadre native demo route only, with status determined by surface evidence.",
+    "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
+    "Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.",
+    "The capture artifact is a real wgpu4k native offscreen texture readback of the selected scene contract, not a system screenshot or window-surface readback.",
     "Broad Kanvas display-list replay is not claimed.",
-    "Native capture remains unavailable unless capture.realNativeReadback is true.",
     "Frame timing is reporting-only and not a release-grade FPS gate."
   ],
   "presentCallCompleted": true,
   "presentedFrames": 12,
-  "reason": "m70.kadre-present-call-completed-timeout-only",
+  "reason": "m70.kadre-native-demo-presented-frames",
   "releaseBlocking": false,
   "requestedFrames": 12,
   "runtimeTelemetry": {
     "gatePhase": "reportingOnly",
     "lane": "frame.kadre-windowed",
-    "measuredP50Ms": 8.0323,
-    "measuredP95Ms": 9.7476,
+    "measuredP50Ms": 7.9826,
+    "measuredP95Ms": 9.6058,
     "measuredSampleCount": 9,
-    "measuredWorstMs": 9.7476,
+    "measuredWorstMs": 9.6058,
     "reportingOnly": true,
     "surfaceStatusCount": 12,
     "totalSampleCount": 12,
@@ -50,7 +68,7 @@
   },
   "sceneId": "m70-a-kanvas-owned-kadre-native-scene",
   "schemaVersion": 1,
-  "status": "degraded",
+  "status": "native-runnable",
   "surface": {
     "format": "BGRA8Unorm",
     "height": 420,
@@ -61,8 +79,8 @@
     "lost": 0,
     "outOfMemory": 0,
     "outdated": 0,
-    "success": 0,
-    "timeout": 12
+    "success": 12,
+    "timeout": 0
   },
   "warmupFrames": 3
 }

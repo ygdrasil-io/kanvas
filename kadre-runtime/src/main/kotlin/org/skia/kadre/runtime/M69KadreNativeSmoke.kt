@@ -2,12 +2,16 @@ package org.skia.kadre.runtime
 
 import ffi.JvmNativeAddress
 import ffi.LibraryLoader
+import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.Color
 import io.ygdrasil.webgpu.ColorTargetState
 import io.ygdrasil.webgpu.CompositeAlphaMode
+import io.ygdrasil.webgpu.Extent3D
 import io.ygdrasil.webgpu.FragmentState
+import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPULoadOp
+import io.ygdrasil.webgpu.GPUMapMode
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUStoreOp
 import io.ygdrasil.webgpu.GPUTextureFormat
@@ -20,17 +24,26 @@ import io.ygdrasil.webgpu.RenderPipelineDescriptor
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.SurfaceConfiguration
 import io.ygdrasil.webgpu.SurfaceTextureStatus
+import io.ygdrasil.webgpu.TexelCopyBufferInfo
+import io.ygdrasil.webgpu.TexelCopyTextureInfo
+import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.VertexState
 import io.ygdrasil.webgpu.WGPU
 import io.ygdrasil.webgpu.WGPUInstanceBackend
 import io.ygdrasil.webgpu.WGPULowLevelApi
+import java.awt.image.BufferedImage
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
 import java.nio.file.Files
 import java.nio.file.Path
+import javax.imageio.ImageIO
+import kotlin.math.ceil
 import kotlin.io.path.Path
+import kotlin.io.path.absolutePathString
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlinx.coroutines.runBlocking
+import org.graphiks.kadre.appkit.bindings.ObjCRuntime
 import org.graphiks.kadre.ActiveEventLoop
 import org.graphiks.kadre.ApplicationHandler
 import org.graphiks.kadre.EventLoop
@@ -52,6 +65,7 @@ private const val M70_SCENE_CONTRACT_ID = "m70-a-kanvas-owned-kadre-native-scene
 private const val SCENE_CONTRACT_VERSION = 1
 private const val SCENE_CONTRACT_OWNER = "kanvas"
 private const val REPORTING_ONLY_GATE_PHASE = "reportingOnly"
+private const val CAPTURE_BYTES_PER_ROW_ALIGNMENT = 256
 
 internal data class NativeSmokeConfig(
     val output: Path,
@@ -60,7 +74,42 @@ internal data class NativeSmokeConfig(
     val warmupFrames: Int = 0,
     val sceneContractId: String = M69_SCENE_CONTRACT_ID,
     val sceneContractVersion: Int = SCENE_CONTRACT_VERSION,
+    val captureOutput: Path? = null,
 )
+
+internal data class NativeCaptureResult(
+    val status: String,
+    val reason: String,
+    val imagePath: String?,
+    val realNativeReadback: Boolean,
+    val source: String,
+    val windowSurfaceReadback: Boolean,
+    val width: Int,
+    val height: Int,
+    val format: String?,
+    val bytes: Long?,
+    val checksum: Long?,
+    val nonTransparentPixels: Int?,
+    val error: String? = null,
+) {
+    fun toJson(indent: String): String = buildString {
+        appendLine("{")
+        appendLine("$indent  \"status\": ${status.json()},")
+        appendLine("$indent  \"reason\": ${reason.json()},")
+        appendLine("$indent  \"imagePath\": ${imagePath?.json() ?: "null"},")
+        appendLine("$indent  \"realNativeReadback\": $realNativeReadback,")
+        appendLine("$indent  \"source\": ${source.json()},")
+        appendLine("$indent  \"windowSurfaceReadback\": $windowSurfaceReadback,")
+        appendLine("$indent  \"width\": $width,")
+        appendLine("$indent  \"height\": $height,")
+        appendLine("$indent  \"format\": ${format?.json() ?: "null"},")
+        appendLine("$indent  \"bytes\": ${bytes ?: "null"},")
+        appendLine("$indent  \"checksum\": ${checksum ?: "null"},")
+        appendLine("$indent  \"nonTransparentPixels\": ${nonTransparentPixels ?: "null"},")
+        appendLine("$indent  \"error\": ${error?.json() ?: "null"}")
+        append("$indent}")
+    }
+}
 
 internal data class NativeSmokeResult(
     val mode: String,
@@ -84,6 +133,8 @@ internal data class NativeSmokeResult(
     val averageFrameMs: Double?,
     val telemetry: RuntimeTelemetry,
     val surfaceStatuses: List<String>,
+    val surfaceApiStatuses: List<String> = emptyList(),
+    val capture: NativeCaptureResult = unavailableCapture(DEFAULT_WIDTH, DEFAULT_HEIGHT),
     val error: String? = null,
 ) {
     fun toJson(): String {
@@ -136,14 +187,17 @@ internal data class NativeSmokeResult(
             appendLine("    \"nativeTimingClaim\": \"present-call-duration-only\"")
             appendLine("  },")
             appendLine("  \"runtimeTelemetry\": $telemetryJson,")
-            appendLine("  \"capture\": {")
-            appendLine("    \"status\": \"unavailable\",")
-            appendLine("    \"reason\": \"m70.native-readback-not-available\",")
-            appendLine("    \"imagePath\": null,")
-            appendLine("    \"realNativeReadback\": false")
-            appendLine("  },")
+            appendLine("  \"capture\": ${capture.toJson("  ")},")
             appendLine("  \"surfaceStatusSummary\": ${surfaceStatusSummary(surfaceStatuses).toJson("  ")},")
             appendLine("  \"surfaceStatuses\": [${surfaceStatuses.joinToString(", ") { it.json() }}],")
+            if (surfaceApiStatuses.isNotEmpty()) {
+                appendLine("  \"surfaceApiStatuses\": [${surfaceApiStatuses.joinToString(", ") { it.json() }}],")
+                appendLine("  \"surfaceStatusSemantics\": {")
+                appendLine("    \"source\": \"wgpu4k SurfaceTextureStatus over wgpu-native v27\",")
+                appendLine("    \"normalizedTimeoutAsSuccess\": true,")
+                appendLine("    \"reason\": \"wgpu-native v27 reports SuccessOptimal as raw status 1; wgpu4k maps raw 1 to SurfaceTextureStatus.timeout\"")
+                appendLine("  },")
+            }
             appendLine("  \"linearIssues\": [${configLinearIssues(mode).joinToString(", ") { it.json() }}],")
             appendLine("  \"nonClaims\": [")
             appendLine(configNonClaims(mode).joinToString(",\n") { "    ${it.json()}" })
@@ -219,6 +273,7 @@ internal class M69KadreNativeSmokeApp(
     private var completed = false
     private val frameDurationsMs = mutableListOf<Double>()
     private val surfaceStatuses = mutableListOf<String>()
+    private val surfaceApiStatuses = mutableListOf<String>()
     private val cpuReference = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT)
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
@@ -327,7 +382,8 @@ internal class M69KadreNativeSmokeApp(
         val gpuDevice = device ?: return
         val started = System.nanoTime()
         val surfaceTexture = surf.getCurrentTexture()
-        surfaceStatuses += surfaceTexture.status.name
+        surfaceApiStatuses += surfaceTexture.status.name
+        surfaceStatuses += surfaceTexture.status.toEvidenceStatus()
         when (surfaceTexture.status) {
             SurfaceTextureStatus.lost,
             SurfaceTextureStatus.outdated -> {
@@ -347,7 +403,7 @@ internal class M69KadreNativeSmokeApp(
 
         val texture = surfaceTexture.texture
         val textureView = texture.createView(null)
-        val pipeline = createScenePipeline(gpuDevice, presentedFrames)
+        val pipeline = createScenePipeline(gpuDevice, presentedFrames, surfaceFormat)
         val encoder = gpuDevice.createCommandEncoder()
         val renderPass = encoder.beginRenderPass(
             RenderPassDescriptor(
@@ -379,7 +435,11 @@ internal class M69KadreNativeSmokeApp(
         }
     }
 
-    private fun createScenePipeline(gpuDevice: GPUDevice, frameIndex: Int): GPURenderPipeline {
+    private fun createScenePipeline(
+        gpuDevice: GPUDevice,
+        frameIndex: Int,
+        targetFormat: GPUTextureFormat,
+    ): GPURenderPipeline {
         val phase = (frameIndex % 60) / 60.0
         val shaderModule = gpuDevice.createShaderModule(ShaderModuleDescriptor(code = firstSceneWgsl(phase)))
         val pipeline = gpuDevice.createRenderPipeline(
@@ -389,12 +449,137 @@ internal class M69KadreNativeSmokeApp(
                 fragment = FragmentState(
                     module = shaderModule,
                     entryPoint = "fs_main",
-                    targets = listOf(ColorTargetState(format = surfaceFormat)),
+                    targets = listOf(ColorTargetState(format = targetFormat)),
                 ),
             )
         )
         shaderModule.close()
         return pipeline
+    }
+
+    private fun captureNativeScene(
+        gpuDevice: GPUDevice?,
+        width: Int,
+        height: Int,
+        frameIndex: Int,
+        output: Path?,
+    ): NativeCaptureResult {
+        if (gpuDevice == null) {
+            return unavailableCapture(width, height, reason = "m70.native-readback-device-unavailable")
+        }
+        if (output == null) {
+            return unavailableCapture(width, height, reason = "m70.native-readback-output-unavailable")
+        }
+        if (width <= 0 || height <= 0) {
+            return unavailableCapture(width, height, reason = "m70.native-readback-invalid-size")
+        }
+
+        return runCatching {
+            val captureFormat = GPUTextureFormat.RGBA8Unorm
+            val unpaddedBytesPerRow = width * 4
+            val paddedBytesPerRow =
+                ((unpaddedBytesPerRow + CAPTURE_BYTES_PER_ROW_ALIGNMENT - 1) /
+                    CAPTURE_BYTES_PER_ROW_ALIGNMENT) * CAPTURE_BYTES_PER_ROW_ALIGNMENT
+            val stagingSize = (paddedBytesPerRow.toLong() * height.toLong()).toULong()
+            val texture = gpuDevice.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                    format = captureFormat,
+                    usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
+                    label = "M70KadreNativeCapture.color",
+                )
+            )
+            val readback = gpuDevice.createBuffer(
+                BufferDescriptor(
+                    size = stagingSize,
+                    usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                    mappedAtCreation = false,
+                    label = "M70KadreNativeCapture.readback",
+                )
+            )
+            val view = texture.createView(null)
+            val pipeline = createScenePipeline(gpuDevice, frameIndex, captureFormat)
+            val encoder = gpuDevice.createCommandEncoder()
+            try {
+                val renderPass = encoder.beginRenderPass(
+                    RenderPassDescriptor(
+                        colorAttachments = listOf(
+                            RenderPassColorAttachment(
+                                view = view,
+                                loadOp = GPULoadOp.Clear,
+                                storeOp = GPUStoreOp.Store,
+                                clearValue = Color(r = 0.03, g = 0.035, b = 0.045, a = 1.0),
+                            )
+                        )
+                    )
+                )
+                renderPass.setPipeline(pipeline)
+                renderPass.draw(6u, 1u, 0u, 0u)
+                renderPass.end()
+                encoder.copyTextureToBuffer(
+                    source = TexelCopyTextureInfo(texture = texture),
+                    destination = TexelCopyBufferInfo(
+                        buffer = readback,
+                        offset = 0uL,
+                        bytesPerRow = paddedBytesPerRow.toUInt(),
+                        rowsPerImage = height.toUInt(),
+                    ),
+                    copySize = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                )
+                gpuDevice.queue.submit(listOf(encoder.finish()))
+                runBlocking { readback.mapAsync(GPUMapMode.Read, 0uL, stagingSize) }.getOrThrow()
+                val mapped = readback.getMappedRange(0uL, stagingSize).toByteArray()
+                val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
+                var checksum = 1469598103934665603L
+                var nonTransparent = 0
+                for (y in 0 until height) {
+                    val rowStart = y * paddedBytesPerRow
+                    for (x in 0 until width) {
+                        val i = rowStart + x * 4
+                        val r = mapped[i].toInt() and 0xFF
+                        val g = mapped[i + 1].toInt() and 0xFF
+                        val b = mapped[i + 2].toInt() and 0xFF
+                        val a = mapped[i + 3].toInt() and 0xFF
+                        if (a != 0) nonTransparent++
+                        val argb = (a shl 24) or (r shl 16) or (g shl 8) or b
+                        checksum = (checksum xor argb.toLong()) * 1099511628211L
+                        image.setRGB(x, y, argb)
+                    }
+                }
+                readback.unmap()
+                output.parent?.createDirectories()
+                check(ImageIO.write(image, "png", output.toFile())) {
+                    "No ImageIO PNG writer accepted the native readback image"
+                }
+                NativeCaptureResult(
+                    status = "produced",
+                    reason = "m70.native-offscreen-texture-readback",
+                    imagePath = reportArtifactPath(output),
+                    realNativeReadback = true,
+                    windowSurfaceReadback = false,
+                    source = "wgpu4k-native-offscreen-texture-rendered-from-kadre-scene-contract",
+                    width = width,
+                    height = height,
+                    format = captureFormat.name,
+                    bytes = Files.size(output),
+                    checksum = checksum,
+                    nonTransparentPixels = nonTransparent,
+                )
+            } finally {
+                runCatching { readback.close() }
+                runCatching { view.close() }
+                runCatching { encoder.close() }
+                runCatching { pipeline.close() }
+                runCatching { texture.close() }
+            }
+        }.getOrElse { error ->
+            unavailableCapture(
+                width = width,
+                height = height,
+                reason = "m70.native-readback-failed",
+                error = error.message ?: error.toString(),
+            )
+        }
     }
 
     private fun completeNative(eventLoop: ActiveEventLoop) {
@@ -403,6 +588,13 @@ internal class M69KadreNativeSmokeApp(
         val size = window?.innerSize ?: PhysicalSize(DEFAULT_WIDTH, DEFAULT_HEIGHT)
         val acquiredSurfaceFrames = surfaceStatuses.count { it == SurfaceTextureStatus.success.name }
         val hasConfirmedPresentation = acquiredSurfaceFrames > 0
+        val capture = captureNativeScene(
+            gpuDevice = device,
+            width = size.width,
+            height = size.height,
+            frameIndex = (presentedFrames - 1).coerceAtLeast(0),
+            output = config.captureOutput,
+        )
         onComplete(
             NativeSmokeResult(
                 mode = config.mode,
@@ -426,6 +618,8 @@ internal class M69KadreNativeSmokeApp(
                 averageFrameMs = frameDurationsMs.takeIf { it.isNotEmpty() }?.average(),
                 telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size),
                 surfaceStatuses = surfaceStatuses.toList(),
+                surfaceApiStatuses = surfaceApiStatuses.toList(),
+                capture = capture,
             )
         )
         releaseResources()
@@ -459,6 +653,8 @@ internal class M69KadreNativeSmokeApp(
                 averageFrameMs = frameDurationsMs.takeIf { it.isNotEmpty() }?.average(),
                 telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size),
                 surfaceStatuses = surfaceStatuses.toList(),
+                surfaceApiStatuses = surfaceApiStatuses.toList(),
+                capture = unavailableCapture(size.width, size.height),
                 error = error,
             )
         )
@@ -479,6 +675,7 @@ internal class M69KadreNativeSmokeApp(
 
 private fun parseArgs(args: Array<String>): NativeSmokeConfig {
     var output = Path("reports/wgsl-pipeline/m69-kadre-native/native-smoke.json")
+    var captureOutput: Path? = null
     var frames = 3
     var mode = "smoke"
     var warmupFrames = 0
@@ -496,6 +693,7 @@ private fun parseArgs(args: Array<String>): NativeSmokeConfig {
                 ?: error("--scene-contract-id requires a value")
             "--scene-contract-version" -> sceneContractVersion = args.getOrNull(++i)?.toIntOrNull()
                 ?: error("--scene-contract-version requires an integer")
+            "--capture-output" -> captureOutput = Path(args.getOrNull(++i) ?: error("--capture-output requires a path"))
         }
         i++
     }
@@ -510,6 +708,12 @@ private fun parseArgs(args: Array<String>): NativeSmokeConfig {
         warmupFrames = warmupFrames.coerceAtLeast(0).coerceAtMost(frames.coerceAtLeast(1)),
         sceneContractId = sceneContractId ?: if (normalizedMode == "demo") M70_SCENE_CONTRACT_ID else M69_SCENE_CONTRACT_ID,
         sceneContractVersion = sceneContractVersion.coerceAtLeast(1),
+        captureOutput = captureOutput
+            ?: if (normalizedMode == "demo") {
+                output.parent?.resolve(output.fileName.toString().removeSuffix(".json") + ".png")
+            } else {
+                null
+            },
     )
 }
 
@@ -548,7 +752,7 @@ private fun configSceneClaim(mode: String): String = if (mode == "demo") {
 }
 
 private fun configLinearIssues(mode: String): List<String> = if (mode == "demo") {
-    listOf("FOR-61", "FOR-62", "FOR-64")
+    listOf("FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73")
 } else {
     listOf("FOR-56", "FOR-57", "FOR-58", "FOR-59")
 }
@@ -556,17 +760,55 @@ private fun configLinearIssues(mode: String): List<String> = if (mode == "demo")
 private fun configNonClaims(mode: String): List<String> = if (mode == "demo") {
     listOf(
         "This run proves bounded Kadre native window present-call execution for the M70-A Kanvas-owned scene contract.",
-        "If every surface status is timeout, the run proves present-call completion only, not confirmed native presentation.",
-        "It does not prove broad Kanvas display-list replay, native readback capture, or input-driven interaction yet.",
+        "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
+        "Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.",
+        "The capture artifact is an offscreen wgpu4k native texture readback of the same scene contract, not a system screenshot of the presented window.",
+        "It does not prove broad Kanvas display-list replay or input-driven interaction yet.",
         "Timing is reporting-only present-call duration telemetry, not a release-grade FPS gate.",
     )
 } else {
     listOf(
         "This smoke proves Kadre native window presentation for a bounded WGSL scene only.",
-        "If every surface status is timeout, the run proves present-call completion only, not confirmed native presentation.",
+        "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
+        "Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.",
         "It does not prove broad Kanvas display-list replay or input-driven interaction yet.",
         "Timing is present-call duration telemetry, not a release-grade FPS gate.",
     )
+}
+
+private fun unavailableCapture(
+    width: Int,
+    height: Int,
+    reason: String = "m70.native-readback-not-available",
+    error: String? = null,
+): NativeCaptureResult = NativeCaptureResult(
+    status = "unavailable",
+    reason = reason,
+    imagePath = null,
+    realNativeReadback = false,
+    windowSurfaceReadback = false,
+    source = "none",
+    width = width,
+    height = height,
+    format = null,
+    bytes = null,
+    checksum = null,
+    nonTransparentPixels = null,
+    error = error,
+)
+
+private fun reportArtifactPath(path: Path): String {
+    val normalized = path.normalize().toString().replace('\\', '/')
+    if (normalized.startsWith("reports/")) {
+        return normalized
+    }
+    val marker = "/reports/"
+    val markerIndex = normalized.indexOf(marker)
+    return if (markerIndex >= 0) {
+        "reports/${normalized.substring(markerIndex + marker.length)}"
+    } else {
+        path.absolutePathString()
+    }
 }
 
 private fun surfaceStatusSummary(statuses: List<String>): SurfaceStatusSummary =
@@ -578,6 +820,12 @@ private fun surfaceStatusSummary(statuses: List<String>): SurfaceStatusSummary =
         outOfMemory = statuses.count { it == SurfaceTextureStatus.outOfMemory.name },
         deviceLost = statuses.count { it == SurfaceTextureStatus.deviceLost.name },
     )
+
+private fun SurfaceTextureStatus.toEvidenceStatus(): String =
+    when (this) {
+        SurfaceTextureStatus.timeout -> SurfaceTextureStatus.success.name
+        else -> name
+    }
 
 private fun renderCpuReference(width: Int, height: Int): Pair<Long, Int> {
     val bitmap = SkBitmap(width, height)

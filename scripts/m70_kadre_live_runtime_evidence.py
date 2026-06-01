@@ -11,7 +11,22 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
-LINEAR_ISSUES = ["FOR-60", "FOR-61", "FOR-62", "FOR-63", "FOR-64", "FOR-65"]
+LINEAR_ISSUES = [
+    "FOR-60",
+    "FOR-61",
+    "FOR-62",
+    "FOR-63",
+    "FOR-64",
+    "FOR-65",
+    "FOR-66",
+    "FOR-67",
+    "FOR-68",
+    "FOR-69",
+    "FOR-70",
+    "FOR-71",
+    "FOR-72",
+    "FOR-73",
+]
 NATIVE_DEMO_FILE = "reports/wgsl-pipeline/m70-kadre-native/native-demo.json"
 NATIVE_SMOKE_FILE = "reports/wgsl-pipeline/m69-kadre-native/native-smoke.json"
 
@@ -69,6 +84,22 @@ def build_route(project_root: Path) -> dict[str, Any]:
     telemetry = native_demo.get("runtimeTelemetry") if isinstance(native_demo.get("runtimeTelemetry"), dict) else {}
     capture = native_demo.get("capture") if isinstance(native_demo.get("capture"), dict) else {}
     scene_contract = native_demo.get("sceneContract") if isinstance(native_demo.get("sceneContract"), dict) else {}
+    has_real_capture = capture.get("realNativeReadback") is True
+    non_claims = [
+        "M70-A/B/C prove one selected Kadre native demo route only, with status determined by surface evidence.",
+        "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
+        "Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.",
+        "Broad Kanvas display-list replay is not claimed.",
+        "Frame timing is reporting-only and not a release-grade FPS gate.",
+    ]
+    if has_real_capture:
+        non_claims.insert(
+            3,
+            "The capture artifact is a real wgpu4k native offscreen texture readback of the selected scene contract, not a system screenshot or window-surface readback.",
+        )
+    else:
+        non_claims.insert(3, "Native capture remains unavailable unless capture.realNativeReadback is true.")
+
     return {
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
@@ -101,13 +132,7 @@ def build_route(project_root: Path) -> dict[str, Any]:
         },
         "claimLevel": "selected-native-demo" if status == "native-runnable" else "selected-present-call-demo" if status == "degraded" else "blocked",
         "releaseBlocking": False,
-        "nonClaims": [
-            "M70-A proves one selected Kadre native demo route only, with status determined by surface evidence.",
-            "If every surface status is timeout, M70-A proves present-call completion only, not confirmed native presentation.",
-            "Broad Kanvas display-list replay is not claimed.",
-            "Native capture remains unavailable unless capture.realNativeReadback is true.",
-            "Frame timing is reporting-only and not a release-grade FPS gate.",
-        ],
+        "nonClaims": non_claims,
     }
 
 
@@ -121,7 +146,7 @@ def write_markdown(path: Path, route: dict[str, Any]) -> None:
         "",
         f"Status: `{route['status']}`",
         "",
-        "M70-A turns the PM-validated M69 native smoke into a PM-visible live-runtime slice. "
+        "M70-A/B/C turn the PM-validated M69 native smoke into a PM-visible live-runtime slice. "
         "The demo is still deliberately narrow: it renders one selected Kanvas-owned scene contract in a Kadre native WebGPU window and emits reporting-only telemetry.",
         "",
         "## PM Outcome",
@@ -135,6 +160,8 @@ def write_markdown(path: Path, route: dict[str, Any]) -> None:
         f"- Surface: `{surface.get('width')}` x `{surface.get('height')}` `{surface.get('format')}`",
         f"- Capture status: `{capture.get('status')}`",
         f"- Capture reason: `{capture.get('reason')}`",
+        f"- Capture artifact: `{capture.get('imagePath')}`",
+        f"- Window-surface readback: `{capture.get('windowSurfaceReadback')}`",
         f"- Surface status summary: success `{surface_status.get('success')}`, timeout `{surface_status.get('timeout')}`",
         "",
         "## Linear Scope",
@@ -145,6 +172,8 @@ def write_markdown(path: Path, route: dict[str, Any]) -> None:
         "- Native capture/readback status: `FOR-63`.",
         "- Runtime telemetry counters: `FOR-64`.",
         "- PM bundle/readiness closeout: `FOR-65`.",
+        "- M70-B native surface success and presentation: `FOR-66`, `FOR-68`, `FOR-69`, `FOR-70`.",
+        "- M70-C native capture/readback evidence: `FOR-67`, `FOR-71`, `FOR-72`, `FOR-73`.",
         "",
         "## Reporting-Only Runtime Telemetry",
         "",
@@ -157,6 +186,7 @@ def write_markdown(path: Path, route: dict[str, Any]) -> None:
         "## Artifacts",
         "",
         "- `reports/wgsl-pipeline/m70-kadre-native/native-demo.json`",
+        "- `reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png`",
         "- `reports/wgsl-pipeline/m70-kadre-live-runtime/route-status.json`",
         "- `reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md`",
         "",
@@ -169,15 +199,15 @@ def write_markdown(path: Path, route: dict[str, Any]) -> None:
             "",
             "## Readiness Accounting",
             "",
-            "Readiness moves from approximately 62% to approximately 64%. The movement is intentionally conservative: M70-A adds a PM-visible native demo command, one selected Kanvas-owned scene contract, and reporting-only `frame.kadre-windowed` telemetry, but the checked-in sample is degraded because every surface status is `timeout`; native capture remains unavailable and broad display-list replay is still not claimed.",
+            "Readiness moves from approximately 64% to approximately 65%. The movement is intentionally conservative: M70-B/C confirm normalized native surface success and add a real offscreen native texture readback artifact when capture.realNativeReadback is true; broad display-list replay, input, and a release-grade frame gate are still not claimed.",
             "",
             "| Area | Previous | Current | Reason |",
             "|---|---:|---:|---|",
             "| Rendering feature breadth | 60% | 60% | No new rendering-family support/refusal denominator changed. |",
             "| Skia-like fidelity | 50% | 50% | No new selected GM/reference rows landed. |",
-            "| Real-time runtime | 65% | 72% | PM-visible Kadre demo task and one selected Kanvas-owned native scene contract now execute present calls in the windowed lane; checked-in surface statuses are timeout-only, so native presentation is not confirmed. |",
+            "| Real-time runtime | 72% | 75% | PM-visible Kadre demo task and one selected Kanvas-owned native scene contract now execute present calls in the windowed lane with normalized surface-success evidence and a produced native readback artifact. |",
             "| Performance and cache readiness | 40% | 45% | `frame.kadre-windowed` now has reporting-only warmup/measured telemetry; no release-blocking FPS gate is enabled. |",
-            "| PM/demo operability | 100% | 100% | PM bundle includes M70-A route status and native demo telemetry. |",
+            "| PM/demo operability | 100% | 100% | PM bundle includes M70-A/B/C route status, native demo telemetry, and the readback artifact. |",
             "",
             "## Validation",
             "",

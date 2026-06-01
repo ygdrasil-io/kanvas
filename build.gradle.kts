@@ -4955,6 +4955,14 @@ tasks.register("pipelinePmBundle") {
         }
         val timestamp = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).toString()
         val serveCommand = "python3 -m http.server 8765 --bind 127.0.0.1 --directory build/reports/wgsl-pipeline-pm-bundle/dashboard"
+        val m70Capture = (m70RouteStatusReport["capture"] as? Map<*, *>).orEmpty()
+        val m70CapturePath = (m70Capture["imagePath"] as? String).orEmpty()
+        val m70CaptureBundlePath = if ((m70Capture["realNativeReadback"] as? Boolean) == true && m70CapturePath.startsWith("reports/wgsl-pipeline/m70-kadre-native/")) {
+            "runtime/m70-kadre-native/${m70CapturePath.substringAfterLast('/')}"
+        } else {
+            ""
+        }
+
         val manifest = linkedMapOf<String, Any>(
             "schemaVersion" to 1,
             "generatedBy" to "pipelinePmBundle",
@@ -5185,8 +5193,11 @@ tasks.register("pipelinePmBundle") {
                 "presentedFrames" to ((m70RouteStatusReport["presentedFrames"] as? Number)?.toInt() ?: 0),
                 "warmupFrames" to ((m70RouteStatusReport["warmupFrames"] as? Number)?.toInt() ?: 0),
                 "claimLevel" to ((m70RouteStatusReport["claimLevel"] as? String).orEmpty()),
-                "captureStatus" to (((m70RouteStatusReport["capture"] as? Map<*, *>)?.get("status") as? String).orEmpty()),
-                "captureReason" to (((m70RouteStatusReport["capture"] as? Map<*, *>)?.get("reason") as? String).orEmpty()),
+                "captureStatus" to ((m70Capture["status"] as? String).orEmpty()),
+                "captureReason" to ((m70Capture["reason"] as? String).orEmpty()),
+                "captureImage" to m70CaptureBundlePath,
+                "captureRealNativeReadback" to ((m70Capture["realNativeReadback"] as? Boolean) ?: false),
+                "captureWindowSurfaceReadback" to ((m70Capture["windowSurfaceReadback"] as? Boolean) ?: false),
                 "surfaceStatusSummary" to ((m70RouteStatusReport["surfaceStatusSummary"] as? Map<*, *>).orEmpty()),
                 "telemetryLane" to (((m70RouteStatusReport["runtimeTelemetry"] as? Map<*, *>)?.get("lane") as? String).orEmpty()),
                 "telemetryGatePhase" to (((m70RouteStatusReport["runtimeTelemetry"] as? Map<*, *>)?.get("gatePhase") as? String).orEmpty()),
@@ -5197,7 +5208,7 @@ tasks.register("pipelinePmBundle") {
                 "routeStatusJson" to "runtime/m70-kadre-live-runtime/route-status.json",
                 "nativeDemoJson" to "runtime/m70-kadre-native/native-demo.json",
                 "releaseBlocking" to false,
-                "notice" to "M70-A adds a PM-visible Kadre demo command, one selected Kanvas-owned scene contract, reporting-only frame telemetry, and a truthful native capture status. It still does not claim broad display-list replay or release-grade FPS.",
+                "notice" to "M70-A/B/C add a PM-visible Kadre demo command, normalized native surface-success evidence, reporting-only frame telemetry, and a produced wgpu4k offscreen texture readback artifact. They still do not claim broad display-list replay, window-surface readback, input, or release-grade FPS.",
             ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
@@ -5278,7 +5289,7 @@ tasks.register("pipelinePmBundle") {
                 "M67 adds a frame gate candidate and family budget inventory from M65 headless/offscreen telemetry; only one family is measured and native Kadre timing remains reporting-only.",
                 "M68 verifies Kadre source-build bridge evidence and flagship scene inputs, but native Kanvas/Kadre window presentation remains blocked until a host adapter exists.",
                 "M69 verifies a Kadre native WebGPU present loop for a bounded standalone WGSL scene; native screenshot capture, input loop, Kanvas display-list replay, and release-grade FPS remain outside the claim.",
-                "M70-A verifies a PM-visible Kadre demo command and reporting-only windowed telemetry for one selected scene contract; timeout-only surface status means present-call completion, not confirmed native presentation, and native readback/capture, broad display-list replay, and release-grade FPS remain outside the claim.",
+                "M70-A/B/C verify a PM-visible Kadre demo command, normalized native surface-success evidence, reporting-only windowed telemetry, and a real wgpu4k offscreen texture readback when capture.realNativeReadback is true; window-surface screenshot/readback, input, broad display-list replay, and release-grade FPS remain outside the claim.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -5323,8 +5334,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- `runtime/m69-kadre-native/`: M69 Kadre native AppKit/Metal smoke evidence with presented frame counters.")
                 appendLine("- M69 Kadre host adapter counters live in `manifest.json` under `m69KadreHostAdapter`; native timing remains present-call duration only.")
                 appendLine("- `runtime/m70-kadre-live-runtime/`: M70-A Kadre live runtime route status for the PM-visible demo lane.")
-                appendLine("- `runtime/m70-kadre-native/`: M70-A native demo telemetry for the selected Kanvas-owned scene contract.")
-                appendLine("- M70-A Kadre live runtime counters live in `manifest.json` under `m70KadreLiveRuntime`; native timing is still reporting-only and capture may be unavailable.")
+                appendLine("- `runtime/m70-kadre-native/`: M70-A/B/C native demo telemetry and readback PNG for the selected Kanvas-owned scene contract.")
+                appendLine("- M70-A/B/C Kadre live runtime counters live in `manifest.json` under `m70KadreLiveRuntime`; native timing is still reporting-only and the capture is an offscreen texture readback, not a window-surface screenshot.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
