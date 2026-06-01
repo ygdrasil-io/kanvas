@@ -82,15 +82,15 @@ corresponding denominator and is linked from the sprint report.
 
 Weighted starting readiness: approximately 25%.
 
-Current readiness after the M72 Kadre single-scene replay slice: approximately 67%.
+Current readiness after the M73 Kadre replay-pack slice: 67.75%, rounded for PM to approximately 70%.
 
 | Area | Weight | Current count | Current progress | Movement |
 |---|---:|---:|---:|---|
 | Rendering feature breadth | 30% | 6/10 | 60% | M66 normalizes selected rows across existing families without adding a new counted family denominator. |
 | Skia-like fidelity | 20% | 50/100 selected rows, 37/100 Skia-comparable minimum | 50% selected evidence | M66 adds 19 selected support/refusal rows with `referenceKind`; 6 are `skia-upstream`, 6 `test-oracle`, and 7 `cpu-oracle`. CPU-oracle rows do not automatically count as Skia-comparable fidelity. |
-| Real-time runtime | 20% | 8.5/10 | 85% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane; M68 adds Kadre source-build bridge evidence; M69 adds a bounded Kadre/AppKit/Metal WebGPU present loop; M70-A adds a PM-visible demo task; M70-B/C confirm normalized surface-success evidence and produce a real wgpu4k offscreen texture readback artifact; M71 drives that selected route with Kadre/AppKit `ControlFlow.Poll`; M72 renders one selected `solid-rect` replay contract with explicit command counters and source dashboard evidence. Native input, broad/multi-scene Kanvas display-list replay, and window-surface screenshot/readback remain incomplete. |
+| Real-time runtime | 20% | 9/10 | 90% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane; M68 adds Kadre source-build bridge evidence; M69 adds a bounded Kadre/AppKit/Metal WebGPU present loop; M70-A adds a PM-visible demo task; M70-B/C confirm normalized surface-success evidence and produce a real wgpu4k offscreen texture readback artifact; M71 drives that selected route with Kadre/AppKit `ControlFlow.Poll`; M72 renders one selected `solid-rect` replay contract with explicit command counters and source dashboard evidence; M73 adds a bounded typed replay-pack registry and scene-id routing for selected scenes. Native input, broad Kanvas display-list replay, arbitrary op streams, dynamic multi-scene live switching, and window-surface screenshot/readback remain incomplete. |
 | Performance and cache readiness | 15% | 9/20 | 45% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry, adds one measured family budget, and proves deterministic quarantine/rebaseline behavior. M70-A adds reporting-only `frame.kadre-windowed` telemetry with warmup/measured samples; it is not a release-grade FPS gate. |
-| PM/demo operability | 15% | 20/20 | 100% | PM bundle includes M65 runtime telemetry/artifacts, M66 family/reference counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 host adapter smoke artifacts, M69 native Kadre present evidence, M70-A/B/C live-runtime/readback evidence, M71 autonomous frame-clock evidence, and M72 single-scene replay evidence. |
+| PM/demo operability | 15% | 20/20 | 100% | PM bundle includes M65 runtime telemetry/artifacts, M66 family/reference counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 host adapter smoke artifacts, M69 native Kadre present evidence, M70-A/B/C live-runtime/readback evidence, M71 autonomous frame-clock evidence, M72 single-scene replay evidence, and M73 replay-pack registry evidence. |
 
 Expected milestone deltas are capped until evidence lands:
 
@@ -109,6 +109,7 @@ Expected milestone deltas are capped until evidence lands:
 | M70-A/B/C | Live Kadre demo, surface semantics, native readback | +1% |
 | M71 | Autonomous Kadre frame clock | +2% |
 | M72 | Single-scene Kadre replay | +1% |
+| M73 | Bounded Kadre replay pack registry | +3% |
 | M70 | Release-candidate closure | Remaining counted evidence only |
 
 ## Milestones
@@ -130,6 +131,7 @@ Expected milestone deltas are capped until evidence lands:
 | M70-C | Kadre Native Readback | Produce or precisely block a real native readback artifact for the selected Kadre scene contract; the current implementation uses wgpu4k offscreen texture readback, not a window screenshot. |
 | M71 | Kadre Autonomous Frame Clock | Make the selected live Kadre demo advance from an explicit Kadre/AppKit frame clock rather than pointer/input wakeups, and expose the clock source in PM telemetry. |
 | M72 | Kadre Scene Replay V1 | Render one selected `solid-rect` replay contract in the Kadre live route with command counters, CPU/GPU evidence, and explicit broad-replay non-claims. |
+| M73 | Kadre Replay Pack V1 | Add a bounded typed replay-pack registry with scene-id selection, selected renderable scenes, expected-unsupported sentinel evidence, and explicit broad-replay non-claims. |
 | M70 | Release Candidate Renderer | Freeze API, runtime, PM demo, CI gates, and known limitations for a renderer release candidate. |
 
 ## Dependency DAG

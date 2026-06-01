@@ -6,56 +6,14 @@
   "gatePhase": "reportingOnly",
   "reportingOnly": true,
   "sceneContract": {
-    "id": "m73-linear-gradient-rect-replay-v1",
+    "id": "m73-unknown-scene",
     "version": 1,
     "owner": "kanvas",
     "milestone": "M70-A/M71/M72/M73",
     "claim": "Selected Kanvas replay scene contract executed through a bounded Kadre native WebGPU present-call loop",
     "wgslSource": "runtime-generated-from-selected-kadre-replay-scene"
   },
-  "sceneReplay": {
-    "id": "m73-linear-gradient-rect-replay-v1",
-    "title": "M73 linear-gradient rect replay",
-    "status": "renderable",
-    "renderedByKadre": true,
-    "source": "kanvas-replay-data",
-    "sourceSceneId": "linear-gradient-rect",
-    "version": 1,
-    "claimLevel": "single-scene-replay-contract",
-    "commandSource": "typed-kadre-runtime-replay-contract",
-    "gpuExecution": "wgsl-generated-from-kadre-replay-scene",
-    "cpuReferenceSource": "typed Kadre replay CPU oracle for same selected commands",
-    "fallbackPolicy": "refuse-unsupported-replay-command",
-    "sourceEvidence": {
-      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#linear-gradient-rect",
-      "cpuRoute": "cpu.shader.linear-gradient.rect",
-      "gpuRoute": "webgpu.generated.linear-gradient.rect",
-      "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]"
-    },
-    "commandCounters": {
-      "total": 2,
-      "supported": 2,
-      "unsupported": 0,
-      "backgroundClear": 1,
-      "fillRect": 1,
-      "animatedFillRect": 0
-    },
-    "unsupportedCommands": [],
-    "commands": [
-      {
-        "label": "linear-gradient-rect",
-        "family": "linearGradientRect",
-        "supported": true,
-        "fillKind": "linearGradient",
-        "x": 0.1200,
-        "y": 0.1600,
-        "width": 0.7600,
-        "height": 0.6200,
-        "dx": 0.0000
-      }
-
-    ]
-  },
+  "sceneReplay": null,
   "replayPack": {
     "id": "m73-kadre-replay-pack-v1",
     "claimLevel": "bounded-replay-pack-contracts",
@@ -275,33 +233,33 @@
 
     ]
   },
-  "status": "native-runnable",
-  "reason": "m73.kadre-replay-pack-selected-scene-presented-frames",
-  "nativePresented": true,
-  "presentCallCompleted": true,
-  "requestedFrames": 180,
-  "warmupFrames": 30,
-  "presentedFrames": 180,
-  "redrawEvents": 180,
+  "status": "blocked",
+  "reason": "m73.kadre-replay-scene-unknown",
+  "nativePresented": false,
+  "presentCallCompleted": false,
+  "requestedFrames": 12,
+  "warmupFrames": 0,
+  "presentedFrames": 0,
+  "redrawEvents": 0,
   "surface": {
     "width": 640,
     "height": 420,
     "format": "BGRA8Unorm"
   },
-  "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+  "adapterInfo": null,
   "cpuReference": {
     "source": "kanvas-skia SkBitmap/SkCanvas",
-    "checksum": 766127960160601107,
+    "checksum": -3378577237779778677,
     "nonTransparentPixels": 5520
   },
   "frameTiming": {
-    "firstFrameMs": 37.2265,
-    "averageFrameMs": 8.4188,
-    "warmupFrameCount": 30,
-    "measuredSampleCount": 150,
-    "measuredP50Ms": 8.4459,
-    "measuredP95Ms": 8.6865,
-    "measuredWorstMs": 10.0670,
+    "firstFrameMs": null,
+    "averageFrameMs": null,
+    "warmupFrameCount": 0,
+    "measuredSampleCount": 0,
+    "measuredP50Ms": null,
+    "measuredP95Ms": null,
+    "measuredWorstMs": null,
     "gatePhase": "reportingOnly",
     "reportingOnly": true,
     "nativeTimingClaim": "present-call-duration-only"
@@ -312,45 +270,39 @@
     "reportingOnly": true,
     "frameClockSource": "kadre.appkit.control-flow-poll",
     "autonomousFrameClock": true,
-    "autonomousFrameCount": 359,
-    "warmupFrameCount": 30,
-    "measuredSampleCount": 150,
-    "measuredP50Ms": 8.4459,
-    "measuredP95Ms": 8.6865,
-    "measuredWorstMs": 10.0670,
-    "totalSampleCount": 180,
-    "surfaceStatusCount": 180
+    "autonomousFrameCount": 0,
+    "warmupFrameCount": 0,
+    "measuredSampleCount": 0,
+    "measuredP50Ms": null,
+    "measuredP95Ms": null,
+    "measuredWorstMs": null,
+    "totalSampleCount": 0,
+    "surfaceStatusCount": 0
   },
   "capture": {
-    "status": "produced",
-    "reason": "m70.native-offscreen-texture-readback",
-    "imagePath": "reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png",
-    "realNativeReadback": true,
-    "source": "wgpu4k-native-offscreen-texture-rendered-from-kadre-scene-contract",
+    "status": "unavailable",
+    "reason": "m70.native-readback-not-available",
+    "imagePath": null,
+    "realNativeReadback": false,
+    "source": "none",
     "windowSurfaceReadback": false,
     "width": 640,
     "height": 420,
-    "format": "RGBA8Unorm",
-    "bytes": 5649,
-    "checksum": -1532881463102611126,
-    "nonTransparentPixels": 268800,
+    "format": null,
+    "bytes": null,
+    "checksum": null,
+    "nonTransparentPixels": null,
     "error": null
   },
   "surfaceStatusSummary": {
-    "success": 180,
+    "success": 0,
     "timeout": 0,
     "lost": 0,
     "outdated": 0,
     "outOfMemory": 0,
     "deviceLost": 0
   },
-  "surfaceStatuses": ["success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success"],
-  "surfaceApiStatuses": ["timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout"],
-  "surfaceStatusSemantics": {
-    "source": "wgpu4k SurfaceTextureStatus over wgpu-native v27",
-    "normalizedTimeoutAsSuccess": true,
-    "reason": "wgpu-native v27 reports SuccessOptimal as raw status 1; wgpu4k maps raw 1 to SurfaceTextureStatus.timeout"
-  },
+  "surfaceStatuses": [],
   "linearIssues": ["FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83", "FOR-84", "FOR-85", "FOR-86", "FOR-87", "FOR-88", "FOR-89"],
   "nonClaims": [
     "This run proves bounded Kadre native window present-call execution for one selected M73 replay-pack scene contract.",
@@ -362,5 +314,5 @@
     "It does not prove broad Kanvas display-list replay, arbitrary SkCanvas op streams, multi-scene live switching, or input-driven interaction yet.",
     "Timing is reporting-only present-call duration telemetry, not a release-grade FPS gate."
   ],
-  "error": null
+  "error": "Unsupported Kadre replay scene contract: m73-unknown-scene"
 }

@@ -37,7 +37,7 @@ import java.lang.foreign.ValueLayout
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.ImageIO
-import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.io.path.Path
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.createDirectories
@@ -63,6 +63,7 @@ private const val DEFAULT_WIDTH = 640
 private const val DEFAULT_HEIGHT = 420
 private const val M69_SCENE_CONTRACT_ID = "m69-first-kanvas-kadre-host-adapter-scene"
 private const val M72_SCENE_CONTRACT_ID = "m72-solid-rect-replay-v1"
+private const val M73_DEFAULT_SCENE_CONTRACT_ID = "m73-linear-gradient-rect-replay-v1"
 private const val SCENE_CONTRACT_VERSION = 1
 private const val SCENE_CONTRACT_OWNER = "kanvas"
 private const val REPORTING_ONLY_GATE_PHASE = "reportingOnly"
@@ -89,6 +90,13 @@ internal data class ReplayColor(val r: Double, val g: Double, val b: Double, val
     }
 }
 
+internal enum class ReplayFillKind(val jsonName: String, val commandFamily: String) {
+    Solid("solid", "fillRect"),
+    LinearGradient("linearGradient", "linearGradientRect"),
+    CheckerBitmap("checkerBitmap", "bitmapRectNearest"),
+    ColorFilterPlus("colorFilterPlus", "linearGradientColorFilterPlus"),
+}
+
 internal data class ReplayRect(
     val label: String,
     val x: Double,
@@ -96,14 +104,18 @@ internal data class ReplayRect(
     val width: Double,
     val height: Double,
     val color: ReplayColor,
+    val endColor: ReplayColor = color,
+    val fillKind: ReplayFillKind = ReplayFillKind.Solid,
+    val tintColor: ReplayColor? = null,
     val animated: Boolean = false,
     val dx: Double = 0.0,
 ) {
     fun toJson(indent: String): String = buildString {
         appendLine("{")
         appendLine("$indent  \"label\": ${label.json()},")
-        appendLine("$indent  \"family\": ${(if (animated) "animatedFillRect" else "fillRect").json()},")
+        appendLine("$indent  \"family\": ${(if (animated) "animatedFillRect" else fillKind.commandFamily).json()},")
         appendLine("$indent  \"supported\": true,")
+        appendLine("$indent  \"fillKind\": ${fillKind.jsonName.json()},")
         appendLine("$indent  \"x\": ${x.formatJsonNumber()},")
         appendLine("$indent  \"y\": ${y.formatJsonNumber()},")
         appendLine("$indent  \"width\": ${width.formatJsonNumber()},")
@@ -122,6 +134,10 @@ internal data class ReplaySceneEvidence(
     val commandSource: String,
     val background: ReplayColor,
     val rects: List<ReplayRect>,
+    val dashboardRow: String,
+    val cpuRoute: String,
+    val gpuRoute: String,
+    val pipelineKey: String,
     val unsupportedCommands: List<String> = emptyList(),
 ) {
     val totalCommandCount: Int get() = 1 + rects.size + unsupportedCommands.size
@@ -129,24 +145,28 @@ internal data class ReplaySceneEvidence(
     val unsupportedCommandCount: Int get() = unsupportedCommands.size
     val fillRectCount: Int get() = rects.count { !it.animated }
     val animatedFillRectCount: Int get() = rects.count { it.animated }
+    val status: String get() = if (unsupportedCommandCount == 0) "renderable" else "expected-unsupported"
+    val renderedByKadre: Boolean get() = unsupportedCommandCount == 0
 
     fun toJson(indent: String): String = buildString {
         appendLine("{")
         appendLine("$indent  \"id\": ${id.json()},")
         appendLine("$indent  \"title\": ${title.json()},")
+        appendLine("$indent  \"status\": ${status.json()},")
+        appendLine("$indent  \"renderedByKadre\": $renderedByKadre,")
         appendLine("$indent  \"source\": ${source.json()},")
         appendLine("$indent  \"sourceSceneId\": ${sourceSceneId.json()},")
         appendLine("$indent  \"version\": $version,")
         appendLine("$indent  \"claimLevel\": \"single-scene-replay-contract\",")
         appendLine("$indent  \"commandSource\": ${commandSource.json()},")
         appendLine("$indent  \"gpuExecution\": \"wgsl-generated-from-kadre-replay-scene\",")
-        appendLine("$indent  \"cpuReferenceSource\": \"kanvas-skia SkBitmap/SkCanvas replay of same selected commands\",")
+        appendLine("$indent  \"cpuReferenceSource\": \"typed Kadre replay CPU oracle for same selected commands\",")
         appendLine("$indent  \"fallbackPolicy\": \"refuse-unsupported-replay-command\",")
         appendLine("$indent  \"sourceEvidence\": {")
-        appendLine("$indent    \"dashboardRow\": \"reports/wgsl-pipeline/scenes/generated/results.json#solid-rect\",")
-        appendLine("$indent    \"cpuRoute\": \"cpu.descriptor.coverage-plan.solid-rect\",")
-        appendLine("$indent    \"gpuRoute\": \"webgpu.coverage.analytic-rect\",")
-        appendLine("$indent    \"pipelineKey\": \"coverageKind=analyticRect\"")
+        appendLine("$indent    \"dashboardRow\": ${dashboardRow.json()},")
+        appendLine("$indent    \"cpuRoute\": ${cpuRoute.json()},")
+        appendLine("$indent    \"gpuRoute\": ${gpuRoute.json()},")
+        appendLine("$indent    \"pipelineKey\": ${pipelineKey.json()}")
         appendLine("$indent  },")
         appendLine("$indent  \"commandCounters\": {")
         appendLine("$indent    \"total\": $totalCommandCount,")
@@ -176,7 +196,108 @@ private val M72_REPLAY_SCENE = ReplaySceneEvidence(
     rects = listOf(
         ReplayRect("solid-rect", 0.20, 0.22, 0.58, 0.50, ReplayColor(0.17, 0.48, 0.90)),
     ),
+    dashboardRow = "reports/wgsl-pipeline/scenes/generated/results.json#solid-rect",
+    cpuRoute = "cpu.descriptor.coverage-plan.solid-rect",
+    gpuRoute = "webgpu.coverage.analytic-rect",
+    pipelineKey = "coverageKind=analyticRect",
 )
+
+private val M73_REPLAY_SCENES = listOf(
+    M72_REPLAY_SCENE,
+    ReplaySceneEvidence(
+        id = M73_DEFAULT_SCENE_CONTRACT_ID,
+        title = "M73 linear-gradient rect replay",
+        source = "kanvas-replay-data",
+        sourceSceneId = "linear-gradient-rect",
+        version = 1,
+        commandSource = "typed-kadre-runtime-replay-contract",
+        background = ReplayColor(0.025, 0.032, 0.045),
+        rects = listOf(
+            ReplayRect(
+                label = "linear-gradient-rect",
+                x = 0.12,
+                y = 0.16,
+                width = 0.76,
+                height = 0.62,
+                color = ReplayColor(0.08, 0.28, 0.72),
+                endColor = ReplayColor(0.15, 0.82, 0.56),
+                fillKind = ReplayFillKind.LinearGradient,
+            ),
+        ),
+        dashboardRow = "reports/wgsl-pipeline/scenes/generated/results.json#linear-gradient-rect",
+        cpuRoute = "cpu.shader.linear-gradient.rect",
+        gpuRoute = "webgpu.generated.linear-gradient.rect",
+        pipelineKey = "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
+    ),
+    ReplaySceneEvidence(
+        id = "m73-bitmap-rect-nearest-replay-v1",
+        title = "M73 bitmap-rect nearest replay",
+        source = "kanvas-replay-data",
+        sourceSceneId = "bitmap-rect-nearest",
+        version = 1,
+        commandSource = "typed-kadre-runtime-replay-contract",
+        background = ReplayColor(0.04, 0.04, 0.05),
+        rects = listOf(
+            ReplayRect(
+                label = "bitmap-rect-nearest-checker",
+                x = 0.16,
+                y = 0.18,
+                width = 0.68,
+                height = 0.58,
+                color = ReplayColor(0.95, 0.72, 0.18),
+                endColor = ReplayColor(0.10, 0.30, 0.78),
+                fillKind = ReplayFillKind.CheckerBitmap,
+            ),
+        ),
+        dashboardRow = "reports/wgsl-pipeline/scenes/generated/results.json#bitmap-rect-nearest",
+        cpuRoute = "cpu.image-rect.strict-nearest",
+        gpuRoute = "webgpu.image-rect.strict-nearest",
+        pipelineKey = "imageRect.strictNearest.promotedSmoke",
+    ),
+    ReplaySceneEvidence(
+        id = "m73-gradient-color-filter-kplus-replay-v1",
+        title = "M73 gradient color-filter kPlus replay",
+        source = "kanvas-replay-data",
+        sourceSceneId = "gradient-color-filter-linear-kplus",
+        version = 1,
+        commandSource = "typed-kadre-runtime-replay-contract",
+        background = ReplayColor(0.035, 0.035, 0.045),
+        rects = listOf(
+            ReplayRect(
+                label = "linear-gradient-plus-red-filter",
+                x = 0.12,
+                y = 0.18,
+                width = 0.74,
+                height = 0.56,
+                color = ReplayColor(0.05, 0.55, 0.20),
+                endColor = ReplayColor(0.24, 0.90, 0.38),
+                fillKind = ReplayFillKind.ColorFilterPlus,
+                tintColor = ReplayColor(0.55, 0.12, 0.02),
+            ),
+        ),
+        dashboardRow = "reports/wgsl-pipeline/scenes/generated/results.json#gradient-color-filter-linear-kplus",
+        cpuRoute = "cpu.shader.linear-gradient.color-filter.blend-kplus-oracle",
+        gpuRoute = "webgpu.generated.linear-gradient.color-filter.blend-kplus",
+        pipelineKey = "shaderFamily=linearGradient colorFilter=Blend(red,kPlus) coverage=analyticRect state=[blendMode=kSrcOver]",
+    ),
+    ReplaySceneEvidence(
+        id = "m73-nested-rrect-clip-refusal-v1",
+        title = "M73 nested rrect clip refusal",
+        source = "kanvas-replay-data",
+        sourceSceneId = "m60-bounded-nested-rrect-clip",
+        version = 1,
+        commandSource = "typed-kadre-runtime-replay-contract",
+        background = ReplayColor(0.04, 0.04, 0.05),
+        rects = emptyList(),
+        dashboardRow = "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json#m60-bounded-nested-rrect-clip",
+        cpuRoute = "cpu.coverage.nested-rrect-clip-oracle",
+        gpuRoute = "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+        pipelineKey = "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported",
+        unsupportedCommands = listOf("nested-rrect-difference-clip"),
+    ),
+)
+
+private val M73_REPLAY_SCENES_BY_ID = M73_REPLAY_SCENES.associateBy { it.id }
 
 internal data class NativeCaptureResult(
     val status: String,
@@ -258,6 +379,7 @@ internal data class NativeSmokeResult(
             appendLine("    \"wgslSource\": ${configWgslSource(mode).json()}")
             appendLine("  },")
             appendLine("  \"sceneReplay\": ${replayScene?.toJson("  ") ?: "null"},")
+            appendLine("  \"replayPack\": ${replayPackJson(mode, "  ")},")
             appendLine("  \"status\": ${status.json()},")
             appendLine("  \"reason\": ${reason.json()},")
             appendLine("  \"nativePresented\": $nativePresented,")
@@ -401,8 +523,17 @@ internal class M69KadreNativeSmokeApp(
             if (config.mode == "demo" && replayScene == null) {
                 completeBlocked(
                     eventLoop,
-                    "m72.kadre-replay-scene-unsupported",
+                    "m73.kadre-replay-scene-unknown",
                     "Unsupported Kadre replay scene contract: ${config.sceneContractId}",
+                )
+                return
+            }
+            val selectedReplayScene = replayScene
+            if (config.mode == "demo" && selectedReplayScene != null && selectedReplayScene.unsupportedCommandCount > 0) {
+                completeBlocked(
+                    eventLoop,
+                    "m73.kadre-replay-scene-expected-unsupported",
+                    "Kadre replay scene ${config.sceneContractId} is expected-unsupported: ${selectedReplayScene.unsupportedCommands.joinToString()}",
                 )
                 return
             }
@@ -839,7 +970,7 @@ private fun parseArgs(args: Array<String>): NativeSmokeConfig {
         frames = frames.coerceAtLeast(1),
         mode = normalizedMode,
         warmupFrames = warmupFrames.coerceAtLeast(0).coerceAtMost(frames.coerceAtLeast(1)),
-        sceneContractId = sceneContractId ?: if (normalizedMode == "demo") M72_SCENE_CONTRACT_ID else M69_SCENE_CONTRACT_ID,
+        sceneContractId = sceneContractId ?: if (normalizedMode == "demo") M73_DEFAULT_SCENE_CONTRACT_ID else M69_SCENE_CONTRACT_ID,
         sceneContractVersion = sceneContractVersion.coerceAtLeast(1),
         captureOutput = captureOutput
             ?: if (normalizedMode == "demo") {
@@ -857,21 +988,21 @@ private fun writeResult(path: Path, result: NativeSmokeResult) {
 
 private val NativeSmokeConfig.presentedReason: String
     get() = if (mode == "demo") {
-        "m72.kadre-single-scene-replay-presented-frames"
+        "m73.kadre-replay-pack-selected-scene-presented-frames"
     } else {
         "m69.kadre-native-presented-frames"
     }
 
 private val NativeSmokeConfig.timeoutOnlyReason: String
     get() = if (mode == "demo") {
-        "m72.kadre-single-scene-replay-present-call-completed-timeout-only"
+        "m73.kadre-replay-pack-selected-scene-present-call-completed-timeout-only"
     } else {
         "m69.kadre-present-call-completed-timeout-only"
     }
 
 private val NativeSmokeConfig.windowTitle: String
     get() = if (mode == "demo") {
-        "Kanvas M72 - Kadre replay demo"
+        "Kanvas M73 - Kadre replay pack"
     } else {
         "Kanvas M69 - Kadre native smoke"
     }
@@ -887,9 +1018,32 @@ private val NativeSmokeConfig.frameClockSource: String
     }
 
 private val NativeSmokeConfig.replayScene: ReplaySceneEvidence?
-    get() = if (mode == "demo" && sceneContractId == M72_SCENE_CONTRACT_ID) M72_REPLAY_SCENE else null
+    get() = if (mode == "demo") M73_REPLAY_SCENES_BY_ID[sceneContractId] else null
 
-private fun configMilestone(mode: String): String = if (mode == "demo") "M70-A/M71/M72" else "M69"
+private fun replayPackJson(mode: String, indent: String): String {
+    if (mode != "demo") return "null"
+    val renderable = M73_REPLAY_SCENES.count { it.renderedByKadre }
+    val unsupported = M73_REPLAY_SCENES.count { !it.renderedByKadre }
+    return buildString {
+        appendLine("{")
+        appendLine("$indent  \"id\": \"m73-kadre-replay-pack-v1\",")
+        appendLine("$indent  \"claimLevel\": \"bounded-replay-pack-contracts\",")
+        appendLine("$indent  \"sceneCount\": ${M73_REPLAY_SCENES.size},")
+        appendLine("$indent  \"renderableSceneCount\": $renderable,")
+        appendLine("$indent  \"unsupportedSceneCount\": $unsupported,")
+        appendLine("$indent  \"source\": \"kanvas-replay-data\",")
+        appendLine("$indent  \"sceneIds\": [${M73_REPLAY_SCENES.joinToString(", ") { it.id.json() }}],")
+        appendLine("$indent  \"sourceSceneIds\": [${M73_REPLAY_SCENES.joinToString(", ") { it.sourceSceneId.json() }}],")
+        appendLine("$indent  \"unsupportedSceneIds\": [${M73_REPLAY_SCENES.filterNot { it.renderedByKadre }.joinToString(", ") { it.id.json() }}],")
+        appendLine("$indent  \"scenes\": [")
+        appendLine(M73_REPLAY_SCENES.joinToString(",\n") { "$indent    ${it.toJson("$indent    ")}" })
+        appendLine()
+        appendLine("$indent  ]")
+        append("$indent}")
+    }
+}
+
+private fun configMilestone(mode: String): String = if (mode == "demo") "M70-A/M71/M72/M73" else "M69"
 
 private fun configSceneClaim(mode: String): String = if (mode == "demo") {
     "Selected Kanvas replay scene contract executed through a bounded Kadre native WebGPU present-call loop"
@@ -904,20 +1058,20 @@ private fun configWgslSource(mode: String): String = if (mode == "demo") {
 }
 
 private fun configLinearIssues(mode: String): List<String> = if (mode == "demo") {
-    listOf("FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83")
+    listOf("FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83", "FOR-84", "FOR-85", "FOR-86", "FOR-87", "FOR-88", "FOR-89")
 } else {
     listOf("FOR-56", "FOR-57", "FOR-58", "FOR-59")
 }
 
 private fun configNonClaims(mode: String): List<String> = if (mode == "demo") {
     listOf(
-        "This run proves bounded Kadre native window present-call execution for the selected M72 `solid-rect` replay contract.",
+        "This run proves bounded Kadre native window present-call execution for one selected M73 replay-pack scene contract.",
         "M71 proves the demo route requests frames from Kadre/AppKit ControlFlow.Poll instead of relying on pointer/input events to wake the run loop.",
-        "M72 proves one selected Kanvas replay scene contract only; broad display-list replay is still outside the claim.",
+        "M72 proves one selected Kanvas replay scene contract; M73 expands that to a small typed replay-pack registry only.",
         "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
         "Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.",
         "The capture artifact is an offscreen wgpu4k native texture readback of the same scene contract, not a system screenshot of the presented window.",
-        "It does not prove broad Kanvas display-list replay or input-driven interaction yet.",
+        "It does not prove broad Kanvas display-list replay, arbitrary SkCanvas op streams, multi-scene live switching, or input-driven interaction yet.",
         "Timing is reporting-only present-call duration telemetry, not a release-grade FPS gate.",
     )
 } else {
@@ -985,23 +1139,39 @@ private fun renderCpuReference(width: Int, height: Int, replayScene: ReplayScene
     val bitmap = SkBitmap(width, height)
     val background = replayScene?.background ?: ReplayColor(0.04, 0.05, 0.07)
     bitmap.eraseColor(background.toArgb())
-    val canvas = SkCanvas(bitmap)
-    val rects = replayScene?.rects ?: listOf(
-        ReplayRect("blue-panel", 0.06, 0.10, 0.62, 0.32, ReplayColor(0.17, 0.48, 0.90)),
-        ReplayRect("green-panel", 0.38, 0.35, 0.46, 0.42, ReplayColor(0.22, 0.69, 0.00)),
-        ReplayRect("red-panel", 0.12, 0.62, 0.32, 0.22, ReplayColor(0.91, 0.29, 0.37)),
-    )
-    rects.forEach { rect ->
-        val paint = SkPaint().apply { color = rect.color.toArgb(); isAntiAlias = true }
-        canvas.drawRect(
-            SkRect.MakeXYWH(
-                (rect.x * width).toFloat(),
-                (rect.y * height).toFloat(),
-                (rect.width * width).toFloat(),
-                (rect.height * height).toFloat(),
-            ),
-            paint,
+    if (replayScene != null) {
+        replayScene.rects.forEach { rect ->
+            val left = (rect.x * width).toInt().coerceIn(0, width)
+            val top = (rect.y * height).toInt().coerceIn(0, height)
+            val right = ((rect.x + rect.width) * width).toInt().coerceIn(0, width)
+            val bottom = ((rect.y + rect.height) * height).toInt().coerceIn(0, height)
+            for (py in top until bottom) {
+                for (px in left until right) {
+                    val u = ((px.toDouble() / width.toDouble()) - rect.x) / rect.width.coerceAtLeast(0.0001)
+                    val v = ((py.toDouble() / height.toDouble()) - rect.y) / rect.height.coerceAtLeast(0.0001)
+                    bitmap.setPixel(px, py, rect.fillColorAt(u, v, phase = 0.0).toArgb())
+                }
+            }
+        }
+    } else {
+        val canvas = SkCanvas(bitmap)
+        val rects = listOf(
+            ReplayRect("blue-panel", 0.06, 0.10, 0.62, 0.32, ReplayColor(0.17, 0.48, 0.90)),
+            ReplayRect("green-panel", 0.38, 0.35, 0.46, 0.42, ReplayColor(0.22, 0.69, 0.00)),
+            ReplayRect("red-panel", 0.12, 0.62, 0.32, 0.22, ReplayColor(0.91, 0.29, 0.37)),
         )
+        rects.forEach { rect ->
+            val paint = SkPaint().apply { color = rect.color.toArgb(); isAntiAlias = true }
+            canvas.drawRect(
+                SkRect.MakeXYWH(
+                    (rect.x * width).toFloat(),
+                    (rect.y * height).toFloat(),
+                    (rect.width * width).toFloat(),
+                    (rect.height * height).toFloat(),
+                ),
+                paint,
+            )
+        }
     }
     var checksum = 1469598103934665603L
     var nonTransparent = 0
@@ -1015,16 +1185,56 @@ private fun renderCpuReference(width: Int, height: Int, replayScene: ReplayScene
     return checksum to nonTransparent
 }
 
+private fun ReplayRect.fillColorAt(u: Double, v: Double, phase: Double): ReplayColor =
+    when (fillKind) {
+        ReplayFillKind.Solid -> color
+        ReplayFillKind.LinearGradient -> color.mix(endColor, u.coerceIn(0.0, 1.0))
+        ReplayFillKind.CheckerBitmap -> {
+            val checker = ((floor(u.coerceIn(0.0, 1.0) * 12.0) + floor(v.coerceIn(0.0, 1.0) * 8.0)).toInt() and 1) == 0
+            if (checker) color else endColor
+        }
+        ReplayFillKind.ColorFilterPlus -> color.mix(endColor, u.coerceIn(0.0, 1.0)).plus(tintColor ?: ReplayColor(0.0, 0.0, 0.0))
+    }
+
+private fun ReplayColor.mix(other: ReplayColor, t: Double): ReplayColor {
+    val clamped = t.coerceIn(0.0, 1.0)
+    return ReplayColor(
+        r = r + (other.r - r) * clamped,
+        g = g + (other.g - g) * clamped,
+        b = b + (other.b - b) * clamped,
+        a = a + (other.a - a) * clamped,
+    )
+}
+
+private fun ReplayColor.plus(other: ReplayColor): ReplayColor =
+    ReplayColor(
+        r = (r + other.r).coerceIn(0.0, 1.0),
+        g = (g + other.g).coerceIn(0.0, 1.0),
+        b = (b + other.b).coerceIn(0.0, 1.0),
+        a = a,
+    )
+
 private fun ReplaySceneEvidence.toWgsl(phase: Double): String {
     val rectTests = rects.mapIndexed { index, rect ->
         val x = if (rect.animated) "${rect.x.wgsl()} + ${rect.dx.wgsl()} * phase" else rect.x.wgsl()
         val y = rect.y.wgsl()
         val width = rect.width.wgsl()
         val height = rect.height.wgsl()
-        val color = rect.color.toWgslVec3()
+        val u = "clamp((in.uv.x - $x) / $width, 0.0, 1.0)"
+        val v = "clamp((in.uv.y - $y) / $height, 0.0, 1.0)"
+        val fill = when (rect.fillKind) {
+            ReplayFillKind.Solid -> rect.color.toWgslVec3()
+            ReplayFillKind.LinearGradient -> "mix(${rect.color.toWgslVec3()}, ${rect.endColor.toWgslVec3()}, $u)"
+            ReplayFillKind.CheckerBitmap -> {
+                "select(${rect.endColor.toWgslVec3()}, ${rect.color.toWgslVec3()}, (i32(floor($u * 12.0)) + i32(floor($v * 8.0))) % 2 == 0)"
+            }
+            ReplayFillKind.ColorFilterPlus -> {
+                "min(mix(${rect.color.toWgslVec3()}, ${rect.endColor.toWgslVec3()}, $u) + ${(rect.tintColor ?: ReplayColor(0.0, 0.0, 0.0)).toWgslVec3()}, vec3<f32>(1.0))"
+            }
+        }
         """
         let rect$index = select(0.0, 1.0, in.uv.x >= $x && in.uv.x <= ($x + $width) && in.uv.y >= $y && in.uv.y <= ($y + $height));
-        color = mix(color, $color, rect$index);
+        color = mix(color, $fill, rect$index * ${rect.color.a.wgsl()});
         """.trimIndent()
     }.joinToString("\n    ")
 
