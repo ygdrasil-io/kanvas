@@ -47,17 +47,31 @@ import org.skia.foundation.SkPaint
 
 private const val DEFAULT_WIDTH = 640
 private const val DEFAULT_HEIGHT = 420
+private const val M69_SCENE_CONTRACT_ID = "m69-first-kanvas-kadre-host-adapter-scene"
+private const val M70_SCENE_CONTRACT_ID = "m70-a-kanvas-owned-kadre-native-scene"
+private const val SCENE_CONTRACT_VERSION = 1
+private const val SCENE_CONTRACT_OWNER = "kanvas"
+private const val REPORTING_ONLY_GATE_PHASE = "reportingOnly"
 
 internal data class NativeSmokeConfig(
     val output: Path,
     val frames: Int = 3,
+    val mode: String = "smoke",
+    val warmupFrames: Int = 0,
+    val sceneContractId: String = M69_SCENE_CONTRACT_ID,
+    val sceneContractVersion: Int = SCENE_CONTRACT_VERSION,
 )
 
 internal data class NativeSmokeResult(
+    val mode: String,
+    val sceneContractId: String,
+    val sceneContractVersion: Int,
     val status: String,
     val reason: String,
     val nativePresented: Boolean,
+    val presentCallCompleted: Boolean,
     val requestedFrames: Int,
+    val warmupFrames: Int,
     val presentedFrames: Int,
     val redrawEvents: Int,
     val width: Int,
@@ -68,44 +82,123 @@ internal data class NativeSmokeResult(
     val cpuReferenceNonTransparentPixels: Int,
     val firstFrameMs: Double?,
     val averageFrameMs: Double?,
+    val telemetry: RuntimeTelemetry,
     val surfaceStatuses: List<String>,
     val error: String? = null,
 ) {
-    fun toJson(): String = buildString {
+    fun toJson(): String {
+        val telemetryJson = telemetry.toJson("  ")
+        return buildString {
+            appendLine("{")
+            appendLine("  \"schemaVersion\": 2,")
+            appendLine("  \"generatedBy\": \"kadre-runtime:M69KadreNativeSmoke\",")
+            appendLine("  \"route\": \"kadre.native.windowed.wgpu4\",")
+            appendLine("  \"mode\": ${mode.json()},")
+            appendLine("  \"gatePhase\": ${REPORTING_ONLY_GATE_PHASE.json()},")
+            appendLine("  \"reportingOnly\": true,")
+            appendLine("  \"sceneContract\": {")
+            appendLine("    \"id\": ${sceneContractId.json()},")
+            appendLine("    \"version\": $sceneContractVersion,")
+            appendLine("    \"owner\": ${SCENE_CONTRACT_OWNER.json()},")
+            appendLine("    \"milestone\": ${configMilestone(mode).json()},")
+            appendLine("    \"claim\": ${configSceneClaim(mode).json()},")
+            appendLine("    \"wgslSource\": \"runtime-generated-from-kanvas-owned-scene-contract\"")
+            appendLine("  },")
+            appendLine("  \"status\": ${status.json()},")
+            appendLine("  \"reason\": ${reason.json()},")
+            appendLine("  \"nativePresented\": $nativePresented,")
+            appendLine("  \"presentCallCompleted\": $presentCallCompleted,")
+            appendLine("  \"requestedFrames\": $requestedFrames,")
+            appendLine("  \"warmupFrames\": $warmupFrames,")
+            appendLine("  \"presentedFrames\": $presentedFrames,")
+            appendLine("  \"redrawEvents\": $redrawEvents,")
+            appendLine("  \"surface\": {")
+            appendLine("    \"width\": $width,")
+            appendLine("    \"height\": $height,")
+            appendLine("    \"format\": ${surfaceFormat?.json() ?: "null"}")
+            appendLine("  },")
+            appendLine("  \"adapterInfo\": ${adapterInfo?.json() ?: "null"},")
+            appendLine("  \"cpuReference\": {")
+            appendLine("    \"source\": \"kanvas-skia SkBitmap/SkCanvas\",")
+            appendLine("    \"checksum\": $cpuReferenceChecksum,")
+            appendLine("    \"nonTransparentPixels\": $cpuReferenceNonTransparentPixels")
+            appendLine("  },")
+            appendLine("  \"frameTiming\": {")
+            appendLine("    \"firstFrameMs\": ${firstFrameMs?.formatJsonNumber() ?: "null"},")
+            appendLine("    \"averageFrameMs\": ${averageFrameMs?.formatJsonNumber() ?: "null"},")
+            appendLine("    \"warmupFrameCount\": ${telemetry.warmupFrameCount},")
+            appendLine("    \"measuredSampleCount\": ${telemetry.measuredSampleCount},")
+            appendLine("    \"measuredP50Ms\": ${telemetry.measuredP50Ms?.formatJsonNumber() ?: "null"},")
+            appendLine("    \"measuredP95Ms\": ${telemetry.measuredP95Ms?.formatJsonNumber() ?: "null"},")
+            appendLine("    \"measuredWorstMs\": ${telemetry.measuredWorstMs?.formatJsonNumber() ?: "null"},")
+            appendLine("    \"gatePhase\": ${telemetry.gatePhase.json()},")
+            appendLine("    \"reportingOnly\": ${telemetry.reportingOnly},")
+            appendLine("    \"nativeTimingClaim\": \"present-call-duration-only\"")
+            appendLine("  },")
+            appendLine("  \"runtimeTelemetry\": $telemetryJson,")
+            appendLine("  \"capture\": {")
+            appendLine("    \"status\": \"unavailable\",")
+            appendLine("    \"reason\": \"m70.native-readback-not-available\",")
+            appendLine("    \"imagePath\": null,")
+            appendLine("    \"realNativeReadback\": false")
+            appendLine("  },")
+            appendLine("  \"surfaceStatusSummary\": ${surfaceStatusSummary(surfaceStatuses).toJson("  ")},")
+            appendLine("  \"surfaceStatuses\": [${surfaceStatuses.joinToString(", ") { it.json() }}],")
+            appendLine("  \"linearIssues\": [${configLinearIssues(mode).joinToString(", ") { it.json() }}],")
+            appendLine("  \"nonClaims\": [")
+            appendLine(configNonClaims(mode).joinToString(",\n") { "    ${it.json()}" })
+            appendLine("  ],")
+            appendLine("  \"error\": ${error?.json() ?: "null"}")
+            appendLine("}")
+        }
+    }
+}
+
+private data class SurfaceStatusSummary(
+    val success: Int,
+    val timeout: Int,
+    val lost: Int,
+    val outdated: Int,
+    val outOfMemory: Int,
+    val deviceLost: Int,
+) {
+    fun toJson(indent: String): String = buildString {
         appendLine("{")
-        appendLine("  \"schemaVersion\": 1,")
-        appendLine("  \"generatedBy\": \"kadre-runtime:M69KadreNativeSmoke\",")
-        appendLine("  \"route\": \"kadre.native.windowed.wgpu4\",")
-        appendLine("  \"status\": ${status.json()},")
-        appendLine("  \"reason\": ${reason.json()},")
-        appendLine("  \"nativePresented\": $nativePresented,")
-        appendLine("  \"requestedFrames\": $requestedFrames,")
-        appendLine("  \"presentedFrames\": $presentedFrames,")
-        appendLine("  \"redrawEvents\": $redrawEvents,")
-        appendLine("  \"surface\": {")
-        appendLine("    \"width\": $width,")
-        appendLine("    \"height\": $height,")
-        appendLine("    \"format\": ${surfaceFormat?.json() ?: "null"}")
-        appendLine("  },")
-        appendLine("  \"adapterInfo\": ${adapterInfo?.json() ?: "null"},")
-        appendLine("  \"cpuReference\": {")
-        appendLine("    \"source\": \"kanvas-skia SkBitmap/SkCanvas\",")
-        appendLine("    \"checksum\": $cpuReferenceChecksum,")
-        appendLine("    \"nonTransparentPixels\": $cpuReferenceNonTransparentPixels")
-        appendLine("  },")
-        appendLine("  \"frameTiming\": {")
-        appendLine("    \"firstFrameMs\": ${firstFrameMs?.formatJsonNumber() ?: "null"},")
-        appendLine("    \"averageFrameMs\": ${averageFrameMs?.formatJsonNumber() ?: "null"},")
-        appendLine("    \"nativeTimingClaim\": \"present-call-duration-only\"")
-        appendLine("  },")
-        appendLine("  \"surfaceStatuses\": [${surfaceStatuses.joinToString(", ") { it.json() }}],")
-        appendLine("  \"linearIssues\": [\"FOR-56\", \"FOR-57\", \"FOR-58\", \"FOR-59\"],")
-        appendLine("  \"nonClaims\": [")
-        appendLine("    \"This smoke proves Kadre native window presentation for a bounded WGSL scene only.\",")
-        appendLine("    \"It does not prove broad Kanvas display-list replay or input-driven interaction yet.\"")
-        appendLine("  ],")
-        appendLine("  \"error\": ${error?.json() ?: "null"}")
-        appendLine("}")
+        appendLine("$indent  \"success\": $success,")
+        appendLine("$indent  \"timeout\": $timeout,")
+        appendLine("$indent  \"lost\": $lost,")
+        appendLine("$indent  \"outdated\": $outdated,")
+        appendLine("$indent  \"outOfMemory\": $outOfMemory,")
+        appendLine("$indent  \"deviceLost\": $deviceLost")
+        append("$indent}")
+    }
+}
+
+internal data class RuntimeTelemetry(
+    val gatePhase: String = REPORTING_ONLY_GATE_PHASE,
+    val reportingOnly: Boolean = true,
+    val lane: String = "frame.kadre-windowed",
+    val warmupFrameCount: Int,
+    val measuredSampleCount: Int,
+    val measuredP50Ms: Double?,
+    val measuredP95Ms: Double?,
+    val measuredWorstMs: Double?,
+    val totalSampleCount: Int,
+    val surfaceStatusCount: Int,
+) {
+    fun toJson(indent: String): String = buildString {
+        appendLine("{")
+        appendLine("$indent  \"lane\": ${lane.json()},")
+        appendLine("$indent  \"gatePhase\": ${gatePhase.json()},")
+        appendLine("$indent  \"reportingOnly\": $reportingOnly,")
+        appendLine("$indent  \"warmupFrameCount\": $warmupFrameCount,")
+        appendLine("$indent  \"measuredSampleCount\": $measuredSampleCount,")
+        appendLine("$indent  \"measuredP50Ms\": ${measuredP50Ms?.formatJsonNumber() ?: "null"},")
+        appendLine("$indent  \"measuredP95Ms\": ${measuredP95Ms?.formatJsonNumber() ?: "null"},")
+        appendLine("$indent  \"measuredWorstMs\": ${measuredWorstMs?.formatJsonNumber() ?: "null"},")
+        appendLine("$indent  \"totalSampleCount\": $totalSampleCount,")
+        appendLine("$indent  \"surfaceStatusCount\": $surfaceStatusCount")
+        append("$indent}")
     }
 }
 
@@ -132,7 +225,7 @@ internal class M69KadreNativeSmokeApp(
         runCatching {
             val win = eventLoop.createWindow(
                 WindowAttributes(
-                    title = "Kanvas M69 - Kadre native smoke",
+                    title = config.windowTitle,
                     size = PhysicalSize(DEFAULT_WIDTH, DEFAULT_HEIGHT),
                     visible = true,
                     resizable = true,
@@ -308,12 +401,19 @@ internal class M69KadreNativeSmokeApp(
         if (completed) return
         completed = true
         val size = window?.innerSize ?: PhysicalSize(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        val acquiredSurfaceFrames = surfaceStatuses.count { it == SurfaceTextureStatus.success.name }
+        val hasConfirmedPresentation = acquiredSurfaceFrames > 0
         onComplete(
             NativeSmokeResult(
-                status = "native-runnable",
-                reason = "m69.kadre-native-presented-frames",
-                nativePresented = true,
+                mode = config.mode,
+                sceneContractId = config.sceneContractId,
+                sceneContractVersion = config.sceneContractVersion,
+                status = if (hasConfirmedPresentation) "native-runnable" else "degraded",
+                reason = if (hasConfirmedPresentation) config.presentedReason else config.timeoutOnlyReason,
+                nativePresented = hasConfirmedPresentation,
+                presentCallCompleted = true,
                 requestedFrames = config.frames,
+                warmupFrames = config.warmupFrames,
                 presentedFrames = presentedFrames,
                 redrawEvents = redrawEvents,
                 width = size.width,
@@ -324,6 +424,7 @@ internal class M69KadreNativeSmokeApp(
                 cpuReferenceNonTransparentPixels = cpuReference.second,
                 firstFrameMs = frameDurationsMs.firstOrNull(),
                 averageFrameMs = frameDurationsMs.takeIf { it.isNotEmpty() }?.average(),
+                telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size),
                 surfaceStatuses = surfaceStatuses.toList(),
             )
         )
@@ -337,10 +438,15 @@ internal class M69KadreNativeSmokeApp(
         val size = window?.innerSize ?: PhysicalSize(DEFAULT_WIDTH, DEFAULT_HEIGHT)
         onComplete(
             NativeSmokeResult(
+                mode = config.mode,
+                sceneContractId = config.sceneContractId,
+                sceneContractVersion = config.sceneContractVersion,
                 status = "blocked",
                 reason = reason,
                 nativePresented = false,
+                presentCallCompleted = false,
                 requestedFrames = config.frames,
+                warmupFrames = config.warmupFrames,
                 presentedFrames = presentedFrames,
                 redrawEvents = redrawEvents,
                 width = size.width,
@@ -351,6 +457,7 @@ internal class M69KadreNativeSmokeApp(
                 cpuReferenceNonTransparentPixels = cpuReference.second,
                 firstFrameMs = frameDurationsMs.firstOrNull(),
                 averageFrameMs = frameDurationsMs.takeIf { it.isNotEmpty() }?.average(),
+                telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size),
                 surfaceStatuses = surfaceStatuses.toList(),
                 error = error,
             )
@@ -373,21 +480,104 @@ internal class M69KadreNativeSmokeApp(
 private fun parseArgs(args: Array<String>): NativeSmokeConfig {
     var output = Path("reports/wgsl-pipeline/m69-kadre-native/native-smoke.json")
     var frames = 3
+    var mode = "smoke"
+    var warmupFrames = 0
+    var sceneContractId: String? = null
+    var sceneContractVersion = SCENE_CONTRACT_VERSION
     var i = 0
     while (i < args.size) {
         when (args[i]) {
             "--output" -> output = Path(args.getOrNull(++i) ?: error("--output requires a path"))
             "--frames" -> frames = args.getOrNull(++i)?.toIntOrNull() ?: error("--frames requires an integer")
+            "--mode" -> mode = args.getOrNull(++i) ?: error("--mode requires smoke or demo")
+            "--warmup-frames" -> warmupFrames = args.getOrNull(++i)?.toIntOrNull()
+                ?: error("--warmup-frames requires an integer")
+            "--scene-contract-id" -> sceneContractId = args.getOrNull(++i)
+                ?: error("--scene-contract-id requires a value")
+            "--scene-contract-version" -> sceneContractVersion = args.getOrNull(++i)?.toIntOrNull()
+                ?: error("--scene-contract-version requires an integer")
         }
         i++
     }
-    return NativeSmokeConfig(output = output, frames = frames.coerceAtLeast(1))
+    val normalizedMode = when (mode.lowercase()) {
+        "smoke", "demo" -> mode.lowercase()
+        else -> error("--mode must be smoke or demo")
+    }
+    return NativeSmokeConfig(
+        output = output,
+        frames = frames.coerceAtLeast(1),
+        mode = normalizedMode,
+        warmupFrames = warmupFrames.coerceAtLeast(0).coerceAtMost(frames.coerceAtLeast(1)),
+        sceneContractId = sceneContractId ?: if (normalizedMode == "demo") M70_SCENE_CONTRACT_ID else M69_SCENE_CONTRACT_ID,
+        sceneContractVersion = sceneContractVersion.coerceAtLeast(1),
+    )
 }
 
 private fun writeResult(path: Path, result: NativeSmokeResult) {
     path.parent?.createDirectories()
     path.writeText(result.toJson())
 }
+
+private val NativeSmokeConfig.presentedReason: String
+    get() = if (mode == "demo") {
+        "m70.kadre-native-demo-presented-frames"
+    } else {
+        "m69.kadre-native-presented-frames"
+    }
+
+private val NativeSmokeConfig.timeoutOnlyReason: String
+    get() = if (mode == "demo") {
+        "m70.kadre-present-call-completed-timeout-only"
+    } else {
+        "m69.kadre-present-call-completed-timeout-only"
+    }
+
+private val NativeSmokeConfig.windowTitle: String
+    get() = if (mode == "demo") {
+        "Kanvas M70-A - Kadre native demo"
+    } else {
+        "Kanvas M69 - Kadre native smoke"
+    }
+
+private fun configMilestone(mode: String): String = if (mode == "demo") "M70-A" else "M69"
+
+private fun configSceneClaim(mode: String): String = if (mode == "demo") {
+    "Kanvas-owned runtime scene contract executed through a bounded Kadre native WebGPU present-call loop"
+} else {
+    "M69 bounded standalone WGSL native present smoke; broad Kanvas display-list replay is not claimed"
+}
+
+private fun configLinearIssues(mode: String): List<String> = if (mode == "demo") {
+    listOf("FOR-61", "FOR-62", "FOR-64")
+} else {
+    listOf("FOR-56", "FOR-57", "FOR-58", "FOR-59")
+}
+
+private fun configNonClaims(mode: String): List<String> = if (mode == "demo") {
+    listOf(
+        "This run proves bounded Kadre native window present-call execution for the M70-A Kanvas-owned scene contract.",
+        "If every surface status is timeout, the run proves present-call completion only, not confirmed native presentation.",
+        "It does not prove broad Kanvas display-list replay, native readback capture, or input-driven interaction yet.",
+        "Timing is reporting-only present-call duration telemetry, not a release-grade FPS gate.",
+    )
+} else {
+    listOf(
+        "This smoke proves Kadre native window presentation for a bounded WGSL scene only.",
+        "If every surface status is timeout, the run proves present-call completion only, not confirmed native presentation.",
+        "It does not prove broad Kanvas display-list replay or input-driven interaction yet.",
+        "Timing is present-call duration telemetry, not a release-grade FPS gate.",
+    )
+}
+
+private fun surfaceStatusSummary(statuses: List<String>): SurfaceStatusSummary =
+    SurfaceStatusSummary(
+        success = statuses.count { it == SurfaceTextureStatus.success.name },
+        timeout = statuses.count { it == SurfaceTextureStatus.timeout.name },
+        lost = statuses.count { it == SurfaceTextureStatus.lost.name },
+        outdated = statuses.count { it == SurfaceTextureStatus.outdated.name },
+        outOfMemory = statuses.count { it == SurfaceTextureStatus.outOfMemory.name },
+        deviceLost = statuses.count { it == SurfaceTextureStatus.deviceLost.name },
+    )
 
 private fun renderCpuReference(width: Int, height: Int): Pair<Long, Int> {
     val bitmap = SkBitmap(width, height)
@@ -409,6 +599,26 @@ private fun renderCpuReference(width: Int, height: Int): Pair<Long, Int> {
         }
     }
     return checksum to nonTransparent
+}
+
+private fun buildTelemetry(config: NativeSmokeConfig, frameDurationsMs: List<Double>, surfaceStatusCount: Int): RuntimeTelemetry {
+    val measured = frameDurationsMs.drop(config.warmupFrames.coerceAtMost(frameDurationsMs.size))
+    return RuntimeTelemetry(
+        warmupFrameCount = frameDurationsMs.size.coerceAtMost(config.warmupFrames),
+        measuredSampleCount = measured.size,
+        measuredP50Ms = measured.percentile(0.50),
+        measuredP95Ms = measured.percentile(0.95),
+        measuredWorstMs = measured.maxOrNull(),
+        totalSampleCount = frameDurationsMs.size,
+        surfaceStatusCount = surfaceStatusCount,
+    )
+}
+
+private fun List<Double>.percentile(percentile: Double): Double? {
+    if (isEmpty()) return null
+    val sorted = sorted()
+    val index = (kotlin.math.ceil(sorted.size * percentile).toInt() - 1).coerceIn(sorted.indices)
+    return sorted[index]
 }
 
 private fun firstSceneWgsl(phase: Double): String = """
@@ -471,10 +681,15 @@ fun main(args: Array<String>) {
         writeResult(
             config.output,
             NativeSmokeResult(
+                mode = config.mode,
+                sceneContractId = config.sceneContractId,
+                sceneContractVersion = config.sceneContractVersion,
                 status = "blocked",
                 reason = "m69.kadre-native-appkit-required",
                 nativePresented = false,
+                presentCallCompleted = false,
                 requestedFrames = config.frames,
+                warmupFrames = config.warmupFrames,
                 presentedFrames = 0,
                 redrawEvents = 0,
                 width = DEFAULT_WIDTH,
@@ -485,6 +700,7 @@ fun main(args: Array<String>) {
                 cpuReferenceNonTransparentPixels = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT).second,
                 firstFrameMs = null,
                 averageFrameMs = null,
+                telemetry = buildTelemetry(config, emptyList(), 0),
                 surfaceStatuses = emptyList(),
                 error = "M69 native smoke currently supports Kadre AppKit + Metal only.",
             )
@@ -504,10 +720,15 @@ fun main(args: Array<String>) {
         writeResult(
             config.output,
             NativeSmokeResult(
+                mode = config.mode,
+                sceneContractId = config.sceneContractId,
+                sceneContractVersion = config.sceneContractVersion,
                 status = "blocked",
                 reason = "m69.kadre-native-run-failed",
                 nativePresented = false,
+                presentCallCompleted = false,
                 requestedFrames = config.frames,
+                warmupFrames = config.warmupFrames,
                 presentedFrames = 0,
                 redrawEvents = 0,
                 width = DEFAULT_WIDTH,
@@ -518,6 +739,7 @@ fun main(args: Array<String>) {
                 cpuReferenceNonTransparentPixels = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT).second,
                 firstFrameMs = null,
                 averageFrameMs = null,
+                telemetry = buildTelemetry(config, emptyList(), 0),
                 surfaceStatuses = emptyList(),
                 error = error.message ?: error.toString(),
             )
@@ -527,10 +749,15 @@ fun main(args: Array<String>) {
         writeResult(
             config.output,
             NativeSmokeResult(
+                mode = config.mode,
+                sceneContractId = config.sceneContractId,
+                sceneContractVersion = config.sceneContractVersion,
                 status = "blocked",
                 reason = "m69.kadre-native-no-result",
                 nativePresented = false,
+                presentCallCompleted = false,
                 requestedFrames = config.frames,
+                warmupFrames = config.warmupFrames,
                 presentedFrames = 0,
                 redrawEvents = 0,
                 width = DEFAULT_WIDTH,
@@ -541,6 +768,7 @@ fun main(args: Array<String>) {
                 cpuReferenceNonTransparentPixels = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT).second,
                 firstFrameMs = null,
                 averageFrameMs = null,
+                telemetry = buildTelemetry(config, emptyList(), 0),
                 surfaceStatuses = emptyList(),
                 error = "Kadre event loop returned without invoking completion callback.",
             )
