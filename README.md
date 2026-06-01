@@ -15,7 +15,7 @@ product target is broader: make Kanvas render more of the practical Skia CPU
 surface while building a measured real-time WebGPU lane with live telemetry,
 feature diagnostics, and PM-visible demos.
 
-New target readiness is approximately 39% after M64 closeout. This is intentionally lower
+New target readiness is approximately 53% after M65/M66 closeout. This is intentionally lower
 than the completed MEP score because the scope has expanded from evidence
 infrastructure to feature breadth, fidelity, runtime behavior, and release
 operability. The score is based on counted denominators in the target doc, not
@@ -24,12 +24,12 @@ manual sprint estimates.
 | Area | Weight | Current progress | PM interpretation |
 |---|---:|---:|---|
 | Rendering feature breadth | 30% | 60% | Path AA, bounded image-filter DAG, text/font, color/blend/color-filter, and registered runtime-effect evidence now have selected generated contracts; broad layers and fallbacks remain incomplete. |
-| Skia-like fidelity | 20% | 31% | Reference/CPU/GPU diffs exist for selected scenes; M64 adds one supported descriptor-backed runtime-effect row, but broad GM parity and diff burn-down remain ahead. |
-| Real-time runtime | 20% | 10% | Static dashboard evidence exists and registered runtime-effect parameter metadata is now available for the future live Kadre lane; frame loop, invalidation, and live telemetry are not productized yet. |
+| Skia-like fidelity | 20% | 50% | M66 raises selected GM/reference evidence to 50/100 rows. Only 37/100 are Skia-comparable today; CPU-oracle rows are breadth/refusal evidence until comparable Skia references land. |
+| Real-time runtime | 20% | 40% | M65 adds a reporting-only headless runtime smoke lane with 120-frame telemetry, nonblank frame artifacts, full-redraw invalidation diagnostics, and explicit Kadre-host refusal. Live Kadre presentation remains future work. |
 | Performance and cache readiness | 15% | 35% | M59 selected performance gate is strong; family budgets, frame budgets, warm/cold cache gates, and runtime gates remain missing. |
-| PM/demo operability | 15% | 55% | PM dashboard works and now exposes graph/glyph diagnostics plus M63/M64 refusal boundaries; live demo packaging, hosted artifacts, and release-candidate workflow remain incomplete. |
+| PM/demo operability | 15% | 80% | PM dashboard now includes M66 family/reference counters and the PM bundle includes M65 runtime smoke telemetry/artifacts; live hosted demo packaging and release-candidate workflow remain incomplete. |
 
-Weighted PM readiness for the new target: **39%**.
+Weighted PM readiness for the new target: **53%**.
 
 Active planning entry points:
 
@@ -45,8 +45,8 @@ Active planning entry points:
 | M62 | Text & Glyph Rendering V1 | Simple text renders through real font loading with outline/path glyph routes; glyph atlas, fallback-family selection, emoji, and complex shaping remain explicit non-claims. |
 | M63 | Color, Blend & ColorFilter Parity | Bounded SrcOver, linear-gradient color-filter kPlus, and sweep-gradient clamp rows render; wide-gamut color-space and advanced blend chains refuse with stable reasons. |
 | M64 | Registered Runtime Effects | SimpleRT renders through a registered Kotlin/WGSL descriptor with parser-reflected uniforms; SpiralRT and arbitrary SkSL refuse with stable reasons. |
-| M65 | Real-Time Scene Runtime | Kadre-hosted scene loop exposes FPS, frame breakdown, invalidation, cache telemetry, and route diagnostics. |
-| M66 | Skia GM Promotion Wave | 50-100 high-value GM-derived rows become generated support/refusal evidence. |
+| M65 | Real-Time Scene Runtime | Headless/offscreen runtime smoke exposes 120-frame telemetry, nonblank frame artifacts, invalidation diagnostics, and explicit Kadre-host blocker. |
+| M66 | Skia GM Promotion Wave | 19 cumulative GM/reference rows become generated support/refusal evidence, bringing selected fidelity evidence to 50/100 rows. |
 | M67 | Performance Tiering | Family-level correctness and performance budgets become release-owned gates. |
 | M68 | Native Real-Time Demo | Runnable Kadre demo shows animation, text, filters, paths, runtime effects, controls, and telemetry. |
 | M69 | Fidelity Hardening Toward Skia CPU | Visual diff burn-down improves promoted families without weakening thresholds globally. |

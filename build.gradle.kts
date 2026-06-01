@@ -776,6 +776,36 @@ tasks.register("pipelineM64RegisteredRuntimeEffectsPack") {
     }
 }
 
+tasks.register("pipelineM66GmPromotionWave") {
+    group = "verification"
+    description = "Materializes M66 cumulative GM/reference promotion wave generated scene rows and artifacts."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m54_hard_feature_depth_pack.py")
+    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json")
+    val sourceArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m66-generated")
+    inputs.file(scriptFile)
+    inputs.file(contractFile)
+    inputs.dir(sourceArtifactDir)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--contract",
+                contractFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineM57PathAaClipMicroPromotionPack") {
     group = "verification"
     description = "Materializes M57 bounded Path AA / clip micro-promotion generated scene rows and artifacts."
@@ -836,6 +866,35 @@ tasks.register("pipelineM60NestedClipPathAaPromotionPack") {
     }
 }
 
+tasks.register("pipelineM65RuntimeSmoke") {
+    group = "verification"
+    description = "Generates M65 headless/offscreen runtime smoke telemetry and nonblank frame artifacts."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m65_runtime_smoke.py")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
+    inputs.file(scriptFile)
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/gpu.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json"))
+    outputs.dir(outputDir)
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-runtime-smoke.md"))
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--output-dir",
+                outputDir.asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineGeneratedSceneExport") {
     group = "verification"
     description = "Materializes generated WGSL scene result artifacts into the dashboard export layout."
@@ -849,6 +908,7 @@ tasks.register("pipelineGeneratedSceneExport") {
     val m62GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m62-generated")
     val m63GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m63-generated")
     val m64GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m64-generated")
+    val m66GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m66-generated")
     val m57GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m57-generated")
     val m60GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m60-generated")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
@@ -860,6 +920,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         "pipelineM62FontFallbackEvidencePack",
         "pipelineM63ColorBlendParityPack",
         "pipelineM64RegisteredRuntimeEffectsPack",
+        "pipelineM66GmPromotionWave",
         "pipelineM57PathAaClipMicroPromotionPack",
         "pipelineM60NestedClipPathAaPromotionPack",
     )
@@ -873,6 +934,7 @@ tasks.register("pipelineGeneratedSceneExport") {
     inputs.dir(m62GeneratedDir)
     inputs.dir(m63GeneratedDir)
     inputs.dir(m64GeneratedDir)
+    inputs.dir(m66GeneratedDir)
     inputs.dir(m57GeneratedDir)
     inputs.dir(m60GeneratedDir)
     outputs.dir(outputDir)
@@ -888,6 +950,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         val m62GeneratedRoot = m62GeneratedDir.get().asFile
         val m63GeneratedRoot = m63GeneratedDir.get().asFile
         val m64GeneratedRoot = m64GeneratedDir.get().asFile
+        val m66GeneratedRoot = m66GeneratedDir.get().asFile
         val m57GeneratedRoot = m57GeneratedDir.get().asFile
         val m60GeneratedRoot = m60GeneratedDir.get().asFile
         val manifest = manifestFile.asFile
@@ -932,6 +995,7 @@ tasks.register("pipelineGeneratedSceneExport") {
             val normalized = relativePath.replace('\\', '/')
             return listOf(
                 m60GeneratedRoot.resolve(normalized),
+                m66GeneratedRoot.resolve(normalized),
                 m64GeneratedRoot.resolve(normalized),
                 m63GeneratedRoot.resolve(normalized),
                 m62GeneratedRoot.resolve(normalized),
@@ -1025,6 +1089,15 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
+        val m66Manifest = m66GeneratedRoot.resolve("data/m66-generated-scenes.json")
+        val m66Scenes = if (m66Manifest.isFile) {
+            val m66Root = JsonSlurper().parse(m66Manifest) as? Map<*, *>
+                ?: throw GradleException("M66 generated scene manifest root must be a JSON object: ${m66Manifest.relativeTo(rootDir)}")
+            m66Root["scenes"] as? List<*>
+                ?: throw GradleException("M66 generated scene manifest must contain a `scenes` array: ${m66Manifest.relativeTo(rootDir)}")
+        } else {
+            emptyList<Any?>()
+        }
         val m60Manifest = m60GeneratedRoot.resolve("data/m60-generated-scenes.json")
         val m60Scenes = if (m60Manifest.isFile) {
             val m60Root = JsonSlurper().parse(m60Manifest) as? Map<*, *>
@@ -1034,7 +1107,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
-        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes + m60Scenes + m61Scenes + m62Scenes + m63Scenes + m64Scenes
+        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes + m60Scenes + m61Scenes + m62Scenes + m63Scenes + m64Scenes + m66Scenes
         val normalizedScenes = mutableListOf<Any?>()
 
         allGeneratedScenes.forEachIndexed { index, rawScene ->
@@ -1114,6 +1187,7 @@ tasks.register("pipelineGeneratedSceneExport") {
                 "build/reports/wgsl-pipeline-m53-generated/data/m53-generated-scenes.json",
                 "build/reports/wgsl-pipeline-m54-generated/data/m54-generated-scenes.json",
                 "build/reports/wgsl-pipeline-m57-generated/data/m57-generated-scenes.json",
+                "build/reports/wgsl-pipeline-m66-generated/data/m66-generated-scenes.json",
             ),
             "scenes" to normalizedScenes,
         )
@@ -2610,6 +2684,9 @@ tasks.register("pipelineSceneDashboardGate") {
             "m54-dash-circle-boundary" to "coverage.edge-count-exceeded",
             "m60-bounded-stroke-cap-join" to "coverage.stroke-cap-join-selector-diagnostics-unavailable",
             "m60-bounded-nested-rrect-clip" to "coverage.nested-clip-visual-parity-below-threshold",
+            "m66-path-aa-dashing-edge-budget-refusal" to "coverage.edge-count-exceeded",
+            "m66-image-filter-crop-prepass-refusal" to "image-filter.crop-input-nonnull-prepass-required",
+            "m66-font-complex-shaping-refusal" to "font.complex-shaping-requires-explicit-shaper",
         )
         val staticPathAaSentinels = mapOf(
             "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",
@@ -2833,11 +2910,16 @@ tasks.register("pipelineSceneDashboardGate") {
         var m62Rows = 0
         var m63Rows = 0
         var m64Rows = 0
+        var m66Rows = 0
+        var m66SkiaUpstreamRows = 0
+        var m66TestOracleRows = 0
+        var m66CpuOracleRows = 0
         val m54FamilyCounts = linkedMapOf<String, Int>()
         val m61FamilyCounts = linkedMapOf<String, Int>()
         val m62FamilyCounts = linkedMapOf<String, Int>()
         val m63FamilyCounts = linkedMapOf<String, Int>()
         val m64FamilyCounts = linkedMapOf<String, Int>()
+        val m66FamilyCounts = linkedMapOf<String, Int>()
 
         scenes.forEachIndexed { index, rawScene ->
             val scene = rawScene as? Map<*, *>
@@ -3003,6 +3085,20 @@ tasks.register("pipelineSceneDashboardGate") {
                     val family = generation.string("hardFeatureFamily") ?: "unknown"
                     m64FamilyCounts[family] = (m64FamilyCounts[family] ?: 0) + 1
                 }
+                if (generation?.string("derivationTask") == "pipelineM66GmPromotionWave") {
+                    m66Rows += 1
+                    val family = generation.string("hardFeatureFamily") ?: "unknown"
+                    m66FamilyCounts[family] = (m66FamilyCounts[family] ?: 0) + 1
+                    when (scene.string("referenceKind")) {
+                        "skia-upstream" -> m66SkiaUpstreamRows += 1
+                        "test-oracle" -> m66TestOracleRows += 1
+                        "cpu-oracle" -> m66CpuOracleRows += 1
+                        else -> fail(sceneId, "m66.reference-kind", "M66 rows require referenceKind skia-upstream, test-oracle, or cpu-oracle")
+                    }
+                    if ("source.generated" !in tagSet) {
+                        fail(sceneId, "m66.generated", "M66 rows must remain generated dashboard evidence")
+                    }
+                }
                 val inventoryId = scene.string("inventoryId")
                 if ("source.inventory" in tagSet || inventoryId.isPresent()) {
                     inventoryDerivedRows += 1
@@ -3113,13 +3209,18 @@ tasks.register("pipelineSceneDashboardGate") {
             "m62Rows" to m62Rows,
             "m63Rows" to m63Rows,
             "m64Rows" to m64Rows,
+            "m66Rows" to m66Rows,
+            "m66.referenceKind.skia-upstream" to m66SkiaUpstreamRows,
+            "m66.referenceKind.test-oracle" to m66TestOracleRows,
+            "m66.referenceKind.cpu-oracle" to m66CpuOracleRows,
         ) + statusCounts.mapKeys { "status.${it.key}" } +
             maturityCounts.mapKeys { "${it.key}" } +
             m54FamilyCounts.mapKeys { "m54.family.${it.key}" } +
             m61FamilyCounts.mapKeys { "m61.family.${it.key}" } +
             m62FamilyCounts.mapKeys { "m62.family.${it.key}" } +
             m63FamilyCounts.mapKeys { "m63.family.${it.key}" } +
-            m64FamilyCounts.mapKeys { "m64.family.${it.key}" }
+            m64FamilyCounts.mapKeys { "m64.family.${it.key}" } +
+            m66FamilyCounts.mapKeys { "m66.family.${it.key}" }
 
         val markdown = buildString {
             appendLine("# WGSL Scene Dashboard Gate Report")
@@ -4035,6 +4136,7 @@ tasks.register("pipelinePmBundle") {
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
 
     dependsOn(
+        "pipelineM65RuntimeSmoke",
         "pipelineSceneDashboardGate",
         "pipelineDashboardFrontQa",
         "pipelinePerformanceTrendWarnings",
@@ -4050,6 +4152,7 @@ tasks.register("pipelinePmBundle") {
     val performanceReleaseGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-performance-release-gate")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
+    val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
     val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
     inputs.dir(dashboardDir)
     inputs.dir(generatedExportDir)
@@ -4059,9 +4162,15 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(performanceReleaseGateDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
+    inputs.dir(m65RuntimeDir)
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-kadre-audit.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-runtime-smoke.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-m66-sprint-report-and-readiness-accounting.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m66-readiness-counters.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m59-performance-release-gate.json"))
     outputs.dir(bundleDir)
@@ -4076,6 +4185,7 @@ tasks.register("pipelinePmBundle") {
         val performanceReleaseGateRoot = performanceReleaseGateDir.get().asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
+        val m65RuntimeRoot = m65RuntimeDir.asFile
         val targetRoot = bundleDir.get().asFile
         val mergedData = dashboardRoot.resolve("data/scenes.json")
         if (!mergedData.isFile) {
@@ -4119,6 +4229,9 @@ tasks.register("pipelinePmBundle") {
         if (inventoryGateRoot.isDirectory) {
             inventoryGateRoot.copyRecursively(targetRoot.resolve("inventory-gate"), overwrite = true)
         }
+        if (m65RuntimeRoot.isDirectory) {
+            m65RuntimeRoot.copyRecursively(targetRoot.resolve("runtime/m65-runtime-smoke"), overwrite = true)
+        }
 
         fun collectReferencedPaths(value: Any?, paths: MutableSet<String>) {
             when (value) {
@@ -4159,6 +4272,10 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-05-31-m59-pm-report.md",
             "reports/wgsl-pipeline/2026-05-31-m59-sprint-review.md",
             "reports/wgsl-pipeline/2026-05-31-m59-non-claims.md",
+            "reports/wgsl-pipeline/2026-06-01-m65-kadre-audit.md",
+            "reports/wgsl-pipeline/2026-06-01-m65-runtime-smoke.md",
+            "reports/wgsl-pipeline/2026-06-01-m65-m66-sprint-report-and-readiness-accounting.md",
+            "reports/wgsl-pipeline/2026-06-01-m66-readiness-counters.md",
         )
         referencedPaths += m56ReportPaths
 
@@ -4248,11 +4365,17 @@ tasks.register("pipelinePmBundle") {
         val m53PromotedRows = promotedRowsFor("pipelineM53InventoryPromotionPack")
         val m54PromotedRows = promotedRowsFor("pipelineM54HardFeatureDepthPack")
         val m57PromotedRows = promotedRowsFor("pipelineM57PathAaClipMicroPromotionPack")
+        val m66PromotedRows = promotedRowsFor("pipelineM66GmPromotionWave")
         val promotionValidationErrors = mutableListOf<String>()
         inventoryDerivedScenes
             .filter { scene ->
                 val generation = scene["generation"] as? Map<*, *>
-                generation?.get("derivationTask") in setOf("pipelineM53InventoryPromotionPack", "pipelineM54HardFeatureDepthPack", "pipelineM57PathAaClipMicroPromotionPack")
+                generation?.get("derivationTask") in setOf(
+                    "pipelineM53InventoryPromotionPack",
+                    "pipelineM54HardFeatureDepthPack",
+                    "pipelineM57PathAaClipMicroPromotionPack",
+                    "pipelineM66GmPromotionWave",
+                )
             }
             .forEach { scene ->
                 val sceneId = (scene["id"] as? String).orEmpty()
@@ -4362,6 +4485,55 @@ tasks.register("pipelinePmBundle") {
                 )
             }
             .orEmpty()
+        val m66ContractFile = rootDir.resolve("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json")
+        val m66Contract = JsonSlurper().parse(m66ContractFile) as? Map<*, *>
+            ?: throw GradleException("M66 contract root must be a JSON object: ${m66ContractFile.relativeTo(rootDir)}")
+        val m66SelectedRows = (m66Contract["selectedCandidateCount"] as? Number)?.toInt()
+            ?: (m66Contract["scenes"] as? List<*>).orEmpty().size
+        val m66RejectedRows = (m66Contract["rejectedRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?.map {
+                mapOf(
+                    "inventoryId" to (it["inventoryId"] as? String).orEmpty(),
+                    "reason" to (it["reason"] as? String).orEmpty(),
+                )
+            }
+            .orEmpty()
+        val m66AllRows = scenes
+            .filterIsInstance<Map<*, *>>()
+            .filter { scene ->
+                val generation = scene["generation"] as? Map<*, *>
+                generation?.get("derivationTask") == "pipelineM66GmPromotionWave"
+            }
+        val m66FamilyCounters = m66AllRows
+            .map { scene ->
+                val generation = scene["generation"] as? Map<*, *>
+                (generation?.get("hardFeatureFamily") as? String).orEmpty().ifBlank { "unknown" }
+            }
+            .groupingBy { it }
+            .eachCount()
+            .toSortedMap()
+        val m66ReferenceKindCounters = m66AllRows
+            .map { (it["referenceKind"] as? String).orEmpty().ifBlank { "unknown" } }
+            .groupingBy { it }
+            .eachCount()
+            .toSortedMap()
+        val m66AllRowsDetail = m66AllRows
+            .map { scene ->
+                val generation = scene["generation"] as? Map<*, *>
+                mapOf(
+                    "id" to (scene["id"] as? String).orEmpty(),
+                    "inventoryId" to (scene["inventoryId"] as? String).orEmpty(),
+                    "status" to (scene["status"] as? String).orEmpty(),
+                    "referenceKind" to (scene["referenceKind"] as? String).orEmpty(),
+                    "sourceReport" to (generation?.get("sourceReport") as? String).orEmpty(),
+                    "derivationReport" to (generation?.get("derivationReport") as? String).orEmpty(),
+                    "derivedFromGeneratedScene" to (generation?.get("derivedFromGeneratedScene") as? String).orEmpty(),
+                    "derivationTask" to (generation?.get("derivationTask") as? String).orEmpty(),
+                    "derivationContract" to (generation?.get("derivationContract") as? String).orEmpty(),
+                    "family" to (generation?.get("hardFeatureFamily") as? String).orEmpty(),
+                )
+            }
         val m55CandidateFile = performanceWarningsRoot.resolve("m55-performance-gate-candidate.json")
         val m55CandidateReport = if (m55CandidateFile.isFile) {
             JsonSlurper().parse(m55CandidateFile) as? Map<*, *>
@@ -4449,6 +4621,16 @@ tasks.register("pipelinePmBundle") {
             "m63GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m63-color-blend-parity-pack.json",
             "m64GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m64-registered-runtime-effects-pack.json",
             "m57GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json",
+            "m66GeneratedContractJson" to "reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json",
+            "m65RuntimeSmoke" to linkedMapOf<String, Any>(
+                "telemetryJson" to "runtime/m65-runtime-smoke/telemetry.json",
+                "slotsJson" to "runtime/m65-runtime-smoke/slots.json",
+                "runtimeReport" to "reports/wgsl-pipeline/2026-06-01-m65-runtime-smoke.md",
+                "kadreAudit" to "reports/wgsl-pipeline/2026-06-01-m65-kadre-audit.md",
+                "sprintReport" to "reports/wgsl-pipeline/2026-06-01-m65-m66-sprint-report-and-readiness-accounting.md",
+                "claimLevel" to "reporting-only",
+                "notice" to "M65 proves a headless/offscreen runtime smoke lane and keeps live Kadre presentation blocked with m65.kadre-host-not-wired; it is not a release-grade FPS or native demo claim.",
+            ),
             "gateReport" to "gate/scene-dashboard-gate.md",
             "frontQaReport" to "front-qa/front-qa.md",
             "frontQaJson" to "front-qa/front-qa.json",
@@ -4594,6 +4776,23 @@ tasks.register("pipelinePmBundle") {
                 "rejectedRowsDetail" to m57RejectedRows,
                 "notice" to "M57 adds one bounded AA clip grid slice only; existing edge-budget, dash, stroke-outline, and complex-clip refusals remain visible.",
             ),
+            "m66GmPromotionWave" to linkedMapOf<String, Any>(
+                "selectedRows" to m66SelectedRows,
+                "promotedRows" to m66AllRows.size,
+                "promotedPassRows" to m66AllRows.count { it["status"] == "pass" },
+                "promotedExpectedUnsupportedRows" to m66AllRows.count { it["status"] == "expected-unsupported" },
+                "inventoryDerivedRows" to m66PromotedRows.size,
+                "rejectedRows" to m66RejectedRows.size,
+                "familyCounters" to m66FamilyCounters,
+                "referenceKindCounters" to m66ReferenceKindCounters,
+                "selectedReport" to "reports/wgsl-pipeline/2026-06-01-m66-selection-ranking.md",
+                "promotionReport" to "reports/wgsl-pipeline/2026-06-01-m66-gm-promotion-wave.md",
+                "readinessCounters" to "reports/wgsl-pipeline/2026-06-01-m66-readiness-counters.md",
+                "contract" to "reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json",
+                "promotedRowsDetail" to m66AllRowsDetail,
+                "rejectedRowsDetail" to m66RejectedRows,
+                "notice" to "M66 normalizes selected support/refusal rows with referenceKind provenance; CPU-oracle rows are breadth/refusal evidence and do not automatically count as Skia fidelity.",
+            ),
             "inventoryCounters" to inventorySummary,
             "dashboardInventoryLinks" to dashboardInventoryLinks,
             "expectedUnsupportedRows" to expectedUnsupported,
@@ -4611,6 +4810,7 @@ tasks.register("pipelinePmBundle") {
                 "M59 closes the selected performance target with measured CPU and GPU/cache payloads for all seven rows; estimated and missing metrics are still rejected as measured evidence.",
                 "M56 promotes one corrected sweep-gradient row only; two-point conical gradients, arbitrary image-filter DAGs, picture prepass support, broad Path AA, dash, stroke, and complex clip remain outside this bundle's claims.",
                 "M57 promotes one bounded AA clip grid slice only; broad aaclip, broad Path AA, dash, cap, join, stroke-outline, complex clip, large clipped paths, and edge-budget increases remain outside this bundle's claims.",
+                "M66 promotes a cumulative GM/reference wave only where generated artifacts, routes, stats, and referenceKind provenance exist; inventory-only candidates still do not count as support.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -4644,6 +4844,9 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M52 inventory promotion counters live in `manifest.json` under `m52InventoryPromotion`.")
                 appendLine("- M53 inventory promotion counters live in `manifest.json` under `m53InventoryPromotion`.")
                 appendLine("- M54 hard feature depth counters live in `manifest.json` under `m54HardFeatureDepth`.")
+                appendLine("- `runtime/m65-runtime-smoke/`: M65 reporting-only runtime smoke telemetry and nonblank frame artifacts.")
+                appendLine("- M65 runtime counters live in `manifest.json` under `m65RuntimeSmoke`.")
+                appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
         )
