@@ -25,6 +25,95 @@ internal enum class ReplayBlendMode(val jsonName: String) {
     SrcOver("SrcOver"),
 }
 
+internal enum class ReplayBitmapSampler(val jsonName: String) {
+    Nearest("nearest"),
+    Linear("linear"),
+}
+
+internal data class ReplayBitmapFixture(
+    val id: String,
+    val width: Int,
+    val height: Int,
+    val colorSpace: String,
+    val alphaType: String,
+    val provenance: String,
+    val pixels: List<ReplayColor>,
+) {
+    init {
+        require(id.isNotBlank()) { "ReplayBitmapFixture id must be non-blank" }
+        require(width > 0 && height > 0) { "ReplayBitmapFixture $id must have positive dimensions" }
+        require(pixels.size == width * height) { "ReplayBitmapFixture $id pixel count must match dimensions" }
+    }
+
+    val pixelChecksum: Long
+        get() {
+            var checksum = 1469598103934665603L
+            pixels.forEach { pixel ->
+                checksum = (checksum xor pixel.toArgb().toLong()) * 1099511628211L
+            }
+            return checksum
+        }
+
+    fun sample(srcX: Double, srcY: Double, sampler: ReplayBitmapSampler): ReplayColor =
+        when (sampler) {
+            ReplayBitmapSampler.Nearest -> {
+                val x = floor(srcX).toInt().coerceIn(0, width - 1)
+                val y = floor(srcY).toInt().coerceIn(0, height - 1)
+                pixel(x, y)
+            }
+            ReplayBitmapSampler.Linear -> {
+                val x = srcX.coerceIn(0.0, (width - 1).toDouble())
+                val y = srcY.coerceIn(0.0, (height - 1).toDouble())
+                val x0 = floor(x).toInt().coerceIn(0, width - 1)
+                val y0 = floor(y).toInt().coerceIn(0, height - 1)
+                val x1 = (x0 + 1).coerceAtMost(width - 1)
+                val y1 = (y0 + 1).coerceAtMost(height - 1)
+                val tx = x - x0.toDouble()
+                val ty = y - y0.toDouble()
+                pixel(x0, y0).mix(pixel(x1, y0), tx).mix(pixel(x0, y1).mix(pixel(x1, y1), tx), ty)
+            }
+        }
+
+    private fun pixel(x: Int, y: Int): ReplayColor = pixels[y * width + x]
+}
+
+internal object ReplayBitmapFixtures {
+    val checker4x4 = ReplayBitmapFixture(
+        id = "m79-fixture-checker-rgba8-4x4",
+        width = 4,
+        height = 4,
+        colorSpace = "srgb",
+        alphaType = "unpremul",
+        provenance = "in-repo deterministic RGBA fixture for M79 nearest bitmap replay",
+        pixels = listOf(
+            ReplayColor(0.96, 0.68, 0.10), ReplayColor(0.12, 0.30, 0.78), ReplayColor(0.96, 0.68, 0.10), ReplayColor(0.12, 0.30, 0.78),
+            ReplayColor(0.12, 0.30, 0.78), ReplayColor(0.92, 0.18, 0.16), ReplayColor(0.18, 0.70, 0.42), ReplayColor(0.96, 0.68, 0.10),
+            ReplayColor(0.96, 0.68, 0.10), ReplayColor(0.18, 0.70, 0.42), ReplayColor(0.92, 0.18, 0.16), ReplayColor(0.12, 0.30, 0.78),
+            ReplayColor(0.12, 0.30, 0.78), ReplayColor(0.96, 0.68, 0.10), ReplayColor(0.12, 0.30, 0.78), ReplayColor(0.96, 0.68, 0.10),
+        ),
+    )
+
+    val alphaSwatch4x4 = ReplayBitmapFixture(
+        id = "m79-fixture-alpha-swatch-rgba8-4x4",
+        width = 4,
+        height = 4,
+        colorSpace = "srgb",
+        alphaType = "unpremul",
+        provenance = "in-repo deterministic RGBA fixture for M79 linear bitmap replay with alpha",
+        pixels = listOf(
+            ReplayColor(0.05, 0.78, 0.82, 0.30), ReplayColor(0.18, 0.55, 0.90, 0.45), ReplayColor(0.58, 0.25, 0.92, 0.58), ReplayColor(0.94, 0.18, 0.44, 0.70),
+            ReplayColor(0.08, 0.70, 0.50, 0.38), ReplayColor(0.30, 0.62, 0.84, 0.52), ReplayColor(0.72, 0.30, 0.76, 0.64), ReplayColor(0.96, 0.32, 0.20, 0.76),
+            ReplayColor(0.20, 0.64, 0.28, 0.46), ReplayColor(0.48, 0.66, 0.22, 0.58), ReplayColor(0.82, 0.52, 0.16, 0.70), ReplayColor(0.98, 0.62, 0.12, 0.82),
+            ReplayColor(0.44, 0.46, 0.18, 0.54), ReplayColor(0.68, 0.58, 0.14, 0.66), ReplayColor(0.88, 0.74, 0.10, 0.78), ReplayColor(1.00, 0.88, 0.08, 0.90),
+        ),
+    )
+
+    val allById: Map<String, ReplayBitmapFixture> = listOf(checker4x4, alphaSwatch4x4).associateBy { it.id }
+
+    fun requireFixture(id: String): ReplayBitmapFixture =
+        requireNotNull(allById[id]) { "Unknown replay bitmap fixture id: $id" }
+}
+
 internal enum class ReplayFillKind(val jsonName: String, val commandFamily: String) {
     Solid("solid", "fillRect"),
     LinearGradient("linearGradient", "linearGradientRect"),
@@ -113,6 +202,79 @@ internal sealed interface ReplayCommand {
         }
     }
 
+    data class BitmapRect(
+        override val label: String,
+        val fixtureId: String,
+        val srcX: Double,
+        val srcY: Double,
+        val srcWidth: Double,
+        val srcHeight: Double,
+        val dstX: Double,
+        val dstY: Double,
+        val dstWidth: Double,
+        val dstHeight: Double,
+        val sampler: ReplayBitmapSampler,
+        val alpha: Double = 1.0,
+        val blendMode: ReplayBlendMode = ReplayBlendMode.SrcOver,
+        val provenance: String,
+    ) : ReplayCommand {
+        override val family: String = "bitmapRect"
+        override val supported: Boolean = true
+        val fixture: ReplayBitmapFixture get() = ReplayBitmapFixtures.requireFixture(fixtureId)
+
+        init {
+            require(srcWidth > 0.0 && srcHeight > 0.0) { "BitmapRect $label source bounds must be positive" }
+            require(dstWidth > 0.0 && dstHeight > 0.0) { "BitmapRect $label destination bounds must be positive" }
+            ReplayBitmapFixtures.requireFixture(fixtureId)
+        }
+
+        fun toJson(indent: String): String = buildString {
+            val bitmapFixture = fixture
+            appendLine("{")
+            appendLine("$indent  \"label\": ${label.json()},")
+            appendLine("$indent  \"family\": ${family.json()},")
+            appendLine("$indent  \"supported\": true,")
+            appendLine("$indent  \"fixtureId\": ${fixtureId.json()},")
+            appendLine("$indent  \"sampler\": ${sampler.jsonName.json()},")
+            appendLine("$indent  \"blendMode\": ${blendMode.jsonName.json()},")
+            appendLine("$indent  \"alpha\": ${alpha.formatJsonNumber()},")
+            appendLine("$indent  \"sourceBounds\": {")
+            appendLine("$indent    \"x\": ${srcX.formatJsonNumber()},")
+            appendLine("$indent    \"y\": ${srcY.formatJsonNumber()},")
+            appendLine("$indent    \"width\": ${srcWidth.formatJsonNumber()},")
+            appendLine("$indent    \"height\": ${srcHeight.formatJsonNumber()},")
+            appendLine("$indent    \"left\": ${srcX.formatJsonNumber()},")
+            appendLine("$indent    \"top\": ${srcY.formatJsonNumber()},")
+            appendLine("$indent    \"right\": ${(srcX + srcWidth).formatJsonNumber()},")
+            appendLine("$indent    \"bottom\": ${(srcY + srcHeight).formatJsonNumber()}")
+            appendLine("$indent  },")
+            appendLine("$indent  \"destinationBounds\": {")
+            appendLine("$indent    \"x\": ${dstX.formatJsonNumber()},")
+            appendLine("$indent    \"y\": ${dstY.formatJsonNumber()},")
+            appendLine("$indent    \"width\": ${dstWidth.formatJsonNumber()},")
+            appendLine("$indent    \"height\": ${dstHeight.formatJsonNumber()},")
+            appendLine("$indent    \"left\": ${dstX.formatJsonNumber()},")
+            appendLine("$indent    \"top\": ${dstY.formatJsonNumber()},")
+            appendLine("$indent    \"right\": ${(dstX + dstWidth).formatJsonNumber()},")
+            appendLine("$indent    \"bottom\": ${(dstY + dstHeight).formatJsonNumber()}")
+            appendLine("$indent  },")
+            appendLine("$indent  \"fixture\": {")
+            appendLine("$indent    \"width\": ${bitmapFixture.width},")
+            appendLine("$indent    \"height\": ${bitmapFixture.height},")
+            appendLine("$indent    \"colorSpace\": ${bitmapFixture.colorSpace.json()},")
+            appendLine("$indent    \"alphaType\": ${bitmapFixture.alphaType.json()},")
+            appendLine("$indent    \"pixelChecksum\": ${bitmapFixture.pixelChecksum}")
+            appendLine("$indent  },")
+            appendLine("$indent  \"provenance\": {")
+            appendLine("$indent    \"owner\": \"kanvas\",")
+            appendLine("$indent    \"storage\": \"in-repo-kotlin-fixture\",")
+            appendLine("$indent    \"fixtureProvenance\": ${bitmapFixture.provenance.json()},")
+            appendLine("$indent    \"commandProvenance\": ${provenance.json()}")
+            appendLine("$indent  }")
+            append("$indent}")
+        }
+    }
+
     data class ExpectedUnsupported(
         override val label: String,
         override val family: String,
@@ -155,6 +317,7 @@ internal data class ReplaySceneEvidence(
     val background: ReplayColor get() = clearCommands.single().color
     val rects: List<ReplayCommand.FillRect> get() = commands.filterIsInstance<ReplayCommand.FillRect>()
     val clipRects: List<ReplayCommand.ClipRect> get() = commands.filterIsInstance<ReplayCommand.ClipRect>()
+    val bitmapRects: List<ReplayCommand.BitmapRect> get() = commands.filterIsInstance<ReplayCommand.BitmapRect>()
     val unsupportedCommands: List<String> get() = commands.filterIsInstance<ReplayCommand.ExpectedUnsupported>().map { it.reason }
     val totalCommandCount: Int get() = commands.size
     val supportedCommandCount: Int get() = commands.count { it.supported }
@@ -163,8 +326,19 @@ internal data class ReplaySceneEvidence(
     val animatedFillRectCount: Int get() = rects.count { it.animated }
     val clipRectCommandCount: Int get() = clipRects.size
     val clipIntersectCommandCount: Int get() = clipRects.count { it.op == ReplayClipOp.Intersect }
-    val srcOverCommandCount: Int get() = rects.count { it.blendMode == ReplayBlendMode.SrcOver }
-    val partialAlphaCommandCount: Int get() = rects.count { it.color.a < 1.0 || it.endColor.a < 1.0 || (it.tintColor?.a ?: 1.0) < 1.0 }
+    val srcOverCommandCount: Int
+        get() = rects.count { it.blendMode == ReplayBlendMode.SrcOver } +
+            bitmapRects.count { it.blendMode == ReplayBlendMode.SrcOver }
+    val partialAlphaCommandCount: Int
+        get() = rects.count { it.color.a < 1.0 || it.endColor.a < 1.0 || (it.tintColor?.a ?: 1.0) < 1.0 } +
+            bitmapRects.count { bitmap ->
+                bitmap.alpha < 1.0 || bitmap.fixture.pixels.any { it.a < 1.0 }
+            }
+    val bitmapCommandCount: Int get() = bitmapRects.size
+    val fixtureBackedBitmapCommandCount: Int get() = bitmapRects.count { it.fixtureId in ReplayBitmapFixtures.allById }
+    val nearestBitmapSamplerCommandCount: Int get() = bitmapRects.count { it.sampler == ReplayBitmapSampler.Nearest }
+    val linearBitmapSamplerCommandCount: Int get() = bitmapRects.count { it.sampler == ReplayBitmapSampler.Linear }
+    val unsupportedBitmapCommandCount: Int get() = commands.filterIsInstance<ReplayCommand.ExpectedUnsupported>().count { it.family.startsWith("bitmap") }
     val status: String get() = if (unsupportedCommandCount == 0) "renderable" else "expected-unsupported"
     val renderedByKadre: Boolean get() = unsupportedCommandCount == 0
 
@@ -198,7 +372,12 @@ internal data class ReplaySceneEvidence(
         appendLine("$indent    \"clipRect\": $clipRectCommandCount,")
         appendLine("$indent    \"clipIntersect\": $clipIntersectCommandCount,")
         appendLine("$indent    \"srcOver\": $srcOverCommandCount,")
-        appendLine("$indent    \"partialAlpha\": $partialAlphaCommandCount")
+        appendLine("$indent    \"partialAlpha\": $partialAlphaCommandCount,")
+        appendLine("$indent    \"bitmapRect\": $bitmapCommandCount,")
+        appendLine("$indent    \"fixtureBackedBitmap\": $fixtureBackedBitmapCommandCount,")
+        appendLine("$indent    \"bitmapSamplerNearest\": $nearestBitmapSamplerCommandCount,")
+        appendLine("$indent    \"bitmapSamplerLinear\": $linearBitmapSamplerCommandCount,")
+        appendLine("$indent    \"unsupportedBitmap\": $unsupportedBitmapCommandCount")
         appendLine("$indent  },")
         appendLine("$indent  \"unsupportedCommands\": [${unsupportedCommands.joinToString(", ") { it.json() }}],")
         appendLine("$indent  \"commands\": [")
@@ -329,7 +508,7 @@ internal val M73_REPLAY_SCENES: List<ReplaySceneEvidence> = listOf(
 internal val M73_REPLAY_SCENES_BY_ID: Map<String, ReplaySceneEvidence> = M73_REPLAY_SCENES.associateBy { it.id }
 
 internal fun replayScenesById(): Map<String, ReplaySceneEvidence> =
-    (M73_REPLAY_SCENES + M77_BLEND_ALPHA_REPLAY_SCENES + M78_CLIP_REPLAY_SCENES).associateBy { it.id }
+    (M73_REPLAY_SCENES + M77_BLEND_ALPHA_REPLAY_SCENES + M78_CLIP_REPLAY_SCENES + M79_BITMAP_REPLAY_SCENES).associateBy { it.id }
 
 internal fun replayPackJson(mode: String, indent: String): String {
     if (mode != "demo") return "null"
@@ -364,25 +543,55 @@ internal fun renderCpuReference(width: Int, height: Int, replayScene: ReplayScen
             if (command is ReplayCommand.ClipRect) {
                 activeClip = activeClip.intersect(command.bounds)
             }
-            val rect = command as? ReplayCommand.FillRect ?: return@forEach
-            val drawBounds = rect.bounds.intersect(activeClip)
-            if (drawBounds.isEmpty) return@forEach
-            val left = (rect.x * width).toInt().coerceIn(0, width)
-            val top = (rect.y * height).toInt().coerceIn(0, height)
-            val right = ((rect.x + rect.width) * width).toInt().coerceIn(0, width)
-            val bottom = ((rect.y + rect.height) * height).toInt().coerceIn(0, height)
-            val clippedLeft = (drawBounds.left * width).toInt().coerceIn(left, right)
-            val clippedTop = (drawBounds.top * height).toInt().coerceIn(top, bottom)
-            val clippedRight = (drawBounds.right * width).toInt().coerceIn(left, right)
-            val clippedBottom = (drawBounds.bottom * height).toInt().coerceIn(top, bottom)
-            for (py in clippedTop until clippedBottom) {
-                for (px in clippedLeft until clippedRight) {
-                    val u = ((px.toDouble() / width.toDouble()) - rect.x) / rect.width.coerceAtLeast(0.0001)
-                    val v = ((py.toDouble() / height.toDouble()) - rect.y) / rect.height.coerceAtLeast(0.0001)
-                    val src = rect.fillColorAt(u, v, phase = 0.0)
-                    val dst = bitmap.getPixel(px, py).toReplayColor()
-                    bitmap.setPixel(px, py, src.blendOver(dst).toArgb())
+            when (command) {
+                is ReplayCommand.FillRect -> {
+                    val rect = command
+                    val drawBounds = rect.bounds.intersect(activeClip)
+                    if (drawBounds.isEmpty) return@forEach
+                    val left = (rect.x * width).toInt().coerceIn(0, width)
+                    val top = (rect.y * height).toInt().coerceIn(0, height)
+                    val right = ((rect.x + rect.width) * width).toInt().coerceIn(0, width)
+                    val bottom = ((rect.y + rect.height) * height).toInt().coerceIn(0, height)
+                    val clippedLeft = (drawBounds.left * width).toInt().coerceIn(left, right)
+                    val clippedTop = (drawBounds.top * height).toInt().coerceIn(top, bottom)
+                    val clippedRight = (drawBounds.right * width).toInt().coerceIn(left, right)
+                    val clippedBottom = (drawBounds.bottom * height).toInt().coerceIn(top, bottom)
+                    for (py in clippedTop until clippedBottom) {
+                        for (px in clippedLeft until clippedRight) {
+                            val u = (((px.toDouble() + 0.5) / width.toDouble()) - rect.x) / rect.width.coerceAtLeast(0.0001)
+                            val v = (((py.toDouble() + 0.5) / height.toDouble()) - rect.y) / rect.height.coerceAtLeast(0.0001)
+                            val src = rect.fillColorAt(u, v, phase = 0.0)
+                            val dst = bitmap.getPixel(px, py).toReplayColor()
+                            bitmap.setPixel(px, py, src.blendOver(dst).toArgb())
+                        }
+                    }
                 }
+                is ReplayCommand.BitmapRect -> {
+                    val rect = command
+                    val drawBounds = rect.bounds.intersect(activeClip)
+                    if (drawBounds.isEmpty) return@forEach
+                    val left = (rect.dstX * width).toInt().coerceIn(0, width)
+                    val top = (rect.dstY * height).toInt().coerceIn(0, height)
+                    val right = ((rect.dstX + rect.dstWidth) * width).toInt().coerceIn(0, width)
+                    val bottom = ((rect.dstY + rect.dstHeight) * height).toInt().coerceIn(0, height)
+                    val clippedLeft = (drawBounds.left * width).toInt().coerceIn(left, right)
+                    val clippedTop = (drawBounds.top * height).toInt().coerceIn(top, bottom)
+                    val clippedRight = (drawBounds.right * width).toInt().coerceIn(left, right)
+                    val clippedBottom = (drawBounds.bottom * height).toInt().coerceIn(top, bottom)
+                    val fixture = rect.fixture
+                    for (py in clippedTop until clippedBottom) {
+                        for (px in clippedLeft until clippedRight) {
+                            val u = (((px.toDouble() + 0.5) / width.toDouble()) - rect.dstX) / rect.dstWidth.coerceAtLeast(0.0001)
+                            val v = (((py.toDouble() + 0.5) / height.toDouble()) - rect.dstY) / rect.dstHeight.coerceAtLeast(0.0001)
+                            val srcX = rect.srcX + u.coerceIn(0.0, 1.0) * rect.srcWidth
+                            val srcY = rect.srcY + v.coerceIn(0.0, 1.0) * rect.srcHeight
+                            val sampled = fixture.sample(srcX, srcY, rect.sampler).withAlphaMultiplier(rect.alpha)
+                            val dst = bitmap.getPixel(px, py).toReplayColor()
+                            bitmap.setPixel(px, py, sampled.blendOver(dst).toArgb())
+                        }
+                    }
+                }
+                else -> Unit
             }
         }
     } else {
@@ -417,6 +626,25 @@ internal fun renderCpuReference(width: Int, height: Int, replayScene: ReplayScen
     return checksum to nonTransparent
 }
 
+internal fun bitmapSampledPixels(width: Int, height: Int, replayScene: ReplaySceneEvidence): Int {
+    var activeClip = ReplayBounds(0.0, 0.0, 1.0, 1.0)
+    var sampled = 0
+    replayScene.commands.forEach { command ->
+        if (command is ReplayCommand.ClipRect) {
+            activeClip = activeClip.intersect(command.bounds)
+        }
+        val bitmap = command as? ReplayCommand.BitmapRect ?: return@forEach
+        val drawBounds = bitmap.bounds.intersect(activeClip)
+        if (drawBounds.isEmpty) return@forEach
+        val left = (drawBounds.left * width).toInt().coerceIn(0, width)
+        val top = (drawBounds.top * height).toInt().coerceIn(0, height)
+        val right = (drawBounds.right * width).toInt().coerceIn(left, width)
+        val bottom = (drawBounds.bottom * height).toInt().coerceIn(top, height)
+        sampled += (right - left) * (bottom - top)
+    }
+    return sampled
+}
+
 private data class ReplayBounds(val left: Double, val top: Double, val right: Double, val bottom: Double) {
     val isEmpty: Boolean get() = right <= left || bottom <= top
 
@@ -434,6 +662,9 @@ private val ReplayCommand.FillRect.bounds: ReplayBounds
 
 private val ReplayCommand.ClipRect.bounds: ReplayBounds
     get() = ReplayBounds(x, y, x + width, y + height)
+
+private val ReplayCommand.BitmapRect.bounds: ReplayBounds
+    get() = ReplayBounds(dstX, dstY, dstX + dstWidth, dstY + dstHeight)
 
 private fun ReplayCommand.FillRect.fillColorAt(u: Double, v: Double, phase: Double): ReplayColor =
     when (fillKind) {
@@ -464,6 +695,9 @@ private fun ReplayColor.plus(other: ReplayColor): ReplayColor =
         a = a,
     )
 
+private fun ReplayColor.withAlphaMultiplier(alphaMultiplier: Double): ReplayColor =
+    ReplayColor(r, g, b, a * alphaMultiplier.coerceIn(0.0, 1.0))
+
 private fun Int.toReplayColor(): ReplayColor =
     ReplayColor(
         r = ((this ushr 16) and 0xFF).toDouble() / 255.0,
@@ -492,6 +726,53 @@ internal fun ReplaySceneEvidence.toWgsl(phase: Double): String {
         if (command is ReplayCommand.ClipRect) {
             activeClip = activeClip.intersect(command.bounds)
             return@mapNotNull null
+        }
+        val bitmap = command as? ReplayCommand.BitmapRect
+        if (bitmap != null) {
+            val index = rectIndex++
+            val x = bitmap.dstX.wgsl()
+            val y = bitmap.dstY.wgsl()
+            val width = bitmap.dstWidth.wgsl()
+            val height = bitmap.dstHeight.wgsl()
+            val u = "clamp((in.uv.x - $x) / $width, 0.0, 1.0)"
+            val v = "clamp((in.uv.y - $y) / $height, 0.0, 1.0)"
+            val fixture = bitmap.fixture
+            val pixels = fixture.pixels.joinToString(", ") {
+                "vec4<f32>(${it.r.wgsl()}, ${it.g.wgsl()}, ${it.b.wgsl()}, ${it.a.wgsl()})"
+            }
+            val sampleX = "clamp(${bitmap.srcX.wgsl()} + $u * ${bitmap.srcWidth.wgsl()}, 0.0, ${(fixture.width - 1).toDouble().wgsl()})"
+            val sampleY = "clamp(${bitmap.srcY.wgsl()} + $v * ${bitmap.srcHeight.wgsl()}, 0.0, ${(fixture.height - 1).toDouble().wgsl()})"
+            val sample = when (bitmap.sampler) {
+                ReplayBitmapSampler.Nearest -> """
+        let bitmapPixels$index = array<vec4<f32>, ${fixture.pixels.size}>($pixels);
+        let sampleX$index = u32(floor($sampleX));
+        let sampleY$index = u32(floor($sampleY));
+        let bitmapColor$index = bitmapPixels$index[sampleY$index * ${fixture.width}u + sampleX$index];
+                """.trimIndent()
+                ReplayBitmapSampler.Linear -> """
+        let bitmapPixels$index = array<vec4<f32>, ${fixture.pixels.size}>($pixels);
+        let sampleXFloat$index = $sampleX;
+        let sampleYFloat$index = $sampleY;
+        let sampleX0$index = floor(sampleXFloat$index);
+        let sampleY0$index = floor(sampleYFloat$index);
+        let sampleTx$index = sampleXFloat$index - sampleX0$index;
+        let sampleTy$index = sampleYFloat$index - sampleY0$index;
+        let sampleX0u$index = u32(sampleX0$index);
+        let sampleY0u$index = u32(sampleY0$index);
+        let sampleX1u$index = u32(min(sampleX0$index + 1.0, ${(fixture.width - 1).toDouble().wgsl()}));
+        let sampleY1u$index = u32(min(sampleY0$index + 1.0, ${(fixture.height - 1).toDouble().wgsl()}));
+        let bitmapC00$index = bitmapPixels$index[sampleY0u$index * ${fixture.width}u + sampleX0u$index];
+        let bitmapC10$index = bitmapPixels$index[sampleY0u$index * ${fixture.width}u + sampleX1u$index];
+        let bitmapC01$index = bitmapPixels$index[sampleY1u$index * ${fixture.width}u + sampleX0u$index];
+        let bitmapC11$index = bitmapPixels$index[sampleY1u$index * ${fixture.width}u + sampleX1u$index];
+        let bitmapColor$index = mix(mix(bitmapC00$index, bitmapC10$index, sampleTx$index), mix(bitmapC01$index, bitmapC11$index, sampleTx$index), sampleTy$index);
+                """.trimIndent()
+            }
+            return@mapNotNull """
+        let rect$index = select(0.0, 1.0, in.uv.x >= $x && in.uv.x < ($x + $width) && in.uv.y >= $y && in.uv.y < ($y + $height) && in.uv.x >= ${activeClip.left.wgsl()} && in.uv.x < ${activeClip.right.wgsl()} && in.uv.y >= ${activeClip.top.wgsl()} && in.uv.y < ${activeClip.bottom.wgsl()});
+        $sample
+        color = mix(color, bitmapColor$index.rgb, rect$index * bitmapColor$index.a * ${bitmap.alpha.wgsl()});
+            """.trimIndent()
         }
         val rect = command as? ReplayCommand.FillRect ?: return@mapNotNull null
         val index = rectIndex++
@@ -575,6 +856,7 @@ private fun ReplayCommand.toJson(indent: String): String =
         }
         is ReplayCommand.FillRect -> toJson(indent)
         is ReplayCommand.ClipRect -> toJson(indent)
+        is ReplayCommand.BitmapRect -> toJson(indent)
         is ReplayCommand.ExpectedUnsupported -> toJson(indent)
     }
 

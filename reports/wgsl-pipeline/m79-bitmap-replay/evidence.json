@@ -1,0 +1,562 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "kadre-runtime:M79BitmapReplay",
+  "linearIssues": ["FOR-95", "FOR-129", "FOR-130", "FOR-131", "FOR-132", "FOR-133"],
+  "packId": "m79-bitmap-replay-v1",
+  "claimLevel": "bounded-fixture-backed-bitmap-replay-evidence",
+  "readinessDelta": 0,
+  "sceneCount": 4,
+  "renderableSceneCount": 3,
+  "expectedUnsupportedSceneCount": 1,
+  "failedSceneCount": 0,
+  "bitmapCommandCount": 3,
+  "fixtureBackedBitmapCommandCount": 3,
+  "nearestSamplerCommandCount": 2,
+  "linearSamplerCommandCount": 1,
+  "unsupportedBitmapCommandCount": 1,
+  "clipRectCommandCount": 1,
+  "clipIntersectCommandCount": 1,
+  "srcOverCommandCount": 4,
+  "partialAlphaCommandCount": 2,
+  "unsupportedBitmapReason": "m79.bitmap.unsupported-sampler.mipmap",
+  "fixtures": [
+    {
+      "id": "m79-fixture-checker-rgba8-4x4",
+      "width": 4,
+      "height": 4,
+      "colorSpace": "srgb",
+      "alphaType": "unpremul",
+      "pixelChecksum": 3600389471136345375,
+      "provenance": "in-repo deterministic RGBA fixture for M79 nearest bitmap replay"
+    },
+    {
+      "id": "m79-fixture-alpha-swatch-rgba8-4x4",
+      "width": 4,
+      "height": 4,
+      "colorSpace": "srgb",
+      "alphaType": "unpremul",
+      "pixelChecksum": -2532904605658194762,
+      "provenance": "in-repo deterministic RGBA fixture for M79 linear bitmap replay with alpha"
+    }
+
+  ],
+  "nonClaims": [
+    "M79 supports only owned in-repo bitmap fixtures addressed by bounded BitmapRect replay commands.",
+    "M79 does not add arbitrary SkImage, codec decode, texture atlas, mipmap, tile-mode, or color-managed image support.",
+    "Unsupported bitmap sampler paths are stable refusal evidence and do not count as rendering failures."
+  ],
+  "scenes": [
+    {
+      "id": "m79-bitmap-fixture-nearest-replay-v1",
+      "title": "M79 fixture bitmap nearest replay",
+      "sourceSceneId": "m79-bitmap-fixture-nearest",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m79.replay-scene-fixture-bitmap-renderable",
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json#m79-bitmap-fixture-nearest-replay-v1",
+        "cpuRoute": "cpu.replay.bitmap.fixture.nearest-oracle",
+        "gpuRoute": "webgpu.kadre-replay.bitmap.fixture.nearest",
+        "pipelineKey": "bitmapFixture=m79-fixture-checker-rgba8-4x4 sampler=nearest state=[blendMode=kSrcOver alpha=opaque] source=m79"
+      },
+      "commandCounters": {
+        "total": 2,
+        "supported": 2,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 0,
+        "bitmapRect": 1,
+        "fixtureBackedBitmap": 1,
+        "bitmapSamplerNearest": 1,
+        "bitmapSamplerLinear": 0,
+        "unsupportedBitmap": 0,
+        "srcOver": 1,
+        "partialAlpha": 0
+      },
+      "unsupportedCommands": [],
+      "sceneContract": {
+        "id": "m79-bitmap-fixture-nearest-replay-v1",
+        "title": "M79 fixture bitmap nearest replay",
+        "status": "renderable",
+        "renderedByKadre": true,
+        "source": "kanvas-replay-data",
+        "sourceSceneId": "m79-bitmap-fixture-nearest",
+        "version": 1,
+        "claimLevel": "single-scene-replay-contract",
+        "commandSource": "m79-typed-bitmap-replay-contract",
+        "gpuExecution": "wgsl-generated-from-kadre-replay-scene",
+        "cpuReferenceSource": "typed Kadre replay CPU oracle for same selected commands",
+        "fallbackPolicy": "refuse-unsupported-replay-command",
+        "sourceEvidence": {
+          "dashboardRow": "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json#m79-bitmap-fixture-nearest-replay-v1",
+          "cpuRoute": "cpu.replay.bitmap.fixture.nearest-oracle",
+          "gpuRoute": "webgpu.kadre-replay.bitmap.fixture.nearest",
+          "pipelineKey": "bitmapFixture=m79-fixture-checker-rgba8-4x4 sampler=nearest state=[blendMode=kSrcOver alpha=opaque] source=m79"
+        },
+        "commandCounters": {
+          "total": 2,
+          "supported": 2,
+          "unsupported": 0,
+          "backgroundClear": 1,
+          "fillRect": 0,
+          "animatedFillRect": 0,
+          "clipRect": 0,
+          "clipIntersect": 0,
+          "srcOver": 1,
+          "partialAlpha": 0,
+          "bitmapRect": 1,
+          "fixtureBackedBitmap": 1,
+          "bitmapSamplerNearest": 1,
+          "bitmapSamplerLinear": 0,
+          "unsupportedBitmap": 0
+        },
+        "unsupportedCommands": [],
+        "commands": [
+          {
+            "label": "background-clear",
+            "family": "backgroundClear",
+            "supported": true,
+            "color": {
+              "r": 0.0300,
+              "g": 0.0340,
+              "b": 0.0440,
+              "a": 1.0000
+            }
+          },
+          {
+            "label": "checker-fixture-nearest",
+            "family": "bitmapRect",
+            "supported": true,
+            "fixtureId": "m79-fixture-checker-rgba8-4x4",
+            "sampler": "nearest",
+            "blendMode": "SrcOver",
+            "alpha": 1.0000,
+            "sourceBounds": {
+              "x": 0.0000,
+              "y": 0.0000,
+              "width": 4.0000,
+              "height": 4.0000,
+              "left": 0.0000,
+              "top": 0.0000,
+              "right": 4.0000,
+              "bottom": 4.0000
+            },
+            "destinationBounds": {
+              "x": 0.1400,
+              "y": 0.1600,
+              "width": 0.5400,
+              "height": 0.5200,
+              "left": 0.1400,
+              "top": 0.1600,
+              "right": 0.6800,
+              "bottom": 0.6800
+            },
+            "fixture": {
+              "width": 4,
+              "height": 4,
+              "colorSpace": "srgb",
+              "alphaType": "unpremul",
+              "pixelChecksum": 3600389471136345375
+            },
+            "provenance": {
+              "owner": "kanvas",
+              "storage": "in-repo-kotlin-fixture",
+              "fixtureProvenance": "in-repo deterministic RGBA fixture for M79 nearest bitmap replay",
+              "commandProvenance": "FOR-129/FOR-130 owned fixture-backed nearest bitmap replay scene"
+            }
+          }
+
+        ]
+      },
+      "cpuOracle": {
+        "width": 640,
+        "height": 420,
+        "checksum": 2208507294891662972,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 75428,
+        "oracle": "fixture-backed-bitmap-sampling-reference"
+      }
+    },
+    {
+      "id": "m79-bitmap-fixture-linear-alpha-replay-v1",
+      "title": "M79 fixture bitmap linear alpha replay",
+      "sourceSceneId": "m79-bitmap-fixture-linear-alpha",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m79.replay-scene-fixture-bitmap-renderable",
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json#m79-bitmap-fixture-linear-alpha-replay-v1",
+        "cpuRoute": "cpu.replay.bitmap.fixture.linear-alpha-oracle",
+        "gpuRoute": "webgpu.kadre-replay.bitmap.fixture.linear-alpha",
+        "pipelineKey": "bitmapFixture=m79-fixture-alpha-swatch-rgba8-4x4 sampler=linear state=[blendMode=kSrcOver alpha=partial] source=m79"
+      },
+      "commandCounters": {
+        "total": 3,
+        "supported": 3,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 1,
+        "bitmapRect": 1,
+        "fixtureBackedBitmap": 1,
+        "bitmapSamplerNearest": 0,
+        "bitmapSamplerLinear": 1,
+        "unsupportedBitmap": 0,
+        "srcOver": 2,
+        "partialAlpha": 1
+      },
+      "unsupportedCommands": [],
+      "sceneContract": {
+        "id": "m79-bitmap-fixture-linear-alpha-replay-v1",
+        "title": "M79 fixture bitmap linear alpha replay",
+        "status": "renderable",
+        "renderedByKadre": true,
+        "source": "kanvas-replay-data",
+        "sourceSceneId": "m79-bitmap-fixture-linear-alpha",
+        "version": 1,
+        "claimLevel": "single-scene-replay-contract",
+        "commandSource": "m79-typed-bitmap-replay-contract",
+        "gpuExecution": "wgsl-generated-from-kadre-replay-scene",
+        "cpuReferenceSource": "typed Kadre replay CPU oracle for same selected commands",
+        "fallbackPolicy": "refuse-unsupported-replay-command",
+        "sourceEvidence": {
+          "dashboardRow": "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json#m79-bitmap-fixture-linear-alpha-replay-v1",
+          "cpuRoute": "cpu.replay.bitmap.fixture.linear-alpha-oracle",
+          "gpuRoute": "webgpu.kadre-replay.bitmap.fixture.linear-alpha",
+          "pipelineKey": "bitmapFixture=m79-fixture-alpha-swatch-rgba8-4x4 sampler=linear state=[blendMode=kSrcOver alpha=partial] source=m79"
+        },
+        "commandCounters": {
+          "total": 3,
+          "supported": 3,
+          "unsupported": 0,
+          "backgroundClear": 1,
+          "fillRect": 1,
+          "animatedFillRect": 0,
+          "clipRect": 0,
+          "clipIntersect": 0,
+          "srcOver": 2,
+          "partialAlpha": 1,
+          "bitmapRect": 1,
+          "fixtureBackedBitmap": 1,
+          "bitmapSamplerNearest": 0,
+          "bitmapSamplerLinear": 1,
+          "unsupportedBitmap": 0
+        },
+        "unsupportedCommands": [],
+        "commands": [
+          {
+            "label": "background-clear",
+            "family": "backgroundClear",
+            "supported": true,
+            "color": {
+              "r": 0.0240,
+              "g": 0.0280,
+              "b": 0.0380,
+              "a": 1.0000
+            }
+          },
+          {
+            "label": "opaque-destination-panel",
+            "family": "fillRect",
+            "supported": true,
+            "fillKind": "solid",
+            "blendMode": "SrcOver",
+            "alpha": 1.0000,
+            "endAlpha": 1.0000,
+            "x": 0.1000,
+            "y": 0.1400,
+            "width": 0.7200,
+            "height": 0.6000,
+            "dx": 0.0000
+          },
+          {
+            "label": "alpha-swatch-linear-scaled",
+            "family": "bitmapRect",
+            "supported": true,
+            "fixtureId": "m79-fixture-alpha-swatch-rgba8-4x4",
+            "sampler": "linear",
+            "blendMode": "SrcOver",
+            "alpha": 0.8200,
+            "sourceBounds": {
+              "x": 0.0000,
+              "y": 0.0000,
+              "width": 4.0000,
+              "height": 4.0000,
+              "left": 0.0000,
+              "top": 0.0000,
+              "right": 4.0000,
+              "bottom": 4.0000
+            },
+            "destinationBounds": {
+              "x": 0.2200,
+              "y": 0.2200,
+              "width": 0.5800,
+              "height": 0.4600,
+              "left": 0.2200,
+              "top": 0.2200,
+              "right": 0.8000,
+              "bottom": 0.6800
+            },
+            "fixture": {
+              "width": 4,
+              "height": 4,
+              "colorSpace": "srgb",
+              "alphaType": "unpremul",
+              "pixelChecksum": -2532904605658194762
+            },
+            "provenance": {
+              "owner": "kanvas",
+              "storage": "in-repo-kotlin-fixture",
+              "fixtureProvenance": "in-repo deterministic RGBA fixture for M79 linear bitmap replay with alpha",
+              "commandProvenance": "FOR-130 fixture-backed scaled destination with alpha SrcOver bitmap replay scene"
+            }
+          }
+
+        ]
+      },
+      "cpuOracle": {
+        "width": 640,
+        "height": 420,
+        "checksum": -8675548398312149882,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 71603,
+        "oracle": "fixture-backed-bitmap-sampling-reference"
+      }
+    },
+    {
+      "id": "m79-bitmap-fixture-clipped-nearest-replay-v1",
+      "title": "M79 fixture bitmap clipped nearest replay",
+      "sourceSceneId": "m79-bitmap-fixture-clipped-nearest",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m79.replay-scene-fixture-bitmap-renderable",
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json#m79-bitmap-fixture-clipped-nearest-replay-v1",
+        "cpuRoute": "cpu.replay.bitmap.fixture.nearest-clip-oracle",
+        "gpuRoute": "webgpu.kadre-replay.bitmap.fixture.nearest-clip",
+        "pipelineKey": "bitmapFixture=m79-fixture-checker-rgba8-4x4 sampler=nearest clip=rectIntersect state=[blendMode=kSrcOver alpha=partial] source=m79"
+      },
+      "commandCounters": {
+        "total": 3,
+        "supported": 3,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 0,
+        "bitmapRect": 1,
+        "fixtureBackedBitmap": 1,
+        "bitmapSamplerNearest": 1,
+        "bitmapSamplerLinear": 0,
+        "unsupportedBitmap": 0,
+        "srcOver": 1,
+        "partialAlpha": 1
+      },
+      "unsupportedCommands": [],
+      "sceneContract": {
+        "id": "m79-bitmap-fixture-clipped-nearest-replay-v1",
+        "title": "M79 fixture bitmap clipped nearest replay",
+        "status": "renderable",
+        "renderedByKadre": true,
+        "source": "kanvas-replay-data",
+        "sourceSceneId": "m79-bitmap-fixture-clipped-nearest",
+        "version": 1,
+        "claimLevel": "single-scene-replay-contract",
+        "commandSource": "m79-typed-bitmap-replay-contract",
+        "gpuExecution": "wgsl-generated-from-kadre-replay-scene",
+        "cpuReferenceSource": "typed Kadre replay CPU oracle for same selected commands",
+        "fallbackPolicy": "refuse-unsupported-replay-command",
+        "sourceEvidence": {
+          "dashboardRow": "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json#m79-bitmap-fixture-clipped-nearest-replay-v1",
+          "cpuRoute": "cpu.replay.bitmap.fixture.nearest-clip-oracle",
+          "gpuRoute": "webgpu.kadre-replay.bitmap.fixture.nearest-clip",
+          "pipelineKey": "bitmapFixture=m79-fixture-checker-rgba8-4x4 sampler=nearest clip=rectIntersect state=[blendMode=kSrcOver alpha=partial] source=m79"
+        },
+        "commandCounters": {
+          "total": 3,
+          "supported": 3,
+          "unsupported": 0,
+          "backgroundClear": 1,
+          "fillRect": 0,
+          "animatedFillRect": 0,
+          "clipRect": 1,
+          "clipIntersect": 1,
+          "srcOver": 1,
+          "partialAlpha": 1,
+          "bitmapRect": 1,
+          "fixtureBackedBitmap": 1,
+          "bitmapSamplerNearest": 1,
+          "bitmapSamplerLinear": 0,
+          "unsupportedBitmap": 0
+        },
+        "unsupportedCommands": [],
+        "commands": [
+          {
+            "label": "background-clear",
+            "family": "backgroundClear",
+            "supported": true,
+            "color": {
+              "r": 0.0260,
+              "g": 0.0300,
+              "b": 0.0400,
+              "a": 1.0000
+            }
+          },
+          {
+            "label": "bitmap-visible-window",
+            "family": "clipRect",
+            "supported": true,
+            "operation": "intersect",
+            "bounds": {
+              "x": 0.2400,
+              "y": 0.2200,
+              "width": 0.3400,
+              "height": 0.3000,
+              "left": 0.2400,
+              "top": 0.2200,
+              "right": 0.5800,
+              "bottom": 0.5200
+            }
+          },
+          {
+            "label": "checker-fixture-nearest-clipped",
+            "family": "bitmapRect",
+            "supported": true,
+            "fixtureId": "m79-fixture-checker-rgba8-4x4",
+            "sampler": "nearest",
+            "blendMode": "SrcOver",
+            "alpha": 0.9200,
+            "sourceBounds": {
+              "x": 0.0000,
+              "y": 0.0000,
+              "width": 4.0000,
+              "height": 4.0000,
+              "left": 0.0000,
+              "top": 0.0000,
+              "right": 4.0000,
+              "bottom": 4.0000
+            },
+            "destinationBounds": {
+              "x": 0.1200,
+              "y": 0.1400,
+              "width": 0.6200,
+              "height": 0.5400,
+              "left": 0.1200,
+              "top": 0.1400,
+              "right": 0.7400,
+              "bottom": 0.6800
+            },
+            "fixture": {
+              "width": 4,
+              "height": 4,
+              "colorSpace": "srgb",
+              "alphaType": "unpremul",
+              "pixelChecksum": 3600389471136345375
+            },
+            "provenance": {
+              "owner": "kanvas",
+              "storage": "in-repo-kotlin-fixture",
+              "fixtureProvenance": "in-repo deterministic RGBA fixture for M79 nearest bitmap replay",
+              "commandProvenance": "FOR-130 fixture-backed nearest bitmap replay scene clipped by a bounded ClipRect"
+            }
+          }
+
+        ]
+      },
+      "cpuOracle": {
+        "width": 640,
+        "height": 420,
+        "checksum": -2224348050358112279,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 27468,
+        "oracle": "fixture-backed-bitmap-sampling-reference"
+      }
+    },
+    {
+      "id": "m79-bitmap-mipmap-sampler-refusal-v1",
+      "title": "M79 unsupported mipmap bitmap sampler refusal",
+      "sourceSceneId": "m79-bitmap-mipmap-sampler-refusal",
+      "status": "expected-unsupported",
+      "renderedByKadre": false,
+      "reason": "m79.bitmap.unsupported-sampler.mipmap",
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json#m79-bitmap-mipmap-sampler-refusal-v1",
+        "cpuRoute": "cpu.replay.bitmap.mipmap-sampler-not-generated",
+        "gpuRoute": "webgpu.kadre-replay.bitmap.mipmap-sampler.expected-unsupported",
+        "pipelineKey": "bitmapSampler=mipmap status=expected-unsupported source=m79"
+      },
+      "commandCounters": {
+        "total": 2,
+        "supported": 1,
+        "unsupported": 1,
+        "backgroundClear": 1,
+        "fillRect": 0,
+        "bitmapRect": 0,
+        "fixtureBackedBitmap": 0,
+        "bitmapSamplerNearest": 0,
+        "bitmapSamplerLinear": 0,
+        "unsupportedBitmap": 1,
+        "srcOver": 0,
+        "partialAlpha": 0
+      },
+      "unsupportedCommands": ["m79.bitmap.unsupported-sampler.mipmap"],
+      "sceneContract": {
+        "id": "m79-bitmap-mipmap-sampler-refusal-v1",
+        "title": "M79 unsupported mipmap bitmap sampler refusal",
+        "status": "expected-unsupported",
+        "renderedByKadre": false,
+        "source": "kanvas-replay-data",
+        "sourceSceneId": "m79-bitmap-mipmap-sampler-refusal",
+        "version": 1,
+        "claimLevel": "single-scene-replay-contract",
+        "commandSource": "m79-typed-bitmap-replay-contract",
+        "gpuExecution": "wgsl-generated-from-kadre-replay-scene",
+        "cpuReferenceSource": "typed Kadre replay CPU oracle for same selected commands",
+        "fallbackPolicy": "refuse-unsupported-replay-command",
+        "sourceEvidence": {
+          "dashboardRow": "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json#m79-bitmap-mipmap-sampler-refusal-v1",
+          "cpuRoute": "cpu.replay.bitmap.mipmap-sampler-not-generated",
+          "gpuRoute": "webgpu.kadre-replay.bitmap.mipmap-sampler.expected-unsupported",
+          "pipelineKey": "bitmapSampler=mipmap status=expected-unsupported source=m79"
+        },
+        "commandCounters": {
+          "total": 2,
+          "supported": 1,
+          "unsupported": 1,
+          "backgroundClear": 1,
+          "fillRect": 0,
+          "animatedFillRect": 0,
+          "clipRect": 0,
+          "clipIntersect": 0,
+          "srcOver": 0,
+          "partialAlpha": 0,
+          "bitmapRect": 0,
+          "fixtureBackedBitmap": 0,
+          "bitmapSamplerNearest": 0,
+          "bitmapSamplerLinear": 0,
+          "unsupportedBitmap": 1
+        },
+        "unsupportedCommands": ["m79.bitmap.unsupported-sampler.mipmap"],
+        "commands": [
+          {
+            "label": "background-clear",
+            "family": "backgroundClear",
+            "supported": true,
+            "color": {
+              "r": 0.0400,
+              "g": 0.0400,
+              "b": 0.0500,
+              "a": 1.0000
+            }
+          },
+          {
+            "label": "mipmap-bitmap-sampler",
+            "family": "bitmapSampler",
+            "supported": false,
+            "reason": "m79.bitmap.unsupported-sampler.mipmap"
+          }
+
+        ]
+      },
+      "cpuOracle": null
+    }
+
+  ]
+}
