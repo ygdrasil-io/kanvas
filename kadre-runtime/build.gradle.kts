@@ -7,6 +7,7 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation(project(":math"))
     implementation(project(":kanvas-skia"))
+    implementation(libs.kotlinxSerialization)
     implementation("org.graphiks.kadre:kadre:1.0.0")
     implementation("org.graphiks.kadre:kadre-win32:1.0.0")
     implementation("org.graphiks.kadre:kadre-x11:1.0.0")
@@ -87,5 +88,19 @@ tasks.register<JavaExec>("pipelineM75ReplayPackEvidence") {
     mainClass.set("org.skia.kadre.runtime.M75ReplayPackEvidenceKt")
     args(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m75-kadre-replay-pack").asFile.absolutePath)
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m75-kadre-replay-pack"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<JavaExec>("pipelineM76GeneratedMetadataReplay") {
+    group = "verification"
+    description = "Generates M76 selected generated-metadata replay evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M76GeneratedMetadataReplayKt")
+    args(
+        rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json").asFile.absolutePath,
+        rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m76-generated-metadata-replay").asFile.absolutePath,
+    )
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m76-generated-metadata-replay"))
     outputs.upToDateWhen { false }
 }

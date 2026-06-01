@@ -4291,6 +4291,7 @@ tasks.register("pipelinePmBundle") {
     group = "verification"
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
     mustRunAfter(":kadre-runtime:pipelineM75ReplayPackEvidence")
+    mustRunAfter(":kadre-runtime:pipelineM76GeneratedMetadataReplay")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4320,6 +4321,7 @@ tasks.register("pipelinePmBundle") {
     val m70KadreLiveRuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m70-kadre-live-runtime")
     val m70KadreNativeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m70-kadre-native")
     val m75ReplayPackEvidenceDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m75-kadre-replay-pack")
+    val m76GeneratedMetadataReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m76-generated-metadata-replay")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4338,6 +4340,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m70KadreLiveRuntimeDir)
     inputs.dir(m70KadreNativeDir)
     inputs.dir(m75ReplayPackEvidenceDir)
+    inputs.dir(m76GeneratedMetadataReplayDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4374,6 +4377,7 @@ tasks.register("pipelinePmBundle") {
         val m70KadreLiveRuntimeRoot = m70KadreLiveRuntimeDir.asFile
         val m70KadreNativeRoot = m70KadreNativeDir.asFile
         val m75ReplayPackEvidenceRoot = m75ReplayPackEvidenceDir.asFile
+        val m76GeneratedMetadataReplayRoot = m76GeneratedMetadataReplayDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4438,6 +4442,9 @@ tasks.register("pipelinePmBundle") {
         if (m75ReplayPackEvidenceRoot.isDirectory) {
             m75ReplayPackEvidenceRoot.copyRecursively(targetRoot.resolve("runtime/m75-kadre-replay-pack"), overwrite = true)
         }
+        if (m76GeneratedMetadataReplayRoot.isDirectory) {
+            m76GeneratedMetadataReplayRoot.copyRecursively(targetRoot.resolve("runtime/m76-generated-metadata-replay"), overwrite = true)
+        }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
         }
@@ -4498,6 +4505,8 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
+            "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
+            "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.json",
         )
         referencedPaths += m56ReportPaths
 
@@ -4927,6 +4936,31 @@ tasks.register("pipelinePmBundle") {
         } else {
             emptyMap<String, Any>()
         }
+        val m76GeneratedMetadataReplayFile = m76GeneratedMetadataReplayRoot.resolve("evidence.json")
+        val m76GeneratedMetadataReplay = if (m76GeneratedMetadataReplayFile.isFile) {
+            JsonSlurper().parse(m76GeneratedMetadataReplayFile) as? Map<*, *>
+                ?: throw GradleException("M76 generated metadata replay evidence must be a JSON object: ${m76GeneratedMetadataReplayFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M76 generated metadata replay evidence: ${m76GeneratedMetadataReplayFile.relativeTo(rootDir)}")
+        }
+        fun m76String(field: String): String =
+            (m76GeneratedMetadataReplay[field] as? String)
+                ?.takeIf { it.isNotBlank() }
+                ?: throw GradleException("M76 generated metadata replay evidence missing string `$field`: ${m76GeneratedMetadataReplayFile.relativeTo(rootDir)}")
+        fun m76Int(field: String): Int =
+            (m76GeneratedMetadataReplay[field] as? Number)?.toInt()
+                ?: throw GradleException("M76 generated metadata replay evidence missing numeric `$field`: ${m76GeneratedMetadataReplayFile.relativeTo(rootDir)}")
+        val m76SceneCount = m76Int("sceneCount")
+        val m76MappedSceneCount = m76Int("mappedSceneCount")
+        val m76RefusedMetadataCount = m76Int("refusedMetadataCount")
+        val m76FailedSceneCount = m76Int("failedSceneCount")
+        if (m76SceneCount <= 0 || m76MappedSceneCount < 2 || m76RefusedMetadataCount < 1 || m76FailedSceneCount != 0) {
+            throw GradleException(
+                "M76 generated metadata replay evidence counters are invalid: " +
+                    "sceneCount=$m76SceneCount mappedSceneCount=$m76MappedSceneCount " +
+                    "refusedMetadataCount=$m76RefusedMetadataCount failedSceneCount=$m76FailedSceneCount",
+            )
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5046,6 +5080,8 @@ tasks.register("pipelinePmBundle") {
             "m70KadreNativeDemoJson" to "runtime/m70-kadre-native/native-demo.json",
             "m75ReplayPackEvidenceMarkdown" to "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
             "m75ReplayPackEvidenceJson" to "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
+            "m76GeneratedMetadataReplayMarkdown" to "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
+            "m76GeneratedMetadataReplayJson" to "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -5259,6 +5295,20 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M75 aggregates deterministic multi-scene replay-pack evidence and per-scene CPU/native facts. It does not add broad SkCanvas/display-list replay or new readiness points.",
             ),
+            "m76GeneratedMetadataReplay" to linkedMapOf<String, Any>(
+                "status" to m76String("claimLevel"),
+                "packId" to m76String("packId"),
+                "sourceManifest" to m76String("sourceManifest"),
+                "sceneCount" to m76SceneCount,
+                "mappedSceneCount" to m76MappedSceneCount,
+                "refusedMetadataCount" to m76RefusedMetadataCount,
+                "failedSceneCount" to m76FailedSceneCount,
+                "readinessDelta" to m76Int("readinessDelta"),
+                "report" to "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
+                "evidenceJson" to "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.json",
+                "releaseBlocking" to false,
+                "notice" to "M76 maps selected generated dashboard metadata into replay contracts for known bounded templates and refuses unsupported metadata with stable reasons. It does not add arbitrary generated scene replay or new readiness points.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -5340,6 +5390,7 @@ tasks.register("pipelinePmBundle") {
                 "M69 verifies a Kadre native WebGPU present loop for a bounded standalone WGSL scene; native screenshot capture, input loop, Kanvas display-list replay, and release-grade FPS remain outside the claim.",
                 "M70-A/B/C verify a PM-visible Kadre demo command, normalized native surface-success evidence, reporting-only windowed telemetry, and a real wgpu4k offscreen texture readback when capture.realNativeReadback is true; M71 verifies autonomous frame scheduling; M72 verifies one selected solid-rect replay contract; M73 verifies a bounded typed replay-pack registry. Window-surface screenshot/readback, input, broad display-list replay, arbitrary op streams, dynamic multi-scene live switching, and release-grade FPS remain outside the claim.",
                 "M75 verifies deterministic multi-scene replay-pack evidence with per-scene CPU reference checksums and selected native/readback facts. It is evidence aggregation only and does not add broad display-list replay, arbitrary op streams, or release-grade runtime timing.",
+                "M76 verifies a selected generated-metadata to replay-contract bridge for known bounded templates and stable refusals. It does not add arbitrary generated scene replay, broad display-list replay, or new feature-family support.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -5388,6 +5439,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M70-A/B/C/M71/M72/M73 Kadre live runtime counters live in `manifest.json` under `m70KadreLiveRuntime`; native timing is still reporting-only, the frame clock is autonomous for the selected route, M73 is a bounded typed replay-pack registry with one selected scene per run, and the capture is an offscreen texture readback, not a window-surface screenshot.")
                 appendLine("- `runtime/m75-kadre-replay-pack/`: M75 deterministic multi-scene replay-pack evidence JSON and Markdown.")
                 appendLine("- M75 replay-pack evidence counters live in `manifest.json` under `m75ReplayPackEvidence`; this is evidence aggregation, not broad display-list replay.")
+                appendLine("- `runtime/m76-generated-metadata-replay/`: M76 selected generated-metadata to replay-contract evidence JSON and Markdown.")
+                appendLine("- M76 metadata replay counters live in `manifest.json` under `m76GeneratedMetadataReplay`; this maps known bounded metadata only and keeps unsupported metadata as stable refusals.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }

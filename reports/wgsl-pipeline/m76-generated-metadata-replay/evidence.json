@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "kadre-runtime:M76GeneratedMetadataReplay",
+  "linearIssues": ["FOR-92", "FOR-114", "FOR-115", "FOR-116", "FOR-117", "FOR-118"],
+  "packId": "m76-generated-metadata-replay-v1",
+  "sourceManifest": "reports/wgsl-pipeline/scenes/generated/results.json",
+  "claimLevel": "selected-generated-metadata-to-replay-contract",
+  "readinessDelta": 0,
+  "sceneCount": 6,
+  "mappedSceneCount": 4,
+  "refusedMetadataCount": 2,
+  "failedSceneCount": 0,
+  "mappingRules": [
+    "source status must be pass",
+    "source metadata must match a known bounded replay template",
+    "source tags must stay inside supported rect/gradient/bitmap/color-filter families",
+    "unsupported route families refuse with stable reasons"
+  ],
+  "nonClaims": [
+    "M76 maps selected generated metadata snapshots only; it does not parse arbitrary generated scenes at runtime.",
+    "M76 does not add broad SkCanvas or display-list replay.",
+    "M76 refusals are boundary evidence and do not count as rendering failures."
+  ],
+  "mappings": [
+    {
+      "sourceSceneId": "solid-rect",
+      "title": "Solid filled rect",
+      "status": "metadata-mapped",
+      "reason": "m76.metadata.mapped-replay-contract",
+      "sourceStatus": "pass",
+      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#solid-rect",
+      "artifactRoot": "artifacts/solid-rect",
+      "sourceReport": "reports/wgsl-pipeline/2026-05-30-m46-solid-rect-generated-evidence.md",
+      "cpuRoute": "cpu.descriptor.coverage-plan.solid-rect",
+      "gpuRoute": "webgpu.coverage.analytic-rect",
+      "pipelineKey": "coverageKind=analyticRect",
+      "tags": ["feature.coverage.analytic-rect", "feature.shape.solid", "maturity.adapter-backed", "maturity.generated-evidence", "reference.cpu-oracle", "risk.none", "route.cpu.descriptor", "route.gpu.webgpu", "source.generated"],
+      "replaySceneId": "m76-solid-rect-metadata-replay-v1",
+      "replayCommandSource": "m76-generated-scene-metadata-mapping",
+      "commandCounters": {
+        "total": 2,
+        "supported": 2,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 1,
+        "animatedFillRect": 0
+      },
+      "cpuReference": {
+        "width": 640,
+        "height": 420,
+        "checksum": 6278179505048423371,
+        "nonTransparentPixels": 5520
+      }
+    },
+    {
+      "sourceSceneId": "linear-gradient-rect",
+      "title": "Linear gradient rect generated WGSL route",
+      "status": "metadata-mapped",
+      "reason": "m76.metadata.mapped-replay-contract",
+      "sourceStatus": "pass",
+      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#linear-gradient-rect",
+      "artifactRoot": "artifacts/linear-gradient-rect",
+      "sourceReport": "reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md",
+      "cpuRoute": "cpu.shader.linear-gradient.rect",
+      "gpuRoute": "webgpu.generated.linear-gradient.rect",
+      "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
+      "tags": ["feature.coverage.analytic-rect", "feature.gradient.linear", "maturity.adapter-backed", "maturity.generated-evidence", "reference.test-oracle", "risk.none", "route.cpu.shader", "route.gpu.webgpu", "source.generated"],
+      "replaySceneId": "m76-linear-gradient-rect-metadata-replay-v1",
+      "replayCommandSource": "m76-generated-scene-metadata-mapping",
+      "commandCounters": {
+        "total": 2,
+        "supported": 2,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 1,
+        "animatedFillRect": 0
+      },
+      "cpuReference": {
+        "width": 640,
+        "height": 420,
+        "checksum": 766127960160601107,
+        "nonTransparentPixels": 5520
+      }
+    },
+    {
+      "sourceSceneId": "bitmap-rect-nearest",
+      "title": "Bitmap rect nearest sampling",
+      "status": "metadata-mapped",
+      "reason": "m76.metadata.mapped-replay-contract",
+      "sourceStatus": "pass",
+      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#bitmap-rect-nearest",
+      "artifactRoot": "artifacts/bitmap-rect-nearest",
+      "sourceReport": "reports/wgsl-pipeline/2026-05-27-m32-drawbitmaprect-skbug4734-resolution.md",
+      "cpuRoute": "cpu.image-rect.strict-nearest",
+      "gpuRoute": "webgpu.image-rect.strict-nearest",
+      "pipelineKey": "imageRect.strictNearest.promotedSmoke",
+      "tags": ["feature.image.bitmap", "feature.sampling.nearest", "maturity.adapter-backed", "maturity.generated-evidence", "reference.skia-upstream", "risk.none", "route.cpu.image-rect", "route.gpu.webgpu", "source.generated"],
+      "replaySceneId": "m76-bitmap-rect-nearest-metadata-replay-v1",
+      "replayCommandSource": "m76-generated-scene-metadata-mapping",
+      "commandCounters": {
+        "total": 2,
+        "supported": 2,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 1,
+        "animatedFillRect": 0
+      },
+      "cpuReference": {
+        "width": 640,
+        "height": 420,
+        "checksum": -7802753964421501890,
+        "nonTransparentPixels": 5520
+      }
+    },
+    {
+      "sourceSceneId": "gradient-color-filter-linear-kplus",
+      "title": "Linear gradient color-filter kPlus route",
+      "status": "metadata-mapped",
+      "reason": "m76.metadata.mapped-replay-contract",
+      "sourceStatus": "pass",
+      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#gradient-color-filter-linear-kplus",
+      "artifactRoot": "artifacts/gradient-color-filter-linear-kplus",
+      "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md",
+      "cpuRoute": "cpu.shader.linear-gradient.color-filter.blend-kplus-oracle",
+      "gpuRoute": "webgpu.generated.linear-gradient.color-filter.blend-kplus",
+      "pipelineKey": "shaderFamily=linearGradient colorFilter=Blend(red,kPlus) coverage=analyticRect state=[blendMode=kSrcOver]",
+      "tags": ["feature.blend.plus", "feature.color-filter", "feature.gradient.linear", "maturity.adapter-backed", "maturity.generated-evidence", "reference.test-oracle", "risk.none", "route.gpu.webgpu", "source.generated"],
+      "replaySceneId": "m76-gradient-color-filter-linear-kplus-metadata-replay-v1",
+      "replayCommandSource": "m76-generated-scene-metadata-mapping",
+      "commandCounters": {
+        "total": 2,
+        "supported": 2,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 1,
+        "animatedFillRect": 0
+      },
+      "cpuReference": {
+        "width": 640,
+        "height": 420,
+        "checksum": -1850474044133108053,
+        "nonTransparentPixels": 5520
+      }
+    },
+    {
+      "sourceSceneId": "path-aa-convexpaths-edge-budget",
+      "title": "Path AA ConvexPaths edge-budget refusal",
+      "status": "expected-unsupported",
+      "reason": "m76.metadata.source-status-not-pass",
+      "sourceStatus": "expected-unsupported",
+      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#path-aa-convexpaths-edge-budget",
+      "artifactRoot": "artifacts/path-aa-convexpaths-edge-budget",
+      "sourceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+      "cpuRoute": "cpu.coverage.path-aa-oracle",
+      "gpuRoute": "webgpu.coverage.path-aa.expected-unsupported",
+      "pipelineKey": "coverage=path-aa edgeBudget=exceeded status=expected-unsupported",
+      "tags": ["feature.coverage.aa", "feature.path-aa", "maturity.generated-evidence", "reference.cpu-oracle", "risk.edge-budget", "risk.expected-unsupported", "route.cpu.oracle", "route.gpu.expected-unsupported", "source.generated"],
+      "replaySceneId": null,
+      "commandCounters": null,
+      "cpuReference": null
+    },
+    {
+      "sourceSceneId": "runtime-effect-simple",
+      "title": "Registered SimpleRT runtime-effect route",
+      "status": "expected-unsupported",
+      "reason": "m76.metadata.unsupported-route-family",
+      "sourceStatus": "pass",
+      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#runtime-effect-simple",
+      "artifactRoot": "artifacts/runtime-effect-simple",
+      "sourceReport": "reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md",
+      "cpuRoute": "cpu.runtime-effect.simple-registered",
+      "gpuRoute": "webgpu.runtime-effect.simple-registered",
+      "pipelineKey": "runtimeEffect=SimpleRT coverage=analyticRect state=[blendMode=kSrcOver]",
+      "tags": ["feature.coverage.analytic-rect", "feature.runtime-effect", "maturity.generated-evidence", "reference.test-oracle", "risk.none", "route.cpu.descriptor", "route.gpu.webgpu", "source.generated"],
+      "replaySceneId": null,
+      "commandCounters": null,
+      "cpuReference": null
+    }
+
+  ]
+}
