@@ -104,3 +104,13 @@ tasks.register<JavaExec>("pipelineM76GeneratedMetadataReplay") {
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m76-generated-metadata-replay"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM77BlendAlphaReplay") {
+    group = "verification"
+    description = "Generates M77 bounded blend/alpha Kadre replay evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M77BlendAlphaReplayKt")
+    args(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m77-blend-alpha-replay").asFile.absolutePath)
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m77-blend-alpha-replay"))
+    outputs.upToDateWhen { false }
+}
