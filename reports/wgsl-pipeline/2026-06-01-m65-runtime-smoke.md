@@ -18,9 +18,9 @@ Status: reporting-only smoke evidence, not a performance release claim.
 
 | Slot | Status | Runtime route | Refusal | Median frame ms | P95 frame ms | Nonblank |
 |---|---|---|---|---:|---:|---|
-| `baseline` | `pass` | `headless.offscreen.smoke-renderer.v1` | `none` | 9.0764 | 9.3875 | True |
-| `m63` | `expected-unsupported` | `headless.offscreen.slot-preview` | `m65.runtime-display-list-replay-not-wired` | 13.0396 | 13.3563 | True |
-| `m64` | `expected-unsupported` | `headless.offscreen.slot-preview` | `m65.runtime-display-list-replay-not-wired` | 12.6438 | 12.8879 | True |
+| `baseline` | `pass` | `headless.offscreen.smoke-renderer.v1` | `none` | 8.9599 | 9.3046 | True |
+| `m63` | `expected-unsupported` | `headless.offscreen.slot-preview` | `m65.runtime-display-list-replay-not-wired` | 12.9778 | 13.249 | True |
+| `m64` | `expected-unsupported` | `headless.offscreen.slot-preview` | `m65.runtime-display-list-replay-not-wired` | 12.4671 | 12.702 | True |
 
 ## Non-Claims
 

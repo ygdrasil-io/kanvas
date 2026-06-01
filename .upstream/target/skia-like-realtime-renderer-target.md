@@ -82,15 +82,15 @@ corresponding denominator and is linked from the sprint report.
 
 Weighted starting readiness: approximately 25%.
 
-Current readiness after M65/M66 closeout: approximately 53%.
+Current readiness after M67/M68 closeout: approximately 58%.
 
 | Area | Weight | Current count | Current progress | Movement |
 |---|---:|---:|---:|---|
 | Rendering feature breadth | 30% | 6/10 | 60% | M66 normalizes selected rows across existing families without adding a new counted family denominator. |
 | Skia-like fidelity | 20% | 50/100 selected rows, 37/100 Skia-comparable minimum | 50% selected evidence | M66 adds 19 selected support/refusal rows with `referenceKind`; 6 are `skia-upstream`, 6 `test-oracle`, and 7 `cpu-oracle`. CPU-oracle rows do not automatically count as Skia-comparable fidelity. |
-| Real-time runtime | 20% | 4/10 | 40% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane with frame loop evidence, full-redraw invalidation diagnostics, nonblank frame artifacts, and exportable telemetry. Live Kadre presentation remains blocked with `m65.kadre-host-not-wired`. |
-| Performance and cache readiness | 15% | 7/20 | 35% | M65 telemetry is reporting-only and M66 does not add release-blocking performance/cache gates. |
-| PM/demo operability | 15% | 16/20 | 80% | PM bundle includes M65 runtime telemetry/artifacts plus M66 family/reference counters and reports. Hosted/live demo packaging and release-candidate workflow remain incomplete. |
+| Real-time runtime | 20% | 5/10 | 50% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane; M68 adds Kadre source-build bridge evidence and host-contract audit from `external/poc-koreos`. Native Kanvas/Kadre presentation remains blocked with `m68.kadre-host-adapter-not-implemented`. |
+| Performance and cache readiness | 15% | 8/20 | 40% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry, adds one measured family budget, and proves deterministic quarantine/rebaseline behavior. Native Kadre timing remains reporting-only. |
+| PM/demo operability | 15% | 18/20 | 90% | PM bundle includes M65 runtime telemetry/artifacts, M66 family/reference counters, M67 performance tiering, and M68 Kadre bridge/demo evidence. The native runnable demo remains blocked until the Kanvas/Kadre host adapter lands. |
 
 Expected milestone deltas are capped until evidence lands:
 
@@ -119,8 +119,8 @@ Expected milestone deltas are capped until evidence lands:
 | M64 | Registered Runtime Effects | Promote SimpleRT through a registered Kotlin/WGSL descriptor with parser-reflected uniforms; refuse SpiralRT without WGSL descriptor and arbitrary SkSL with stable reasons. |
 | M65 | Real-Time Scene Runtime | Add a Kadre-hosted frame loop, display-list replay boundary, invalidation diagnostics, cache telemetry, live controls, and reporting-only frame metrics. |
 | M66 | Skia GM Promotion Wave | Aggregate M60-M64 promotions and add only the missing rows needed to reach the selected 50-100 GM/reference set. |
-| M67 | Performance Tiering | Promote reporting-only M65 frame metrics plus family pipeline budgets into candidate/release gates with quarantine and rebaseline policy. |
-| M68 | Native Real-Time Demo | Package a runnable demo showing text, filters, paths, runtime effects, animation, and telemetry. |
+| M67 | Performance Tiering | Promote M65 frame metrics into a `frame.headless-webgpu` candidate gate, family budgets, and deterministic quarantine/rebaseline evidence. |
+| M68 | Native Real-Time Demo | Package Kadre source-build bridge evidence and flagship scene inputs; native windowed launch remains blocked until a Kanvas/Kadre host adapter exists. |
 | M69 | Fidelity Hardening Toward Skia CPU | Burn down visual diffs across promoted families without weakening thresholds globally. |
 | M70 | Release Candidate Renderer | Freeze API, runtime, PM demo, CI gates, and known limitations for a renderer release candidate. |
 
