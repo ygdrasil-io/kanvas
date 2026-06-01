@@ -6,7 +6,7 @@
   "gatePhase": "reportingOnly",
   "reportingOnly": true,
   "sceneContract": {
-    "id": "m73-linear-gradient-rect-replay-v1",
+    "id": "m73-bitmap-rect-nearest-replay-v1",
     "version": 1,
     "owner": "kanvas",
     "milestone": "M70-A/M71/M72/M73",
@@ -14,12 +14,12 @@
     "wgslSource": "runtime-generated-from-selected-kadre-replay-scene"
   },
   "sceneReplay": {
-    "id": "m73-linear-gradient-rect-replay-v1",
-    "title": "M73 linear-gradient rect replay",
+    "id": "m73-bitmap-rect-nearest-replay-v1",
+    "title": "M73 bitmap-rect nearest replay",
     "status": "renderable",
     "renderedByKadre": true,
     "source": "kanvas-replay-data",
-    "sourceSceneId": "linear-gradient-rect",
+    "sourceSceneId": "bitmap-rect-nearest",
     "version": 1,
     "claimLevel": "single-scene-replay-contract",
     "commandSource": "typed-kadre-runtime-replay-contract",
@@ -27,10 +27,10 @@
     "cpuReferenceSource": "typed Kadre replay CPU oracle for same selected commands",
     "fallbackPolicy": "refuse-unsupported-replay-command",
     "sourceEvidence": {
-      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#linear-gradient-rect",
-      "cpuRoute": "cpu.shader.linear-gradient.rect",
-      "gpuRoute": "webgpu.generated.linear-gradient.rect",
-      "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]"
+      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#bitmap-rect-nearest",
+      "cpuRoute": "cpu.image-rect.strict-nearest",
+      "gpuRoute": "webgpu.image-rect.strict-nearest",
+      "pipelineKey": "imageRect.strictNearest.promotedSmoke"
     },
     "commandCounters": {
       "total": 2,
@@ -43,14 +43,14 @@
     "unsupportedCommands": [],
     "commands": [
       {
-        "label": "linear-gradient-rect",
-        "family": "linearGradientRect",
+        "label": "bitmap-rect-nearest-checker",
+        "family": "bitmapRectNearest",
         "supported": true,
-        "fillKind": "linearGradient",
-        "x": 0.1200,
-        "y": 0.1600,
-        "width": 0.7600,
-        "height": 0.6200,
+        "fillKind": "checkerBitmap",
+        "x": 0.1600,
+        "y": 0.1800,
+        "width": 0.6800,
+        "height": 0.5800,
         "dx": 0.0000
       }
 
@@ -279,10 +279,10 @@
   "reason": "m73.kadre-replay-pack-selected-scene-presented-frames",
   "nativePresented": true,
   "presentCallCompleted": true,
-  "requestedFrames": 180,
-  "warmupFrames": 30,
-  "presentedFrames": 180,
-  "redrawEvents": 180,
+  "requestedFrames": 12,
+  "warmupFrames": 0,
+  "presentedFrames": 12,
+  "redrawEvents": 12,
   "surface": {
     "width": 640,
     "height": 420,
@@ -291,17 +291,17 @@
   "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
   "cpuReference": {
     "source": "kanvas-skia SkBitmap/SkCanvas",
-    "checksum": 766127960160601107,
+    "checksum": -7802753964421501890,
     "nonTransparentPixels": 5520
   },
   "frameTiming": {
-    "firstFrameMs": 37.2265,
-    "averageFrameMs": 8.4188,
-    "warmupFrameCount": 30,
-    "measuredSampleCount": 150,
-    "measuredP50Ms": 8.4459,
-    "measuredP95Ms": 8.6865,
-    "measuredWorstMs": 10.0670,
+    "firstFrameMs": 169.0310,
+    "averageFrameMs": 21.0871,
+    "warmupFrameCount": 0,
+    "measuredSampleCount": 12,
+    "measuredP50Ms": 7.7924,
+    "measuredP95Ms": 169.0310,
+    "measuredWorstMs": 169.0310,
     "gatePhase": "reportingOnly",
     "reportingOnly": true,
     "nativeTimingClaim": "present-call-duration-only"
@@ -312,14 +312,14 @@
     "reportingOnly": true,
     "frameClockSource": "kadre.appkit.control-flow-poll",
     "autonomousFrameClock": true,
-    "autonomousFrameCount": 359,
-    "warmupFrameCount": 30,
-    "measuredSampleCount": 150,
-    "measuredP50Ms": 8.4459,
-    "measuredP95Ms": 8.6865,
-    "measuredWorstMs": 10.0670,
-    "totalSampleCount": 180,
-    "surfaceStatusCount": 180
+    "autonomousFrameCount": 23,
+    "warmupFrameCount": 0,
+    "measuredSampleCount": 12,
+    "measuredP50Ms": 7.7924,
+    "measuredP95Ms": 169.0310,
+    "measuredWorstMs": 169.0310,
+    "totalSampleCount": 12,
+    "surfaceStatusCount": 12
   },
   "capture": {
     "status": "produced",
@@ -331,21 +331,21 @@
     "width": 640,
     "height": 420,
     "format": "RGBA8Unorm",
-    "bytes": 5649,
-    "checksum": -1532881463102611126,
+    "bytes": 9842,
+    "checksum": 5430544664403204737,
     "nonTransparentPixels": 268800,
     "error": null
   },
   "surfaceStatusSummary": {
-    "success": 180,
+    "success": 12,
     "timeout": 0,
     "lost": 0,
     "outdated": 0,
     "outOfMemory": 0,
     "deviceLost": 0
   },
-  "surfaceStatuses": ["success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success"],
-  "surfaceApiStatuses": ["timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout"],
+  "surfaceStatuses": ["success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success"],
+  "surfaceApiStatuses": ["timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout"],
   "surfaceStatusSemantics": {
     "source": "wgpu4k SurfaceTextureStatus over wgpu-native v27",
     "normalizedTimeoutAsSuccess": true,
