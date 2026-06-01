@@ -134,3 +134,13 @@ tasks.register<JavaExec>("pipelineM79BitmapReplay") {
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m79-bitmap-replay"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM80SharedReplayOracle") {
+    group = "verification"
+    description = "Generates M80 shared replay CPU oracle evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M80SharedReplayOracleKt")
+    args(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m80-shared-replay-oracle").asFile.absolutePath)
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m80-shared-replay-oracle"))
+    outputs.upToDateWhen { false }
+}

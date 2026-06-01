@@ -7,6 +7,7 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkPaint
 
 internal const val M73_DEFAULT_SCENE_CONTRACT_ID = "m73-linear-gradient-rect-replay-v1"
+internal const val REPLAY_CPU_ORACLE_API = "org.skia.kadre.runtime.ReplayCpuOracle"
 
 private const val M72_SCENE_CONTRACT_ID = "m72-solid-rect-replay-v1"
 
@@ -153,6 +154,10 @@ internal sealed interface ReplayCommand {
         override val family: String get() = if (animated) "animatedFillRect" else fillKind.commandFamily
         override val supported: Boolean = true
 
+        init {
+            require(width > 0.0 && height > 0.0) { "FillRect $label bounds must be positive" }
+        }
+
         fun toJson(indent: String): String = buildString {
             appendLine("{")
             appendLine("$indent  \"label\": ${label.json()},")
@@ -181,6 +186,10 @@ internal sealed interface ReplayCommand {
     ) : ReplayCommand {
         override val family: String = "clipRect"
         override val supported: Boolean = true
+
+        init {
+            require(width > 0.0 && height > 0.0) { "ClipRect $label bounds must be positive" }
+        }
 
         fun toJson(indent: String): String = buildString {
             appendLine("{")
@@ -533,117 +542,167 @@ internal fun replayPackJson(mode: String, indent: String): String {
     }
 }
 
-internal fun renderCpuReference(width: Int, height: Int, replayScene: ReplaySceneEvidence? = null): Pair<Long, Int> {
-    val bitmap = SkBitmap(width, height)
-    val background = replayScene?.background ?: ReplayColor(0.04, 0.05, 0.07)
-    bitmap.eraseColor(background.toArgb())
-    if (replayScene != null) {
+internal data class ReplayCpuOracleResult(
+    val api: String,
+    val deviceWidth: Int,
+    val deviceHeight: Int,
+    val sceneId: String?,
+    val sceneStatus: String,
+    val sampledChecksum: Long,
+    val nonTransparentPixels: Int,
+    val bitmapSampledPixels: Int,
+    val unsupportedReasons: List<String>,
+    val commandFamilies: Set<String>,
+) {
+    val rendered: Boolean get() = unsupportedReasons.isEmpty()
+}
+
+internal object ReplayCpuOracle {
+    fun render(width: Int, height: Int, replayScene: ReplaySceneEvidence? = null): ReplayCpuOracleResult {
+        require(width > 0 && height > 0) { "ReplayCpuOracle device dimensions must be positive: ${width}x$height" }
+
+        val bitmap = SkBitmap(width, height)
+        val background = replayScene?.background ?: ReplayColor(0.04, 0.05, 0.07)
+        bitmap.eraseColor(background.toArgb())
+        if (replayScene != null) {
+            var activeClip = ReplayBounds(0.0, 0.0, 1.0, 1.0)
+            replayScene.commands.forEach { command ->
+                if (command is ReplayCommand.ClipRect) {
+                    activeClip = activeClip.intersect(command.bounds)
+                }
+                when (command) {
+                    is ReplayCommand.FillRect -> {
+                        val rect = command
+                        val drawBounds = rect.bounds.intersect(activeClip)
+                        if (drawBounds.isEmpty) return@forEach
+                        val left = (rect.x * width).toInt().coerceIn(0, width)
+                        val top = (rect.y * height).toInt().coerceIn(0, height)
+                        val right = ((rect.x + rect.width) * width).toInt().coerceIn(0, width)
+                        val bottom = ((rect.y + rect.height) * height).toInt().coerceIn(0, height)
+                        val clippedLeft = (drawBounds.left * width).toInt().coerceIn(left, right)
+                        val clippedTop = (drawBounds.top * height).toInt().coerceIn(top, bottom)
+                        val clippedRight = (drawBounds.right * width).toInt().coerceIn(left, right)
+                        val clippedBottom = (drawBounds.bottom * height).toInt().coerceIn(top, bottom)
+                        for (py in clippedTop until clippedBottom) {
+                            for (px in clippedLeft until clippedRight) {
+                                val u = (((px.toDouble() + 0.5) / width.toDouble()) - rect.x) / rect.width.coerceAtLeast(0.0001)
+                                val v = (((py.toDouble() + 0.5) / height.toDouble()) - rect.y) / rect.height.coerceAtLeast(0.0001)
+                                val src = rect.fillColorAt(u, v, phase = 0.0)
+                                val dst = bitmap.getPixel(px, py).toReplayColor()
+                                bitmap.setPixel(px, py, src.blendOver(dst).toArgb())
+                            }
+                        }
+                    }
+                    is ReplayCommand.BitmapRect -> {
+                        val rect = command
+                        val drawBounds = rect.bounds.intersect(activeClip)
+                        if (drawBounds.isEmpty) return@forEach
+                        val left = (rect.dstX * width).toInt().coerceIn(0, width)
+                        val top = (rect.dstY * height).toInt().coerceIn(0, height)
+                        val right = ((rect.dstX + rect.dstWidth) * width).toInt().coerceIn(0, width)
+                        val bottom = ((rect.dstY + rect.dstHeight) * height).toInt().coerceIn(0, height)
+                        val clippedLeft = (drawBounds.left * width).toInt().coerceIn(left, right)
+                        val clippedTop = (drawBounds.top * height).toInt().coerceIn(top, bottom)
+                        val clippedRight = (drawBounds.right * width).toInt().coerceIn(left, right)
+                        val clippedBottom = (drawBounds.bottom * height).toInt().coerceIn(top, bottom)
+                        val fixture = rect.fixture
+                        for (py in clippedTop until clippedBottom) {
+                            for (px in clippedLeft until clippedRight) {
+                                val u = (((px.toDouble() + 0.5) / width.toDouble()) - rect.dstX) / rect.dstWidth.coerceAtLeast(0.0001)
+                                val v = (((py.toDouble() + 0.5) / height.toDouble()) - rect.dstY) / rect.dstHeight.coerceAtLeast(0.0001)
+                                val srcX = rect.srcX + u.coerceIn(0.0, 1.0) * rect.srcWidth
+                                val srcY = rect.srcY + v.coerceIn(0.0, 1.0) * rect.srcHeight
+                                val sampled = fixture.sample(srcX, srcY, rect.sampler).withAlphaMultiplier(rect.alpha)
+                                val dst = bitmap.getPixel(px, py).toReplayColor()
+                                bitmap.setPixel(px, py, sampled.blendOver(dst).toArgb())
+                            }
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        } else {
+            val canvas = SkCanvas(bitmap)
+            val rects = listOf(
+                ReplayCommand.FillRect("blue-panel", 0.06, 0.10, 0.62, 0.32, ReplayColor(0.17, 0.48, 0.90)),
+                ReplayCommand.FillRect("green-panel", 0.38, 0.35, 0.46, 0.42, ReplayColor(0.22, 0.69, 0.00)),
+                ReplayCommand.FillRect("red-panel", 0.12, 0.62, 0.32, 0.22, ReplayColor(0.91, 0.29, 0.37)),
+            )
+            rects.forEach { rect ->
+                val paint = SkPaint().apply { color = rect.color.toArgb(); isAntiAlias = true }
+                canvas.drawRect(
+                    SkRect.MakeXYWH(
+                        (rect.x * width).toFloat(),
+                        (rect.y * height).toFloat(),
+                        (rect.width * width).toFloat(),
+                        (rect.height * height).toFloat(),
+                    ),
+                    paint,
+                )
+            }
+        }
+
+        val sampledFacts = sampleBitmapFacts(bitmap, width, height)
+        return ReplayCpuOracleResult(
+            api = REPLAY_CPU_ORACLE_API,
+            deviceWidth = width,
+            deviceHeight = height,
+            sceneId = replayScene?.id,
+            sceneStatus = replayScene?.status ?: "native-smoke-reference",
+            sampledChecksum = sampledFacts.sampledChecksum,
+            nonTransparentPixels = sampledFacts.nonTransparentPixels,
+            bitmapSampledPixels = replayScene?.let { countBitmapSampledPixels(width, height, it) } ?: 0,
+            unsupportedReasons = replayScene?.unsupportedCommands.orEmpty(),
+            commandFamilies = replayScene?.commands?.map { it.family }?.toSortedSet().orEmpty(),
+        )
+    }
+
+    fun countBitmapSampledPixels(width: Int, height: Int, replayScene: ReplaySceneEvidence): Int {
+        require(width > 0 && height > 0) { "ReplayCpuOracle device dimensions must be positive: ${width}x$height" }
         var activeClip = ReplayBounds(0.0, 0.0, 1.0, 1.0)
+        var sampled = 0
         replayScene.commands.forEach { command ->
             if (command is ReplayCommand.ClipRect) {
                 activeClip = activeClip.intersect(command.bounds)
             }
-            when (command) {
-                is ReplayCommand.FillRect -> {
-                    val rect = command
-                    val drawBounds = rect.bounds.intersect(activeClip)
-                    if (drawBounds.isEmpty) return@forEach
-                    val left = (rect.x * width).toInt().coerceIn(0, width)
-                    val top = (rect.y * height).toInt().coerceIn(0, height)
-                    val right = ((rect.x + rect.width) * width).toInt().coerceIn(0, width)
-                    val bottom = ((rect.y + rect.height) * height).toInt().coerceIn(0, height)
-                    val clippedLeft = (drawBounds.left * width).toInt().coerceIn(left, right)
-                    val clippedTop = (drawBounds.top * height).toInt().coerceIn(top, bottom)
-                    val clippedRight = (drawBounds.right * width).toInt().coerceIn(left, right)
-                    val clippedBottom = (drawBounds.bottom * height).toInt().coerceIn(top, bottom)
-                    for (py in clippedTop until clippedBottom) {
-                        for (px in clippedLeft until clippedRight) {
-                            val u = (((px.toDouble() + 0.5) / width.toDouble()) - rect.x) / rect.width.coerceAtLeast(0.0001)
-                            val v = (((py.toDouble() + 0.5) / height.toDouble()) - rect.y) / rect.height.coerceAtLeast(0.0001)
-                            val src = rect.fillColorAt(u, v, phase = 0.0)
-                            val dst = bitmap.getPixel(px, py).toReplayColor()
-                            bitmap.setPixel(px, py, src.blendOver(dst).toArgb())
-                        }
-                    }
-                }
-                is ReplayCommand.BitmapRect -> {
-                    val rect = command
-                    val drawBounds = rect.bounds.intersect(activeClip)
-                    if (drawBounds.isEmpty) return@forEach
-                    val left = (rect.dstX * width).toInt().coerceIn(0, width)
-                    val top = (rect.dstY * height).toInt().coerceIn(0, height)
-                    val right = ((rect.dstX + rect.dstWidth) * width).toInt().coerceIn(0, width)
-                    val bottom = ((rect.dstY + rect.dstHeight) * height).toInt().coerceIn(0, height)
-                    val clippedLeft = (drawBounds.left * width).toInt().coerceIn(left, right)
-                    val clippedTop = (drawBounds.top * height).toInt().coerceIn(top, bottom)
-                    val clippedRight = (drawBounds.right * width).toInt().coerceIn(left, right)
-                    val clippedBottom = (drawBounds.bottom * height).toInt().coerceIn(top, bottom)
-                    val fixture = rect.fixture
-                    for (py in clippedTop until clippedBottom) {
-                        for (px in clippedLeft until clippedRight) {
-                            val u = (((px.toDouble() + 0.5) / width.toDouble()) - rect.dstX) / rect.dstWidth.coerceAtLeast(0.0001)
-                            val v = (((py.toDouble() + 0.5) / height.toDouble()) - rect.dstY) / rect.dstHeight.coerceAtLeast(0.0001)
-                            val srcX = rect.srcX + u.coerceIn(0.0, 1.0) * rect.srcWidth
-                            val srcY = rect.srcY + v.coerceIn(0.0, 1.0) * rect.srcHeight
-                            val sampled = fixture.sample(srcX, srcY, rect.sampler).withAlphaMultiplier(rect.alpha)
-                            val dst = bitmap.getPixel(px, py).toReplayColor()
-                            bitmap.setPixel(px, py, sampled.blendOver(dst).toArgb())
-                        }
-                    }
-                }
-                else -> Unit
+            val bitmap = command as? ReplayCommand.BitmapRect ?: return@forEach
+            val drawBounds = bitmap.bounds.intersect(activeClip)
+            if (drawBounds.isEmpty) return@forEach
+            val left = (drawBounds.left * width).toInt().coerceIn(0, width)
+            val top = (drawBounds.top * height).toInt().coerceIn(0, height)
+            val right = (drawBounds.right * width).toInt().coerceIn(left, width)
+            val bottom = (drawBounds.bottom * height).toInt().coerceIn(top, height)
+            sampled += (right - left) * (bottom - top)
+        }
+        return sampled
+    }
+
+    private fun sampleBitmapFacts(bitmap: SkBitmap, width: Int, height: Int): SampledBitmapFacts {
+        var checksum = 1469598103934665603L
+        var nonTransparent = 0
+        for (y in 0 until height step 7) {
+            for (x in 0 until width step 7) {
+                val argb = bitmap.getPixel(x, y)
+                if ((argb ushr 24) != 0) nonTransparent++
+                checksum = (checksum xor argb.toLong()) * 1099511628211L
             }
         }
-    } else {
-        val canvas = SkCanvas(bitmap)
-        val rects = listOf(
-            ReplayCommand.FillRect("blue-panel", 0.06, 0.10, 0.62, 0.32, ReplayColor(0.17, 0.48, 0.90)),
-            ReplayCommand.FillRect("green-panel", 0.38, 0.35, 0.46, 0.42, ReplayColor(0.22, 0.69, 0.00)),
-            ReplayCommand.FillRect("red-panel", 0.12, 0.62, 0.32, 0.22, ReplayColor(0.91, 0.29, 0.37)),
-        )
-        rects.forEach { rect ->
-            val paint = SkPaint().apply { color = rect.color.toArgb(); isAntiAlias = true }
-            canvas.drawRect(
-                SkRect.MakeXYWH(
-                    (rect.x * width).toFloat(),
-                    (rect.y * height).toFloat(),
-                    (rect.width * width).toFloat(),
-                    (rect.height * height).toFloat(),
-                ),
-                paint,
-            )
-        }
+        return SampledBitmapFacts(checksum, nonTransparent)
     }
-    var checksum = 1469598103934665603L
-    var nonTransparent = 0
-    for (y in 0 until height step 7) {
-        for (x in 0 until width step 7) {
-            val argb = bitmap.getPixel(x, y)
-            if ((argb ushr 24) != 0) nonTransparent++
-            checksum = (checksum xor argb.toLong()) * 1099511628211L
-        }
-    }
-    return checksum to nonTransparent
 }
 
-internal fun bitmapSampledPixels(width: Int, height: Int, replayScene: ReplaySceneEvidence): Int {
-    var activeClip = ReplayBounds(0.0, 0.0, 1.0, 1.0)
-    var sampled = 0
-    replayScene.commands.forEach { command ->
-        if (command is ReplayCommand.ClipRect) {
-            activeClip = activeClip.intersect(command.bounds)
-        }
-        val bitmap = command as? ReplayCommand.BitmapRect ?: return@forEach
-        val drawBounds = bitmap.bounds.intersect(activeClip)
-        if (drawBounds.isEmpty) return@forEach
-        val left = (drawBounds.left * width).toInt().coerceIn(0, width)
-        val top = (drawBounds.top * height).toInt().coerceIn(0, height)
-        val right = (drawBounds.right * width).toInt().coerceIn(left, width)
-        val bottom = (drawBounds.bottom * height).toInt().coerceIn(top, height)
-        sampled += (right - left) * (bottom - top)
-    }
-    return sampled
+private data class SampledBitmapFacts(val sampledChecksum: Long, val nonTransparentPixels: Int)
+
+internal fun renderReplayCpuOracle(width: Int, height: Int, replayScene: ReplaySceneEvidence? = null): ReplayCpuOracleResult =
+    ReplayCpuOracle.render(width, height, replayScene)
+
+internal fun renderCpuReference(width: Int, height: Int, replayScene: ReplaySceneEvidence? = null): Pair<Long, Int> {
+    val result = renderReplayCpuOracle(width, height, replayScene)
+    return result.sampledChecksum to result.nonTransparentPixels
 }
+
+internal fun bitmapSampledPixels(width: Int, height: Int, replayScene: ReplaySceneEvidence): Int =
+    ReplayCpuOracle.countBitmapSampledPixels(width, height, replayScene)
 
 private data class ReplayBounds(val left: Double, val top: Double, val right: Double, val bottom: Double) {
     val isEmpty: Boolean get() = right <= left || bottom <= top
