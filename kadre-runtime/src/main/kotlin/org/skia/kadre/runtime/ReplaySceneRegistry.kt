@@ -21,6 +21,10 @@ internal data class ReplayColor(val r: Double, val g: Double, val b: Double, val
     }
 }
 
+internal enum class ReplayBlendMode(val jsonName: String) {
+    SrcOver("SrcOver"),
+}
+
 internal enum class ReplayFillKind(val jsonName: String, val commandFamily: String) {
     Solid("solid", "fillRect"),
     LinearGradient("linearGradient", "linearGradientRect"),
@@ -48,6 +52,7 @@ internal sealed interface ReplayCommand {
         val color: ReplayColor,
         val endColor: ReplayColor = color,
         val fillKind: ReplayFillKind = ReplayFillKind.Solid,
+        val blendMode: ReplayBlendMode = ReplayBlendMode.SrcOver,
         val tintColor: ReplayColor? = null,
         val animated: Boolean = false,
         val dx: Double = 0.0,
@@ -61,6 +66,9 @@ internal sealed interface ReplayCommand {
             appendLine("$indent  \"family\": ${family.json()},")
             appendLine("$indent  \"supported\": true,")
             appendLine("$indent  \"fillKind\": ${fillKind.jsonName.json()},")
+            appendLine("$indent  \"blendMode\": ${blendMode.jsonName.json()},")
+            appendLine("$indent  \"alpha\": ${color.a.formatJsonNumber()},")
+            appendLine("$indent  \"endAlpha\": ${endColor.a.formatJsonNumber()},")
             appendLine("$indent  \"x\": ${x.formatJsonNumber()},")
             appendLine("$indent  \"y\": ${y.formatJsonNumber()},")
             appendLine("$indent  \"width\": ${width.formatJsonNumber()},")
@@ -108,6 +116,8 @@ internal data class ReplaySceneEvidence(
     val unsupportedCommandCount: Int get() = commands.count { !it.supported }
     val fillRectCount: Int get() = rects.count { !it.animated }
     val animatedFillRectCount: Int get() = rects.count { it.animated }
+    val srcOverCommandCount: Int get() = rects.count { it.blendMode == ReplayBlendMode.SrcOver }
+    val partialAlphaCommandCount: Int get() = rects.count { it.color.a < 1.0 || it.endColor.a < 1.0 || (it.tintColor?.a ?: 1.0) < 1.0 }
     val status: String get() = if (unsupportedCommandCount == 0) "renderable" else "expected-unsupported"
     val renderedByKadre: Boolean get() = unsupportedCommandCount == 0
 
@@ -137,7 +147,9 @@ internal data class ReplaySceneEvidence(
         appendLine("$indent    \"unsupported\": $unsupportedCommandCount,")
         appendLine("$indent    \"backgroundClear\": ${commands.count { it is ReplayCommand.Clear }},")
         appendLine("$indent    \"fillRect\": $fillRectCount,")
-        appendLine("$indent    \"animatedFillRect\": $animatedFillRectCount")
+        appendLine("$indent    \"animatedFillRect\": $animatedFillRectCount,")
+        appendLine("$indent    \"srcOver\": $srcOverCommandCount,")
+        appendLine("$indent    \"partialAlpha\": $partialAlphaCommandCount")
         appendLine("$indent  },")
         appendLine("$indent  \"unsupportedCommands\": [${unsupportedCommands.joinToString(", ") { it.json() }}],")
         appendLine("$indent  \"commands\": [")
@@ -304,7 +316,9 @@ internal fun renderCpuReference(width: Int, height: Int, replayScene: ReplayScen
                 for (px in left until right) {
                     val u = ((px.toDouble() / width.toDouble()) - rect.x) / rect.width.coerceAtLeast(0.0001)
                     val v = ((py.toDouble() / height.toDouble()) - rect.y) / rect.height.coerceAtLeast(0.0001)
-                    bitmap.setPixel(px, py, rect.fillColorAt(u, v, phase = 0.0).toArgb())
+                    val src = rect.fillColorAt(u, v, phase = 0.0)
+                    val dst = bitmap.getPixel(px, py).toReplayColor()
+                    bitmap.setPixel(px, py, src.blendOver(dst).toArgb())
                 }
             }
         }
@@ -369,6 +383,27 @@ private fun ReplayColor.plus(other: ReplayColor): ReplayColor =
         a = a,
     )
 
+private fun Int.toReplayColor(): ReplayColor =
+    ReplayColor(
+        r = ((this ushr 16) and 0xFF).toDouble() / 255.0,
+        g = ((this ushr 8) and 0xFF).toDouble() / 255.0,
+        b = (this and 0xFF).toDouble() / 255.0,
+        a = ((this ushr 24) and 0xFF).toDouble() / 255.0,
+    )
+
+private fun ReplayColor.blendOver(dst: ReplayColor): ReplayColor {
+    val sa = a.coerceIn(0.0, 1.0)
+    val da = dst.a.coerceIn(0.0, 1.0)
+    val outA = sa + da * (1.0 - sa)
+    if (outA <= 0.0) return ReplayColor(0.0, 0.0, 0.0, 0.0)
+    return ReplayColor(
+        r = ((r.coerceIn(0.0, 1.0) * sa) + (dst.r.coerceIn(0.0, 1.0) * da * (1.0 - sa))) / outA,
+        g = ((g.coerceIn(0.0, 1.0) * sa) + (dst.g.coerceIn(0.0, 1.0) * da * (1.0 - sa))) / outA,
+        b = ((b.coerceIn(0.0, 1.0) * sa) + (dst.b.coerceIn(0.0, 1.0) * da * (1.0 - sa))) / outA,
+        a = outA,
+    )
+}
+
 internal fun ReplaySceneEvidence.toWgsl(phase: Double): String {
     val rectTests = rects.mapIndexed { index, rect ->
         val x = if (rect.animated) "${rect.x.wgsl()} + ${rect.dx.wgsl()} * phase" else rect.x.wgsl()
@@ -387,9 +422,17 @@ internal fun ReplaySceneEvidence.toWgsl(phase: Double): String {
                 "min(mix(${rect.color.toWgslVec3()}, ${rect.endColor.toWgslVec3()}, $u) + ${(rect.tintColor ?: ReplayColor(0.0, 0.0, 0.0)).toWgslVec3()}, vec3<f32>(1.0))"
             }
         }
+        val alpha = when (rect.fillKind) {
+            ReplayFillKind.Solid -> rect.color.a.wgsl()
+            ReplayFillKind.LinearGradient,
+            ReplayFillKind.ColorFilterPlus -> "mix(${rect.color.a.wgsl()}, ${rect.endColor.a.wgsl()}, $u)"
+            ReplayFillKind.CheckerBitmap -> {
+                "select(${rect.endColor.a.wgsl()}, ${rect.color.a.wgsl()}, (i32(floor($u * 12.0)) + i32(floor($v * 8.0))) % 2 == 0)"
+            }
+        }
         """
         let rect$index = select(0.0, 1.0, in.uv.x >= $x && in.uv.x <= ($x + $width) && in.uv.y >= $y && in.uv.y <= ($y + $height));
-        color = mix(color, $fill, rect$index * ${rect.color.a.wgsl()});
+        color = mix(color, $fill, rect$index * $alpha);
         """.trimIndent()
     }.joinToString("\n    ")
 

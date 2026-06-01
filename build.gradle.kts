@@ -4292,6 +4292,7 @@ tasks.register("pipelinePmBundle") {
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
     mustRunAfter(":kadre-runtime:pipelineM75ReplayPackEvidence")
     mustRunAfter(":kadre-runtime:pipelineM76GeneratedMetadataReplay")
+    mustRunAfter(":kadre-runtime:pipelineM77BlendAlphaReplay")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4322,6 +4323,7 @@ tasks.register("pipelinePmBundle") {
     val m70KadreNativeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m70-kadre-native")
     val m75ReplayPackEvidenceDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m75-kadre-replay-pack")
     val m76GeneratedMetadataReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m76-generated-metadata-replay")
+    val m77BlendAlphaReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m77-blend-alpha-replay")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4341,6 +4343,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m70KadreNativeDir)
     inputs.dir(m75ReplayPackEvidenceDir)
     inputs.dir(m76GeneratedMetadataReplayDir)
+    inputs.dir(m77BlendAlphaReplayDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4378,6 +4381,7 @@ tasks.register("pipelinePmBundle") {
         val m70KadreNativeRoot = m70KadreNativeDir.asFile
         val m75ReplayPackEvidenceRoot = m75ReplayPackEvidenceDir.asFile
         val m76GeneratedMetadataReplayRoot = m76GeneratedMetadataReplayDir.asFile
+        val m77BlendAlphaReplayRoot = m77BlendAlphaReplayDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4445,6 +4449,9 @@ tasks.register("pipelinePmBundle") {
         if (m76GeneratedMetadataReplayRoot.isDirectory) {
             m76GeneratedMetadataReplayRoot.copyRecursively(targetRoot.resolve("runtime/m76-generated-metadata-replay"), overwrite = true)
         }
+        if (m77BlendAlphaReplayRoot.isDirectory) {
+            m77BlendAlphaReplayRoot.copyRecursively(targetRoot.resolve("runtime/m77-blend-alpha-replay"), overwrite = true)
+        }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
         }
@@ -4507,6 +4514,8 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.json",
+            "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.md",
+            "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json",
         )
         referencedPaths += m56ReportPaths
 
@@ -4961,6 +4970,39 @@ tasks.register("pipelinePmBundle") {
                     "refusedMetadataCount=$m76RefusedMetadataCount failedSceneCount=$m76FailedSceneCount",
             )
         }
+        val m77BlendAlphaReplayFile = m77BlendAlphaReplayRoot.resolve("evidence.json")
+        val m77BlendAlphaReplay = if (m77BlendAlphaReplayFile.isFile) {
+            JsonSlurper().parse(m77BlendAlphaReplayFile) as? Map<*, *>
+                ?: throw GradleException("M77 blend alpha replay evidence must be a JSON object: ${m77BlendAlphaReplayFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M77 blend alpha replay evidence: ${m77BlendAlphaReplayFile.relativeTo(rootDir)}")
+        }
+        fun m77String(field: String): String =
+            (m77BlendAlphaReplay[field] as? String)
+                ?.takeIf { it.isNotBlank() }
+                ?: throw GradleException("M77 blend alpha replay evidence missing string `$field`: ${m77BlendAlphaReplayFile.relativeTo(rootDir)}")
+        fun m77Int(field: String): Int =
+            (m77BlendAlphaReplay[field] as? Number)?.toInt()
+                ?: throw GradleException("M77 blend alpha replay evidence missing numeric `$field`: ${m77BlendAlphaReplayFile.relativeTo(rootDir)}")
+        val m77SceneCount = m77Int("sceneCount")
+        val m77RenderableSceneCount = m77Int("renderableSceneCount")
+        val m77ExpectedUnsupportedSceneCount = m77Int("expectedUnsupportedSceneCount")
+        val m77FailedSceneCount = m77Int("failedSceneCount")
+        val m77PartialAlphaSceneCount = m77Int("partialAlphaSceneCount")
+        if (
+            m77SceneCount < 3 ||
+            m77RenderableSceneCount < 2 ||
+            m77PartialAlphaSceneCount < 2 ||
+            m77ExpectedUnsupportedSceneCount < 1 ||
+            m77FailedSceneCount != 0
+        ) {
+            throw GradleException(
+                "M77 blend alpha replay evidence counters are invalid: " +
+                    "sceneCount=$m77SceneCount renderableSceneCount=$m77RenderableSceneCount " +
+                    "partialAlphaSceneCount=$m77PartialAlphaSceneCount " +
+                    "expectedUnsupportedSceneCount=$m77ExpectedUnsupportedSceneCount failedSceneCount=$m77FailedSceneCount",
+            )
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5082,6 +5124,8 @@ tasks.register("pipelinePmBundle") {
             "m75ReplayPackEvidenceJson" to "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "m76GeneratedMetadataReplayMarkdown" to "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
             "m76GeneratedMetadataReplayJson" to "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.json",
+            "m77BlendAlphaReplayMarkdown" to "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.md",
+            "m77BlendAlphaReplayJson" to "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -5309,6 +5353,23 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M76 maps selected generated dashboard metadata into replay contracts for known bounded templates and refuses unsupported metadata with stable reasons. It does not add arbitrary generated scene replay or new readiness points.",
             ),
+            "m77BlendAlphaReplay" to linkedMapOf<String, Any>(
+                "status" to m77String("claimLevel"),
+                "packId" to m77String("packId"),
+                "sceneCount" to m77SceneCount,
+                "renderableSceneCount" to m77RenderableSceneCount,
+                "partialAlphaSceneCount" to m77PartialAlphaSceneCount,
+                "expectedUnsupportedSceneCount" to m77ExpectedUnsupportedSceneCount,
+                "failedSceneCount" to m77FailedSceneCount,
+                "srcOverCommandCount" to m77Int("srcOverCommandCount"),
+                "partialAlphaCommandCount" to m77Int("partialAlphaCommandCount"),
+                "unsupportedBlendReason" to m77String("unsupportedBlendReason"),
+                "readinessDelta" to m77Int("readinessDelta"),
+                "report" to "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.md",
+                "evidenceJson" to "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json",
+                "releaseBlocking" to false,
+                "notice" to "M77 makes SrcOver and partial alpha explicit for bounded Kadre replay scenes and preserves unsupported blend modes as stable refusals. It does not add arbitrary blend modes or broad display-list replay.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -5391,6 +5452,7 @@ tasks.register("pipelinePmBundle") {
                 "M70-A/B/C verify a PM-visible Kadre demo command, normalized native surface-success evidence, reporting-only windowed telemetry, and a real wgpu4k offscreen texture readback when capture.realNativeReadback is true; M71 verifies autonomous frame scheduling; M72 verifies one selected solid-rect replay contract; M73 verifies a bounded typed replay-pack registry. Window-surface screenshot/readback, input, broad display-list replay, arbitrary op streams, dynamic multi-scene live switching, and release-grade FPS remain outside the claim.",
                 "M75 verifies deterministic multi-scene replay-pack evidence with per-scene CPU reference checksums and selected native/readback facts. It is evidence aggregation only and does not add broad display-list replay, arbitrary op streams, or release-grade runtime timing.",
                 "M76 verifies a selected generated-metadata to replay-contract bridge for known bounded templates and stable refusals. It does not add arbitrary generated scene replay, broad display-list replay, or new feature-family support.",
+                "M77 verifies bounded SrcOver partial-alpha replay scenes and one unsupported blend-mode refusal. It does not add arbitrary blend modes, layer compositing, or broad display-list replay.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -5441,6 +5503,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M75 replay-pack evidence counters live in `manifest.json` under `m75ReplayPackEvidence`; this is evidence aggregation, not broad display-list replay.")
                 appendLine("- `runtime/m76-generated-metadata-replay/`: M76 selected generated-metadata to replay-contract evidence JSON and Markdown.")
                 appendLine("- M76 metadata replay counters live in `manifest.json` under `m76GeneratedMetadataReplay`; this maps known bounded metadata only and keeps unsupported metadata as stable refusals.")
+                appendLine("- `runtime/m77-blend-alpha-replay/`: M77 bounded SrcOver partial-alpha replay evidence JSON and Markdown.")
+                appendLine("- M77 blend/alpha replay counters live in `manifest.json` under `m77BlendAlphaReplay`; unsupported blend modes remain stable refusals.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
