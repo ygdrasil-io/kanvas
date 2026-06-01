@@ -35,6 +35,10 @@ tasks.register<JavaExec>("runM69KadreNativeSmoke") {
         rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m69-kadre-native/native-smoke.json").asFile.absolutePath,
         "--frames",
         "3",
+        "--mode",
+        "smoke",
+        "--warmup-frames",
+        "0",
     )
     jvmArgs(buildList {
         if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
@@ -43,5 +47,32 @@ tasks.register<JavaExec>("runM69KadreNativeSmoke") {
         add("--enable-native-access=ALL-UNNAMED")
     })
     outputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m69-kadre-native/native-smoke.json"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<JavaExec>("runM70KadreNativeDemo") {
+    group = "verification"
+    description = "Runs the PM-visible M70-A Kadre native WebGPU demo and writes reporting-only runtime telemetry."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M69KadreNativeSmokeKt")
+    args(
+        "--output",
+        rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo.json").asFile.absolutePath,
+        "--frames",
+        providers.gradleProperty("kadreDemoFrames").orElse("420").get(),
+        "--mode",
+        "demo",
+        "--warmup-frames",
+        providers.gradleProperty("kadreDemoWarmupFrames").orElse("120").get(),
+        "--scene-contract-id",
+        "m70-a-kanvas-owned-kadre-native-scene",
+    )
+    jvmArgs(buildList {
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+        add("--enable-native-access=ALL-UNNAMED")
+    })
+    outputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo.json"))
     outputs.upToDateWhen { false }
 }
