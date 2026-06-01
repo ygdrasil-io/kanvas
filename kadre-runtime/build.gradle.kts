@@ -161,3 +161,13 @@ tasks.register<JavaExec>("pipelineM81NativeFrameCapture") {
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m81-native-frame-capture"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM82InputResizeRuntimeLoop") {
+    group = "verification"
+    description = "Generates M82 Kadre input, resize, live scene state, and telemetry evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M82KadreInputResizeRuntimeLoopKt")
+    args(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop").asFile.absolutePath)
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop"))
+    outputs.upToDateWhen { false }
+}
