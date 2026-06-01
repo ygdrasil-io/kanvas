@@ -52,7 +52,7 @@ tasks.register<JavaExec>("runM69KadreNativeSmoke") {
 
 tasks.register<JavaExec>("runM70KadreNativeDemo") {
     group = "verification"
-    description = "Runs the PM-visible M70-M72 Kadre native WebGPU demo and writes reporting-only runtime telemetry."
+    description = "Runs the PM-visible M70-M73 Kadre native WebGPU demo and writes reporting-only runtime telemetry."
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.skia.kadre.runtime.M69KadreNativeSmokeKt")
     args(
@@ -65,7 +65,7 @@ tasks.register<JavaExec>("runM70KadreNativeDemo") {
         "--warmup-frames",
         providers.gradleProperty("kadreDemoWarmupFrames").orElse("120").get(),
         "--scene-contract-id",
-        "m72-solid-rect-replay-v1",
+        providers.gradleProperty("kadreReplaySceneId").orElse("m73-linear-gradient-rect-replay-v1").get(),
         "--capture-output",
         rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png").asFile.absolutePath,
     )

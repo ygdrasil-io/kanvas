@@ -1,16 +1,17 @@
-# M70-M72 Kadre Live Runtime Evidence
+# M70-M73 Kadre Live Runtime Evidence
 
 Status: `native-runnable`
 
-M70-A/B/C turn the PM-validated M69 native smoke into a PM-visible live-runtime slice. M71 closes the PM-observed mouse-wake limitation by driving the demo route through Kadre/AppKit ControlFlow.Poll. M72 replaces the shader-only demo claim with one selected Kanvas replay contract backed by the generated dashboard `solid-rect` row. The demo is still deliberately narrow: it renders one selected replay scene contract in a Kadre native WebGPU window and emits reporting-only telemetry.
+M70-A/B/C turn the PM-validated M69 native smoke into a PM-visible live-runtime slice. M71 closes the PM-observed mouse-wake limitation by driving the demo route through Kadre/AppKit ControlFlow.Poll. M72 replaces the shader-only demo claim with one selected Kanvas replay contract backed by the generated dashboard `solid-rect` row. M73 expands that narrow slice to a bounded replay-pack registry while still selecting one scene per native demo run. The demo is still deliberately narrow: it renders one selected typed replay scene contract in a Kadre native WebGPU window and emits reporting-only telemetry.
 
 ## PM Outcome
 
-- Scene: `m72-solid-rect-replay-v1`
-- Source dashboard scene: `solid-rect`
+- Scene: `m73-linear-gradient-rect-replay-v1`
+- Source dashboard scene: `linear-gradient-rect`
 - Replay source: `kanvas-replay-data`
 - Replay claim level: `single-scene-replay-contract`
 - Replay commands: total `2`, supported `2`, unsupported `0`
+- Replay pack: `m73-kadre-replay-pack-v1` with `5` scenes, `4` renderable, `1` expected-unsupported
 - Mode: `demo`
 - Native presented: `True`
 - Present-call completed: `True`
@@ -24,8 +25,8 @@ M70-A/B/C turn the PM-validated M69 native smoke into a PM-visible live-runtime 
 - Capture reason: `m70.native-offscreen-texture-readback`
 - Capture artifact: `reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png`
 - Window-surface readback: `False`
-- CPU reference checksum/nontransparent: `6278179505048423371` / `5520`
-- Native readback checksum/nontransparent: `828073766954355235` / `268800`
+- CPU reference checksum/nontransparent: `766127960160601107` / `5520`
+- Native readback checksum/nontransparent: `-1532881463102611126` / `268800`
 - Surface status summary: success `180`, timeout `0`
 
 ## Linear Scope
@@ -40,14 +41,24 @@ M70-A/B/C turn the PM-validated M69 native smoke into a PM-visible live-runtime 
 - M70-C native capture/readback evidence: `FOR-67`, `FOR-71`, `FOR-72`, `FOR-73`.
 - M71 autonomous Kadre frame clock: `FOR-74`, `FOR-75`, `FOR-76`, `FOR-77`, `FOR-78`.
 - M72 single-scene Kadre replay: `FOR-79`, `FOR-80`, `FOR-81`, `FOR-82`, `FOR-83`.
+- M73 Kadre replay pack: `FOR-84`, `FOR-85`, `FOR-86`, `FOR-87`, `FOR-88`, `FOR-89`.
 
 ## Replay Evidence
 
-- Replay scene title: `M72 solid-rect replay`
+- Replay scene title: `M73 linear-gradient rect replay`
 - Command source: `typed-kadre-runtime-replay-contract`
 - GPU execution: `wgsl-generated-from-kadre-replay-scene`
 - Fallback policy: `refuse-unsupported-replay-command`
-- Source evidence: `reports/wgsl-pipeline/scenes/generated/results.json#solid-rect`
+- Source evidence: `reports/wgsl-pipeline/scenes/generated/results.json#linear-gradient-rect`
+
+## Replay Pack Registry
+
+- Pack id: `m73-kadre-replay-pack-v1`
+- Scene count: `5`
+- Renderable scenes: `4`
+- Expected-unsupported scenes: `1`
+- Scene ids: `m72-solid-rect-replay-v1, m73-linear-gradient-rect-replay-v1, m73-bitmap-rect-nearest-replay-v1, m73-gradient-color-filter-kplus-replay-v1, m73-nested-rrect-clip-refusal-v1`
+- Unsupported scene ids: `m73-nested-rrect-clip-refusal-v1`
 
 ## Reporting-Only Runtime Telemetry
 
@@ -57,7 +68,7 @@ M70-A/B/C turn the PM-validated M69 native smoke into a PM-visible live-runtime 
 - Autonomous frame clock: `True`
 - Autonomous frame requests: `359`
 - Measured samples: `150`
-- p50/p95/worst: `8.4843` / `9.584` / `10.0245` ms
+- p50/p95/worst: `8.4459` / `8.6865` / `10.067` ms
 - Surface status samples: `180`
 
 ## Artifacts
@@ -69,32 +80,35 @@ M70-A/B/C turn the PM-validated M69 native smoke into a PM-visible live-runtime 
 
 ## Non-Claims
 
-- M70-A/B/C prove one selected Kadre native route only, with status determined by surface evidence; M72 proves one selected `solid-rect` replay contract on that route.
+- M70-A/B/C prove one selected Kadre native route only, with status determined by surface evidence; M72 proves one selected `solid-rect` replay contract; M73 expands that to a small typed replay-pack registry.
 - Native presentation is claimed only when the normalized surface status summary contains at least one success.
 - Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.
 - The capture artifact is a real wgpu4k native offscreen texture readback of the selected scene contract, not a system screenshot or window-surface readback.
 - Broad Kanvas display-list replay is not claimed.
 - Frame timing is reporting-only and not a release-grade FPS gate.
 - M71 claims autonomous frame scheduling only when runtimeTelemetry.autonomousFrameClock is true and autonomousFrameCount records frame requests generated by Kadre/AppKit ControlFlow.Poll.
-- M72 claims one selected `solid-rect` replay contract only; arbitrary SkCanvas op streams and multi-scene replay remain future work.
+- M73 claims a bounded registry of typed replay contracts only; arbitrary SkCanvas op streams, broad display-list replay, and dynamic multi-scene live switching remain future work.
 
 ## Readiness Accounting
 
-Readiness moves from approximately 66% to approximately 67%. The movement is intentionally conservative: M72 proves one selected `solid-rect` replay contract in Kadre, but broad display-list replay, multi-scene replay, input, window-surface readback, and a release-grade frame gate are still not claimed.
+Readiness moves from approximately 67% to an exact weighted score of 67.75%, rounded for PM to approximately 70%. The movement is intentionally conservative: M73 proves a small typed replay-pack registry and one selected rendered pack scene in Kadre, but broad display-list replay, arbitrary op streams, dynamic multi-scene switching, input, window-surface readback, and a release-grade frame gate are still not claimed.
 
 | Area | Previous | Current | Reason |
 |---|---:|---:|---|
 | Rendering feature breadth | 60% | 60% | No new rendering-family support/refusal denominator changed. |
 | Skia-like fidelity | 50% | 50% | No new selected GM/reference rows landed. |
-| Real-time runtime | 80% | 85% | The selected Kadre route now renders a `solid-rect` replay contract with explicit command counters and source dashboard evidence. |
+| Real-time runtime | 85% | 90% | The selected Kadre route now has a bounded M73 replay-pack registry and renders one selected pack scene with explicit command counters and source dashboard evidence. |
 | Performance and cache readiness | 45% | 45% | `frame.kadre-windowed` remains reporting-only warmup/measured telemetry; no release-blocking FPS gate is enabled. |
-| PM/demo operability | 100% | 100% | PM bundle includes M70-A/B/C route status, M71 autonomous clock evidence, M72 replay counters, native demo telemetry, and the readback artifact. |
+| PM/demo operability | 100% | 100% | PM bundle includes M70-A/B/C route status, M71 autonomous clock evidence, M72/M73 replay counters, native demo telemetry, and the readback artifact. |
 
 ## Validation
 
 ```bash
 rtk ./gradlew --no-daemon :kadre-runtime:compileKotlin
 rtk ./gradlew --no-daemon -PkadreDemoFrames=180 -PkadreDemoWarmupFrames=30 :kadre-runtime:runM70KadreNativeDemo
+rtk ./gradlew --no-daemon -PkadreReplaySceneId=m73-bitmap-rect-nearest-replay-v1 -PkadreDemoFrames=12 -PkadreDemoWarmupFrames=0 :kadre-runtime:runM70KadreNativeDemo
+rtk ./gradlew --no-daemon -PkadreReplaySceneId=m73-nested-rrect-clip-refusal-v1 -PkadreDemoFrames=12 -PkadreDemoWarmupFrames=0 :kadre-runtime:runM70KadreNativeDemo
+rtk ./gradlew --no-daemon -PkadreReplaySceneId=m73-unknown-scene -PkadreDemoFrames=12 -PkadreDemoWarmupFrames=0 :kadre-runtime:runM70KadreNativeDemo
 rtk ./gradlew --no-daemon pipelineM70KadreLiveRuntimeEvidence
 rtk ./gradlew --no-daemon pipelinePmBundle
 ```
