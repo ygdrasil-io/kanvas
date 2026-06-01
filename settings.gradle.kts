@@ -43,6 +43,11 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
+// Kadre is not assumed to be available from Maven Central during Kanvas integration.
+// Keep it as an independent source build so Kanvas modules can depend on
+// org.graphiks.kadre:* coordinates without vendoring Kadre modules into this build.
+includeBuild("external/poc-koreos")
+
 include(":math")
 include(":kanvas-skia")
 include(":codec-api")
