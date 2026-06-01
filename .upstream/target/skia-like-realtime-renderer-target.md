@@ -82,15 +82,15 @@ corresponding denominator and is linked from the sprint report.
 
 Weighted starting readiness: approximately 25%.
 
-Current readiness after the M78 bounded ClipRect replay slice: 67.75%, rounded for PM to approximately 70%.
+Current readiness after the M79 bounded fixture-backed bitmap replay slice: 67.75%, rounded for PM to approximately 70%.
 
 | Area | Weight | Current count | Current progress | Movement |
 |---|---:|---:|---:|---|
 | Rendering feature breadth | 30% | 6/10 | 60% | M66 normalizes selected rows across existing families without adding a new counted family denominator. |
 | Skia-like fidelity | 20% | 50/100 selected rows, 37/100 Skia-comparable minimum | 50% selected evidence | M66 adds 19 selected support/refusal rows with `referenceKind`; 6 are `skia-upstream`, 6 `test-oracle`, and 7 `cpu-oracle`. CPU-oracle rows do not automatically count as Skia-comparable fidelity. |
-| Real-time runtime | 20% | 9/10 | 90% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane; M68 adds Kadre source-build bridge evidence; M69 adds a bounded Kadre/AppKit/Metal WebGPU present loop; M70-A adds a PM-visible demo task; M70-B/C confirm normalized surface-success evidence and produce a real wgpu4k offscreen texture readback artifact; M71 drives that selected route with Kadre/AppKit `ControlFlow.Poll`; M72 renders one selected `solid-rect` replay contract with explicit command counters and source dashboard evidence; M73 adds a bounded typed replay-pack registry and scene-id routing for selected scenes; M74 extracts that registry into closed typed replay commands; M75 emits deterministic multi-scene replay-pack evidence; M76 maps selected generated dashboard metadata into replay contracts with stable refusals; M77 makes bounded `SrcOver` partial-alpha replay explicit and preserves unsupported blend modes as stable refusals; M78 adds bounded `ClipRect` intersect replay evidence and preserves complex clip refusals, without broadening the runtime claim. Native input, broad Kanvas display-list replay, arbitrary op streams, arbitrary blend modes, broad clip-stack semantics, dynamic multi-scene live switching, and window-surface screenshot/readback remain incomplete. |
+| Real-time runtime | 20% | 9/10 | 90% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane; M68 adds Kadre source-build bridge evidence; M69 adds a bounded Kadre/AppKit/Metal WebGPU present loop; M70-A adds a PM-visible demo task; M70-B/C confirm normalized surface-success evidence and produce a real wgpu4k offscreen texture readback artifact; M71 drives that selected route with Kadre/AppKit `ControlFlow.Poll`; M72 renders one selected `solid-rect` replay contract with explicit command counters and source dashboard evidence; M73 adds a bounded typed replay-pack registry and scene-id routing for selected scenes; M74 extracts that registry into closed typed replay commands; M75 emits deterministic multi-scene replay-pack evidence; M76 maps selected generated dashboard metadata into replay contracts with stable refusals; M77 makes bounded `SrcOver` partial-alpha replay explicit and preserves unsupported blend modes as stable refusals; M78 adds bounded `ClipRect` intersect replay evidence and preserves complex clip refusals; M79 adds bounded fixture-backed `BitmapRect` replay evidence and preserves unsupported bitmap sampler refusals, without broadening the runtime claim. Native input, broad Kanvas display-list replay, arbitrary op streams, arbitrary blend modes, broad clip-stack semantics, arbitrary texture/image support, dynamic multi-scene live switching, and window-surface screenshot/readback remain incomplete. |
 | Performance and cache readiness | 15% | 9/20 | 45% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry, adds one measured family budget, and proves deterministic quarantine/rebaseline behavior. M70-A adds reporting-only `frame.kadre-windowed` telemetry with warmup/measured samples; it is not a release-grade FPS gate. |
-| PM/demo operability | 15% | 20/20 | 100% | PM bundle includes M65 runtime telemetry/artifacts, M66 family/reference counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 host adapter smoke artifacts, M69 native Kadre present evidence, M70-A/B/C live-runtime/readback evidence, M71 autonomous frame-clock evidence, M72 single-scene replay evidence, M73 replay-pack registry evidence, M74 replay-command foundation evidence, M75 multi-scene replay-pack evidence, M76 generated-metadata replay evidence, M77 blend/alpha replay evidence, and M78 clip replay evidence. |
+| PM/demo operability | 15% | 20/20 | 100% | PM bundle includes M65 runtime telemetry/artifacts, M66 family/reference counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 host adapter smoke artifacts, M69 native Kadre present evidence, M70-A/B/C live-runtime/readback evidence, M71 autonomous frame-clock evidence, M72 single-scene replay evidence, M73 replay-pack registry evidence, M74 replay-command foundation evidence, M75 multi-scene replay-pack evidence, M76 generated-metadata replay evidence, M77 blend/alpha replay evidence, M78 clip replay evidence, and M79 bitmap replay evidence. |
 
 Expected milestone deltas are capped until evidence lands:
 
@@ -115,6 +115,7 @@ Expected milestone deltas are capped until evidence lands:
 | M76 | Selected generated-metadata replay bridge | +0% |
 | M77 | Bounded blend/alpha replay evidence | +0% |
 | M78 | Bounded ClipRect replay evidence | +0% |
+| M79 | Bounded fixture-backed bitmap replay evidence | +0% |
 | M70 | Release-candidate closure | Remaining counted evidence only |
 
 ## Milestones
@@ -142,6 +143,7 @@ Expected milestone deltas are capped until evidence lands:
 | M76 | Replay From Generated Scene Metadata | Map selected generated dashboard metadata into known bounded replay contracts, keep source route/pipeline provenance visible, and refuse unsupported metadata with stable reasons without claiming arbitrary generated scene replay. |
 | M77 | Blend & Alpha Replay | Make replay-command blend and alpha semantics explicit for bounded `SrcOver` partial-alpha scenes, add CPU oracle evidence, and preserve unsupported blend modes as stable refusals without claiming arbitrary blend support. |
 | M78 | Clip Replay V1 | Make `ClipRect` intersect replay explicit for bounded axis-aligned rect scenes, add CPU oracle evidence, and preserve complex clip refusals without claiming broad clip-stack support. |
+| M79 | Bitmap Replay V1 | Make fixture-backed `BitmapRect` replay explicit for bounded nearest/linear sampler scenes, add CPU oracle evidence, and preserve unsupported bitmap sampler refusals without claiming broad image, texture, codec, mipmap, tile-mode, or color-managed decode support. |
 | M70 | Release Candidate Renderer | Freeze API, runtime, PM demo, CI gates, and known limitations for a renderer release candidate. |
 
 ## Dependency DAG

@@ -220,10 +220,103 @@ class ReplaySceneRegistryTest {
     fun m78ReplayScenesAreSelectableByLiveReplayRegistry() {
         val replayScenes = replayScenesById()
 
-        assertEquals(M73_REPLAY_SCENES.size + M77_BLEND_ALPHA_REPLAY_SCENES.size + M78_CLIP_REPLAY_SCENES.size, replayScenes.size)
+        assertEquals(M73_REPLAY_SCENES.size + M77_BLEND_ALPHA_REPLAY_SCENES.size + M78_CLIP_REPLAY_SCENES.size + M79_BITMAP_REPLAY_SCENES.size, replayScenes.size)
         assertEquals("renderable", requireNotNull(replayScenes["m78-clipped-solid-rect-replay-v1"]).status)
         assertEquals("renderable", requireNotNull(replayScenes["m78-clipped-alpha-gradient-replay-v1"]).status)
         assertEquals("expected-unsupported", requireNotNull(replayScenes["m78-complex-clip-refusal-v1"]).status)
+    }
+
+    @Test
+    fun m79BitmapReplayCoversFixtureBackedScenesAndUnsupportedSampler() {
+        val evidence = buildBitmapReplayEvidence()
+        val json = evidence.toJson()
+
+        assertEquals(4, evidence.sceneCount)
+        assertEquals(3, evidence.renderableSceneCount)
+        assertEquals(1, evidence.expectedUnsupportedSceneCount)
+        assertEquals(0, evidence.failedSceneCount)
+        assertEquals(3, evidence.bitmapCommandCount)
+        assertEquals(3, evidence.fixtureBackedBitmapCommandCount)
+        assertEquals(2, evidence.nearestSamplerCommandCount)
+        assertEquals(1, evidence.linearSamplerCommandCount)
+        assertEquals(1, evidence.unsupportedBitmapCommandCount)
+        assertEquals(1, evidence.clipRectCommandCount)
+        assertEquals(1, evidence.clipIntersectCommandCount)
+        assertEquals(4, evidence.srcOverCommandCount)
+        assertEquals(2, evidence.partialAlphaCommandCount)
+        assertContains(json, "\"packId\": \"m79-bitmap-replay-v1\"")
+        assertContains(json, "\"linearIssues\": [\"FOR-95\", \"FOR-129\", \"FOR-130\", \"FOR-131\", \"FOR-132\", \"FOR-133\"]")
+        assertContains(json, "\"id\": \"m79-bitmap-fixture-nearest-replay-v1\"")
+        assertContains(json, "\"id\": \"m79-bitmap-fixture-linear-alpha-replay-v1\"")
+        assertContains(json, "\"id\": \"m79-bitmap-fixture-clipped-nearest-replay-v1\"")
+        assertContains(json, "\"id\": \"m79-bitmap-mipmap-sampler-refusal-v1\"")
+        assertContains(json, "\"unsupportedBitmapReason\": \"m79.bitmap.unsupported-sampler.mipmap\"")
+        assertContains(json, "\"oracle\": \"fixture-backed-bitmap-sampling-reference\"")
+    }
+
+    @Test
+    fun m79BitmapCommandsExposeContractFieldsCountersAndCpuOracleFacts() {
+        val nearest = M79_BITMAP_REPLAY_SCENES.single { it.id == "m79-bitmap-fixture-nearest-replay-v1" }
+        val linearAlpha = M79_BITMAP_REPLAY_SCENES.single { it.id == "m79-bitmap-fixture-linear-alpha-replay-v1" }
+        val clipped = M79_BITMAP_REPLAY_SCENES.single { it.id == "m79-bitmap-fixture-clipped-nearest-replay-v1" }
+        val unsupported = M79_BITMAP_REPLAY_SCENES.single { it.id == "m79-bitmap-mipmap-sampler-refusal-v1" }
+
+        assertEquals("renderable", nearest.status)
+        assertEquals(1, nearest.bitmapCommandCount)
+        assertEquals(1, nearest.fixtureBackedBitmapCommandCount)
+        assertEquals(1, nearest.nearestBitmapSamplerCommandCount)
+        assertEquals(0, nearest.linearBitmapSamplerCommandCount)
+        assertContains(nearest.toJson("  "), "\"family\": \"bitmapRect\"")
+        assertContains(nearest.toJson("  "), "\"fixtureId\": \"m79-fixture-checker-rgba8-4x4\"")
+        assertContains(nearest.toJson("  "), "\"sourceBounds\"")
+        assertContains(nearest.toJson("  "), "\"destinationBounds\"")
+        assertContains(nearest.toJson("  "), "\"sampler\": \"nearest\"")
+        assertContains(nearest.toJson("  "), "\"blendMode\": \"SrcOver\"")
+        assertContains(nearest.toJson("  "), "\"alpha\": 1.0000")
+        assertContains(nearest.toJson("  "), "\"owner\": \"kanvas\"")
+        assertContains(nearest.toJson("  "), "\"storage\": \"in-repo-kotlin-fixture\"")
+
+        assertEquals(1, linearAlpha.bitmapCommandCount)
+        assertEquals(2, linearAlpha.srcOverCommandCount)
+        assertEquals(1, linearAlpha.partialAlphaCommandCount)
+        assertEquals(1, linearAlpha.linearBitmapSamplerCommandCount)
+        assertContains(linearAlpha.toJson("  "), "\"fixtureId\": \"m79-fixture-alpha-swatch-rgba8-4x4\"")
+        assertContains(linearAlpha.toJson("  "), "\"sampler\": \"linear\"")
+        assertContains(linearAlpha.toJson("  "), "\"alpha\": 0.8200")
+        assertContains(linearAlpha.toWgsl(0.0), "bitmapPixels")
+
+        assertEquals(1, clipped.clipRectCommandCount)
+        assertEquals(1, clipped.clipIntersectCommandCount)
+        assertEquals(1, clipped.bitmapCommandCount)
+        assertEquals(1, clipped.nearestBitmapSamplerCommandCount)
+        assertEquals(1, clipped.partialAlphaCommandCount)
+        assertContains(clipped.toJson("  "), "\"family\": \"clipRect\"")
+        assertContains(clipped.toJson("  "), "\"operation\": \"intersect\"")
+        assertContains(clipped.toJson("  "), "\"fixtureId\": \"m79-fixture-checker-rgba8-4x4\"")
+        assertContains(clipped.toWgsl(0.0), "in.uv.x >= 0.240000f")
+        assertContains(clipped.toWgsl(0.0), "in.uv.y < 0.520000f")
+
+        val cpuReference = renderCpuReference(640, 420, nearest)
+        assertEquals(true, cpuReference.first != 0L)
+        assertEquals(true, cpuReference.second > 0)
+        assertEquals(true, bitmapSampledPixels(640, 420, nearest) > 0)
+        assertEquals(true, bitmapSampledPixels(640, 420, clipped) < bitmapSampledPixels(640, 420, nearest))
+
+        assertEquals("expected-unsupported", unsupported.status)
+        assertEquals(1, unsupported.unsupportedCommandCount)
+        assertEquals(1, unsupported.unsupportedBitmapCommandCount)
+        assertEquals(listOf("m79.bitmap.unsupported-sampler.mipmap"), unsupported.unsupportedCommands)
+        assertContains(unsupported.toJson("  "), "\"unsupportedCommands\": [\"m79.bitmap.unsupported-sampler.mipmap\"]")
+    }
+
+    @Test
+    fun m79ReplayScenesAreSelectableByLiveReplayRegistry() {
+        val replayScenes = replayScenesById()
+
+        assertEquals("renderable", requireNotNull(replayScenes["m79-bitmap-fixture-nearest-replay-v1"]).status)
+        assertEquals("renderable", requireNotNull(replayScenes["m79-bitmap-fixture-linear-alpha-replay-v1"]).status)
+        assertEquals("renderable", requireNotNull(replayScenes["m79-bitmap-fixture-clipped-nearest-replay-v1"]).status)
+        assertEquals("expected-unsupported", requireNotNull(replayScenes["m79-bitmap-mipmap-sampler-refusal-v1"]).status)
     }
 
     private fun m76ManifestFixture(): String = """
