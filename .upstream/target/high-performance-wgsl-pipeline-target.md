@@ -65,6 +65,12 @@ The CPU backend remains the primary reference for Skia-like behavior. GPU
 results are validated against CPU and upstream GM references with explicit
 similarity thresholds.
 
+For bounded Kadre replay-pack scenes, `ReplayCpuOracle` is the shared CPU
+reference API for command interpretation, sampled checksums, nontransparent
+pixels, bitmap sampled pixels, and expected-unsupported reasons. This is a
+replay oracle for the typed M72-M80 command subset, not a broad SkCanvas or
+display-list CPU renderer.
+
 The pipeline must preserve:
 
 - Skia-style local-matrix shader behavior.

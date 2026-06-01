@@ -1,0 +1,371 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "kadre-runtime:M80SharedReplayOracle",
+  "linearIssues": ["FOR-96", "FOR-134", "FOR-135", "FOR-136", "FOR-137", "FOR-138"],
+  "packId": "m80-shared-replay-oracle-v1",
+  "claimLevel": "shared-replay-cpu-oracle-hardening",
+  "readinessDelta": 0,
+  "oracleApi": "org.skia.kadre.runtime.ReplayCpuOracle",
+  "typedResultFields": ["api", "deviceWidth", "deviceHeight", "sceneId", "sceneStatus", "sampledChecksum", "nonTransparentPixels", "bitmapSampledPixels", "unsupportedReasons", "commandFamilies"],
+  "sceneCount": 15,
+  "renderableSceneCount": 11,
+  "expectedUnsupportedSceneCount": 4,
+  "failedSceneCount": 0,
+  "failedValidationRowCount": 0,
+  "supportedCommandFamilies": ["backgroundClear", "bitmapRect", "bitmapRectNearest", "clipRect", "fillRect", "linearGradientColorFilterPlus", "linearGradientRect"],
+  "evidencePathsUsingSharedOracle": ["reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json", "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.json", "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json", "reports/wgsl-pipeline/m78-clip-replay/evidence.json", "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json"],
+  "nonClaims": [
+    "M80 extracts bounded replay CPU oracle semantics only; it is not a broad SkCanvas or display-list oracle.",
+    "M80 does not add arbitrary image, filter, path, saveLayer, codec, text, or runtime-effect execution.",
+    "Expected-unsupported rows remain refusal evidence and do not count as rendering failures.",
+    "Readiness remains unchanged because this is shared reference hardening, not new rendering breadth."
+  ],
+  "validationRows": [
+    {
+      "id": "fillrect-src-over-alpha",
+      "status": "pass",
+      "source": "ReplaySceneRegistryTest",
+      "assertion": "FillRect and SrcOver alpha facts are asserted through typed oracle fields."
+    },
+    {
+      "id": "cliprect-intersection",
+      "status": "pass",
+      "source": "ReplaySceneRegistryTest",
+      "assertion": "ClipRect intersection changes sampled checksum/nontransparent facts and preserves clipped bitmap sample counts."
+    },
+    {
+      "id": "bitmap-nearest",
+      "status": "pass",
+      "source": "ReplaySceneRegistryTest",
+      "assertion": "Nearest fixture-backed BitmapRect replay exposes deterministic checksum and sampled pixel facts."
+    },
+    {
+      "id": "bitmap-linear-alpha",
+      "status": "pass",
+      "source": "ReplaySceneRegistryTest",
+      "assertion": "Linear bitmap sampling with alpha remains covered by deterministic oracle facts."
+    },
+    {
+      "id": "bitmap-under-cliprect",
+      "status": "pass",
+      "source": "ReplaySceneRegistryTest",
+      "assertion": "BitmapRect under ClipRect reports fewer sampled pixels than the unclipped nearest fixture scene."
+    },
+    {
+      "id": "expected-unsupported",
+      "status": "pass",
+      "source": "ReplaySceneRegistryTest",
+      "assertion": "Unsupported blend, clip, and bitmap sampler rows keep stable refusal reasons."
+    },
+    {
+      "id": "invalid-fixture-and-bounds",
+      "status": "pass",
+      "source": "ReplaySceneRegistryTest",
+      "assertion": "Invalid fixture ids and malformed rect/bitmap bounds fail with stable messages before evidence generation."
+    }
+
+  ],
+  "scenes": [
+    {
+      "id": "m72-solid-rect-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "fillRect"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m72-solid-rect-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": 6278179505048423371,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "fillRect"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m73-bitmap-rect-nearest-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "bitmapRectNearest"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m73-bitmap-rect-nearest-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": -7802753964421501890,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "bitmapRectNearest"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m73-gradient-color-filter-kplus-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "linearGradientColorFilterPlus"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m73-gradient-color-filter-kplus-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": -1873966236454970453,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "linearGradientColorFilterPlus"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m73-linear-gradient-rect-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "linearGradientRect"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m73-linear-gradient-rect-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": 2419576889657174880,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "linearGradientRect"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m73-nested-rrect-clip-refusal-v1",
+      "status": "expected-unsupported",
+      "renderedByKadre": false,
+      "commandFamilies": ["backgroundClear", "clip"],
+      "unsupportedReasons": ["nested-rrect-difference-clip"],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m73-nested-rrect-clip-refusal-v1",
+        "sceneStatus": "expected-unsupported",
+        "sampledChecksum": -5166315637198820477,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": ["nested-rrect-difference-clip"],
+        "commandFamilies": ["backgroundClear", "clip"],
+        "rendered": false
+      }
+    },
+    {
+      "id": "m77-alpha-srcover-stack-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "fillRect"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m77-alpha-srcover-stack-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": 8888851062735355593,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "fillRect"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m77-gradient-alpha-srcover-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "fillRect", "linearGradientRect"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m77-gradient-alpha-srcover-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": 7001428679570322671,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "fillRect", "linearGradientRect"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m77-multiply-blend-refusal-v1",
+      "status": "expected-unsupported",
+      "renderedByKadre": false,
+      "commandFamilies": ["backgroundClear", "blendMode"],
+      "unsupportedReasons": ["m77.unsupported-blend-mode.kMultiply"],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m77-multiply-blend-refusal-v1",
+        "sceneStatus": "expected-unsupported",
+        "sampledChecksum": -5166315637198820477,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": ["m77.unsupported-blend-mode.kMultiply"],
+        "commandFamilies": ["backgroundClear", "blendMode"],
+        "rendered": false
+      }
+    },
+    {
+      "id": "m78-clipped-alpha-gradient-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "clipRect", "fillRect", "linearGradientRect"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m78-clipped-alpha-gradient-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": 2577339759288933471,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "clipRect", "fillRect", "linearGradientRect"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m78-clipped-solid-rect-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "clipRect", "fillRect"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m78-clipped-solid-rect-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": 7657149549507766923,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "clipRect", "fillRect"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m78-complex-clip-refusal-v1",
+      "status": "expected-unsupported",
+      "renderedByKadre": false,
+      "commandFamilies": ["backgroundClear", "clip"],
+      "unsupportedReasons": ["m78.clip.unsupported-complex-clip"],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m78-complex-clip-refusal-v1",
+        "sceneStatus": "expected-unsupported",
+        "sampledChecksum": -5166315637198820477,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": ["m78.clip.unsupported-complex-clip"],
+        "commandFamilies": ["backgroundClear", "clip"],
+        "rendered": false
+      }
+    },
+    {
+      "id": "m79-bitmap-fixture-clipped-nearest-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "bitmapRect", "clipRect"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m79-bitmap-fixture-clipped-nearest-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": -2224348050358112279,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 27468,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "bitmapRect", "clipRect"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m79-bitmap-fixture-linear-alpha-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "bitmapRect", "fillRect"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m79-bitmap-fixture-linear-alpha-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": -8675548398312149882,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 71603,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "bitmapRect", "fillRect"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m79-bitmap-fixture-nearest-replay-v1",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "commandFamilies": ["backgroundClear", "bitmapRect"],
+      "unsupportedReasons": [],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m79-bitmap-fixture-nearest-replay-v1",
+        "sceneStatus": "renderable",
+        "sampledChecksum": 2208507294891662972,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 75428,
+        "unsupportedReasons": [],
+        "commandFamilies": ["backgroundClear", "bitmapRect"],
+        "rendered": true
+      }
+    },
+    {
+      "id": "m79-bitmap-mipmap-sampler-refusal-v1",
+      "status": "expected-unsupported",
+      "renderedByKadre": false,
+      "commandFamilies": ["backgroundClear", "bitmapSampler"],
+      "unsupportedReasons": ["m79.bitmap.unsupported-sampler.mipmap"],
+      "cpuOracle": {
+        "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+        "deviceWidth": 640,
+        "deviceHeight": 420,
+        "sceneId": "m79-bitmap-mipmap-sampler-refusal-v1",
+        "sceneStatus": "expected-unsupported",
+        "sampledChecksum": -5166315637198820477,
+        "nonTransparentPixels": 5520,
+        "bitmapSampledPixels": 0,
+        "unsupportedReasons": ["m79.bitmap.unsupported-sampler.mipmap"],
+        "commandFamilies": ["backgroundClear", "bitmapSampler"],
+        "rendered": false
+      }
+    }
+
+  ]
+}

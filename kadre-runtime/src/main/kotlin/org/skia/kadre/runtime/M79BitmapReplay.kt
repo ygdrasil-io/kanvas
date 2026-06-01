@@ -141,9 +141,7 @@ internal val M79_BITMAP_REPLAY_SCENES: List<ReplaySceneEvidence> = listOf(
 
 internal data class BitmapReplayRow(
     val scene: ReplaySceneEvidence,
-    val cpuReferenceChecksum: Long?,
-    val cpuReferenceNonTransparentPixels: Int?,
-    val bitmapSampledPixels: Int?,
+    val cpuOracle: ReplayCpuOracleResult?,
 ) {
     fun toJson(indent: String): String = buildString {
         appendLine("{")
@@ -180,16 +178,17 @@ internal data class BitmapReplayRow(
     }
 
     private fun cpuOracleJson(indent: String): String =
-        if (cpuReferenceChecksum == null || cpuReferenceNonTransparentPixels == null || bitmapSampledPixels == null) {
+        if (cpuOracle == null) {
             "null"
         } else {
             buildString {
                 appendLine("{")
                 appendLine("$indent    \"width\": $WIDTH,")
                 appendLine("$indent    \"height\": $HEIGHT,")
-                appendLine("$indent    \"checksum\": $cpuReferenceChecksum,")
-                appendLine("$indent    \"nonTransparentPixels\": $cpuReferenceNonTransparentPixels,")
-                appendLine("$indent    \"bitmapSampledPixels\": $bitmapSampledPixels,")
+                appendLine("$indent    \"checksum\": ${cpuOracle.sampledChecksum},")
+                appendLine("$indent    \"nonTransparentPixels\": ${cpuOracle.nonTransparentPixels},")
+                appendLine("$indent    \"bitmapSampledPixels\": ${cpuOracle.bitmapSampledPixels},")
+                appendLine("$indent    \"oracleApi\": ${cpuOracle.api.json()},")
                 appendLine("$indent    \"oracle\": \"fixture-backed-bitmap-sampling-reference\"")
                 append("$indent  }")
             }
@@ -290,7 +289,7 @@ internal data class BitmapReplayEvidence(val rows: List<BitmapReplayRow>) {
         appendLine("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|")
         rows.forEach { row ->
             appendLine(
-                "| `${row.scene.id}` | `${row.scene.status}` | `${row.scene.fixtureBackedBitmapCommandCount}` | `${row.scene.clipRectCommandCount}` | `${row.scene.nearestBitmapSamplerCommandCount}` | `${row.scene.linearBitmapSamplerCommandCount}` | `${row.scene.srcOverCommandCount}` | `${row.scene.partialAlphaCommandCount}` | `${row.cpuReferenceChecksum ?: 0}` | `${row.bitmapSampledPixels ?: 0}` | `${sceneReason(row.scene)}` |",
+                "| `${row.scene.id}` | `${row.scene.status}` | `${row.scene.fixtureBackedBitmapCommandCount}` | `${row.scene.clipRectCommandCount}` | `${row.scene.nearestBitmapSamplerCommandCount}` | `${row.scene.linearBitmapSamplerCommandCount}` | `${row.scene.srcOverCommandCount}` | `${row.scene.partialAlphaCommandCount}` | `${row.cpuOracle?.sampledChecksum ?: 0}` | `${row.cpuOracle?.bitmapSampledPixels ?: 0}` | `${sceneReason(row.scene)}` |",
             )
         }
         appendLine()
@@ -312,12 +311,10 @@ internal data class BitmapReplayEvidence(val rows: List<BitmapReplayRow>) {
 internal fun buildBitmapReplayEvidence(): BitmapReplayEvidence =
     BitmapReplayEvidence(
         rows = M79_BITMAP_REPLAY_SCENES.map { scene ->
-            val cpuReference = if (scene.renderedByKadre) renderCpuReference(WIDTH, HEIGHT, scene) else null
+            val cpuOracle = if (scene.renderedByKadre) renderReplayCpuOracle(WIDTH, HEIGHT, scene) else null
             BitmapReplayRow(
                 scene = scene,
-                cpuReferenceChecksum = cpuReference?.first,
-                cpuReferenceNonTransparentPixels = cpuReference?.second,
-                bitmapSampledPixels = if (scene.renderedByKadre) bitmapSampledPixels(WIDTH, HEIGHT, scene) else null,
+                cpuOracle = cpuOracle,
             )
         },
     )

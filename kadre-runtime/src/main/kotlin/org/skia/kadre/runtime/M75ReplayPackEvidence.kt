@@ -25,8 +25,7 @@ internal data class ReplayNativeEvidence(
 
 internal data class ReplayPackEvidenceRow(
     val scene: ReplaySceneEvidence,
-    val cpuReferenceChecksum: Long,
-    val cpuReferenceNonTransparentPixels: Int,
+    val cpuOracle: ReplayCpuOracleResult,
     val nativeEvidence: ReplayNativeEvidence,
 ) {
     fun toJson(indent: String): String = buildString {
@@ -55,8 +54,10 @@ internal data class ReplayPackEvidenceRow(
         appendLine("$indent  \"cpuReference\": {")
         appendLine("$indent    \"width\": $WIDTH,")
         appendLine("$indent    \"height\": $HEIGHT,")
-        appendLine("$indent    \"checksum\": $cpuReferenceChecksum,")
-        appendLine("$indent    \"nonTransparentPixels\": $cpuReferenceNonTransparentPixels")
+        appendLine("$indent    \"checksum\": ${cpuOracle.sampledChecksum},")
+        appendLine("$indent    \"nonTransparentPixels\": ${cpuOracle.nonTransparentPixels},")
+        appendLine("$indent    \"bitmapSampledPixels\": ${cpuOracle.bitmapSampledPixels},")
+        appendLine("$indent    \"oracleApi\": ${cpuOracle.api.json()}")
         appendLine("$indent  },")
         appendLine("$indent  \"nativeEvidence\": ${nativeEvidence.toJson("$indent  ")}")
         append("$indent}")
@@ -121,7 +122,7 @@ internal data class ReplayPackEvidence(
         appendLine("|---|---|---:|---:|---|")
         rows.forEach { row ->
             appendLine(
-                "| `${row.scene.id}` | `${row.scene.status}` | `${row.cpuReferenceChecksum}` | `${row.cpuReferenceNonTransparentPixels}` | `${row.nativeEvidence.status}` |",
+                "| `${row.scene.id}` | `${row.scene.status}` | `${row.cpuOracle.sampledChecksum}` | `${row.cpuOracle.nonTransparentPixels}` | `${row.nativeEvidence.status}` |",
             )
         }
         appendLine()
@@ -142,11 +143,10 @@ internal data class ReplayPackEvidence(
 internal fun buildReplayPackEvidence(): ReplayPackEvidence =
     ReplayPackEvidence(
         rows = M73_REPLAY_SCENES.map { scene ->
-            val cpuReference = renderCpuReference(WIDTH, HEIGHT, scene)
+            val cpuOracle = renderReplayCpuOracle(WIDTH, HEIGHT, scene)
             ReplayPackEvidenceRow(
                 scene = scene,
-                cpuReferenceChecksum = cpuReference.first,
-                cpuReferenceNonTransparentPixels = cpuReference.second,
+                cpuOracle = cpuOracle,
                 nativeEvidence = nativeEvidenceFor(scene),
             )
         },

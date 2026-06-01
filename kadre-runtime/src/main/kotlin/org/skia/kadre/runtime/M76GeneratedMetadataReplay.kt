@@ -36,8 +36,7 @@ internal sealed interface GeneratedMetadataReplayMapping {
     data class Mapped(
         override val metadata: GeneratedSceneReplayMetadata,
         val scene: ReplaySceneEvidence,
-        val cpuReferenceChecksum: Long,
-        val cpuReferenceNonTransparentPixels: Int,
+        val cpuOracle: ReplayCpuOracleResult,
     ) : GeneratedMetadataReplayMapping {
         override val status: String = "metadata-mapped"
         override val reason: String = "m76.metadata.mapped-replay-contract"
@@ -245,12 +244,11 @@ internal fun mapGeneratedMetadataToReplay(metadata: GeneratedSceneReplayMetadata
         gpuRoute = metadata.gpuRoute,
         pipelineKey = metadata.pipelineKey,
     )
-    val cpuReference = renderCpuReference(WIDTH, HEIGHT, scene)
+    val cpuOracle = renderReplayCpuOracle(WIDTH, HEIGHT, scene)
     return GeneratedMetadataReplayMapping.Mapped(
         metadata = metadata,
         scene = scene,
-        cpuReferenceChecksum = cpuReference.first,
-        cpuReferenceNonTransparentPixels = cpuReference.second,
+        cpuOracle = cpuOracle,
     )
 }
 
@@ -299,8 +297,10 @@ private fun GeneratedMetadataReplayMapping.toJson(indent: String): String = buil
             appendLine("$indent  \"cpuReference\": {")
             appendLine("$indent    \"width\": $WIDTH,")
             appendLine("$indent    \"height\": $HEIGHT,")
-            appendLine("$indent    \"checksum\": ${mapping.cpuReferenceChecksum},")
-            appendLine("$indent    \"nonTransparentPixels\": ${mapping.cpuReferenceNonTransparentPixels}")
+            appendLine("$indent    \"checksum\": ${mapping.cpuOracle.sampledChecksum},")
+            appendLine("$indent    \"nonTransparentPixels\": ${mapping.cpuOracle.nonTransparentPixels},")
+            appendLine("$indent    \"bitmapSampledPixels\": ${mapping.cpuOracle.bitmapSampledPixels},")
+            appendLine("$indent    \"oracleApi\": ${mapping.cpuOracle.api.json()}")
             appendLine("$indent  }")
         }
         is GeneratedMetadataReplayMapping.Refused -> {
