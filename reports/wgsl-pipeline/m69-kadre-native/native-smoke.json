@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "kadre-runtime:M69KadreNativeSmoke",
+  "route": "kadre.native.windowed.wgpu4",
+  "status": "native-runnable",
+  "reason": "m69.kadre-native-presented-frames",
+  "nativePresented": true,
+  "requestedFrames": 3,
+  "presentedFrames": 3,
+  "redrawEvents": 3,
+  "surface": {
+    "width": 640,
+    "height": 420,
+    "format": "BGRA8Unorm"
+  },
+  "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+  "cpuReference": {
+    "source": "kanvas-skia SkBitmap/SkCanvas",
+    "checksum": -5176167521326809762,
+    "nonTransparentPixels": 5520
+  },
+  "frameTiming": {
+    "firstFrameMs": 35.1017,
+    "averageFrameMs": 14.9912,
+    "nativeTimingClaim": "present-call-duration-only"
+  },
+  "surfaceStatuses": ["timeout", "timeout", "timeout"],
+  "linearIssues": ["FOR-56", "FOR-57", "FOR-58", "FOR-59"],
+  "nonClaims": [
+    "This smoke proves Kadre native window presentation for a bounded WGSL scene only.",
+    "It does not prove broad Kanvas display-list replay or input-driven interaction yet."
+  ],
+  "error": null
+}

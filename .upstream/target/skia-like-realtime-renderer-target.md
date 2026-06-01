@@ -82,15 +82,15 @@ corresponding denominator and is linked from the sprint report.
 
 Weighted starting readiness: approximately 25%.
 
-Current readiness after M69 closeout: approximately 60%.
+Current readiness after the M69 native Kadre continuation: approximately 62%.
 
 | Area | Weight | Current count | Current progress | Movement |
 |---|---:|---:|---:|---|
 | Rendering feature breadth | 30% | 6/10 | 60% | M66 normalizes selected rows across existing families without adding a new counted family denominator. |
 | Skia-like fidelity | 20% | 50/100 selected rows, 37/100 Skia-comparable minimum | 50% selected evidence | M66 adds 19 selected support/refusal rows with `referenceKind`; 6 are `skia-upstream`, 6 `test-oracle`, and 7 `cpu-oracle`. CPU-oracle rows do not automatically count as Skia-comparable fidelity. |
-| Real-time runtime | 20% | 6/10 | 60% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane; M68 adds Kadre source-build bridge evidence and host-contract audit from `external/poc-koreos`; M69 adds an executable Kanvas/Kadre host adapter contract and headless bridge route. Native Kanvas/Kadre presentation remains blocked with `m69.native-kanvas-kadre-present-not-implemented`. |
-| Performance and cache readiness | 15% | 8/20 | 40% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry, adds one measured family budget, and proves deterministic quarantine/rebaseline behavior. Native Kadre timing remains reporting-only. |
-| PM/demo operability | 15% | 19/20 | 95% | PM bundle includes M65 runtime telemetry/artifacts, M66 family/reference counters, M67 performance tiering, M68 Kadre bridge/demo evidence, and M69 host adapter smoke artifacts. The native runnable demo remains blocked until the Kadre native present loop lands. |
+| Real-time runtime | 20% | 6.5/10 | 65% | M65 adds a reporting-only headless/offscreen 120-frame runtime smoke lane; M68 adds Kadre source-build bridge evidence and host-contract audit from `external/poc-koreos`; M69 now adds a bounded standalone Kadre/AppKit/Metal WebGPU present loop with 3 presented frames. Native input, broad Kanvas display-list replay, and screenshot capture remain incomplete. |
+| Performance and cache readiness | 15% | 8/20 | 40% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry, adds one measured family budget, and proves deterministic quarantine/rebaseline behavior. M69 native timing is present-call duration only, not a release-grade FPS gate. |
+| PM/demo operability | 15% | 20/20 | 100% | PM bundle includes M65 runtime telemetry/artifacts, M66 family/reference counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 host adapter smoke artifacts, and M69 native Kadre present evidence. |
 
 Expected milestone deltas are capped until evidence lands:
 
@@ -105,7 +105,7 @@ Expected milestone deltas are capped until evidence lands:
 | M66 | Cumulative GM/reference promotion wave | +8% |
 | M67 | Performance/cache/frame gates | +8% |
 | M68 | Native Kadre demo package | +8% |
-| M69 | Kanvas/Kadre host adapter route contract | +3% |
+| M69 | Kanvas/Kadre host adapter and bounded native present loop | +6% |
 | M70 | Release-candidate closure | Remaining counted evidence only |
 
 ## Milestones
@@ -121,7 +121,7 @@ Expected milestone deltas are capped until evidence lands:
 | M66 | Skia GM Promotion Wave | Aggregate M60-M64 promotions and add only the missing rows needed to reach the selected 50-100 GM/reference set. |
 | M67 | Performance Tiering | Promote M65 frame metrics into a `frame.headless-webgpu` candidate gate, family budgets, and deterministic quarantine/rebaseline evidence. |
 | M68 | Native Real-Time Demo | Package Kadre source-build bridge evidence and flagship scene inputs; native windowed launch remains blocked until a Kanvas/Kadre host adapter exists. |
-| M69 | Kanvas/Kadre Host Adapter V1 | Generate the host adapter contract, headless bridge smoke, first scene route, and PM bundle counters; keep native-presented Kanvas pixels as the next explicit blocker. |
+| M69 | Kanvas/Kadre Host Adapter V1 | Generate the host adapter contract, route smoke, first scene route, PM bundle counters, and a bounded standalone native Kadre/WebGPU present loop; keep input-driven interaction and broad Kanvas replay as the next explicit blockers. |
 | M70 | Release Candidate Renderer | Freeze API, runtime, PM demo, CI gates, and known limitations for a renderer release candidate. |
 
 ## Dependency DAG

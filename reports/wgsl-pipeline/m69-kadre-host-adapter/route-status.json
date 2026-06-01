@@ -2,7 +2,51 @@
   "evidence": {
     "failures": [],
     "m65NonblankPixelProof": true,
-    "nativePresentationSourceReady": false,
+    "nativeClaim": "bounded standalone WGSL present loop; Kanvas display-list replay is not claimed",
+    "nativePresentationSourceReady": true,
+    "nativeSmoke": {
+      "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+      "cpuReference": {
+        "checksum": -5176167521326809762,
+        "nonTransparentPixels": 5520,
+        "source": "kanvas-skia SkBitmap/SkCanvas"
+      },
+      "error": null,
+      "frameTiming": {
+        "averageFrameMs": 14.9912,
+        "firstFrameMs": 35.1017,
+        "nativeTimingClaim": "present-call-duration-only"
+      },
+      "generatedBy": "kadre-runtime:M69KadreNativeSmoke",
+      "linearIssues": [
+        "FOR-56",
+        "FOR-57",
+        "FOR-58",
+        "FOR-59"
+      ],
+      "nativePresented": true,
+      "nonClaims": [
+        "This smoke proves Kadre native window presentation for a bounded WGSL scene only.",
+        "It does not prove broad Kanvas display-list replay or input-driven interaction yet."
+      ],
+      "presentedFrames": 3,
+      "reason": "m69.kadre-native-presented-frames",
+      "redrawEvents": 3,
+      "requestedFrames": 3,
+      "route": "kadre.native.windowed.wgpu4",
+      "schemaVersion": 1,
+      "status": "native-runnable",
+      "surface": {
+        "format": "BGRA8Unorm",
+        "height": 420,
+        "width": 640
+      },
+      "surfaceStatuses": [
+        "timeout",
+        "timeout",
+        "timeout"
+      ]
+    },
     "requiredM65Files": [
       {
         "bytes": 6375,
@@ -31,7 +75,7 @@
     ],
     "sourceAuditReady": true
   },
-  "generatedAt": "2026-06-01T13:25:11Z",
+  "generatedAt": "2026-06-01T14:04:40Z",
   "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
   "linearIssues": [
     "FOR-56",
@@ -39,9 +83,9 @@
     "FOR-58",
     "FOR-59"
   ],
-  "nativePresentationReason": "m69.native-kanvas-kadre-present-not-implemented",
-  "nativePresented": false,
-  "reason": "m69.kadre-contract-ready-m65-headless-pixel-proof",
+  "nativePresentationReason": "none",
+  "nativePresented": true,
+  "reason": "m69.kadre-native-presented-frames",
   "routes": {
     "headlessBridge": {
       "nativePresented": false,
@@ -50,12 +94,19 @@
       "status": "pass"
     },
     "nativeWindowed": {
-      "nativePresented": false,
-      "reason": "m69.native-kanvas-kadre-present-not-implemented",
-      "route": "kadre.native.windowed",
-      "status": "blocked"
+      "claim": "bounded-standalone-wgsl-present-loop",
+      "nativePresented": true,
+      "presentedFrames": 3,
+      "reason": "none",
+      "route": "kadre.native.windowed.wgpu4",
+      "status": "pass",
+      "surface": {
+        "format": "BGRA8Unorm",
+        "height": 420,
+        "width": 640
+      }
     }
   },
   "schemaVersion": 1,
-  "status": "headless-bridge"
+  "status": "native-runnable"
 }

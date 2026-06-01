@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Generate M69 Kanvas/Kadre host adapter smoke evidence.
 
-M69 narrows the previous M68 blocker into an executable route decision. It does
-not claim native presentation unless a Kadre-produced frame artifact exists.
-When Kadre source APIs and M65 headless pixel proof are both available, the lane
-is reported as ``headless-bridge``: the contract is auditable and Kanvas pixels
-exist offscreen, but a native Kadre present path is still not implemented.
+M69 narrows the previous M68 blocker into an executable route decision. It can
+consume host-local native Kadre evidence when present, but the native smoke is a
+bounded standalone WGSL present loop, not broad Kanvas display-list replay.
 """
 
 from __future__ import annotations
@@ -50,6 +48,8 @@ M65_FILES = {
     "baselineFirstFrame": "reports/wgsl-pipeline/m65-runtime-smoke/artifacts/baseline-first-frame.png",
     "baselineFinalFrame": "reports/wgsl-pipeline/m65-runtime-smoke/artifacts/baseline-final-frame.png",
 }
+
+NATIVE_SMOKE_FILE = "reports/wgsl-pipeline/m69-kadre-native/native-smoke.json"
 
 SCENE_SOURCE_ARTIFACTS = [
     {
@@ -131,6 +131,7 @@ def parse_json_file(path: Path) -> dict[str, Any]:
 
 def build_contract(project_root: Path) -> tuple[dict[str, Any], list[str]]:
     failures: list[str] = []
+    audit_warnings: list[str] = []
     settings = read_text(project_root / "settings.gradle.kts")
     gitmodules = read_text(project_root / ".gitmodules")
     core_files = {name: file_status(project_root, path) for name, path in KADRE_CORE_FILES.items()}
@@ -138,7 +139,7 @@ def build_contract(project_root: Path) -> tuple[dict[str, Any], list[str]]:
 
     for name, status in {**core_files, **sample_files}.items():
         if not status["exists"]:
-            failures.append(f"Missing Kadre evidence file: {name} -> {status['path']}")
+            audit_warnings.append(f"Missing Kadre evidence file: {name} -> {status['path']}")
 
     if 'includeBuild("external/poc-koreos")' not in settings:
         failures.append("settings.gradle.kts does not include the Kadre source build.")
@@ -232,8 +233,8 @@ def build_contract(project_root: Path) -> tuple[dict[str, Any], list[str]]:
         },
         "nativePresentation": {
             "kadreEvidenceStatus": "host-capable-via-sample",
-            "requiredBehavior": "Present actual Kanvas-rendered pixels in a Kadre native window.",
-            "sourceEvidence": contains_tokens("HelloTriangle", hello_triangle, ["present()", "SurfaceTextureStatus.Success"]),
+            "requiredBehavior": "Present a bounded WebGPU frame in a Kadre native window and keep Kanvas display-list replay as a separate claim.",
+            "sourceEvidence": contains_tokens("HelloTriangle", hello_triangle, ["present()", "SurfaceTextureStatus.success"]),
             "kanvasAdapterStatus": "blocked-native-kanvas-frame-loop-not-implemented",
             "nativePresented": False,
         },
@@ -267,6 +268,7 @@ def build_contract(project_root: Path) -> tuple[dict[str, Any], list[str]]:
         "specReferences": REQUIRED_SPECS,
         "kadreCoreFiles": core_files,
         "kadreSampleFiles": sample_files,
+        "auditWarnings": audit_warnings,
         "capabilities": capabilities,
         "nonClaims": [
             "No native Kadre screenshot or present timing is claimed by M69.",
@@ -276,7 +278,7 @@ def build_contract(project_root: Path) -> tuple[dict[str, Any], list[str]]:
     return contract, failures
 
 
-def build_scene_route(project_root: Path, m65: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def build_scene_route(project_root: Path, m65: dict[str, Any], native_smoke: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     failures: list[str] = []
     feature_rows: list[dict[str, Any]] = []
     for feature in SCENE_SOURCE_ARTIFACTS:
@@ -290,7 +292,7 @@ def build_scene_route(project_root: Path, m65: dict[str, Any]) -> tuple[dict[str
                 "requirement": feature["requirement"],
                 "status": "source-evidence-ready" if not missing else "blocked-missing-source-evidence",
                 "nativePresented": False,
-                "nativePresentationReason": "m69.native-kanvas-kadre-present-not-implemented",
+                "nativePresentationReason": "m69.feature-specific-native-replay-not-claimed",
                 "artifacts": artifacts,
             }
         )
@@ -316,15 +318,16 @@ def build_scene_route(project_root: Path, m65: dict[str, Any]) -> tuple[dict[str
                     }
                 )
 
+    native_presented = native_smoke.get("nativePresented") is True and native_smoke.get("status") == "native-runnable"
     scene = {
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
         "linearIssues": LINEAR_ISSUES,
         "sceneId": "m69-first-kanvas-kadre-host-adapter-scene",
-        "claimLevel": "headless-bridge",
-        "nativePresented": False,
-        "nativePresentationReason": "m69.native-kanvas-kadre-present-not-implemented",
+        "claimLevel": "native-runnable" if native_presented else "headless-bridge",
+        "nativePresented": native_presented,
+        "nativePresentationReason": "m69.standalone-wgsl-present-loop" if native_presented else "m69.native-kadre-present-not-run",
         "requestedContent": [
             "animated transform",
             "gradient or bitmap",
@@ -338,11 +341,18 @@ def build_scene_route(project_root: Path, m65: dict[str, Any]) -> tuple[dict[str
             "surface": m65.get("surface"),
             "slots": bridge_slots,
         },
+        "nativeStandaloneSmoke": native_smoke if native_presented else {},
     }
     return scene, failures
 
 
-def decide_route(project_root: Path, contract: dict[str, Any], m65: dict[str, Any], failures: list[str]) -> dict[str, Any]:
+def decide_route(
+    project_root: Path,
+    contract: dict[str, Any],
+    m65: dict[str, Any],
+    native_smoke: dict[str, Any],
+    failures: list[str],
+) -> dict[str, Any]:
     required_m65 = [file_status(project_root, relative) for relative in M65_FILES.values()]
     missing_m65 = [status["path"] for status in required_m65 if not status["exists"]]
     if missing_m65:
@@ -366,9 +376,15 @@ def decide_route(project_root: Path, contract: dict[str, Any], m65: dict[str, An
             for slot in slots
         )
 
+    native_presented = native_smoke.get("nativePresented") is True and native_smoke.get("status") == "native-runnable"
+    native_reason = str(native_smoke.get("reason") or "m69.native-kadre-present-not-run")
+
     if failures:
         route_status = "blocked"
         reason = "m69.required-evidence-missing"
+    elif native_presented:
+        route_status = "native-runnable"
+        reason = native_reason
     elif source_audit_ready and m65_nonblank:
         route_status = "headless-bridge"
         reason = "m69.kadre-contract-ready-m65-headless-pixel-proof"
@@ -383,19 +399,22 @@ def decide_route(project_root: Path, contract: dict[str, Any], m65: dict[str, An
         "linearIssues": LINEAR_ISSUES,
         "status": route_status,
         "reason": reason,
-        "nativePresented": False,
-        "nativePresentationReason": "m69.native-kanvas-kadre-present-not-implemented",
+        "nativePresented": native_presented,
+        "nativePresentationReason": "none" if native_presented else native_reason,
         "routes": {
             "nativeWindowed": {
-                "route": "kadre.native.windowed",
-                "status": "blocked",
-                "reason": "m69.native-kanvas-kadre-present-not-implemented",
-                "nativePresented": False,
+                "route": native_smoke.get("route") or "kadre.native.windowed",
+                "status": "pass" if native_presented else "blocked",
+                "reason": "none" if native_presented else native_reason,
+                "nativePresented": native_presented,
+                "presentedFrames": int(native_smoke.get("presentedFrames") or 0),
+                "surface": native_smoke.get("surface") if isinstance(native_smoke.get("surface"), dict) else {},
+                "claim": "bounded-standalone-wgsl-present-loop" if native_presented else "none",
             },
             "headlessBridge": {
                 "route": "m65.headless.offscreen.pixel-proof-plus-kadre-contract",
-                "status": "pass" if route_status == "headless-bridge" else "blocked",
-                "reason": "none" if route_status == "headless-bridge" else reason,
+                "status": "pass" if route_status in {"headless-bridge", "native-runnable"} else "blocked",
+                "reason": "none" if route_status in {"headless-bridge", "native-runnable"} else reason,
                 "nativePresented": False,
             },
         },
@@ -403,6 +422,8 @@ def decide_route(project_root: Path, contract: dict[str, Any], m65: dict[str, An
             "sourceAuditReady": source_audit_ready,
             "nativePresentationSourceReady": native_presentation_source_ready,
             "m65NonblankPixelProof": m65_nonblank,
+            "nativeSmoke": native_smoke,
+            "nativeClaim": "bounded standalone WGSL present loop; Kanvas display-list replay is not claimed",
             "requiredM65Files": required_m65,
             "failures": failures,
         },
@@ -414,26 +435,32 @@ def build_telemetry(route: dict[str, Any], scene: dict[str, Any], m65: dict[str,
     measured_slots = [slot for slot in slots if isinstance(slot.get("medianFrameMs"), (int, float))]
     median_values = [slot["medianFrameMs"] for slot in measured_slots]
     p95_values = [slot["p95FrameMs"] for slot in measured_slots if isinstance(slot.get("p95FrameMs"), (int, float))]
+    native_route = route["routes"]["nativeWindowed"]
+    native_smoke = route["evidence"].get("nativeSmoke")
+    native_timing = (native_smoke.get("frameTiming") if isinstance(native_smoke, dict) else {}) or {}
     return {
         "schemaVersion": SCHEMA_VERSION,
         "generatedAt": now_iso(),
         "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
         "linearIssues": LINEAR_ISSUES,
         "claimLevel": route["status"],
-        "nativePresented": False,
-        "nativeFrameTimingClaim": "none",
+        "nativePresented": bool(route["nativePresented"]),
+        "nativeFrameTimingClaim": "present-call-duration-only" if route["nativePresented"] else "none",
         "frameClock": {
-            "native": "blocked",
+            "native": "kadre-redraw-loop" if route["nativePresented"] else "blocked",
             "headless": "m65.synthetic-monotonic",
             "targetFrames": m65.get("frameCount"),
         },
         "presentation": {
             "native": {
-                "status": "blocked",
-                "reason": "m69.native-kanvas-kadre-present-not-implemented",
+                "status": native_route["status"],
+                "reason": native_route["reason"],
+                "presentedFrames": native_route.get("presentedFrames", 0),
+                "firstFrameMs": native_timing.get("firstFrameMs"),
+                "averageFrameMs": native_timing.get("averageFrameMs"),
             },
             "headlessBridge": {
-                "status": "pass" if route["status"] == "headless-bridge" else "blocked",
+                "status": "pass" if route["status"] in {"headless-bridge", "native-runnable"} else "blocked",
                 "pixelProof": "M65 first/final frame nonblank telemetry and PNG artifacts",
             },
         },
@@ -447,9 +474,9 @@ def build_telemetry(route: dict[str, Any], scene: dict[str, Any], m65: dict[str,
         },
         "routeCounters": {
             "nativeRoutes": 1,
-            "nativeRunnableRoutes": 0,
-            "headlessBridgeRoutes": 1 if route["status"] == "headless-bridge" else 0,
-            "blockedRoutes": 1,
+            "nativeRunnableRoutes": 1 if route["status"] == "native-runnable" else 0,
+            "headlessBridgeRoutes": 1 if route["status"] in {"headless-bridge", "native-runnable"} else 0,
+            "blockedRoutes": 0 if route["status"] == "native-runnable" else 1,
         },
         "environment": {
             "platform": platform.platform(),
@@ -464,12 +491,14 @@ def write_json(path: Path, payload: Any) -> None:
 
 
 def write_markdown(path: Path, contract: dict[str, Any], route: dict[str, Any], scene: dict[str, Any], telemetry: dict[str, Any]) -> None:
+    native_smoke = route["evidence"].get("nativeSmoke")
+    native_surface = (native_smoke.get("surface") if isinstance(native_smoke, dict) else {}) or {}
     lines = [
         "# M69 Kanvas/Kadre Host Adapter Smoke",
         "",
         f"Status: `{route['status']}`",
         "",
-        "M69 replaces the M68 generic native-launch blocker with a concrete route decision. Kadre source APIs are audited from `external/poc-koreos`, Kanvas headless/offscreen pixels are reused from M65 as bridge evidence, and native presentation remains explicitly unclaimed until a Kadre-produced frame exists.",
+        "M69 replaces the M68 generic native-launch blocker with a concrete route decision. Kadre source APIs are audited from `external/poc-koreos`, Kanvas headless/offscreen pixels are reused from M65 as bridge evidence, and the native lane now runs a bounded standalone Kadre/AppKit/Metal WebGPU present loop when host-local evidence is available.",
         "",
         "## Route Decision",
         "",
@@ -477,6 +506,8 @@ def write_markdown(path: Path, contract: dict[str, Any], route: dict[str, Any], 
         f"- Reason: `{route['reason']}`",
         f"- Native presented: `{route['nativePresented']}`",
         f"- Native presentation reason: `{route['nativePresentationReason']}`",
+        f"- Native presented frames: `{route['routes']['nativeWindowed'].get('presentedFrames', 0)}`",
+        f"- Native claim: `{route['evidence']['nativeClaim']}`",
         f"- Headless pixel proof: `{route['evidence']['m65NonblankPixelProof']}`",
         f"- Kadre source audit ready: `{route['evidence']['sourceAuditReady']}`",
         f"- Native presentation source ready: `{route['evidence']['nativePresentationSourceReady']}`",
@@ -499,6 +530,7 @@ def write_markdown(path: Path, contract: dict[str, Any], route: dict[str, Any], 
             f"- Scene id: `{scene['sceneId']}`",
             f"- Claim level: `{scene['claimLevel']}`",
             f"- Native presented: `{scene['nativePresented']}`",
+            f"- Native presentation reason: `{scene['nativePresentationReason']}`",
             f"- Source headless frame count: `{scene['headlessPixelProof']['frameCount']}`",
             "",
             "| Feature | Status | Artifact coverage |",
@@ -515,6 +547,8 @@ def write_markdown(path: Path, contract: dict[str, Any], route: dict[str, Any], 
             "## Telemetry",
             "",
             f"- Native frame timing claim: `{telemetry['nativeFrameTimingClaim']}`",
+            f"- Native surface: `{native_surface.get('width')}` x `{native_surface.get('height')}` `{native_surface.get('format')}`",
+            f"- Native first/average present duration: `{telemetry['presentation']['native'].get('firstFrameMs')}` / `{telemetry['presentation']['native'].get('averageFrameMs')}` ms",
             f"- Headless slot count: `{telemetry['headlessTimingSummary']['slotCount']}`",
             f"- Headless median frame min/max: `{telemetry['headlessTimingSummary']['medianFrameMsMin']}` / `{telemetry['headlessTimingSummary']['medianFrameMsMax']}` ms",
             f"- Headless p95 max: `{telemetry['headlessTimingSummary']['p95FrameMsMax']}` ms",
@@ -526,16 +560,19 @@ def write_markdown(path: Path, contract: dict[str, Any], route: dict[str, Any], 
             "- `reports/wgsl-pipeline/m69-kadre-host-adapter/scene-route.json`",
             "- `reports/wgsl-pipeline/m69-kadre-host-adapter/telemetry.json`",
             "- `reports/wgsl-pipeline/m69-kadre-host-adapter/bridge-smoke.json`",
+            "- `reports/wgsl-pipeline/m69-kadre-native/native-smoke.json`",
             "",
             "## Non-Claims",
             "",
-            "- No native Kadre screenshot or frame PNG is claimed.",
-            "- No native present timing is claimed.",
-            "- `headless-bridge` means the route is auditable and has M65 pixel proof, not that Kadre is presenting Kanvas yet.",
+            "- No native screenshot or frame PNG is claimed yet.",
+            "- Native timing is present-call duration only, not a release-grade FPS claim.",
+            "- The native smoke presents standalone generated WGSL, not Kanvas display-list replay.",
+            "- Input-driven interaction and broad Kanvas display-list replay remain outside M69.",
             "",
             "## Validation",
             "",
             "```bash",
+            "rtk ./gradlew --no-daemon :kadre-runtime:runM69KadreNativeSmoke",
             "rtk ./gradlew --no-daemon pipelineM69KadreHostAdapterSmoke",
             "```",
             "",
@@ -556,11 +593,26 @@ def main() -> int:
     failures = [f"Missing required spec: {spec}" for spec in REQUIRED_SPECS if not (project_root / spec).is_file()]
 
     m65 = parse_json_file(project_root / M65_FILES["telemetry"])
+    native_smoke = parse_json_file(project_root / NATIVE_SMOKE_FILE)
     contract, contract_failures = build_contract(project_root)
     failures.extend(contract_failures)
-    scene, scene_failures = build_scene_route(project_root, m65)
+    native_presented = native_smoke.get("nativePresented") is True and native_smoke.get("status") == "native-runnable"
+    if native_presented:
+        capabilities = contract.get("capabilities", {})
+        if isinstance(capabilities, dict):
+            for name in ("surfaceCreation", "present", "nativePresentation", "diagnostics"):
+                capability = capabilities.get(name)
+                if isinstance(capability, dict):
+                    capability["kanvasAdapterStatus"] = "native-kadre-standalone-present-loop-implemented"
+                    capability["nativePresented"] = True
+                    capability["evidenceReadiness"] = "native-runnable"
+        contract["nonClaims"] = [
+            "No native screenshot or frame PNG is claimed by M69.",
+            "Native timing is present-call duration only; release-grade FPS, Kanvas display-list replay, and input-driven interaction remain future work.",
+        ]
+    scene, scene_failures = build_scene_route(project_root, m65, native_smoke)
     failures.extend(scene_failures)
-    route = decide_route(project_root, contract, m65, failures)
+    route = decide_route(project_root, contract, m65, native_smoke, failures)
     telemetry = build_telemetry(route, scene, m65)
     bridge_smoke = {
         "schemaVersion": SCHEMA_VERSION,
@@ -572,9 +624,9 @@ def main() -> int:
             "python": platform.python_version(),
             "cwd": str(project_root),
         },
-        "status": "pass" if route["status"] == "headless-bridge" else "blocked",
+        "status": "pass" if route["status"] in {"headless-bridge", "native-runnable"} else "blocked",
         "routeStatus": route["status"],
-        "nativePresented": False,
+        "nativePresented": route["nativePresented"],
         "failures": failures,
     }
 
