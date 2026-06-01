@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 2,
+  "generatedBy": "kadre-runtime:M69KadreNativeSmoke",
+  "route": "kadre.native.windowed.wgpu4",
+  "mode": "demo",
+  "gatePhase": "reportingOnly",
+  "reportingOnly": true,
+  "sceneContract": {
+    "id": "m83-display-list-pm-scene-v1",
+    "version": 1,
+    "owner": "kanvas",
+    "milestone": "M83",
+    "claim": "Selected bounded Kanvas display-list scene contract executed through the Kadre native WebGPU present-call loop",
+    "wgslSource": "runtime-generated-from-selected-kadre-replay-scene"
+  },
+  "sceneReplay": {
+    "id": "m83-display-list-pm-scene-v1",
+    "title": "M83 Kanvas display-list PM scene replay",
+    "status": "renderable",
+    "renderedByKadre": true,
+    "source": "kanvas-display-list",
+    "sourceSceneId": "m83-display-list-pm-scene",
+    "version": 1,
+    "claimLevel": "single-scene-replay-contract",
+    "commandSource": "bounded-kanvas-display-list-lowered-to-typed-kadre-replay-contract",
+    "gpuExecution": "wgsl-generated-from-kadre-replay-scene",
+    "cpuReferenceSource": "typed Kadre replay CPU oracle for same selected commands",
+    "fallbackPolicy": "refuse-unsupported-replay-command",
+    "sourceEvidence": {
+      "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#m83-display-list-pm-scene",
+      "cpuRoute": "cpu.display-list.replay-oracle.bounded",
+      "gpuRoute": "webgpu.kadre.native.display-list-replay.bounded",
+      "pipelineKey": "source=kanvasDisplayList commands=clear+clipRect+linearGradient+bitmapRect+alphaRect state=[blendMode=kSrcOver]"
+    },
+    "commandCounters": {
+      "total": 5,
+      "supported": 5,
+      "unsupported": 0,
+      "backgroundClear": 1,
+      "fillRect": 2,
+      "animatedFillRect": 0,
+      "clipRect": 1,
+      "clipIntersect": 1,
+      "srcOver": 3,
+      "partialAlpha": 3,
+      "bitmapRect": 1,
+      "fixtureBackedBitmap": 1,
+      "bitmapSamplerNearest": 1,
+      "bitmapSamplerLinear": 0,
+      "unsupportedBitmap": 0
+    },
+    "unsupportedCommands": [],
+    "commands": [
+      {
+        "label": "background-clear",
+        "family": "backgroundClear",
+        "supported": true,
+        "color": {
+          "r": 0.0280,
+          "g": 0.0340,
+          "b": 0.0460,
+          "a": 1.0000
+        }
+      },
+      {
+        "label": "display-list-root-clip",
+        "family": "clipRect",
+        "supported": true,
+        "operation": "intersect",
+        "bounds": {
+          "x": 0.0800,
+          "y": 0.1000,
+          "width": 0.8400,
+          "height": 0.7600,
+          "left": 0.0800,
+          "top": 0.1000,
+          "right": 0.9200,
+          "bottom": 0.8600
+        }
+      },
+      {
+        "label": "display-list-gradient-panel",
+        "family": "linearGradientRect",
+        "supported": true,
+        "fillKind": "linearGradient",
+        "blendMode": "SrcOver",
+        "alpha": 0.9600,
+        "endAlpha": 0.8800,
+        "x": 0.1100,
+        "y": 0.1400,
+        "width": 0.7800,
+        "height": 0.3400,
+        "dx": 0.0000
+      },
+      {
+        "label": "display-list-fixture-bitmap",
+        "family": "bitmapRect",
+        "supported": true,
+        "fixtureId": "m79-fixture-checker-rgba8-4x4",
+        "sampler": "nearest",
+        "blendMode": "SrcOver",
+        "alpha": 0.9200,
+        "sourceBounds": {
+          "x": 0.0000,
+          "y": 0.0000,
+          "width": 4.0000,
+          "height": 4.0000,
+          "left": 0.0000,
+          "top": 0.0000,
+          "right": 4.0000,
+          "bottom": 4.0000
+        },
+        "destinationBounds": {
+          "x": 0.1800,
+          "y": 0.5200,
+          "width": 0.2800,
+          "height": 0.2200,
+          "left": 0.1800,
+          "top": 0.5200,
+          "right": 0.4600,
+          "bottom": 0.7400
+        },
+        "fixture": {
+          "width": 4,
+          "height": 4,
+          "colorSpace": "srgb",
+          "alphaType": "unpremul",
+          "pixelChecksum": 3600389471136345375
+        },
+        "provenance": {
+          "owner": "kanvas",
+          "storage": "in-repo-kotlin-fixture",
+          "fixtureProvenance": "in-repo deterministic RGBA fixture for M79 nearest bitmap replay",
+          "commandProvenance": "M83 display-list image node lowered to deterministic in-repo bitmap fixture"
+        }
+      },
+      {
+        "label": "display-list-alpha-overlay",
+        "family": "fillRect",
+        "supported": true,
+        "fillKind": "solid",
+        "blendMode": "SrcOver",
+        "alpha": 0.4200,
+        "endAlpha": 0.4200,
+        "x": 0.4200,
+        "y": 0.5000,
+        "width": 0.3400,
+        "height": 0.2600,
+        "dx": 0.0000
+      }
+
+    ]
+  },
+  "replayPack": null,
+  "status": "native-runnable",
+  "reason": "m73.kadre-replay-pack-selected-scene-presented-frames",
+  "nativePresented": true,
+  "presentCallCompleted": true,
+  "requestedFrames": 180,
+  "warmupFrames": 60,
+  "presentedFrames": 180,
+  "redrawEvents": 180,
+  "surface": {
+    "width": 640,
+    "height": 420,
+    "format": "BGRA8Unorm"
+  },
+  "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+  "cpuReference": {
+    "source": "kanvas-skia SkBitmap/SkCanvas",
+    "checksum": 8858584405967304209,
+    "nonTransparentPixels": 5520
+  },
+  "frameTiming": {
+    "firstFrameMs": 38.7768,
+    "averageFrameMs": 16.4917,
+    "warmupFrameCount": 60,
+    "measuredSampleCount": 120,
+    "measuredP50Ms": 16.6495,
+    "measuredP95Ms": 18.1140,
+    "measuredWorstMs": 18.3875,
+    "gatePhase": "reportingOnly",
+    "reportingOnly": true,
+    "nativeTimingClaim": "present-call-duration-only"
+  },
+  "runtimeTelemetry": {
+    "lane": "frame.kadre-windowed",
+    "gatePhase": "reportingOnly",
+    "reportingOnly": true,
+    "frameClockSource": "kadre.appkit.control-flow-poll",
+    "autonomousFrameClock": true,
+    "autonomousFrameCount": 359,
+    "warmupFrameCount": 60,
+    "measuredSampleCount": 120,
+    "measuredP50Ms": 16.6495,
+    "measuredP95Ms": 18.1140,
+    "measuredWorstMs": 18.3875,
+    "totalSampleCount": 180,
+    "surfaceStatusCount": 180
+  },
+  "capture": {
+    "status": "produced",
+    "reason": "m70.native-offscreen-texture-readback",
+    "imagePath": "reports/wgsl-pipeline/m83-display-list-replay/native-demo-readback.png",
+    "realNativeReadback": true,
+    "source": "wgpu4k-native-offscreen-texture-rendered-from-kadre-scene-contract",
+    "windowSurfaceReadback": false,
+    "width": 640,
+    "height": 420,
+    "format": "RGBA8Unorm",
+    "bytes": 6764,
+    "checksum": 3144274249428185857,
+    "nonTransparentPixels": 268800,
+    "error": null
+  },
+  "surfaceStatusSummary": {
+    "success": 180,
+    "timeout": 0,
+    "lost": 0,
+    "outdated": 0,
+    "outOfMemory": 0,
+    "deviceLost": 0
+  },
+  "surfaceStatuses": ["success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success", "success"],
+  "surfaceApiStatuses": ["timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout", "timeout"],
+  "surfaceStatusSemantics": {
+    "source": "wgpu4k SurfaceTextureStatus over wgpu-native v27",
+    "normalizedTimeoutAsSuccess": true,
+    "reason": "wgpu-native v27 reports SuccessOptimal as raw status 1; wgpu4k maps raw 1 to SurfaceTextureStatus.timeout"
+  },
+  "linearIssues": ["FOR-99", "FOR-149", "FOR-150", "FOR-151", "FOR-152", "FOR-153"],
+  "nonClaims": [
+    "This run proves one bounded Kanvas display-list scene contract selected through the Kadre native window present-call loop.",
+    "M83 does not prove arbitrary SkCanvas op streams, text, image-filter DAGs, arbitrary runtime effects, or full display-list replay.",
+    "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
+    "The capture artifact is an offscreen wgpu4k native texture readback of the same M83 scene contract, not a system screenshot of the presented window.",
+    "Timing is reporting-only present-call duration telemetry, not a release-grade FPS gate."
+  ],
+  "error": null
+}

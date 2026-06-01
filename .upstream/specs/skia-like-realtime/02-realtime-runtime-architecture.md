@@ -178,6 +178,26 @@ Initial curated scenes:
 Initial environment:
 
 - Apple M-series adapter as the first measured lane;
+
+## M83 Display-List Replay Through Kadre
+
+M83 promotes the runtime from selected replay-pack scenes toward Kanvas
+display-list content, but only for a bounded command subset. The accepted
+evidence shape is:
+
+- one renderable Kanvas display-list scene lowered into the typed Kadre replay
+  contract;
+- one expected-unsupported display-list scene that preserves stable refusal
+  reasons for text/glyph runs, image-filter DAG nodes, and runtime-effect
+  placeholders;
+- CPU oracle and native Kadre/WebGPU route facts that agree on renderable vs
+  expected-unsupported state;
+- a native demo JSON whose `sceneContract.id` is the M83 display-list scene;
+- a nonblank native offscreen readback PNG for that same scene contract.
+
+M83 does not claim broad SkCanvas op streams, saveLayer replay, arbitrary
+clip stacks, arbitrary images/text/effects, or release-grade frame timing.
+Those areas remain later runtime/feature work.
 - JDK 25;
 - 120 warm frames plus 300 measured frames for candidate gates;
 - 60 FPS target, 30 FPS warning until M67 promotes a lane.
