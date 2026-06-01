@@ -79,3 +79,13 @@ tasks.register<JavaExec>("runM70KadreNativeDemo") {
     outputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo.json"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM75ReplayPackEvidence") {
+    group = "verification"
+    description = "Generates M75 multi-scene Kadre replay-pack evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M75ReplayPackEvidenceKt")
+    args(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m75-kadre-replay-pack").asFile.absolutePath)
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m75-kadre-replay-pack"))
+    outputs.upToDateWhen { false }
+}

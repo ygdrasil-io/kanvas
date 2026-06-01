@@ -71,4 +71,22 @@ class ReplaySceneRegistryTest {
 
         assertContains(error.message.orEmpty(), "must contain exactly one ReplayCommand.Clear")
     }
+
+    @Test
+    fun m75ReplayPackEvidenceKeepsPerSceneSchema() {
+        val evidence = buildReplayPackEvidence()
+        val json = evidence.toJson()
+
+        assertEquals(5, evidence.sceneCount)
+        assertEquals(4, evidence.renderableSceneCount)
+        assertEquals(1, evidence.expectedUnsupportedSceneCount)
+        assertEquals(0, evidence.failedSceneCount)
+        assertContains(json, "\"packId\": \"m75-kadre-replay-pack-evidence-v1\"")
+        assertContains(json, "\"linearIssues\": [\"FOR-91\", \"FOR-110\", \"FOR-111\", \"FOR-112\", \"FOR-113\"]")
+        assertContains(json, "\"cpuReference\"")
+        assertContains(json, "\"nativeEvidence\"")
+        assertContains(json, "\"readbackImage\": \"reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png\"")
+        assertContains(json, "\"reason\": \"m73.kadre-replay-scene-expected-unsupported\"")
+        assertContains(json, "\"status\": \"not-generated\"")
+    }
 }

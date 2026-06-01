@@ -4290,6 +4290,7 @@ tasks.register("pipelineSkiaGmInventoryGate") {
 tasks.register("pipelinePmBundle") {
     group = "verification"
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
+    mustRunAfter(":kadre-runtime:pipelineM75ReplayPackEvidence")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4318,6 +4319,7 @@ tasks.register("pipelinePmBundle") {
     val m69KadreNativeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m69-kadre-native")
     val m70KadreLiveRuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m70-kadre-live-runtime")
     val m70KadreNativeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m70-kadre-native")
+    val m75ReplayPackEvidenceDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m75-kadre-replay-pack")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4335,6 +4337,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m69KadreNativeDir)
     inputs.dir(m70KadreLiveRuntimeDir)
     inputs.dir(m70KadreNativeDir)
+    inputs.dir(m75ReplayPackEvidenceDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4370,6 +4373,7 @@ tasks.register("pipelinePmBundle") {
         val m69KadreNativeRoot = m69KadreNativeDir.asFile
         val m70KadreLiveRuntimeRoot = m70KadreLiveRuntimeDir.asFile
         val m70KadreNativeRoot = m70KadreNativeDir.asFile
+        val m75ReplayPackEvidenceRoot = m75ReplayPackEvidenceDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4431,6 +4435,9 @@ tasks.register("pipelinePmBundle") {
         if (m70KadreNativeRoot.isDirectory) {
             m70KadreNativeRoot.copyRecursively(targetRoot.resolve("runtime/m70-kadre-native"), overwrite = true)
         }
+        if (m75ReplayPackEvidenceRoot.isDirectory) {
+            m75ReplayPackEvidenceRoot.copyRecursively(targetRoot.resolve("runtime/m75-kadre-replay-pack"), overwrite = true)
+        }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
         }
@@ -4489,6 +4496,8 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-06-01-m69-kadre-host-adapter-smoke.md",
             "reports/wgsl-pipeline/2026-06-01-m69-sprint-report-and-readiness-accounting.md",
             "reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md",
+            "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
+            "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
         )
         referencedPaths += m56ReportPaths
 
@@ -4911,6 +4920,13 @@ tasks.register("pipelinePmBundle") {
         } else {
             emptyMap<String, Any>()
         }
+        val m75ReplayPackEvidenceFile = m75ReplayPackEvidenceRoot.resolve("evidence.json")
+        val m75ReplayPackEvidence = if (m75ReplayPackEvidenceFile.isFile) {
+            JsonSlurper().parse(m75ReplayPackEvidenceFile) as? Map<*, *>
+                ?: throw GradleException("M75 replay-pack evidence must be a JSON object: ${m75ReplayPackEvidenceFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5028,6 +5044,8 @@ tasks.register("pipelinePmBundle") {
             "m70KadreLiveRuntimeReport" to "reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md",
             "m70KadreLiveRuntimeRouteStatusJson" to "runtime/m70-kadre-live-runtime/route-status.json",
             "m70KadreNativeDemoJson" to "runtime/m70-kadre-native/native-demo.json",
+            "m75ReplayPackEvidenceMarkdown" to "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
+            "m75ReplayPackEvidenceJson" to "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -5227,6 +5245,20 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M70-A/B/C add a PM-visible Kadre demo command, normalized native surface-success evidence, reporting-only frame telemetry, and a produced wgpu4k offscreen texture readback artifact. M71 adds an autonomous Kadre/AppKit ControlFlow.Poll frame clock. M72 replaces the shader-only demo claim with one selected solid-rect replay contract. M73 expands that to a bounded typed replay-pack registry. They still do not claim broad display-list replay, arbitrary op streams, window-surface readback, input, or release-grade FPS.",
             ),
+            "m75ReplayPackEvidence" to linkedMapOf<String, Any>(
+                "status" to ((m75ReplayPackEvidence["claimLevel"] as? String).orEmpty()),
+                "packId" to ((m75ReplayPackEvidence["packId"] as? String).orEmpty()),
+                "sourcePackId" to ((m75ReplayPackEvidence["sourcePackId"] as? String).orEmpty()),
+                "sceneCount" to ((m75ReplayPackEvidence["sceneCount"] as? Number)?.toInt() ?: 0),
+                "renderableSceneCount" to ((m75ReplayPackEvidence["renderableSceneCount"] as? Number)?.toInt() ?: 0),
+                "expectedUnsupportedSceneCount" to ((m75ReplayPackEvidence["expectedUnsupportedSceneCount"] as? Number)?.toInt() ?: 0),
+                "failedSceneCount" to ((m75ReplayPackEvidence["failedSceneCount"] as? Number)?.toInt() ?: 0),
+                "readinessDelta" to ((m75ReplayPackEvidence["readinessDelta"] as? Number)?.toInt() ?: 0),
+                "report" to "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
+                "evidenceJson" to "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
+                "releaseBlocking" to false,
+                "notice" to "M75 aggregates deterministic multi-scene replay-pack evidence and per-scene CPU/native facts. It does not add broad SkCanvas/display-list replay or new readiness points.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -5307,6 +5339,7 @@ tasks.register("pipelinePmBundle") {
                 "M68 verifies Kadre source-build bridge evidence and flagship scene inputs, but native Kanvas/Kadre window presentation remains blocked until a host adapter exists.",
                 "M69 verifies a Kadre native WebGPU present loop for a bounded standalone WGSL scene; native screenshot capture, input loop, Kanvas display-list replay, and release-grade FPS remain outside the claim.",
                 "M70-A/B/C verify a PM-visible Kadre demo command, normalized native surface-success evidence, reporting-only windowed telemetry, and a real wgpu4k offscreen texture readback when capture.realNativeReadback is true; M71 verifies autonomous frame scheduling; M72 verifies one selected solid-rect replay contract; M73 verifies a bounded typed replay-pack registry. Window-surface screenshot/readback, input, broad display-list replay, arbitrary op streams, dynamic multi-scene live switching, and release-grade FPS remain outside the claim.",
+                "M75 verifies deterministic multi-scene replay-pack evidence with per-scene CPU reference checksums and selected native/readback facts. It is evidence aggregation only and does not add broad display-list replay, arbitrary op streams, or release-grade runtime timing.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -5353,6 +5386,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- `runtime/m70-kadre-live-runtime/`: M70-A Kadre live runtime route status for the PM-visible demo lane.")
                 appendLine("- `runtime/m70-kadre-native/`: M70-A/B/C native demo telemetry and readback PNG for the selected Kanvas-owned scene contract.")
                 appendLine("- M70-A/B/C/M71/M72/M73 Kadre live runtime counters live in `manifest.json` under `m70KadreLiveRuntime`; native timing is still reporting-only, the frame clock is autonomous for the selected route, M73 is a bounded typed replay-pack registry with one selected scene per run, and the capture is an offscreen texture readback, not a window-surface screenshot.")
+                appendLine("- `runtime/m75-kadre-replay-pack/`: M75 deterministic multi-scene replay-pack evidence JSON and Markdown.")
+                appendLine("- M75 replay-pack evidence counters live in `manifest.json` under `m75ReplayPackEvidence`; this is evidence aggregation, not broad display-list replay.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
