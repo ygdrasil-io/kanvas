@@ -150,9 +150,11 @@ class ReplaySceneRegistryTest {
         assertContains(alphaStack.toJson("  "), "\"blendMode\": \"SrcOver\"")
         assertContains(alphaStack.toJson("  "), "\"alpha\": 0.4500")
 
-        val cpuReference = renderCpuReference(640, 420, alphaStack)
-        assertEquals(true, cpuReference.first != 0L)
-        assertEquals(true, cpuReference.second > 0)
+        val cpuReference = renderReplayCpuOracle(640, 420, alphaStack)
+        assertEquals(REPLAY_CPU_ORACLE_API, cpuReference.api)
+        assertEquals(8888851062735355593L, cpuReference.sampledChecksum)
+        assertEquals(5520, cpuReference.nonTransparentPixels)
+        assertEquals(0, cpuReference.bitmapSampledPixels)
 
         assertEquals("expected-unsupported", unsupported.status)
         assertEquals(1, unsupported.unsupportedCommandCount)
@@ -206,9 +208,11 @@ class ReplaySceneRegistryTest {
         assertContains(alphaClip.toWgsl(0.0), "in.uv.y < 0.680000f")
         assertContains(alphaClip.toWgsl(0.0), "in.uv.x < (0.080000f + 0.840000f)")
 
-        val cpuReference = renderCpuReference(640, 420, solidClip)
-        assertEquals(true, cpuReference.first != 0L)
-        assertEquals(true, cpuReference.second > 0)
+        val cpuReference = renderReplayCpuOracle(640, 420, solidClip)
+        assertEquals(REPLAY_CPU_ORACLE_API, cpuReference.api)
+        assertEquals(7657149549507766923L, cpuReference.sampledChecksum)
+        assertEquals(5520, cpuReference.nonTransparentPixels)
+        assertEquals(0, cpuReference.bitmapSampledPixels)
 
         assertEquals("expected-unsupported", unsupported.status)
         assertEquals(1, unsupported.unsupportedCommandCount)
@@ -296,11 +300,19 @@ class ReplaySceneRegistryTest {
         assertContains(clipped.toWgsl(0.0), "in.uv.x >= 0.240000f")
         assertContains(clipped.toWgsl(0.0), "in.uv.y < 0.520000f")
 
-        val cpuReference = renderCpuReference(640, 420, nearest)
-        assertEquals(true, cpuReference.first != 0L)
-        assertEquals(true, cpuReference.second > 0)
-        assertEquals(true, bitmapSampledPixels(640, 420, nearest) > 0)
-        assertEquals(true, bitmapSampledPixels(640, 420, clipped) < bitmapSampledPixels(640, 420, nearest))
+        val cpuReference = renderReplayCpuOracle(640, 420, nearest)
+        val linearAlphaCpuReference = renderReplayCpuOracle(640, 420, linearAlpha)
+        val clippedCpuReference = renderReplayCpuOracle(640, 420, clipped)
+        assertEquals(REPLAY_CPU_ORACLE_API, cpuReference.api)
+        assertEquals(2208507294891662972L, cpuReference.sampledChecksum)
+        assertEquals(5520, cpuReference.nonTransparentPixels)
+        assertEquals(75428, cpuReference.bitmapSampledPixels)
+        assertEquals(-8675548398312149882L, linearAlphaCpuReference.sampledChecksum)
+        assertEquals(5520, linearAlphaCpuReference.nonTransparentPixels)
+        assertEquals(71603, linearAlphaCpuReference.bitmapSampledPixels)
+        assertEquals(-2224348050358112279L, clippedCpuReference.sampledChecksum)
+        assertEquals(27468, clippedCpuReference.bitmapSampledPixels)
+        assertEquals(true, clippedCpuReference.bitmapSampledPixels < cpuReference.bitmapSampledPixels)
 
         assertEquals("expected-unsupported", unsupported.status)
         assertEquals(1, unsupported.unsupportedCommandCount)
@@ -317,6 +329,113 @@ class ReplaySceneRegistryTest {
         assertEquals("renderable", requireNotNull(replayScenes["m79-bitmap-fixture-linear-alpha-replay-v1"]).status)
         assertEquals("renderable", requireNotNull(replayScenes["m79-bitmap-fixture-clipped-nearest-replay-v1"]).status)
         assertEquals("expected-unsupported", requireNotNull(replayScenes["m79-bitmap-mipmap-sampler-refusal-v1"]).status)
+    }
+
+    @Test
+    fun sharedReplayCpuOracleExposesTypedResultAndUnsupportedFacts() {
+        val unsupported = M79_BITMAP_REPLAY_SCENES.single { it.id == "m79-bitmap-mipmap-sampler-refusal-v1" }
+        val oracle = renderReplayCpuOracle(640, 420, unsupported)
+
+        assertEquals(REPLAY_CPU_ORACLE_API, oracle.api)
+        assertEquals(640, oracle.deviceWidth)
+        assertEquals(420, oracle.deviceHeight)
+        assertEquals(unsupported.id, oracle.sceneId)
+        assertEquals("expected-unsupported", oracle.sceneStatus)
+        assertEquals(false, oracle.rendered)
+        assertEquals(listOf("m79.bitmap.unsupported-sampler.mipmap"), oracle.unsupportedReasons)
+        assertEquals(-5166315637198820477L, oracle.sampledChecksum)
+        assertEquals(5520, oracle.nonTransparentPixels)
+    }
+
+    @Test
+    fun sharedReplayCpuOracleRejectsMalformedInputsWithStableMessages() {
+        val invalidDevice = assertFailsWith<IllegalArgumentException> {
+            renderReplayCpuOracle(0, 420)
+        }
+        assertContains(invalidDevice.message.orEmpty(), "ReplayCpuOracle device dimensions must be positive: 0x420")
+
+        val invalidFixture = assertFailsWith<IllegalArgumentException> {
+            ReplayCommand.BitmapRect(
+                label = "missing-fixture",
+                fixtureId = "missing-fixture",
+                srcX = 0.0,
+                srcY = 0.0,
+                srcWidth = 1.0,
+                srcHeight = 1.0,
+                dstX = 0.0,
+                dstY = 0.0,
+                dstWidth = 1.0,
+                dstHeight = 1.0,
+                sampler = ReplayBitmapSampler.Nearest,
+                provenance = "test",
+            )
+        }
+        assertContains(invalidFixture.message.orEmpty(), "Unknown replay bitmap fixture id: missing-fixture")
+
+        val invalidFill = assertFailsWith<IllegalArgumentException> {
+            ReplayCommand.FillRect("bad-fill", 0.0, 0.0, 0.0, 1.0, ReplayColor(1.0, 0.0, 0.0))
+        }
+        assertContains(invalidFill.message.orEmpty(), "FillRect bad-fill bounds must be positive")
+
+        val invalidClip = assertFailsWith<IllegalArgumentException> {
+            ReplayCommand.ClipRect("bad-clip", 0.0, 0.0, 1.0, -1.0)
+        }
+        assertContains(invalidClip.message.orEmpty(), "ClipRect bad-clip bounds must be positive")
+
+        val invalidBitmapBounds = assertFailsWith<IllegalArgumentException> {
+            ReplayCommand.BitmapRect(
+                label = "bad-bitmap",
+                fixtureId = ReplayBitmapFixtures.checker4x4.id,
+                srcX = 0.0,
+                srcY = 0.0,
+                srcWidth = 0.0,
+                srcHeight = 1.0,
+                dstX = 0.0,
+                dstY = 0.0,
+                dstWidth = 1.0,
+                dstHeight = 1.0,
+                sampler = ReplayBitmapSampler.Nearest,
+                provenance = "test",
+            )
+        }
+        assertContains(invalidBitmapBounds.message.orEmpty(), "BitmapRect bad-bitmap source bounds must be positive")
+
+        val invalidBitmapDestinationBounds = assertFailsWith<IllegalArgumentException> {
+            ReplayCommand.BitmapRect(
+                label = "bad-bitmap-destination",
+                fixtureId = ReplayBitmapFixtures.checker4x4.id,
+                srcX = 0.0,
+                srcY = 0.0,
+                srcWidth = 1.0,
+                srcHeight = 1.0,
+                dstX = 0.0,
+                dstY = 0.0,
+                dstWidth = 0.0,
+                dstHeight = 1.0,
+                sampler = ReplayBitmapSampler.Nearest,
+                provenance = "test",
+            )
+        }
+        assertContains(invalidBitmapDestinationBounds.message.orEmpty(), "BitmapRect bad-bitmap-destination destination bounds must be positive")
+    }
+
+    @Test
+    fun m80SharedReplayOracleEvidenceSummarizesSharedApiAndFailureCoverage() {
+        val evidence = buildSharedReplayOracleEvidence()
+        val json = evidence.toJson()
+
+        assertEquals("org.skia.kadre.runtime.ReplayCpuOracle", REPLAY_CPU_ORACLE_API)
+        assertEquals(replayScenesById().size, evidence.sceneCount)
+        assertEquals(0, evidence.failedSceneCount)
+        assertEquals(0, evidence.failedValidationRowCount)
+        assertEquals(true, evidence.supportedCommandFamilies.contains("bitmapRect"))
+        assertEquals(true, evidence.supportedCommandFamilies.contains("clipRect"))
+        assertContains(json, "\"packId\": \"m80-shared-replay-oracle-v1\"")
+        assertContains(json, "\"oracleApi\": \"org.skia.kadre.runtime.ReplayCpuOracle\"")
+        assertContains(json, "\"sampledChecksum\"")
+        assertContains(json, "\"bitmapSampledPixels\"")
+        assertContains(json, "\"failedValidationRowCount\": 0")
+        assertContains(json, "\"id\": \"invalid-fixture-and-bounds\"")
     }
 
     private fun m76ManifestFixture(): String = """

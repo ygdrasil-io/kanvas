@@ -109,8 +109,7 @@ internal val M78_CLIP_REPLAY_SCENES: List<ReplaySceneEvidence> = listOf(
 
 internal data class ClipReplayRow(
     val scene: ReplaySceneEvidence,
-    val cpuReferenceChecksum: Long?,
-    val cpuReferenceNonTransparentPixels: Int?,
+    val cpuOracle: ReplayCpuOracleResult?,
 ) {
     fun toJson(indent: String): String = buildString {
         appendLine("{")
@@ -145,15 +144,17 @@ internal data class ClipReplayRow(
     }
 
     private fun cpuOracleJson(indent: String): String =
-        if (cpuReferenceChecksum == null || cpuReferenceNonTransparentPixels == null) {
+        if (cpuOracle == null) {
             "null"
         } else {
             buildString {
                 appendLine("{")
                 appendLine("$indent    \"width\": $WIDTH,")
                 appendLine("$indent    \"height\": $HEIGHT,")
-                appendLine("$indent    \"checksum\": $cpuReferenceChecksum,")
-                appendLine("$indent    \"nonTransparentPixels\": $cpuReferenceNonTransparentPixels,")
+                appendLine("$indent    \"checksum\": ${cpuOracle.sampledChecksum},")
+                appendLine("$indent    \"nonTransparentPixels\": ${cpuOracle.nonTransparentPixels},")
+                appendLine("$indent    \"bitmapSampledPixels\": ${cpuOracle.bitmapSampledPixels},")
+                appendLine("$indent    \"oracleApi\": ${cpuOracle.api.json()},")
                 appendLine("$indent    \"oracle\": \"clip-rect-intersect-sampled-reference\"")
                 append("$indent  }")
             }
@@ -224,7 +225,7 @@ internal data class ClipReplayEvidence(val rows: List<ClipReplayRow>) {
         appendLine("|---|---|---:|---:|---:|---|")
         rows.forEach { row ->
             appendLine(
-                "| `${row.scene.id}` | `${row.scene.status}` | `${row.scene.clipRectCommandCount}` | `${row.scene.fillRectCount}` | `${row.cpuReferenceChecksum ?: 0}` | `${sceneReason(row.scene)}` |",
+                "| `${row.scene.id}` | `${row.scene.status}` | `${row.scene.clipRectCommandCount}` | `${row.scene.fillRectCount}` | `${row.cpuOracle?.sampledChecksum ?: 0}` | `${sceneReason(row.scene)}` |",
             )
         }
         appendLine()
@@ -245,11 +246,10 @@ internal data class ClipReplayEvidence(val rows: List<ClipReplayRow>) {
 internal fun buildClipReplayEvidence(): ClipReplayEvidence =
     ClipReplayEvidence(
         rows = M78_CLIP_REPLAY_SCENES.map { scene ->
-            val cpuReference = if (scene.renderedByKadre) renderCpuReference(WIDTH, HEIGHT, scene) else null
+            val cpuOracle = if (scene.renderedByKadre) renderReplayCpuOracle(WIDTH, HEIGHT, scene) else null
             ClipReplayRow(
                 scene = scene,
-                cpuReferenceChecksum = cpuReference?.first,
-                cpuReferenceNonTransparentPixels = cpuReference?.second,
+                cpuOracle = cpuOracle,
             )
         },
     )

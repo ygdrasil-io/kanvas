@@ -4295,6 +4295,7 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM77BlendAlphaReplay")
     mustRunAfter(":kadre-runtime:pipelineM78ClipReplay")
     mustRunAfter(":kadre-runtime:pipelineM79BitmapReplay")
+    mustRunAfter(":kadre-runtime:pipelineM80SharedReplayOracle")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4328,6 +4329,7 @@ tasks.register("pipelinePmBundle") {
     val m77BlendAlphaReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m77-blend-alpha-replay")
     val m78ClipReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m78-clip-replay")
     val m79BitmapReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m79-bitmap-replay")
+    val m80SharedReplayOracleDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m80-shared-replay-oracle")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4350,6 +4352,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m77BlendAlphaReplayDir)
     inputs.dir(m78ClipReplayDir)
     inputs.dir(m79BitmapReplayDir)
+    inputs.dir(m80SharedReplayOracleDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4390,6 +4393,7 @@ tasks.register("pipelinePmBundle") {
         val m77BlendAlphaReplayRoot = m77BlendAlphaReplayDir.asFile
         val m78ClipReplayRoot = m78ClipReplayDir.asFile
         val m79BitmapReplayRoot = m79BitmapReplayDir.asFile
+        val m80SharedReplayOracleRoot = m80SharedReplayOracleDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4466,6 +4470,9 @@ tasks.register("pipelinePmBundle") {
         if (m79BitmapReplayRoot.isDirectory) {
             m79BitmapReplayRoot.copyRecursively(targetRoot.resolve("runtime/m79-bitmap-replay"), overwrite = true)
         }
+        if (m80SharedReplayOracleRoot.isDirectory) {
+            m80SharedReplayOracleRoot.copyRecursively(targetRoot.resolve("runtime/m80-shared-replay-oracle"), overwrite = true)
+        }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
         }
@@ -4534,6 +4541,8 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/m78-clip-replay/evidence.json",
             "reports/wgsl-pipeline/m79-bitmap-replay/evidence.md",
             "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json",
+            "reports/wgsl-pipeline/m80-shared-replay-oracle/evidence.md",
+            "reports/wgsl-pipeline/m80-shared-replay-oracle/evidence.json",
         )
         referencedPaths += m56ReportPaths
 
@@ -5237,6 +5246,103 @@ tasks.register("pipelinePmBundle") {
                     "failedSceneCount=$m79FailedSceneCount",
             )
         }
+        val m80SharedReplayOracleFile = m80SharedReplayOracleRoot.resolve("evidence.json")
+        val m80SharedReplayOracle = if (m80SharedReplayOracleFile.isFile) {
+            JsonSlurper().parse(m80SharedReplayOracleFile) as? Map<*, *>
+                ?: throw GradleException("M80 shared replay oracle evidence must be a JSON object: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M80 shared replay oracle evidence: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+        }
+        fun m80String(field: String): String =
+            (m80SharedReplayOracle[field] as? String)
+                ?.takeIf { it.isNotBlank() }
+                ?: throw GradleException("M80 shared replay oracle evidence missing string `$field`: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+        fun m80Int(field: String): Int =
+            (m80SharedReplayOracle[field] as? Number)?.toInt()
+                ?: throw GradleException("M80 shared replay oracle evidence missing numeric `$field`: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+        val m80SceneCount = m80Int("sceneCount")
+        val m80RenderableSceneCount = m80Int("renderableSceneCount")
+        val m80ExpectedUnsupportedSceneCount = m80Int("expectedUnsupportedSceneCount")
+        val m80FailedSceneCount = m80Int("failedSceneCount")
+        val m80FailedValidationRowCount = m80Int("failedValidationRowCount")
+        val m80SupportedCommandFamilies = (m80SharedReplayOracle["supportedCommandFamilies"] as? List<*>)
+            ?.filterIsInstance<String>()
+            .orEmpty()
+        if (m80String("packId") != "m80-shared-replay-oracle-v1" || m80String("oracleApi") != "org.skia.kadre.runtime.ReplayCpuOracle") {
+            throw GradleException("M80 shared replay oracle evidence has unexpected pack id or oracle API: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+        }
+        listOf("backgroundClear", "fillRect", "clipRect", "bitmapRect").forEach { family ->
+            if (family !in m80SupportedCommandFamilies) {
+                throw GradleException("M80 shared replay oracle evidence missing supported family `$family`: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+            }
+        }
+        val m80Scenes = (m80SharedReplayOracle["scenes"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?: throw GradleException("M80 shared replay oracle evidence missing scenes[]: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+        val m80ValidationRows = (m80SharedReplayOracle["validationRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?: throw GradleException("M80 shared replay oracle evidence missing validationRows[]: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+        val m80ScenesById = m80Scenes.associateBy { it["id"] as? String }
+        listOf(
+            "m72-solid-rect-replay-v1",
+            "m73-linear-gradient-rect-replay-v1",
+            "m77-alpha-srcover-stack-replay-v1",
+            "m78-clipped-solid-rect-replay-v1",
+            "m79-bitmap-fixture-linear-alpha-replay-v1",
+            "m79-bitmap-fixture-clipped-nearest-replay-v1",
+            "m79-bitmap-mipmap-sampler-refusal-v1",
+        ).forEach { sceneId ->
+            if (m80ScenesById[sceneId] == null) {
+                throw GradleException("M80 shared replay oracle evidence missing scene `$sceneId`: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+            }
+        }
+        val m80ValidationRowIds = m80ValidationRows.mapNotNull { it["id"] as? String }.toSet()
+        listOf(
+            "fillrect-src-over-alpha",
+            "cliprect-intersection",
+            "bitmap-nearest",
+            "bitmap-linear-alpha",
+            "bitmap-under-cliprect",
+            "expected-unsupported",
+            "invalid-fixture-and-bounds",
+        ).forEach { rowId ->
+            if (rowId !in m80ValidationRowIds) {
+                throw GradleException("M80 shared replay oracle evidence missing validation row `$rowId`: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+            }
+        }
+        if (m80Scenes.none { it["status"] == "expected-unsupported" && (it["unsupportedReasons"] as? List<*>)?.isNotEmpty() == true }) {
+            throw GradleException("M80 shared replay oracle evidence missing expected-unsupported row facts: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+        }
+        if (m80Scenes.any { scene ->
+                val cpuOracle = scene["cpuOracle"] as? Map<*, *> ?: return@any true
+                cpuOracle["sampledChecksum"] !is Number ||
+                    (cpuOracle["nonTransparentPixels"] as? Number)?.toInt()?.takeIf { it > 0 } == null ||
+                    cpuOracle["bitmapSampledPixels"] !is Number ||
+                    cpuOracle["api"] != "org.skia.kadre.runtime.ReplayCpuOracle" ||
+                    cpuOracle["sceneId"] !is String ||
+                    cpuOracle["sceneStatus"] !is String ||
+                    cpuOracle["unsupportedReasons"] !is List<*> ||
+                    cpuOracle["commandFamilies"] !is List<*>
+            }
+        ) {
+            throw GradleException("M80 shared replay oracle evidence has incomplete typed CPU oracle scene facts: ${m80SharedReplayOracleFile.relativeTo(rootDir)}")
+        }
+        if (
+            m80SceneCount != 15 ||
+            m80RenderableSceneCount != 11 ||
+            m80ExpectedUnsupportedSceneCount != 4 ||
+            m80FailedSceneCount != 0 ||
+            m80FailedValidationRowCount != 0 ||
+            m80ValidationRows.size != 7
+        ) {
+            throw GradleException(
+                "M80 shared replay oracle evidence counters are invalid: " +
+                    "sceneCount=$m80SceneCount renderableSceneCount=$m80RenderableSceneCount " +
+                    "expectedUnsupportedSceneCount=$m80ExpectedUnsupportedSceneCount " +
+                    "failedSceneCount=$m80FailedSceneCount failedValidationRowCount=$m80FailedValidationRowCount " +
+                    "validationRows=${m80ValidationRows.size}",
+            )
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5364,6 +5470,8 @@ tasks.register("pipelinePmBundle") {
             "m78ClipReplayJson" to "reports/wgsl-pipeline/m78-clip-replay/evidence.json",
             "m79BitmapReplayMarkdown" to "reports/wgsl-pipeline/m79-bitmap-replay/evidence.md",
             "m79BitmapReplayJson" to "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json",
+            "m80SharedReplayOracleMarkdown" to "reports/wgsl-pipeline/m80-shared-replay-oracle/evidence.md",
+            "m80SharedReplayOracleJson" to "reports/wgsl-pipeline/m80-shared-replay-oracle/evidence.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -5649,6 +5757,22 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M79 adds bounded BitmapRect replay evidence for owned in-repo fixtures with nearest and linear samplers, alpha/blend/provenance fields, and stable unsupported sampler refusals. It does not add arbitrary SkImage, codec decode, mipmap, texture atlas, tile-mode, or color-managed image support.",
             ),
+            "m80SharedReplayOracle" to linkedMapOf<String, Any>(
+                "status" to m80String("claimLevel"),
+                "packId" to m80String("packId"),
+                "oracleApi" to m80String("oracleApi"),
+                "sceneCount" to m80SceneCount,
+                "renderableSceneCount" to m80RenderableSceneCount,
+                "expectedUnsupportedSceneCount" to m80ExpectedUnsupportedSceneCount,
+                "failedSceneCount" to m80FailedSceneCount,
+                "failedValidationRowCount" to m80FailedValidationRowCount,
+                "supportedCommandFamilies" to m80SupportedCommandFamilies,
+                "readinessDelta" to m80Int("readinessDelta"),
+                "report" to "reports/wgsl-pipeline/m80-shared-replay-oracle/evidence.md",
+                "evidenceJson" to "reports/wgsl-pipeline/m80-shared-replay-oracle/evidence.json",
+                "releaseBlocking" to false,
+                "notice" to "M80 routes bounded replay CPU reference facts through a shared typed oracle result for native smoke, tests, and M75-M79 evidence. It is reference hardening only and does not add broad SkCanvas/display-list replay or new readiness points.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -5734,6 +5858,7 @@ tasks.register("pipelinePmBundle") {
                 "M77 verifies bounded SrcOver partial-alpha replay scenes and one unsupported blend-mode refusal. It does not add arbitrary blend modes, layer compositing, or broad display-list replay.",
                 "M78 verifies bounded ClipRect intersect replay scenes and one complex clip refusal. It does not add rounded clips, path clips, difference clips, saveLayer clip stacks, arbitrary SkCanvas clip replay, or broad clip-stack support.",
                 "M79 verifies bounded fixture-backed BitmapRect replay scenes with nearest/linear samplers and one unsupported mipmap sampler refusal. It does not add arbitrary SkImage, codec decode, texture atlas, mipmap, tile-mode, or color-managed image support.",
+                "M80 hardens the bounded replay CPU reference behind a shared typed oracle result. It does not add broad SkCanvas/display-list replay or any new rendering breadth.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -5790,6 +5915,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M78 clip replay counters live in `manifest.json` under `m78ClipReplay`; complex rounded/path/difference clips remain stable refusals.")
                 appendLine("- `runtime/m79-bitmap-replay/`: M79 bounded fixture-backed BitmapRect replay evidence JSON and Markdown.")
                 appendLine("- M79 bitmap replay counters live in `manifest.json` under `m79BitmapReplay`; unsupported mipmap/texture sampler paths remain stable refusals.")
+                appendLine("- `runtime/m80-shared-replay-oracle/`: M80 shared replay CPU oracle evidence JSON and Markdown.")
+                appendLine("- M80 shared replay oracle counters live in `manifest.json` under `m80SharedReplayOracle`; this is reference hardening, not broad display-list replay or new readiness.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }

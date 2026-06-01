@@ -280,7 +280,7 @@ internal class M69KadreNativeSmokeApp(
     private val surfaceStatuses = mutableListOf<String>()
     private val surfaceApiStatuses = mutableListOf<String>()
     private val replayScene = config.replayScene
-    private val cpuReference = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT, replayScene)
+    private val cpuReference = renderReplayCpuOracle(DEFAULT_WIDTH, DEFAULT_HEIGHT, replayScene)
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
         runCatching {
@@ -645,8 +645,8 @@ internal class M69KadreNativeSmokeApp(
                 height = size.height,
                 surfaceFormat = surfaceFormat.name,
                 adapterInfo = adapterInfo,
-                cpuReferenceChecksum = cpuReference.first,
-                cpuReferenceNonTransparentPixels = cpuReference.second,
+                cpuReferenceChecksum = cpuReference.sampledChecksum,
+                cpuReferenceNonTransparentPixels = cpuReference.nonTransparentPixels,
                 firstFrameMs = frameDurationsMs.firstOrNull(),
                 averageFrameMs = frameDurationsMs.takeIf { it.isNotEmpty() }?.average(),
                 telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size, autonomousFrameRequests),
@@ -682,8 +682,8 @@ internal class M69KadreNativeSmokeApp(
                 height = size.height,
                 surfaceFormat = surfaceFormat.name,
                 adapterInfo = adapterInfo,
-                cpuReferenceChecksum = cpuReference.first,
-                cpuReferenceNonTransparentPixels = cpuReference.second,
+                cpuReferenceChecksum = cpuReference.sampledChecksum,
+                cpuReferenceNonTransparentPixels = cpuReference.nonTransparentPixels,
                 firstFrameMs = frameDurationsMs.firstOrNull(),
                 averageFrameMs = frameDurationsMs.takeIf { it.isNotEmpty() }?.average(),
                 telemetry = buildTelemetry(config, frameDurationsMs, surfaceStatuses.size, autonomousFrameRequests),
@@ -969,6 +969,7 @@ private fun Double.formatJsonNumber(): String = "%.4f".format(java.util.Locale.U
 
 fun main(args: Array<String>) {
     val config = parseArgs(args)
+    val fallbackCpuReference = renderReplayCpuOracle(DEFAULT_WIDTH, DEFAULT_HEIGHT)
     val os = System.getProperty("os.name", "").lowercase()
     if (!os.contains("mac")) {
         writeResult(
@@ -989,8 +990,8 @@ fun main(args: Array<String>) {
                 height = DEFAULT_HEIGHT,
                 surfaceFormat = null,
                 adapterInfo = null,
-                cpuReferenceChecksum = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT).first,
-                cpuReferenceNonTransparentPixels = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT).second,
+                cpuReferenceChecksum = fallbackCpuReference.sampledChecksum,
+                cpuReferenceNonTransparentPixels = fallbackCpuReference.nonTransparentPixels,
                 firstFrameMs = null,
                 averageFrameMs = null,
                 telemetry = buildTelemetry(config, emptyList(), 0),
@@ -1028,8 +1029,8 @@ fun main(args: Array<String>) {
                 height = DEFAULT_HEIGHT,
                 surfaceFormat = null,
                 adapterInfo = null,
-                cpuReferenceChecksum = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT).first,
-                cpuReferenceNonTransparentPixels = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT).second,
+                cpuReferenceChecksum = fallbackCpuReference.sampledChecksum,
+                cpuReferenceNonTransparentPixels = fallbackCpuReference.nonTransparentPixels,
                 firstFrameMs = null,
                 averageFrameMs = null,
                 telemetry = buildTelemetry(config, emptyList(), 0),
@@ -1057,8 +1058,8 @@ fun main(args: Array<String>) {
                 height = DEFAULT_HEIGHT,
                 surfaceFormat = null,
                 adapterInfo = null,
-                cpuReferenceChecksum = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT).first,
-                cpuReferenceNonTransparentPixels = renderCpuReference(DEFAULT_WIDTH, DEFAULT_HEIGHT).second,
+                cpuReferenceChecksum = fallbackCpuReference.sampledChecksum,
+                cpuReferenceNonTransparentPixels = fallbackCpuReference.nonTransparentPixels,
                 firstFrameMs = null,
                 averageFrameMs = null,
                 telemetry = buildTelemetry(config, emptyList(), 0),
