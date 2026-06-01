@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "pipelineM62FontFallbackEvidencePack",
+  "description": "M62 missing-glyph/fallback evidence contract. Rows are materialized from generated font baseline artifacts and keep fallback-family support explicitly refused until deterministic fallback infrastructure exists.",
+  "artifactSourceRoot": "reports/wgsl-pipeline/scenes/artifacts",
+  "sourceReport": "reports/wgsl-pipeline/2026-06-01-m62-missing-glyph-fallback-evidence.md",
+  "selectedReport": "reports/wgsl-pipeline/2026-06-01-m62-missing-glyph-fallback-evidence.md",
+  "selectedCandidateCount": 1,
+  "outputEvidenceDir": "wgsl-pipeline-m62-generated",
+  "outputDescription": "M62 missing-glyph/fallback generated dashboard row materialized from a deterministic bundled-font baseline scene.",
+  "outputManifest": "data/m62-generated-scenes.json",
+  "scenes": [
+    {
+      "id": "m62-missing-glyph-fallback-refusal",
+      "title": "M62 missing glyph fallback refusal",
+      "family": "text and glyph rendering v1",
+      "status": "expected-unsupported",
+      "linearIssue": "FOR-17",
+      "baseArtifactScene": "font-latin-outline-drawstring",
+      "referenceKind": "cpu-oracle",
+      "font": {
+        "source": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+        "textInput": "KANVAS U+10FFFF",
+        "shapingMode": "simple-glyph-id-map-missing-glyph",
+        "glyphDiagnostics": "artifacts/m62-missing-glyph-fallback-refusal/font-diagnostics.json",
+        "fallbackPolicy": "fallback-family-selection-unsupported"
+      },
+      "cpuRoute": "cpu.text.outline.missing-glyph-oracle",
+      "gpuRoute": "webgpu.text.refuse.missing-glyph-fallback",
+      "pipelineKey": "textRoute=missing-glyph-fallback glyphRepresentation=unsupported fallbackFamily=required source=LiberationSans-Regular",
+      "fallbackReason": "font.missing-glyph-fallback-unsupported",
+      "pixels": 18432,
+      "matchingPixels": 18432,
+      "threshold": 99.95,
+      "nonClaim": "Documents deterministic missing-glyph/fallback refusal only; does not claim fallback-family selection, color glyphs, complex shaping, glyph atlas, or SDF/LCD support.",
+      "tags": ["source.generated", "feature.font", "feature.text", "feature.missing-glyph", "route.cpu.oracle", "route.gpu.expected-unsupported", "reference.cpu-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]
+    }
+  ]
+}
