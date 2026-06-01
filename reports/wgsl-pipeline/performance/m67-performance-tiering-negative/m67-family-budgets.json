@@ -1,0 +1,116 @@
+{
+  "counters": {
+    "families": 7,
+    "measuredFamilies": 1,
+    "reportingOnlyFamilies": 6,
+    "status": {
+      "quarantine": 1,
+      "reporting-only": 6
+    }
+  },
+  "families": [
+    {
+      "capability": "animated transform + SrcOver-like smoke",
+      "family": "core paint/blend",
+      "lane": "frame.headless-webgpu",
+      "measured": true,
+      "measurementType": "live frame benchmark",
+      "medianMs": 8.9599,
+      "p95Ms": 9.3046,
+      "reason": "M67 candidate from M65 headless/offscreen smoke telemetry.",
+      "releaseBlocking": false,
+      "sampleCount": 120,
+      "scope": "baseline smoke scene",
+      "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json",
+      "status": "quarantine",
+      "threshold": {
+        "targetMedianMs": 16.7,
+        "warningP95Ms": 33.3
+      },
+      "tier": "P0 pipeline"
+    },
+    {
+      "capability": "registered runtime-effect slot preview",
+      "family": "runtime effect",
+      "lane": "frame.headless-webgpu",
+      "measured": false,
+      "measurementType": "live frame benchmark",
+      "reason": "M65 times a synthetic preview slot, but runtime display-list replay is refused; do not count as runtime-effect performance support.",
+      "releaseBlocking": false,
+      "scope": "source evidence linked; display-list replay not wired",
+      "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json",
+      "status": "reporting-only",
+      "tier": "P1 family"
+    },
+    {
+      "capability": "Path AA/stroke/clip budget",
+      "family": "path/clip",
+      "lane": "family.path-clip",
+      "measured": false,
+      "measurementType": "GPU/cache row benchmark",
+      "reason": "No isolated M67 Path/clip timing payload exists yet; do not count the baseline transform smoke as a Path/clip measurement.",
+      "releaseBlocking": false,
+      "scope": "not exercised by the M65 smoke scene",
+      "source": "reports/wgsl-pipeline/scenes/generated/results.json",
+      "status": "reporting-only",
+      "tier": "P1 family"
+    },
+    {
+      "capability": "bitmap sampling and upload budget",
+      "family": "image/bitmap",
+      "lane": "family.image-bitmap",
+      "measured": false,
+      "measurementType": "GPU/cache row benchmark",
+      "reason": "No isolated M67 bitmap sampling or upload timing payload exists yet.",
+      "releaseBlocking": false,
+      "scope": "not exercised by the M65 smoke scene",
+      "source": "reports/wgsl-pipeline/scenes/generated/results.json",
+      "status": "reporting-only",
+      "tier": "P1 family"
+    },
+    {
+      "capability": "intermediate texture budget",
+      "family": "image-filter DAG",
+      "lane": "family.image-filter-dag",
+      "measured": false,
+      "measurementType": "image-filter intermediate texture benchmark",
+      "reason": "No M67 measured intermediate texture payload exists yet; do not count as measured.",
+      "releaseBlocking": false,
+      "scope": "M61/M66 rows only; not exercised by M65 smoke",
+      "source": "reports/wgsl-pipeline/scenes/generated/results.json",
+      "status": "reporting-only",
+      "tier": "P1 family"
+    },
+    {
+      "capability": "glyph atlas upload/miss budget",
+      "family": "text/glyph atlas",
+      "lane": "family.text-glyph-atlas",
+      "measured": false,
+      "measurementType": "glyph atlas upload benchmark",
+      "reason": "M65 does not render text, so glyph atlas misses remain schema/planning evidence only.",
+      "releaseBlocking": false,
+      "scope": "not exercised by the M65 smoke scene",
+      "source": "reports/wgsl-pipeline/scenes/generated/results.json",
+      "status": "reporting-only",
+      "tier": "P1 family"
+    },
+    {
+      "capability": "Kadre present timing",
+      "family": "native frame loop",
+      "lane": "frame.kadre-windowed",
+      "measured": false,
+      "measurementType": "live frame benchmark",
+      "reason": "Native Kadre timing remains outside M67 unless a real Kadre-hosted frame loop is measured.",
+      "releaseBlocking": false,
+      "scope": "M68 native windowed demo",
+      "source": "external/poc-koreos/",
+      "status": "reporting-only",
+      "tier": "P0 frame"
+    }
+  ],
+  "fixture": "negative-quarantine",
+  "generatedAt": "2026-06-01T12:23:11Z",
+  "generatedBy": "scripts/m67_performance_tiering.py",
+  "schemaVersion": 1,
+  "sourceTelemetry": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
+}

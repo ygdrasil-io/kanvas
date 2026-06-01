@@ -1,0 +1,224 @@
+{
+  "features": [
+    {
+      "allArtifactsPresent": true,
+      "artifacts": [
+        {
+          "bytes": 12574,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/m65-runtime-smoke/artifacts/baseline-first-frame.png",
+          "sha256": "0dbf82e88b7c137086bd417a6860e92665783dd61a25c22d7bf7e674f96a2f70"
+        },
+        {
+          "bytes": 12642,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/m65-runtime-smoke/artifacts/baseline-final-frame.png",
+          "sha256": "5e4ea8a5f74c1eb45e64873ee0120bb2a315f1e7343b7fba2ba5d30d83c88d31"
+        },
+        {
+          "bytes": 6375,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json",
+          "sha256": "9a7b1b5efb348b034710341c44a91a809c65d9d40b226e04d0c34a9f58f25eb0"
+        }
+      ],
+      "claim": "M65 provides synthetic/offscreen frame motion; M68 does not yet present it through Kadre.",
+      "feature": "animated transform",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "status": "bridge-smoke"
+    },
+    {
+      "allArtifactsPresent": true,
+      "artifacts": [
+        {
+          "bytes": 89246,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/cpu.png",
+          "sha256": "49c612b7b2622c83118bdc1d52e48e5089491f0c253c64e06638474b1ab04f94"
+        },
+        {
+          "bytes": 18824,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/gpu.png",
+          "sha256": "15091abd1833ee4c74719205860d4a651eca99c7e730aa9abbf929f7934d44fe"
+        },
+        {
+          "bytes": 743,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/route-gpu.json",
+          "sha256": "8d7cef628408a839e6cd3d62b2b88019e65a6f8ea79c1f504564bb94cafe58da"
+        },
+        {
+          "bytes": 1408,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-gpu.json",
+          "sha256": "9a818d009966329820d5aee0b2ca01a041fafc9a471a30cc41f99c2465771c66"
+        }
+      ],
+      "claim": "Kanvas dashboard has CPU/GPU source rows suitable for a future native scene.",
+      "feature": "Path AA / stroke / clip",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "status": "source-evidence-ready"
+    },
+    {
+      "allArtifactsPresent": true,
+      "artifacts": [
+        {
+          "bytes": 533,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-rect-nearest/cpu.png",
+          "sha256": "3fb223567fea528cd9ed1bf31708f921ce4c65bb8bddac846e2a7f63794eda1f"
+        },
+        {
+          "bytes": 534,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-rect-nearest/gpu.png",
+          "sha256": "fb6031e61005fa613fca2da73d3b7715b51f87eb0c0e25db5a91380283f206e6"
+        },
+        {
+          "bytes": 771,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-rect-nearest/route-gpu.json",
+          "sha256": "e53a9eef74f7f5dd103bd098f9a437961b5e198f607bf02964688411effbe287"
+        },
+        {
+          "bytes": 1057,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-local-matrix/route-gpu.json",
+          "sha256": "226102ebf56823ef06349b01cf72a285966ee9c8151d347e6bb42f9bb38ab20a"
+        }
+      ],
+      "claim": "Bitmap rows exist with CPU/GPU artifact coverage.",
+      "feature": "image / bitmap sampling",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "status": "source-evidence-ready"
+    },
+    {
+      "allArtifactsPresent": true,
+      "artifacts": [
+        {
+          "bytes": 1440,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+          "sha256": "051090a08b8b6b89f88e54094d4b387691808877da052bbecd27fbd149cf2f87"
+        },
+        {
+          "bytes": 659,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+          "sha256": "f849c01d212cddb044e8ea701a40dce0919746bb0006c44c94ca1316b1cfdb36"
+        },
+        {
+          "bytes": 849,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json",
+          "sha256": "6e816be17228d125ce395571e178b970ff5c5e5f9e761eabf7cd4b383c4d8a39"
+        }
+      ],
+      "claim": "Bounded image-filter DAG rows exist; unsupported DAGs remain explicit refusals.",
+      "feature": "image-filter DAG",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "status": "source-evidence-ready"
+    },
+    {
+      "allArtifactsPresent": true,
+      "artifacts": [
+        {
+          "bytes": 705,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/font-latin-outline-drawstring/cpu.png",
+          "sha256": "c5ea6114b269f19f0a926a5dad68bc8b0d640f2f1b251ef3f5b70ed52625b5c1"
+        },
+        {
+          "bytes": 582,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/font-latin-outline-drawstring/route-gpu.json",
+          "sha256": "64420a859ad4e3aa9012ed12d25e698d3676e86ee25a9ac6ab745c4748e2fb69"
+        },
+        {
+          "bytes": 607,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/font-textblob-positioned-glyph-run/route-gpu.json",
+          "sha256": "50ce36ee8b7ff37718714b2715f9bf115e09598ac328971caac1719250c9637c"
+        },
+        {
+          "bytes": 514,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/route-gpu.json",
+          "sha256": "0d98f500ddbe584a154744591373839e498ad221483748186b98a9e631cc1e96"
+        }
+      ],
+      "claim": "Simple Latin glyph rows exist; complex shaping and color emoji stay refused.",
+      "feature": "text / glyph",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "status": "source-evidence-ready"
+    },
+    {
+      "allArtifactsPresent": true,
+      "artifacts": [
+        {
+          "bytes": 137,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/gpu.png",
+          "sha256": "ebe02361e7d7a989211d75d087d2d8e23f053b23ebc83fc00c58a0b8db3a49e4"
+        },
+        {
+          "bytes": 858,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/route-gpu.json",
+          "sha256": "b598db8a9855a2331507cef9a2b3035f4def8c8a7e37836415836b1708dc7462"
+        },
+        {
+          "bytes": 1059,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/src-over-stack/route-gpu.json",
+          "sha256": "71b395044d39bbf66e16fc0203af12dbb1e43bf25b8a881892ce7d0dcee6e978"
+        }
+      ],
+      "claim": "Blend/color-filter source rows exist for future interactive toggles.",
+      "feature": "blend / color filter",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "status": "source-evidence-ready"
+    },
+    {
+      "allArtifactsPresent": true,
+      "artifacts": [
+        {
+          "bytes": 226,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu.png",
+          "sha256": "ca74dee240abcdc1e6a0ce036d4ec1875224b00d91110b140f0a07f0a9cfca55"
+        },
+        {
+          "bytes": 922,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json",
+          "sha256": "c360be8d6a31ac933f100f6eabfd02df7bc6bfc7adaf482ac5fe857cddc95aa9"
+        }
+      ],
+      "claim": "Registered runtime-effect source row exists; live parameter editing is not wired.",
+      "feature": "runtime-effect controls",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "status": "source-evidence-ready"
+    }
+  ],
+  "generatedAt": "2026-06-01T12:23:10Z",
+  "generatedBy": "scripts/m68_kadre_demo_evidence.py",
+  "linearIssues": [
+    "FOR-50",
+    "FOR-51",
+    "FOR-52",
+    "FOR-53"
+  ],
+  "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+  "nativePresented": false,
+  "scene": "m68-flagship-kadre-native-demo",
+  "schemaVersion": 1
+}

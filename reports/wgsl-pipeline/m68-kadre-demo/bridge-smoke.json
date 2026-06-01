@@ -1,0 +1,24 @@
+{
+  "claimLevel": "bridge-smoke",
+  "environment": {
+    "cwd": "/private/tmp/kanvas-m67-m68",
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "python": "3.14.5"
+  },
+  "failures": [],
+  "generatedAt": "2026-06-01T12:23:10Z",
+  "generatedBy": "scripts/m68_kadre_demo_evidence.py",
+  "linearIssues": [
+    "FOR-50",
+    "FOR-51",
+    "FOR-52",
+    "FOR-53"
+  ],
+  "nativeLaunch": {
+    "nonClaim": "No Kadre-hosted Kanvas frame loop or native screenshot was generated.",
+    "reason": "m68.kadre-host-adapter-not-implemented",
+    "status": "blocked"
+  },
+  "schemaVersion": 1,
+  "status": "pass"
+}

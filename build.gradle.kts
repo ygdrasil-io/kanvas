@@ -895,6 +895,99 @@ tasks.register("pipelineM65RuntimeSmoke") {
     }
 }
 
+tasks.register("pipelineM67PerformanceTiering") {
+    group = "verification"
+    description = "Generates M67 frame gate candidate and family performance budget artifacts from M65 telemetry."
+
+    dependsOn("pipelineM65RuntimeSmoke")
+
+    val scriptFile = layout.projectDirectory.file("scripts/m67_performance_tiering.py")
+    val telemetryFile = layout.projectDirectory.file("reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/performance/m67-performance-tiering")
+    inputs.file(scriptFile)
+    inputs.file(telemetryFile)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--telemetry",
+                telemetryFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
+tasks.register("pipelineM67PerformanceTieringNegative") {
+    group = "verification"
+    description = "Runs the M67 deterministic negative fixture for quarantine/rebaseline behavior."
+
+    dependsOn("pipelineM65RuntimeSmoke")
+
+    val scriptFile = layout.projectDirectory.file("scripts/m67_performance_tiering.py")
+    val telemetryFile = layout.projectDirectory.file("reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/performance/m67-performance-tiering-negative")
+    inputs.file(scriptFile)
+    inputs.file(telemetryFile)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--telemetry",
+                telemetryFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.asFile.relativeTo(rootDir).path,
+                "--fixture",
+                "negative-quarantine",
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
+tasks.register("pipelineM68KadreDemoEvidence") {
+    group = "verification"
+    description = "Generates M68 Kadre native demo bridge-smoke evidence and explicit native-launch blocker."
+
+    dependsOn("pipelineM65RuntimeSmoke")
+
+    val scriptFile = layout.projectDirectory.file("scripts/m68_kadre_demo_evidence.py")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m68-kadre-demo")
+    inputs.file(scriptFile)
+    inputs.file(layout.projectDirectory.file(".gitmodules"))
+    inputs.file(layout.projectDirectory.file("settings.gradle.kts"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke"))
+    outputs.dir(outputDir)
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m68-kadre-demo-evidence.md"))
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--output-dir",
+                outputDir.asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineGeneratedSceneExport") {
     group = "verification"
     description = "Materializes generated WGSL scene result artifacts into the dashboard export layout."
@@ -4141,6 +4234,9 @@ tasks.register("pipelinePmBundle") {
         "pipelineDashboardFrontQa",
         "pipelinePerformanceTrendWarnings",
         "pipelinePerformanceReleaseGate",
+        "pipelineM67PerformanceTiering",
+        "pipelineM67PerformanceTieringNegative",
+        "pipelineM68KadreDemoEvidence",
         "pipelineSkiaGmInventoryGate",
     )
 
@@ -4150,6 +4246,9 @@ tasks.register("pipelinePmBundle") {
     val frontQaDir = layout.buildDirectory.dir("reports/wgsl-pipeline-front-qa")
     val performanceWarningsDir = layout.buildDirectory.dir("reports/wgsl-pipeline-performance-warnings")
     val performanceReleaseGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-performance-release-gate")
+    val m67PerformanceDir = layout.projectDirectory.dir("reports/wgsl-pipeline/performance/m67-performance-tiering")
+    val m67PerformanceNegativeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/performance/m67-performance-tiering-negative")
+    val m68KadreDemoDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m68-kadre-demo")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4160,12 +4259,17 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(frontQaDir)
     inputs.dir(performanceWarningsDir)
     inputs.dir(performanceReleaseGateDir)
+    inputs.dir(m67PerformanceDir)
+    inputs.dir(m67PerformanceNegativeDir)
+    inputs.dir(m68KadreDemoDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-kadre-audit.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-runtime-smoke.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m65-m66-sprint-report-and-readiness-accounting.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m68-kadre-demo-evidence.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m67-m68-sprint-report-and-readiness-accounting.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
@@ -4183,6 +4287,9 @@ tasks.register("pipelinePmBundle") {
         val frontQaRoot = frontQaDir.get().asFile
         val performanceWarningsRoot = performanceWarningsDir.get().asFile
         val performanceReleaseGateRoot = performanceReleaseGateDir.get().asFile
+        val m67PerformanceRoot = m67PerformanceDir.asFile
+        val m67PerformanceNegativeRoot = m67PerformanceNegativeDir.asFile
+        val m68KadreDemoRoot = m68KadreDemoDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4222,6 +4329,15 @@ tasks.register("pipelinePmBundle") {
         }
         if (performanceReleaseGateRoot.isDirectory) {
             performanceReleaseGateRoot.copyRecursively(targetRoot.resolve("performance-release-gate"), overwrite = true)
+        }
+        if (m67PerformanceRoot.isDirectory) {
+            m67PerformanceRoot.copyRecursively(targetRoot.resolve("performance/m67-performance-tiering"), overwrite = true)
+        }
+        if (m67PerformanceNegativeRoot.isDirectory) {
+            m67PerformanceNegativeRoot.copyRecursively(targetRoot.resolve("performance/m67-performance-tiering-negative"), overwrite = true)
+        }
+        if (m68KadreDemoRoot.isDirectory) {
+            m68KadreDemoRoot.copyRecursively(targetRoot.resolve("runtime/m68-kadre-demo"), overwrite = true)
         }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
@@ -4273,10 +4389,12 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-05-31-m59-sprint-review.md",
             "reports/wgsl-pipeline/2026-05-31-m59-non-claims.md",
             "reports/wgsl-pipeline/2026-06-01-m65-kadre-audit.md",
-            "reports/wgsl-pipeline/2026-06-01-m65-runtime-smoke.md",
-            "reports/wgsl-pipeline/2026-06-01-m65-m66-sprint-report-and-readiness-accounting.md",
-            "reports/wgsl-pipeline/2026-06-01-m66-readiness-counters.md",
-        )
+                "reports/wgsl-pipeline/2026-06-01-m65-runtime-smoke.md",
+                "reports/wgsl-pipeline/2026-06-01-m65-m66-sprint-report-and-readiness-accounting.md",
+                "reports/wgsl-pipeline/2026-06-01-m66-readiness-counters.md",
+                "reports/wgsl-pipeline/2026-06-01-m68-kadre-demo-evidence.md",
+                "reports/wgsl-pipeline/2026-06-01-m67-m68-sprint-report-and-readiness-accounting.md",
+            )
         referencedPaths += m56ReportPaths
 
         val unavailable = mutableListOf<Map<String, String>>()
@@ -4573,6 +4691,82 @@ tasks.register("pipelinePmBundle") {
                 )
             }
             .orEmpty()
+        val m67FrameGateFile = m67PerformanceRoot.resolve("m67-frame-gate-candidate.json")
+        val m67FrameGateReport = if (m67FrameGateFile.isFile) {
+            JsonSlurper().parse(m67FrameGateFile) as? Map<*, *>
+                ?: throw GradleException("M67 frame gate candidate report must be a JSON object: ${m67FrameGateFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
+        val m67FamilyBudgetFile = m67PerformanceRoot.resolve("m67-family-budgets.json")
+        val m67FamilyBudgetReport = if (m67FamilyBudgetFile.isFile) {
+            JsonSlurper().parse(m67FamilyBudgetFile) as? Map<*, *>
+                ?: throw GradleException("M67 family budget report must be a JSON object: ${m67FamilyBudgetFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
+        val m67NegativeFixtureFile = m67PerformanceNegativeRoot.resolve("m67-negative-fixture.json")
+        val m67NegativeFixtureReport = if (m67NegativeFixtureFile.isFile) {
+            JsonSlurper().parse(m67NegativeFixtureFile) as? Map<*, *>
+                ?: throw GradleException("M67 negative fixture report must be a JSON object: ${m67NegativeFixtureFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
+        val m67FrameGateCounters = (m67FrameGateReport["counters"] as? Map<*, *>).orEmpty()
+        val m67FamilyBudgetCounters = (m67FamilyBudgetReport["counters"] as? Map<*, *>).orEmpty()
+        val m67FamilyBudgetRows = (m67FamilyBudgetReport["families"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?.map {
+                mapOf(
+                    "family" to (it["family"] as? String).orEmpty(),
+                    "tier" to (it["tier"] as? String).orEmpty(),
+                    "status" to (it["status"] as? String).orEmpty(),
+                    "measured" to (it["measured"] as? Boolean ?: false),
+                    "lane" to (it["lane"] as? String).orEmpty(),
+                )
+            }
+            .orEmpty()
+        val m68BridgeSmokeFile = m68KadreDemoRoot.resolve("bridge-smoke.json")
+        val m68BridgeSmokeReport = if (m68BridgeSmokeFile.isFile) {
+            JsonSlurper().parse(m68BridgeSmokeFile) as? Map<*, *>
+                ?: throw GradleException("M68 bridge-smoke report must be a JSON object: ${m68BridgeSmokeFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
+        val m68KadreAuditFile = m68KadreDemoRoot.resolve("kadre-host-audit.json")
+        val m68KadreAuditReport = if (m68KadreAuditFile.isFile) {
+            JsonSlurper().parse(m68KadreAuditFile) as? Map<*, *>
+                ?: throw GradleException("M68 Kadre audit report must be a JSON object: ${m68KadreAuditFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
+        val m68RouteSummaryFile = m68KadreDemoRoot.resolve("route-summary.json")
+        val m68RouteSummaryReport = if (m68RouteSummaryFile.isFile) {
+            JsonSlurper().parse(m68RouteSummaryFile) as? Map<*, *>
+                ?: throw GradleException("M68 route summary report must be a JSON object: ${m68RouteSummaryFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
+        val m68FlagshipSceneFile = m68KadreDemoRoot.resolve("flagship-scene-evidence.json")
+        val m68FlagshipSceneReport = if (m68FlagshipSceneFile.isFile) {
+            JsonSlurper().parse(m68FlagshipSceneFile) as? Map<*, *>
+                ?: throw GradleException("M68 flagship scene report must be a JSON object: ${m68FlagshipSceneFile.relativeTo(rootDir)}")
+        } else {
+            emptyMap<String, Any>()
+        }
+        val m68NativeLaunch = (m68BridgeSmokeReport["nativeLaunch"] as? Map<*, *>).orEmpty()
+        val m68HostContract = (m68KadreAuditReport["hostContract"] as? Map<*, *>).orEmpty()
+        val m68FeatureRows = (m68FlagshipSceneReport["features"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?.map {
+                mapOf(
+                    "feature" to (it["feature"] as? String).orEmpty(),
+                    "status" to (it["status"] as? String).orEmpty(),
+                    "nativePresented" to (it["nativePresented"] as? Boolean ?: false),
+                    "allArtifactsPresent" to (it["allArtifactsPresent"] as? Boolean ?: false),
+                )
+            }
+            .orEmpty()
         val m52RejectedRows = listOf(
             mapOf("inventoryId" to "skia-gm-animatedgif", "reason" to "Codec/animation dependency remains gated."),
             mapOf("inventoryId" to "skia-gm-animcodecplayerexif", "reason" to "Codec/EXIF dependency remains gated."),
@@ -4644,6 +4838,18 @@ tasks.register("pipelinePmBundle") {
             "m55PerformanceGateCandidateJson" to "performance/m55-performance-gate-candidate.json",
             "m59PerformanceReleaseGateReport" to "performance-release-gate/m59-performance-release-gate.md",
             "m59PerformanceReleaseGateJson" to "performance-release-gate/m59-performance-release-gate.json",
+            "m67PerformanceTieringReport" to "performance/m67-performance-tiering/m67-frame-gate-candidate.md",
+            "m67PerformanceTieringJson" to "performance/m67-performance-tiering/m67-frame-gate-candidate.json",
+            "m67FamilyBudgetsReport" to "performance/m67-performance-tiering/m67-family-budgets.md",
+            "m67FamilyBudgetsJson" to "performance/m67-performance-tiering/m67-family-budgets.json",
+            "m67NegativeFixtureReport" to "performance/m67-performance-tiering-negative/m67-negative-fixture.md",
+            "m67NegativeFixtureJson" to "performance/m67-performance-tiering-negative/m67-negative-fixture.json",
+            "m68KadreDemoReport" to "reports/wgsl-pipeline/2026-06-01-m68-kadre-demo-evidence.md",
+            "m68KadreDemoAuditJson" to "runtime/m68-kadre-demo/kadre-host-audit.json",
+            "m68KadreDemoBridgeSmokeJson" to "runtime/m68-kadre-demo/bridge-smoke.json",
+            "m68KadreDemoRouteSummaryJson" to "runtime/m68-kadre-demo/route-summary.json",
+            "m68KadreDemoFlagshipSceneJson" to "runtime/m68-kadre-demo/flagship-scene-evidence.json",
+            "m68KadreDemoTelemetryOverlayJson" to "runtime/m68-kadre-demo/telemetry-overlay-sample.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -4735,6 +4941,47 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to true,
                 "notice" to "M59 blocks every selected final-target lane with missing required measured metadata or explicit threshold breaches; estimated and missing metrics remain visible but are not treated as measured evidence.",
             ),
+            "m67PerformanceTiering" to linkedMapOf<String, Any>(
+                "frameRows" to ((m67FrameGateCounters["rows"] as? Number)?.toInt() ?: 0),
+                "candidateRows" to ((m67FrameGateCounters["candidateRows"] as? Number)?.toInt()
+                    ?: ((m67FrameGateCounters["rows"] as? Number)?.toInt() ?: 0)),
+                "passRows" to ((m67FrameGateCounters["passRows"] as? Number)?.toInt() ?: 0),
+                "warnRows" to ((m67FrameGateCounters["warnRows"] as? Number)?.toInt() ?: 0),
+                "failRows" to ((m67FrameGateCounters["failRows"] as? Number)?.toInt() ?: 0),
+                "quarantineRows" to ((m67FrameGateCounters["quarantineRows"] as? Number)?.toInt() ?: 0),
+                "statusCounters" to (m67FrameGateCounters["status"] ?: emptyMap<String, Any>()),
+                "families" to ((m67FamilyBudgetCounters["families"] as? Number)?.toInt() ?: m67FamilyBudgetRows.size),
+                "measuredFamilies" to ((m67FamilyBudgetCounters["measuredFamilies"] as? Number)?.toInt() ?: 0),
+                "reportingOnlyFamilies" to ((m67FamilyBudgetCounters["reportingOnlyFamilies"] as? Number)?.toInt() ?: 0),
+                "familyRowsDetail" to m67FamilyBudgetRows,
+                "negativeFixtureExpectedStatus" to ((m67NegativeFixtureReport["expectedStatus"] as? String).orEmpty()),
+                "frameGateReport" to "performance/m67-performance-tiering/m67-frame-gate-candidate.md",
+                "frameGateJson" to "performance/m67-performance-tiering/m67-frame-gate-candidate.json",
+                "familyBudgetReport" to "performance/m67-performance-tiering/m67-family-budgets.md",
+                "familyBudgetJson" to "performance/m67-performance-tiering/m67-family-budgets.json",
+                "negativeFixtureReport" to "performance/m67-performance-tiering-negative/m67-negative-fixture.md",
+                "negativeFixtureJson" to "performance/m67-performance-tiering-negative/m67-negative-fixture.json",
+                "releaseBlocking" to false,
+                "notice" to "M67 promotes frame.headless-webgpu to a candidate gate from M65 headless telemetry and adds family budgets; native Kadre timing remains reporting-only until M68 real window evidence exists.",
+            ),
+            "m68KadreDemo" to linkedMapOf<String, Any>(
+                "claimLevel" to ((m68BridgeSmokeReport["claimLevel"] as? String).orEmpty()),
+                "bridgeSmokeStatus" to ((m68BridgeSmokeReport["status"] as? String).orEmpty()),
+                "nativeLaunchStatus" to ((m68NativeLaunch["status"] as? String).orEmpty()),
+                "nativeLaunchReason" to ((m68NativeLaunch["reason"] as? String).orEmpty()),
+                "hostContractCapabilities" to m68HostContract.keys.map { it.toString() }.sorted(),
+                "featureRows" to m68FeatureRows.size,
+                "featureRowsDetail" to m68FeatureRows,
+                "routeSummaryStatus" to (((m68RouteSummaryReport["nativeRoute"] as? Map<*, *>)?.get("status") as? String).orEmpty()),
+                "report" to "reports/wgsl-pipeline/2026-06-01-m68-kadre-demo-evidence.md",
+                "auditJson" to "runtime/m68-kadre-demo/kadre-host-audit.json",
+                "bridgeSmokeJson" to "runtime/m68-kadre-demo/bridge-smoke.json",
+                "routeSummaryJson" to "runtime/m68-kadre-demo/route-summary.json",
+                "flagshipSceneJson" to "runtime/m68-kadre-demo/flagship-scene-evidence.json",
+                "telemetryOverlayJson" to "runtime/m68-kadre-demo/telemetry-overlay-sample.json",
+                "releaseBlocking" to false,
+                "notice" to "M68 verifies the Kadre source-build bridge and flagship scene inputs, but native Kanvas/Kadre presentation remains blocked with m68.kadre-host-adapter-not-implemented.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -4811,6 +5058,8 @@ tasks.register("pipelinePmBundle") {
                 "M56 promotes one corrected sweep-gradient row only; two-point conical gradients, arbitrary image-filter DAGs, picture prepass support, broad Path AA, dash, stroke, and complex clip remain outside this bundle's claims.",
                 "M57 promotes one bounded AA clip grid slice only; broad aaclip, broad Path AA, dash, cap, join, stroke-outline, complex clip, large clipped paths, and edge-budget increases remain outside this bundle's claims.",
                 "M66 promotes a cumulative GM/reference wave only where generated artifacts, routes, stats, and referenceKind provenance exist; inventory-only candidates still do not count as support.",
+                "M67 adds a frame gate candidate and family budget inventory from M65 headless/offscreen telemetry; only one family is measured and native Kadre timing remains reporting-only.",
+                "M68 verifies Kadre source-build bridge evidence and flagship scene inputs, but native Kanvas/Kadre window presentation remains blocked until a host adapter exists.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -4839,6 +5088,9 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M55 performance gate candidate counters live in `manifest.json` under `m55PerformanceGateCandidate`; reports are bundled under `performance/`.")
                 appendLine("- `performance-release-gate/`: M59 measured final-target release gate JSON and Markdown reports.")
                 appendLine("- M59 performance release gate counters live in `manifest.json` under `m59PerformanceReleaseGate`.")
+                appendLine("- `performance/m67-performance-tiering/`: M67 frame gate candidate, baseline, and family budget reports.")
+                appendLine("- `performance/m67-performance-tiering-negative/`: M67 deterministic quarantine/rebaseline negative fixture reports.")
+                appendLine("- M67 performance tiering counters live in `manifest.json` under `m67PerformanceTiering`.")
                 appendLine("- `inventory/`: M51 Skia GM inventory JSON and Markdown. Inventory rows are not support claims.")
                 appendLine("- `inventory-gate/`: M51 inventory validation reports and mismatch snapshot.")
                 appendLine("- M52 inventory promotion counters live in `manifest.json` under `m52InventoryPromotion`.")
@@ -4846,6 +5098,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M54 hard feature depth counters live in `manifest.json` under `m54HardFeatureDepth`.")
                 appendLine("- `runtime/m65-runtime-smoke/`: M65 reporting-only runtime smoke telemetry and nonblank frame artifacts.")
                 appendLine("- M65 runtime counters live in `manifest.json` under `m65RuntimeSmoke`.")
+                appendLine("- `runtime/m68-kadre-demo/`: M68 Kadre source-build bridge smoke, host-contract audit, route summary, flagship scene inputs, and telemetry overlay sample.")
+                appendLine("- M68 Kadre demo counters live in `manifest.json` under `m68KadreDemo`; native launch remains blocked until the Kanvas/Kadre host adapter is implemented.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }

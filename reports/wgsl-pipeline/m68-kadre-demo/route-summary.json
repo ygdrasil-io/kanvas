@@ -1,0 +1,59 @@
+{
+  "bridgeRoute": {
+    "reason": "none",
+    "route": "kadre.source-build.contract-audit",
+    "status": "pass"
+  },
+  "featureRoutes": [
+    {
+      "feature": "animated transform",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "sourceEvidenceStatus": "bridge-smoke"
+    },
+    {
+      "feature": "Path AA / stroke / clip",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "sourceEvidenceStatus": "source-evidence-ready"
+    },
+    {
+      "feature": "image / bitmap sampling",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "sourceEvidenceStatus": "source-evidence-ready"
+    },
+    {
+      "feature": "image-filter DAG",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "sourceEvidenceStatus": "source-evidence-ready"
+    },
+    {
+      "feature": "text / glyph",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "sourceEvidenceStatus": "source-evidence-ready"
+    },
+    {
+      "feature": "blend / color filter",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "sourceEvidenceStatus": "source-evidence-ready"
+    },
+    {
+      "feature": "runtime-effect controls",
+      "nativePresentationReason": "m68.kadre-host-adapter-not-implemented",
+      "nativePresented": false,
+      "sourceEvidenceStatus": "source-evidence-ready"
+    }
+  ],
+  "generatedAt": "2026-06-01T12:23:10Z",
+  "generatedBy": "scripts/m68_kadre_demo_evidence.py",
+  "nativeRoute": {
+    "reason": "m68.kadre-host-adapter-not-implemented",
+    "route": "kadre.native.windowed",
+    "status": "blocked"
+  },
+  "schemaVersion": 1
+}
