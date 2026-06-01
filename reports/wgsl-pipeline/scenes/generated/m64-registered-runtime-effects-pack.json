@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "pipelineM64RegisteredRuntimeEffectsPack",
+  "description": "M64 registered runtime-effect contract. Rows are materialized from existing runtime-effect evidence and do not claim arbitrary SkSL compilation or unregistered effect approximation.",
+  "artifactSourceRoot": "reports/wgsl-pipeline/scenes/artifacts",
+  "sourceReport": "reports/wgsl-pipeline/2026-06-01-m64-runtime-effect-audit.md",
+  "selectedReport": "reports/wgsl-pipeline/2026-06-01-m64-runtime-effect-audit.md",
+  "selectedCandidateCount": 3,
+  "outputEvidenceDir": "wgsl-pipeline-m64-generated",
+  "outputDescription": "M64 registered runtime-effect generated dashboard rows materialized from descriptor-backed and dispatch-only runtime-effect support matrix evidence.",
+  "outputManifest": "data/m64-generated-scenes.json",
+  "scenes": [
+    {
+      "id": "m64-simple-rt-descriptor-backed",
+      "title": "M64 SimpleRT descriptor-backed shader",
+      "family": "registered runtime effects",
+      "status": "pass",
+      "linearIssue": "FOR-27",
+      "baseArtifactScene": "runtime-effect-simple",
+      "referenceKind": "test-oracle",
+      "cpuRoute": "cpu.runtime-effect.descriptor.simple_rt",
+      "gpuRoute": "webgpu.runtime-effect.descriptor.simple_rt",
+      "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl parserReflected=true uniforms=gColor@0 state=[blendMode=kSrcOver] milestone=M64",
+      "fallbackReason": "none",
+      "pixels": 4096,
+      "matchingPixels": 4096,
+      "threshold": 99.95,
+      "gpuRouteDetails": {
+        "runtimeEffectStableId": "runtime.simple_rt",
+        "wgslImplementationId": "wgsl/runtime_simple_rt",
+        "parserEvidence": "RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms",
+        "uniformLayout": {
+          "gColor": 0
+        },
+        "uniformBytes": 16,
+        "supportMatrix": "reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md"
+      },
+      "cpuRouteDetails": {
+        "runtimeEffectStableId": "runtime.simple_rt",
+        "cpuImplementationId": "kotlin/simple_rt",
+        "uniforms": ["gColor:kFloat4"],
+        "children": []
+      },
+      "nonClaim": "Promotes only the registered SimpleRT descriptor-backed shader with reflected gColor uniform layout; arbitrary SkSL, unregistered effects, runtime-effect color filters, blenders, and image filters remain out of scope.",
+      "tags": ["source.generated", "feature.runtime-effect", "feature.coverage.analytic-rect", "route.cpu.descriptor", "route.gpu.webgpu", "reference.test-oracle", "maturity.generated-evidence", "maturity.adapter-backed", "risk.none"]
+    },
+    {
+      "id": "m64-spiral-rt-wgsl-descriptor-refusal",
+      "title": "M64 SpiralRT WGSL descriptor refusal",
+      "family": "registered runtime effects",
+      "status": "expected-unsupported",
+      "linearIssue": "FOR-29",
+      "baseArtifactScene": "runtime-effect-support-matrix",
+      "allowArtifactOnlyBase": true,
+      "policyOnlyArtifacts": true,
+      "sourceTask": "runtime-effect-support-matrix",
+      "sourceTest": "RuntimeEffectDescriptorWebGpuTest#registered runtime shader without WGSL descriptor fails with stable diagnostic",
+      "sourceReport": "reports/wgsl-pipeline/2026-06-01-m64-runtime-effect-audit.md",
+      "referenceKind": "test-oracle",
+      "cpuRoute": "cpu.runtime-effect.dispatch.spiral_rt",
+      "gpuRoute": "webgpu.runtime-effect.refuse.missing-wgsl-descriptor",
+      "pipelineKey": "runtimeEffect=SpiralRT descriptor=missing wgslImplementationId=missing milestone=M64",
+      "fallbackReason": "runtime-effect.wgsl-descriptor-missing",
+      "pixels": 4096,
+      "matchingPixels": 0,
+      "threshold": 0,
+      "policyArtifactDescription": "Policy-only refusal artifact for registered SpiralRT without a WGSL descriptor. It intentionally is not a SimpleRT render.",
+      "gpuRouteDetails": {
+        "runtimeEffectStableId": "runtime.spiral_rt",
+        "wgslImplementationId": "missing",
+        "parserEvidence": "not available; support matrix classifies SpiralRT as dispatch-only/missing-descriptor",
+        "supportMatrix": "reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md"
+      },
+      "cpuRouteDetails": {
+        "runtimeEffectStableId": "runtime.spiral_rt",
+        "cpuImplementationId": "kotlin/spiral_rt",
+        "uniforms": ["rad_scale:kFloat", "in_center:kFloat2", "in_colors0:kFloat4", "in_colors1:kFloat4"],
+        "children": []
+      },
+      "nonClaim": "Documents that SpiralRT remains dispatch-only without a registered WGSL descriptor; it does not claim GPU support or arbitrary runtime-effect lowering.",
+      "tags": ["source.generated", "feature.runtime-effect", "route.cpu.descriptor", "route.gpu.expected-unsupported", "reference.test-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]
+    },
+    {
+      "id": "m64-arbitrary-sksl-runtime-effect-refusal",
+      "title": "M64 arbitrary SkSL runtime-effect refusal",
+      "family": "registered runtime effects",
+      "status": "expected-unsupported",
+      "linearIssue": "FOR-29",
+      "baseArtifactScene": "runtime-effect-support-matrix",
+      "allowArtifactOnlyBase": true,
+      "policyOnlyArtifacts": true,
+      "sourceTask": "runtime-effect-support-matrix",
+      "sourceTest": "arbitrary SkSL runtime-effect policy boundary",
+      "sourceReport": "reports/wgsl-pipeline/2026-06-01-m64-runtime-effect-audit.md",
+      "referenceKind": "test-oracle",
+      "cpuRoute": "cpu.runtime-effect.refuse.arbitrary-sksl",
+      "cpuStatus": "expected-unsupported",
+      "cpuFallbackReason": "runtime-effect.arbitrary-sksl-unsupported",
+      "gpuRoute": "webgpu.runtime-effect.refuse.arbitrary-sksl",
+      "pipelineKey": "runtimeEffect=unknown source=arbitrarySkSL descriptor=missing milestone=M64",
+      "fallbackReason": "runtime-effect.arbitrary-sksl-unsupported",
+      "pixels": 4096,
+      "matchingPixels": 0,
+      "threshold": 0,
+      "policyArtifactDescription": "Policy-only refusal artifact for arbitrary user SkSL. It intentionally is not a SimpleRT render.",
+      "gpuRouteDetails": {
+        "runtimeEffectStableId": "unregistered",
+        "wgslImplementationId": "missing",
+        "parserEvidence": "not applicable; Kanvas does not compile arbitrary SkSL to WGSL",
+        "supportMatrix": "reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md"
+      },
+      "cpuRouteDetails": {
+        "runtimeEffectStableId": "unregistered",
+        "cpuImplementationId": "missing",
+        "uniforms": [],
+        "children": []
+      },
+      "nonClaim": "Documents that arbitrary SkSL sources remain unsupported; Kanvas does not rebuild Skia's SkSL compiler, IR, VM, or silent approximation path.",
+      "tags": ["source.generated", "feature.runtime-effect", "route.cpu.expected-unsupported", "route.gpu.expected-unsupported", "reference.test-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]
+    }
+  ]
+}

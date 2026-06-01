@@ -8,6 +8,8 @@ import copy
 import json
 import shutil
 import subprocess
+import struct
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +69,55 @@ def copy_required(source: Path, target: Path, scene_id: str, artifact: str) -> N
     shutil.copy2(source, target)
 
 
+def write_rgba_png(path: Path, width: int, height: int, rgba: tuple[int, int, int, int]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = bytes(rgba) * width
+    raw = b"".join(b"\x00" + row for _ in range(height))
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + kind
+            + data
+            + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+        )
+
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+
+
+def write_policy_artifacts(target_root: Path, scene_id: str, scene: dict[str, Any]) -> None:
+    width = as_int(scene.get("policyArtifactWidth"), 64)
+    height = as_int(scene.get("policyArtifactHeight"), 64)
+    colors = scene.get("policyArtifactColors", {})
+    if not isinstance(colors, dict):
+        colors = {}
+
+    def color(name: str, fallback: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+        value = colors.get(name)
+        if isinstance(value, list) and len(value) == 4 and all(isinstance(v, int) for v in value):
+            return tuple(max(0, min(255, v)) for v in value)  # type: ignore[return-value]
+        return fallback
+
+    write_rgba_png(target_root / "skia.png", width, height, color("skia", (80, 80, 88, 255)))
+    write_rgba_png(target_root / "cpu.png", width, height, color("cpu", (64, 72, 96, 255)))
+    write_rgba_png(target_root / "cpu-diff.png", width, height, color("cpu-diff", (0, 0, 0, 255)))
+    write_json(
+        target_root / "policy-artifact.json",
+        {
+            "sceneId": scene_id,
+            "kind": "policy-only-expected-unsupported",
+            "reason": scene["fallbackReason"],
+            "description": scene.get("policyArtifactDescription", ""),
+            "nonClaim": scene.get("nonClaim", ""),
+        },
+    )
+
+
 def as_int(value: Any, default: int) -> int:
     return value if isinstance(value, int) else default
 
@@ -114,9 +165,10 @@ def materialize_scene(
     fallback_reason = scene["fallbackReason"]
     scene_source_report = scene.get("sourceReport", source_report)
     scene_selected_report = scene.get("selectedReport", selected_report)
+    policy_only_artifacts = bool(scene.get("policyOnlyArtifacts"))
     base_row = base_rows.get(base_scene_id)
     if base_row is None:
-        if not scene.get("allowArtifactOnlyBase"):
+        if not scene.get("allowArtifactOnlyBase") and not policy_only_artifacts:
             raise SystemExit(f"{scene_id}: base generated scene `{base_scene_id}` is missing")
         base_generation = {
             "sourceTask": scene.get("sourceTask", ""),
@@ -131,8 +183,13 @@ def materialize_scene(
     source_root = artifact_root / base_scene_id
     target_root = output_root / "artifacts" / scene_id
     required = PASS_ARTIFACTS if status == "pass" else UNSUPPORTED_ARTIFACTS
-    for artifact in required:
-        copy_required(source_root / artifact, target_root / artifact, scene_id, artifact)
+    if policy_only_artifacts:
+        if status != "expected-unsupported":
+            raise SystemExit(f"{scene_id}: policyOnlyArtifacts is only supported for expected-unsupported rows")
+        write_policy_artifacts(target_root, scene_id, scene)
+    else:
+        for artifact in required:
+            copy_required(source_root / artifact, target_root / artifact, scene_id, artifact)
     font_diagnostics = source_root / "font-diagnostics.json"
     if font_diagnostics.is_file():
         copy_required(font_diagnostics, target_root / "font-diagnostics.json", scene_id, "font-diagnostics.json")
@@ -148,7 +205,7 @@ def materialize_scene(
 
     cpu_route = {
         "selectedRoute": scene["cpuRoute"],
-        "fallbackReason": "none",
+        "fallbackReason": scene.get("cpuFallbackReason", "none"),
         "generatedBy": generated_by,
         "derivedFromGeneratedScene": base_scene_id,
         "hardFeatureFamily": scene["family"],
@@ -209,6 +266,8 @@ def materialize_scene(
     if isinstance(inventory_id, str) and inventory_id:
         stats["inventoryId"] = inventory_id
     stats.update(stats_details)
+    if policy_only_artifacts:
+        stats["policyOnlyArtifact"] = True
     write_json(target_root / "route-cpu.json", cpu_route)
     write_json(target_root / "route-gpu.json", gpu_route)
     write_json(target_root / "stats.json", stats)
@@ -219,7 +278,7 @@ def materialize_scene(
 
     artifact_prefix = f"artifacts/{scene_id}"
     cpu: dict[str, Any] = {
-        "status": "pass",
+        "status": scene.get("cpuStatus", "pass"),
         "artifactStatus": "produced",
         "image": f"{artifact_prefix}/cpu.png",
         "diff": f"{artifact_prefix}/cpu-diff.png",
@@ -232,7 +291,7 @@ def materialize_scene(
         },
         "route": {
             "selectedRoute": scene["cpuRoute"],
-            "fallbackReason": "none",
+            "fallbackReason": scene.get("cpuFallbackReason", "none"),
         },
         "stats": {
             "pixels": pixels,
@@ -371,6 +430,10 @@ def materialize_scene(
         row["graphDiagnostics"] = f"{artifact_prefix}/graph-diagnostics.json"
         row["evidence"].append(f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/graph-diagnostics.json")
         row["evidence"].append(scene.get("graphDiagnosticsReport", M61_GRAPH_DIAGNOSTICS_REPORT))
+    if policy_only_artifacts:
+        row["policyArtifact"] = f"{artifact_prefix}/policy-artifact.json"
+        row["evidence"].append(f"{artifact_prefix}/policy-artifact.json")
+        row["evidence"].append(f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/policy-artifact.json")
     row["evidence"] = unique_strings(row["evidence"])
     if status == "pass":
         row["diffs"]["gpu"] = f"{artifact_prefix}/gpu-diff.png"
