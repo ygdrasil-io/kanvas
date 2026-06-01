@@ -103,6 +103,36 @@ Root-cause buckets:
 - unsupported fallback accidentally routed as support;
 - reference mismatch.
 
+## M86 Fidelity Burn-Down Wave 2
+
+M86 is the first post-M85 burn-down pass over the cumulative M66 GM/reference
+wave. It is not allowed to improve the PM readiness score merely by
+reclassifying evidence. It may move readiness only when a later patch adds new
+generated support rows, Skia-comparable references, measured gates, or
+before/after rendered artifacts for a visual fix.
+
+Required M86 evidence:
+
+- ranked candidate list with family, `referenceKind`, expected GPU route, PM
+  value, and risk;
+- full support/refusal row preservation from the selected generated evidence;
+- root-cause classification for visible diffs and expected unsupported rows;
+- explicit high-value remediation targets;
+- statement that CPU-oracle rows do not count as Skia-comparable fidelity;
+- statement that no global threshold was weakened;
+- sprint report explaining whether renderer fixes were actually applied.
+
+For a row to count as "fixed" in M86 or later, the evidence must include:
+
+- the row id and root cause;
+- before and after CPU/GPU/reference/diff artifacts;
+- old and new similarity/threshold payloads;
+- family-specific threshold rationale when changed;
+- dashboard gate output with 0 `tracked-gap` and 0 unexpected `fail`.
+
+If no renderer fix is included, the sprint must say that clearly and treat the
+output as burn-down planning evidence, not a completed visual correction.
+
 ## Threshold Policy
 
 Do not lower thresholds globally. Threshold changes must be:
