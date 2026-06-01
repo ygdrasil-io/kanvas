@@ -147,12 +147,12 @@ internal data class NativeSmokeResult(
             appendLine("    \"id\": ${sceneContractId.json()},")
             appendLine("    \"version\": $sceneContractVersion,")
             appendLine("    \"owner\": ${SCENE_CONTRACT_OWNER.json()},")
-            appendLine("    \"milestone\": ${configMilestone(mode).json()},")
-            appendLine("    \"claim\": ${configSceneClaim(mode).json()},")
+            appendLine("    \"milestone\": ${configMilestone(mode, sceneContractId).json()},")
+            appendLine("    \"claim\": ${configSceneClaim(mode, sceneContractId).json()},")
             appendLine("    \"wgslSource\": ${configWgslSource(mode).json()}")
             appendLine("  },")
             appendLine("  \"sceneReplay\": ${replayScene?.toJson("  ") ?: "null"},")
-            appendLine("  \"replayPack\": ${replayPackJson(mode, "  ")},")
+            appendLine("  \"replayPack\": ${replayPackJson(mode, sceneContractId, "  ")},")
             appendLine("  \"status\": ${status.json()},")
             appendLine("  \"reason\": ${reason.json()},")
             appendLine("  \"nativePresented\": $nativePresented,")
@@ -196,9 +196,9 @@ internal data class NativeSmokeResult(
                 appendLine("    \"reason\": \"wgpu-native v27 reports SuccessOptimal as raw status 1; wgpu4k maps raw 1 to SurfaceTextureStatus.timeout\"")
                 appendLine("  },")
             }
-            appendLine("  \"linearIssues\": [${configLinearIssues(mode).joinToString(", ") { it.json() }}],")
+            appendLine("  \"linearIssues\": [${configLinearIssues(mode, sceneContractId).joinToString(", ") { it.json() }}],")
             appendLine("  \"nonClaims\": [")
-            appendLine(configNonClaims(mode).joinToString(",\n") { "    ${it.json()}" })
+            appendLine(configNonClaims(mode, sceneContractId).joinToString(",\n") { "    ${it.json()}" })
             appendLine("  ],")
             appendLine("  \"error\": ${error?.json() ?: "null"}")
             appendLine("}")
@@ -793,12 +793,19 @@ private val NativeSmokeConfig.frameClockSource: String
 private val NativeSmokeConfig.replayScene: ReplaySceneEvidence?
     get() = if (mode == "demo") replayScenesById()[sceneContractId] else null
 
-private fun configMilestone(mode: String): String = if (mode == "demo") "M70-A/M71/M72/M73/M74" else "M69"
+private fun configMilestone(mode: String, sceneContractId: String): String = when {
+    mode == "demo" && sceneContractId == M83_DISPLAY_LIST_PM_SCENE_ID -> "M83"
+    mode == "demo" -> "M70-A/M71/M72/M73/M74"
+    else -> "M69"
+}
 
-private fun configSceneClaim(mode: String): String = if (mode == "demo") {
-    "Selected Kanvas replay scene contract executed through a bounded Kadre native WebGPU present-call loop"
-} else {
-    "M69 bounded standalone WGSL native present smoke; broad Kanvas display-list replay is not claimed"
+private fun configSceneClaim(mode: String, sceneContractId: String): String = when {
+    mode == "demo" && sceneContractId == M83_DISPLAY_LIST_PM_SCENE_ID ->
+        "Selected bounded Kanvas display-list scene contract executed through the Kadre native WebGPU present-call loop"
+    mode == "demo" ->
+        "Selected Kanvas replay scene contract executed through a bounded Kadre native WebGPU present-call loop"
+    else ->
+        "M69 bounded standalone WGSL native present smoke; broad Kanvas display-list replay is not claimed"
 }
 
 private fun configWgslSource(mode: String): String = if (mode == "demo") {
@@ -807,14 +814,24 @@ private fun configWgslSource(mode: String): String = if (mode == "demo") {
     "runtime-generated-from-kadre-native-smoke-scene"
 }
 
-private fun configLinearIssues(mode: String): List<String> = if (mode == "demo") {
-    listOf("FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83", "FOR-84", "FOR-85", "FOR-86", "FOR-87", "FOR-88", "FOR-89", "FOR-90", "FOR-105", "FOR-106", "FOR-107", "FOR-108", "FOR-109")
-} else {
-    listOf("FOR-56", "FOR-57", "FOR-58", "FOR-59")
+private fun configLinearIssues(mode: String, sceneContractId: String): List<String> = when {
+    mode == "demo" && sceneContractId == M83_DISPLAY_LIST_PM_SCENE_ID ->
+        listOf("FOR-99", "FOR-149", "FOR-150", "FOR-151", "FOR-152", "FOR-153")
+    mode == "demo" ->
+        listOf("FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83", "FOR-84", "FOR-85", "FOR-86", "FOR-87", "FOR-88", "FOR-89", "FOR-90", "FOR-105", "FOR-106", "FOR-107", "FOR-108", "FOR-109")
+    else ->
+        listOf("FOR-56", "FOR-57", "FOR-58", "FOR-59")
 }
 
-private fun configNonClaims(mode: String): List<String> = if (mode == "demo") {
-    listOf(
+private fun configNonClaims(mode: String, sceneContractId: String): List<String> = when {
+    mode == "demo" && sceneContractId == M83_DISPLAY_LIST_PM_SCENE_ID -> listOf(
+        "This run proves one bounded Kanvas display-list scene contract selected through the Kadre native window present-call loop.",
+        "M83 does not prove arbitrary SkCanvas op streams, text, image-filter DAGs, arbitrary runtime effects, or full display-list replay.",
+        "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
+        "The capture artifact is an offscreen wgpu4k native texture readback of the same M83 scene contract, not a system screenshot of the presented window.",
+        "Timing is reporting-only present-call duration telemetry, not a release-grade FPS gate.",
+    )
+    mode == "demo" -> listOf(
         "This run proves bounded Kadre native window present-call execution for one selected M73 replay-pack scene contract.",
         "M71 proves the demo route requests frames from Kadre/AppKit ControlFlow.Poll instead of relying on pointer/input events to wake the run loop.",
         "M72 proves one selected Kanvas replay scene contract; M73 expands that to a small typed replay-pack registry only.",
@@ -825,8 +842,7 @@ private fun configNonClaims(mode: String): List<String> = if (mode == "demo") {
         "It does not prove broad Kanvas display-list replay, arbitrary SkCanvas op streams, multi-scene live switching, or input-driven interaction yet.",
         "Timing is reporting-only present-call duration telemetry, not a release-grade FPS gate.",
     )
-} else {
-    listOf(
+    else -> listOf(
         "This smoke proves Kadre native window presentation for a bounded WGSL scene only.",
         "Native presentation is claimed only when the normalized surface status summary contains at least one success.",
         "Raw Kadre/wgpu4k API status names remain recorded separately when they differ from normalized evidence semantics.",

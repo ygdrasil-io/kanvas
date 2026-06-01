@@ -1,0 +1,148 @@
+{
+    "schemaVersion": 1,
+    "generatedBy": "kadre-runtime:M83DisplayListReplay",
+    "linearIssues": [
+        "FOR-99",
+        "FOR-149",
+        "FOR-150",
+        "FOR-151",
+        "FOR-152",
+        "FOR-153"
+    ],
+    "packId": "m83-display-list-replay-through-kadre-v1",
+    "claimLevel": "bounded-kanvas-display-list-replay-through-native-kadre",
+    "readinessDelta": 0,
+    "nativePixelsProducedFromDisplayListByThisTask": true,
+    "sceneCount": 2,
+    "renderableSceneCount": 1,
+    "expectedUnsupportedSceneCount": 1,
+    "failedSceneCount": 0,
+    "totalCommandCount": 9,
+    "supportedCommandCount": 6,
+    "unsupportedCommandCount": 3,
+    "supportStateMismatchCount": 0,
+    "nativeEvidence": {
+        "status": "native-display-list-produced",
+        "reason": "m83.native-display-list-presented",
+        "nativeDemoJson": "reports/wgsl-pipeline/m83-display-list-replay/native-demo.json",
+        "readbackImage": "reports/wgsl-pipeline/m83-display-list-replay/native-demo-readback.png",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "nativePresented": true,
+        "presentedFrames": 180,
+        "captureStatus": "produced",
+        "captureReason": "m70.native-offscreen-texture-readback",
+        "captureNonTransparentPixels": 268800,
+        "adapterInfo": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+        "nativePixelsProducedFromDisplayListByThisTask": true
+    },
+    "artifactPaths": [
+        "reports/wgsl-pipeline/m83-display-list-replay/evidence.json",
+        "reports/wgsl-pipeline/m83-display-list-replay/evidence.md",
+        "reports/wgsl-pipeline/m83-display-list-replay/native-demo.json",
+        "reports/wgsl-pipeline/m83-display-list-replay/native-demo-readback.png"
+    ],
+    "validationRows": [
+        {
+            "id": "m83.display-list-scene-registered",
+            "status": "pass",
+            "assertion": "M83 renderable display-list scene is present in replayScenesById()."
+        },
+        {
+            "id": "m83.cpu-native-support-state",
+            "status": "pass",
+            "assertion": "CPU oracle rendered state matches scene support/refusal state."
+        },
+        {
+            "id": "m83.native-display-list-artifact",
+            "status": "pass",
+            "assertion": "Native Kadre demo produced nonblank pixels for the M83 display-list scene contract."
+        },
+        {
+            "id": "m83.stable-refusals",
+            "status": "pass",
+            "assertion": "Unsupported display-list nodes retain stable text/filter/runtime-effect refusal reasons."
+        }
+    ],
+    "nonClaims": [
+        "M83 proves one bounded Kanvas display-list scene lowered into the typed Kadre replay contract; it is not arbitrary SkCanvas op replay.",
+        "Unsupported text, image-filter DAG, and runtime-effect placeholder nodes remain explicit refusals.",
+        "The native PNG is a wgpu4k offscreen texture readback of the selected M83 scene contract, not a window-surface screenshot.",
+        "Native timing remains reporting-only and is not promoted to a release-grade FPS gate."
+    ],
+    "scenes": [
+        {
+            "id": "m83-display-list-pm-scene-v1",
+            "title": "M83 Kanvas display-list PM scene replay",
+            "status": "renderable",
+            "renderedByKadre": true,
+            "source": "kanvas-display-list",
+            "sourceSceneId": "m83-display-list-pm-scene",
+            "commandSource": "bounded-kanvas-display-list-lowered-to-typed-kadre-replay-contract",
+            "unsupportedCommands": [],
+            "commandCounters": {
+                "total": 5,
+                "supported": 5,
+                "unsupported": 0,
+                "clipRect": 1,
+                "fillRect": 2,
+                "bitmapRect": 1,
+                "srcOver": 3,
+                "partialAlpha": 3
+            },
+            "sourceEvidence": {
+                "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#m83-display-list-pm-scene",
+                "cpuRoute": "cpu.display-list.replay-oracle.bounded",
+                "gpuRoute": "webgpu.kadre.native.display-list-replay.bounded",
+                "pipelineKey": "source=kanvasDisplayList commands=clear+clipRect+linearGradient+bitmapRect+alphaRect state=[blendMode=kSrcOver]"
+            },
+            "cpuReference": {
+                "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+                "deviceWidth": 640,
+                "deviceHeight": 420,
+                "sampledChecksum": 8858584405967304209,
+                "nonTransparentPixels": 5520,
+                "bitmapSampledPixels": 16468,
+                "rendered": true
+            }
+        },
+        {
+            "id": "m83-display-list-placeholder-refusal-v1",
+            "title": "M83 unsupported display-list nodes refusal",
+            "status": "expected-unsupported",
+            "renderedByKadre": false,
+            "source": "kanvas-display-list",
+            "sourceSceneId": "m83-display-list-placeholder-refusals",
+            "commandSource": "bounded-kanvas-display-list-lowered-to-typed-kadre-replay-contract",
+            "unsupportedCommands": [
+                "m83.text.placeholder-glyph-run-not-routed",
+                "m83.filter.placeholder-dag-not-routed",
+                "m83.runtime-effect.placeholder-descriptor-not-registered"
+            ],
+            "commandCounters": {
+                "total": 4,
+                "supported": 1,
+                "unsupported": 3,
+                "clipRect": 0,
+                "fillRect": 0,
+                "bitmapRect": 0,
+                "srcOver": 0,
+                "partialAlpha": 0
+            },
+            "sourceEvidence": {
+                "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#m83-display-list-placeholder-refusals",
+                "cpuRoute": "cpu.display-list.replay-oracle.expected-unsupported",
+                "gpuRoute": "webgpu.kadre.native.display-list-replay.expected-unsupported",
+                "pipelineKey": "source=kanvasDisplayList unsupported=text+imageFilter+runtimeEffect"
+            },
+            "cpuReference": {
+                "api": "org.skia.kadre.runtime.ReplayCpuOracle",
+                "deviceWidth": 640,
+                "deviceHeight": 420,
+                "sampledChecksum": 640574846146112387,
+                "nonTransparentPixels": 5520,
+                "bitmapSampledPixels": 0,
+                "rendered": false
+            }
+        }
+    ]
+}

@@ -516,11 +516,113 @@ internal val M73_REPLAY_SCENES: List<ReplaySceneEvidence> = listOf(
 
 internal val M73_REPLAY_SCENES_BY_ID: Map<String, ReplaySceneEvidence> = M73_REPLAY_SCENES.associateBy { it.id }
 
+internal const val M83_DISPLAY_LIST_PM_SCENE_ID = "m83-display-list-pm-scene-v1"
+internal const val M83_DISPLAY_LIST_PLACEHOLDER_SCENE_ID = "m83-display-list-placeholder-refusal-v1"
+
+internal val M83_DISPLAY_LIST_REPLAY_SCENES: List<ReplaySceneEvidence> = listOf(
+    ReplaySceneEvidence(
+        id = M83_DISPLAY_LIST_PM_SCENE_ID,
+        title = "M83 Kanvas display-list PM scene replay",
+        source = "kanvas-display-list",
+        sourceSceneId = "m83-display-list-pm-scene",
+        version = 1,
+        commandSource = "bounded-kanvas-display-list-lowered-to-typed-kadre-replay-contract",
+        commands = listOf(
+            ReplayCommand.Clear(ReplayColor(0.028, 0.034, 0.046)),
+            ReplayCommand.ClipRect(
+                label = "display-list-root-clip",
+                x = 0.08,
+                y = 0.10,
+                width = 0.84,
+                height = 0.76,
+            ),
+            ReplayCommand.FillRect(
+                label = "display-list-gradient-panel",
+                x = 0.11,
+                y = 0.14,
+                width = 0.78,
+                height = 0.34,
+                color = ReplayColor(0.08, 0.26, 0.74, 0.96),
+                endColor = ReplayColor(0.10, 0.80, 0.56, 0.88),
+                fillKind = ReplayFillKind.LinearGradient,
+            ),
+            ReplayCommand.BitmapRect(
+                label = "display-list-fixture-bitmap",
+                fixtureId = ReplayBitmapFixtures.checker4x4.id,
+                srcX = 0.0,
+                srcY = 0.0,
+                srcWidth = 4.0,
+                srcHeight = 4.0,
+                dstX = 0.18,
+                dstY = 0.52,
+                dstWidth = 0.28,
+                dstHeight = 0.22,
+                sampler = ReplayBitmapSampler.Nearest,
+                alpha = 0.92,
+                provenance = "M83 display-list image node lowered to deterministic in-repo bitmap fixture",
+            ),
+            ReplayCommand.FillRect(
+                label = "display-list-alpha-overlay",
+                x = 0.42,
+                y = 0.50,
+                width = 0.34,
+                height = 0.26,
+                color = ReplayColor(0.92, 0.18, 0.30, 0.42),
+            ),
+        ),
+        dashboardRow = "reports/wgsl-pipeline/scenes/generated/results.json#m83-display-list-pm-scene",
+        cpuRoute = "cpu.display-list.replay-oracle.bounded",
+        gpuRoute = "webgpu.kadre.native.display-list-replay.bounded",
+        pipelineKey = "source=kanvasDisplayList commands=clear+clipRect+linearGradient+bitmapRect+alphaRect state=[blendMode=kSrcOver]",
+    ),
+    ReplaySceneEvidence(
+        id = M83_DISPLAY_LIST_PLACEHOLDER_SCENE_ID,
+        title = "M83 unsupported display-list nodes refusal",
+        source = "kanvas-display-list",
+        sourceSceneId = "m83-display-list-placeholder-refusals",
+        version = 1,
+        commandSource = "bounded-kanvas-display-list-lowered-to-typed-kadre-replay-contract",
+        commands = listOf(
+            ReplayCommand.Clear(ReplayColor(0.035, 0.038, 0.048)),
+            ReplayCommand.ExpectedUnsupported(
+                label = "display-list-text-glyph-run",
+                family = "text",
+                reason = "m83.text.placeholder-glyph-run-not-routed",
+            ),
+            ReplayCommand.ExpectedUnsupported(
+                label = "display-list-image-filter-crop-input",
+                family = "imageFilter",
+                reason = "m83.filter.placeholder-dag-not-routed",
+            ),
+            ReplayCommand.ExpectedUnsupported(
+                label = "display-list-runtime-effect",
+                family = "runtimeEffect",
+                reason = "m83.runtime-effect.placeholder-descriptor-not-registered",
+            ),
+        ),
+        dashboardRow = "reports/wgsl-pipeline/scenes/generated/results.json#m83-display-list-placeholder-refusals",
+        cpuRoute = "cpu.display-list.replay-oracle.expected-unsupported",
+        gpuRoute = "webgpu.kadre.native.display-list-replay.expected-unsupported",
+        pipelineKey = "source=kanvasDisplayList unsupported=text+imageFilter+runtimeEffect",
+    ),
+)
+
 internal fun replayScenesById(): Map<String, ReplaySceneEvidence> =
-    (M73_REPLAY_SCENES + M77_BLEND_ALPHA_REPLAY_SCENES + M78_CLIP_REPLAY_SCENES + M79_BITMAP_REPLAY_SCENES).associateBy { it.id }
+    (
+        M73_REPLAY_SCENES +
+            M77_BLEND_ALPHA_REPLAY_SCENES +
+            M78_CLIP_REPLAY_SCENES +
+            M79_BITMAP_REPLAY_SCENES +
+            M83_DISPLAY_LIST_REPLAY_SCENES
+        ).associateBy { it.id }
 
 internal fun replayPackJson(mode: String, indent: String): String {
+    return replayPackJson(mode, M73_DEFAULT_SCENE_CONTRACT_ID, indent)
+}
+
+internal fun replayPackJson(mode: String, sceneContractId: String, indent: String): String {
     if (mode != "demo") return "null"
+    if (sceneContractId !in M73_REPLAY_SCENES_BY_ID) return "null"
     val renderable = M73_REPLAY_SCENES.count { it.renderedByKadre }
     val unsupported = M73_REPLAY_SCENES.count { !it.renderedByKadre }
     return buildString {
