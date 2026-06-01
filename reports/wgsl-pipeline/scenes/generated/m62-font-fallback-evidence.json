@@ -32,6 +32,8 @@
       "fallbackReason": "font.missing-glyph-fallback-unsupported",
       "pixels": 18432,
       "matchingPixels": 18432,
+      "cpuSimilarity": 100,
+      "cpuThreshold": 99.95,
       "threshold": 99.95,
       "nonClaim": "Documents deterministic missing-glyph/fallback refusal only; does not claim fallback-family selection, color glyphs, complex shaping, glyph atlas, or SDF/LCD support.",
       "tags": ["source.generated", "feature.font", "feature.text", "feature.missing-glyph", "route.cpu.oracle", "route.gpu.expected-unsupported", "reference.cpu-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]

@@ -82,6 +82,16 @@ corresponding denominator and is linked from the sprint report.
 
 Weighted starting readiness: approximately 25%.
 
+Current readiness after M61/M62 closeout: approximately 31%.
+
+| Area | Weight | Current count | Current progress | Movement |
+|---|---:|---:|---:|---|
+| Rendering feature breadth | 30% | 4/10 | 40% | M61 adds bounded image-filter DAG V2 evidence; M62 clarifies text/font outline rendering and fallback refusals. |
+| Skia-like fidelity | 20% | 27/100 | 27% | M61/M62 add selected generated reference/oracle rows without broad GM parity claims. |
+| Real-time runtime | 20% | 1/10 | 10% | No Kadre/frame-loop capability landed in M61/M62. |
+| Performance and cache readiness | 15% | 7/20 | 35% | No new measured performance/cache gate landed in M61/M62. |
+| PM/demo operability | 15% | 9/20 | 45% | PM dashboard now exposes graph diagnostics and glyph-route/atlas non-claim diagnostics. |
+
 Expected milestone deltas are capped until evidence lands:
 
 | Milestone | Primary area movement | Maximum readiness delta |

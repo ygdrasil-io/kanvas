@@ -2738,8 +2738,10 @@ tasks.register("pipelineSceneDashboardGate") {
         var inventoryDerivedRows = 0
         var m54Rows = 0
         var m61Rows = 0
+        var m62Rows = 0
         val m54FamilyCounts = linkedMapOf<String, Int>()
         val m61FamilyCounts = linkedMapOf<String, Int>()
+        val m62FamilyCounts = linkedMapOf<String, Int>()
 
         scenes.forEachIndexed { index, rawScene ->
             val scene = rawScene as? Map<*, *>
@@ -2890,6 +2892,11 @@ tasks.register("pipelineSceneDashboardGate") {
                     val family = generation.string("hardFeatureFamily") ?: "unknown"
                     m61FamilyCounts[family] = (m61FamilyCounts[family] ?: 0) + 1
                 }
+                if (generation?.string("derivationTask") == "pipelineM62FontFallbackEvidencePack") {
+                    m62Rows += 1
+                    val family = generation.string("hardFeatureFamily") ?: "unknown"
+                    m62FamilyCounts[family] = (m62FamilyCounts[family] ?: 0) + 1
+                }
                 val inventoryId = scene.string("inventoryId")
                 if ("source.inventory" in tagSet || inventoryId.isPresent()) {
                     inventoryDerivedRows += 1
@@ -2997,10 +3004,12 @@ tasks.register("pipelineSceneDashboardGate") {
             "inventoryDerived" to inventoryDerivedRows,
             "m54Rows" to m54Rows,
             "m61Rows" to m61Rows,
+            "m62Rows" to m62Rows,
         ) + statusCounts.mapKeys { "status.${it.key}" } +
             maturityCounts.mapKeys { "${it.key}" } +
             m54FamilyCounts.mapKeys { "m54.family.${it.key}" } +
-            m61FamilyCounts.mapKeys { "m61.family.${it.key}" }
+            m61FamilyCounts.mapKeys { "m61.family.${it.key}" } +
+            m62FamilyCounts.mapKeys { "m62.family.${it.key}" }
 
         val markdown = buildString {
             appendLine("# WGSL Scene Dashboard Gate Report")
