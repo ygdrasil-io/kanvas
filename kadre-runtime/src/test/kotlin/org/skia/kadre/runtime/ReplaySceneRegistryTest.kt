@@ -28,6 +28,10 @@ class ReplaySceneRegistryTest {
         assertContains(sceneJson, "\"unsupported\": 0")
         assertContains(sceneJson, "\"backgroundClear\": 1")
         assertContains(sceneJson, "\"fillRect\": 1")
+        assertContains(sceneJson, "\"srcOver\": 1")
+        assertContains(sceneJson, "\"partialAlpha\": 0")
+        assertContains(sceneJson, "\"blendMode\": \"SrcOver\"")
+        assertContains(sceneJson, "\"alpha\": 1.0000")
         assertContains(sceneJson, "\"unsupportedCommands\": []")
     }
 
@@ -107,6 +111,53 @@ class ReplaySceneRegistryTest {
         assertContains(json, "\"reason\": \"m76.metadata.unsupported-route-family\"")
         assertContains(json, "\"sourceSceneId\": \"path-aa-convexpaths-edge-budget\"")
         assertContains(json, "\"sourceSceneId\": \"runtime-effect-simple\"")
+    }
+
+    @Test
+    fun m77BlendAlphaReplayCoversSrcOverAlphaAndUnsupportedBlend() {
+        val evidence = buildBlendAlphaReplayEvidence()
+        val json = evidence.toJson()
+
+        assertEquals(3, evidence.sceneCount)
+        assertEquals(2, evidence.renderableSceneCount)
+        assertEquals(1, evidence.expectedUnsupportedSceneCount)
+        assertEquals(0, evidence.failedSceneCount)
+        assertEquals(2, evidence.partialAlphaSceneCount)
+        assertEquals(4, evidence.srcOverCommandCount)
+        assertEquals(3, evidence.partialAlphaCommandCount)
+        assertContains(json, "\"packId\": \"m77-blend-alpha-replay-v1\"")
+        assertContains(json, "\"linearIssues\": [\"FOR-93\", \"FOR-119\", \"FOR-120\", \"FOR-121\", \"FOR-122\", \"FOR-123\"]")
+        assertContains(json, "\"id\": \"m77-alpha-srcover-stack-replay-v1\"")
+        assertContains(json, "\"id\": \"m77-gradient-alpha-srcover-replay-v1\"")
+        assertContains(json, "\"id\": \"m77-multiply-blend-refusal-v1\"")
+        assertContains(json, "\"unsupportedBlendReason\": \"m77.unsupported-blend-mode.kMultiply\"")
+        assertContains(json, "\"blendMode\": \"SrcOver\"")
+        assertContains(json, "\"alpha\": 0.3500")
+        assertContains(json, "\"endAlpha\": 0.7000")
+        assertContains(json, "\"oracle\": \"src-over-partial-alpha-sampled-reference\"")
+    }
+
+    @Test
+    fun m77SceneCommandsExposeBlendAlphaSemanticsAndCpuOracleFacts() {
+        val alphaStack = M77_BLEND_ALPHA_REPLAY_SCENES.single { it.id == "m77-alpha-srcover-stack-replay-v1" }
+        val unsupported = M77_BLEND_ALPHA_REPLAY_SCENES.single { it.id == "m77-multiply-blend-refusal-v1" }
+
+        assertEquals("renderable", alphaStack.status)
+        assertEquals(3, alphaStack.totalCommandCount)
+        assertEquals(2, alphaStack.fillRectCount)
+        assertEquals(2, alphaStack.srcOverCommandCount)
+        assertEquals(1, alphaStack.partialAlphaCommandCount)
+        assertContains(alphaStack.toJson("  "), "\"blendMode\": \"SrcOver\"")
+        assertContains(alphaStack.toJson("  "), "\"alpha\": 0.4500")
+
+        val cpuReference = renderCpuReference(640, 420, alphaStack)
+        assertEquals(true, cpuReference.first != 0L)
+        assertEquals(true, cpuReference.second > 0)
+
+        assertEquals("expected-unsupported", unsupported.status)
+        assertEquals(1, unsupported.unsupportedCommandCount)
+        assertEquals(listOf("m77.unsupported-blend-mode.kMultiply"), unsupported.unsupportedCommands)
+        assertContains(unsupported.toJson("  "), "\"unsupportedCommands\": [\"m77.unsupported-blend-mode.kMultiply\"]")
     }
 
     private fun m76ManifestFixture(): String = """

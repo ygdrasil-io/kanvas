@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "kadre-runtime:M77BlendAlphaReplay",
+  "linearIssues": ["FOR-93", "FOR-119", "FOR-120", "FOR-121", "FOR-122", "FOR-123"],
+  "packId": "m77-blend-alpha-replay-v1",
+  "claimLevel": "bounded-src-over-alpha-replay-evidence",
+  "readinessDelta": 0,
+  "sceneCount": 3,
+  "renderableSceneCount": 2,
+  "expectedUnsupportedSceneCount": 1,
+  "failedSceneCount": 0,
+  "partialAlphaSceneCount": 2,
+  "srcOverCommandCount": 4,
+  "partialAlphaCommandCount": 3,
+  "unsupportedBlendReason": "m77.unsupported-blend-mode.kMultiply",
+  "nonClaims": [
+    "M77 supports only explicit SrcOver replay commands with bounded partial-alpha rect scenes.",
+    "M77 does not add broad SkCanvas/display-list replay or arbitrary blend-mode support.",
+    "Unsupported blend modes are stable refusal evidence and do not count as rendering failures."
+  ],
+  "scenes": [
+    {
+      "id": "m77-alpha-srcover-stack-replay-v1",
+      "title": "M77 alpha SrcOver stack replay",
+      "sourceSceneId": "m77-alpha-srcover-stack",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m77.replay-scene-src-over-alpha-renderable",
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json#m77-alpha-srcover-stack-replay-v1",
+        "cpuRoute": "cpu.replay.src-over.partial-alpha-oracle",
+        "gpuRoute": "webgpu.kadre-replay.src-over.partial-alpha",
+        "pipelineKey": "coverage=analyticRect state=[blendMode=kSrcOver alpha=partial] source=m77"
+      },
+      "commandCounters": {
+        "total": 3,
+        "supported": 3,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 2,
+        "animatedFillRect": 0,
+        "srcOver": 2,
+        "partialAlpha": 1
+      },
+      "unsupportedCommands": [],
+      "commands": [
+        {
+          "label": "opaque-blue-destination",
+          "family": "fillRect",
+          "supported": true,
+          "fillKind": "solid",
+          "blendMode": "SrcOver",
+          "alpha": 1.0000,
+          "endAlpha": 1.0000,
+          "x": 0.1400,
+          "y": 0.1800,
+          "width": 0.5000,
+          "height": 0.4800,
+          "dx": 0.0000
+        },
+        {
+          "label": "partial-alpha-red-source",
+          "family": "fillRect",
+          "supported": true,
+          "fillKind": "solid",
+          "blendMode": "SrcOver",
+          "alpha": 0.4500,
+          "endAlpha": 0.4500,
+          "x": 0.3600,
+          "y": 0.3000,
+          "width": 0.4800,
+          "height": 0.4400,
+          "dx": 0.0000
+        }
+
+      ],
+      "cpuOracle": {
+        "width": 640,
+        "height": 420,
+        "checksum": 8888851062735355593,
+        "nonTransparentPixels": 5520,
+        "oracle": "src-over-partial-alpha-sampled-reference"
+      }
+    },
+    {
+      "id": "m77-gradient-alpha-srcover-replay-v1",
+      "title": "M77 gradient alpha SrcOver replay",
+      "sourceSceneId": "m77-gradient-alpha-srcover",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m77.replay-scene-src-over-alpha-renderable",
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json#m77-gradient-alpha-srcover-replay-v1",
+        "cpuRoute": "cpu.replay.linear-gradient.src-over.partial-alpha-oracle",
+        "gpuRoute": "webgpu.kadre-replay.linear-gradient.src-over.partial-alpha",
+        "pipelineKey": "shaderFamily=linearGradient coverage=analyticRect state=[blendMode=kSrcOver alpha=partial] source=m77"
+      },
+      "commandCounters": {
+        "total": 3,
+        "supported": 3,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 2,
+        "animatedFillRect": 0,
+        "srcOver": 2,
+        "partialAlpha": 2
+      },
+      "unsupportedCommands": [],
+      "commands": [
+        {
+          "label": "partial-alpha-gradient",
+          "family": "linearGradientRect",
+          "supported": true,
+          "fillKind": "linearGradient",
+          "blendMode": "SrcOver",
+          "alpha": 0.3500,
+          "endAlpha": 0.7000,
+          "x": 0.1000,
+          "y": 0.1800,
+          "width": 0.7800,
+          "height": 0.3400,
+          "dx": 0.0000
+        },
+        {
+          "label": "partial-alpha-violet-overlay",
+          "family": "fillRect",
+          "supported": true,
+          "fillKind": "solid",
+          "blendMode": "SrcOver",
+          "alpha": 0.5800,
+          "endAlpha": 0.5800,
+          "x": 0.2400,
+          "y": 0.4400,
+          "width": 0.5200,
+          "height": 0.3000,
+          "dx": 0.0000
+        }
+
+      ],
+      "cpuOracle": {
+        "width": 640,
+        "height": 420,
+        "checksum": 3620605029146334392,
+        "nonTransparentPixels": 5520,
+        "oracle": "src-over-partial-alpha-sampled-reference"
+      }
+    },
+    {
+      "id": "m77-multiply-blend-refusal-v1",
+      "title": "M77 unsupported multiply blend refusal",
+      "sourceSceneId": "m77-multiply-blend-refusal",
+      "status": "expected-unsupported",
+      "renderedByKadre": false,
+      "reason": "m77.unsupported-blend-mode.kMultiply",
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json#m77-multiply-blend-refusal-v1",
+        "cpuRoute": "cpu.replay.blend-mode.multiply-oracle-not-generated",
+        "gpuRoute": "webgpu.kadre-replay.blend-mode.expected-unsupported",
+        "pipelineKey": "state=[blendMode=kMultiply] status=expected-unsupported source=m77"
+      },
+      "commandCounters": {
+        "total": 2,
+        "supported": 1,
+        "unsupported": 1,
+        "backgroundClear": 1,
+        "fillRect": 0,
+        "animatedFillRect": 0,
+        "srcOver": 0,
+        "partialAlpha": 0
+      },
+      "unsupportedCommands": ["m77.unsupported-blend-mode.kMultiply"],
+      "commands": [
+
+
+      ],
+      "cpuOracle": null
+    }
+
+  ]
+}
