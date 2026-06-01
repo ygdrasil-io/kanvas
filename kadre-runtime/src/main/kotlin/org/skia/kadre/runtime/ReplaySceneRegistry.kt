@@ -32,6 +32,10 @@ internal enum class ReplayFillKind(val jsonName: String, val commandFamily: Stri
     ColorFilterPlus("colorFilterPlus", "linearGradientColorFilterPlus"),
 }
 
+internal enum class ReplayClipOp(val jsonName: String) {
+    Intersect("intersect"),
+}
+
 internal sealed interface ReplayCommand {
     val label: String
     val family: String
@@ -78,12 +82,52 @@ internal sealed interface ReplayCommand {
         }
     }
 
+    data class ClipRect(
+        override val label: String,
+        val x: Double,
+        val y: Double,
+        val width: Double,
+        val height: Double,
+        val op: ReplayClipOp = ReplayClipOp.Intersect,
+    ) : ReplayCommand {
+        override val family: String = "clipRect"
+        override val supported: Boolean = true
+
+        fun toJson(indent: String): String = buildString {
+            appendLine("{")
+            appendLine("$indent  \"label\": ${label.json()},")
+            appendLine("$indent  \"family\": ${family.json()},")
+            appendLine("$indent  \"supported\": true,")
+            appendLine("$indent  \"operation\": ${op.jsonName.json()},")
+            appendLine("$indent  \"bounds\": {")
+            appendLine("$indent    \"x\": ${x.formatJsonNumber()},")
+            appendLine("$indent    \"y\": ${y.formatJsonNumber()},")
+            appendLine("$indent    \"width\": ${width.formatJsonNumber()},")
+            appendLine("$indent    \"height\": ${height.formatJsonNumber()},")
+            appendLine("$indent    \"left\": ${x.formatJsonNumber()},")
+            appendLine("$indent    \"top\": ${y.formatJsonNumber()},")
+            appendLine("$indent    \"right\": ${(x + width).formatJsonNumber()},")
+            appendLine("$indent    \"bottom\": ${(y + height).formatJsonNumber()}")
+            appendLine("$indent  }")
+            append("$indent}")
+        }
+    }
+
     data class ExpectedUnsupported(
         override val label: String,
         override val family: String,
         val reason: String,
     ) : ReplayCommand {
         override val supported: Boolean = false
+
+        fun toJson(indent: String): String = buildString {
+            appendLine("{")
+            appendLine("$indent  \"label\": ${label.json()},")
+            appendLine("$indent  \"family\": ${family.json()},")
+            appendLine("$indent  \"supported\": false,")
+            appendLine("$indent  \"reason\": ${reason.json()}")
+            append("$indent}")
+        }
     }
 }
 
@@ -110,12 +154,15 @@ internal data class ReplaySceneEvidence(
 
     val background: ReplayColor get() = clearCommands.single().color
     val rects: List<ReplayCommand.FillRect> get() = commands.filterIsInstance<ReplayCommand.FillRect>()
+    val clipRects: List<ReplayCommand.ClipRect> get() = commands.filterIsInstance<ReplayCommand.ClipRect>()
     val unsupportedCommands: List<String> get() = commands.filterIsInstance<ReplayCommand.ExpectedUnsupported>().map { it.reason }
     val totalCommandCount: Int get() = commands.size
     val supportedCommandCount: Int get() = commands.count { it.supported }
     val unsupportedCommandCount: Int get() = commands.count { !it.supported }
     val fillRectCount: Int get() = rects.count { !it.animated }
     val animatedFillRectCount: Int get() = rects.count { it.animated }
+    val clipRectCommandCount: Int get() = clipRects.size
+    val clipIntersectCommandCount: Int get() = clipRects.count { it.op == ReplayClipOp.Intersect }
     val srcOverCommandCount: Int get() = rects.count { it.blendMode == ReplayBlendMode.SrcOver }
     val partialAlphaCommandCount: Int get() = rects.count { it.color.a < 1.0 || it.endColor.a < 1.0 || (it.tintColor?.a ?: 1.0) < 1.0 }
     val status: String get() = if (unsupportedCommandCount == 0) "renderable" else "expected-unsupported"
@@ -148,12 +195,14 @@ internal data class ReplaySceneEvidence(
         appendLine("$indent    \"backgroundClear\": ${commands.count { it is ReplayCommand.Clear }},")
         appendLine("$indent    \"fillRect\": $fillRectCount,")
         appendLine("$indent    \"animatedFillRect\": $animatedFillRectCount,")
+        appendLine("$indent    \"clipRect\": $clipRectCommandCount,")
+        appendLine("$indent    \"clipIntersect\": $clipIntersectCommandCount,")
         appendLine("$indent    \"srcOver\": $srcOverCommandCount,")
         appendLine("$indent    \"partialAlpha\": $partialAlphaCommandCount")
         appendLine("$indent  },")
         appendLine("$indent  \"unsupportedCommands\": [${unsupportedCommands.joinToString(", ") { it.json() }}],")
         appendLine("$indent  \"commands\": [")
-        appendLine(rects.joinToString(",\n") { "$indent    ${it.toJson("$indent    ")}" })
+        appendLine(commands.joinToString(",\n") { "$indent    ${it.toJson("$indent    ")}" })
         appendLine()
         appendLine("$indent  ]")
         append("$indent}")
@@ -279,6 +328,9 @@ internal val M73_REPLAY_SCENES: List<ReplaySceneEvidence> = listOf(
 
 internal val M73_REPLAY_SCENES_BY_ID: Map<String, ReplaySceneEvidence> = M73_REPLAY_SCENES.associateBy { it.id }
 
+internal fun replayScenesById(): Map<String, ReplaySceneEvidence> =
+    (M73_REPLAY_SCENES + M77_BLEND_ALPHA_REPLAY_SCENES + M78_CLIP_REPLAY_SCENES).associateBy { it.id }
+
 internal fun replayPackJson(mode: String, indent: String): String {
     if (mode != "demo") return "null"
     val renderable = M73_REPLAY_SCENES.count { it.renderedByKadre }
@@ -307,13 +359,24 @@ internal fun renderCpuReference(width: Int, height: Int, replayScene: ReplayScen
     val background = replayScene?.background ?: ReplayColor(0.04, 0.05, 0.07)
     bitmap.eraseColor(background.toArgb())
     if (replayScene != null) {
-        replayScene.rects.forEach { rect ->
+        var activeClip = ReplayBounds(0.0, 0.0, 1.0, 1.0)
+        replayScene.commands.forEach { command ->
+            if (command is ReplayCommand.ClipRect) {
+                activeClip = activeClip.intersect(command.bounds)
+            }
+            val rect = command as? ReplayCommand.FillRect ?: return@forEach
+            val drawBounds = rect.bounds.intersect(activeClip)
+            if (drawBounds.isEmpty) return@forEach
             val left = (rect.x * width).toInt().coerceIn(0, width)
             val top = (rect.y * height).toInt().coerceIn(0, height)
             val right = ((rect.x + rect.width) * width).toInt().coerceIn(0, width)
             val bottom = ((rect.y + rect.height) * height).toInt().coerceIn(0, height)
-            for (py in top until bottom) {
-                for (px in left until right) {
+            val clippedLeft = (drawBounds.left * width).toInt().coerceIn(left, right)
+            val clippedTop = (drawBounds.top * height).toInt().coerceIn(top, bottom)
+            val clippedRight = (drawBounds.right * width).toInt().coerceIn(left, right)
+            val clippedBottom = (drawBounds.bottom * height).toInt().coerceIn(top, bottom)
+            for (py in clippedTop until clippedBottom) {
+                for (px in clippedLeft until clippedRight) {
                     val u = ((px.toDouble() / width.toDouble()) - rect.x) / rect.width.coerceAtLeast(0.0001)
                     val v = ((py.toDouble() / height.toDouble()) - rect.y) / rect.height.coerceAtLeast(0.0001)
                     val src = rect.fillColorAt(u, v, phase = 0.0)
@@ -353,6 +416,24 @@ internal fun renderCpuReference(width: Int, height: Int, replayScene: ReplayScen
     }
     return checksum to nonTransparent
 }
+
+private data class ReplayBounds(val left: Double, val top: Double, val right: Double, val bottom: Double) {
+    val isEmpty: Boolean get() = right <= left || bottom <= top
+
+    fun intersect(other: ReplayBounds): ReplayBounds =
+        ReplayBounds(
+            left = maxOf(left, other.left),
+            top = maxOf(top, other.top),
+            right = minOf(right, other.right),
+            bottom = minOf(bottom, other.bottom),
+        )
+}
+
+private val ReplayCommand.FillRect.bounds: ReplayBounds
+    get() = ReplayBounds(x, y, x + width, y + height)
+
+private val ReplayCommand.ClipRect.bounds: ReplayBounds
+    get() = ReplayBounds(x, y, x + width, y + height)
 
 private fun ReplayCommand.FillRect.fillColorAt(u: Double, v: Double, phase: Double): ReplayColor =
     when (fillKind) {
@@ -405,7 +486,15 @@ private fun ReplayColor.blendOver(dst: ReplayColor): ReplayColor {
 }
 
 internal fun ReplaySceneEvidence.toWgsl(phase: Double): String {
-    val rectTests = rects.mapIndexed { index, rect ->
+    var activeClip = ReplayBounds(0.0, 0.0, 1.0, 1.0)
+    var rectIndex = 0
+    val rectTests = commands.mapNotNull { command ->
+        if (command is ReplayCommand.ClipRect) {
+            activeClip = activeClip.intersect(command.bounds)
+            return@mapNotNull null
+        }
+        val rect = command as? ReplayCommand.FillRect ?: return@mapNotNull null
+        val index = rectIndex++
         val x = if (rect.animated) "${rect.x.wgsl()} + ${rect.dx.wgsl()} * phase" else rect.x.wgsl()
         val y = rect.y.wgsl()
         val width = rect.width.wgsl()
@@ -431,7 +520,7 @@ internal fun ReplaySceneEvidence.toWgsl(phase: Double): String {
             }
         }
         """
-        let rect$index = select(0.0, 1.0, in.uv.x >= $x && in.uv.x <= ($x + $width) && in.uv.y >= $y && in.uv.y <= ($y + $height));
+        let rect$index = select(0.0, 1.0, in.uv.x >= $x && in.uv.x < ($x + $width) && in.uv.y >= $y && in.uv.y < ($y + $height) && in.uv.x >= ${activeClip.left.wgsl()} && in.uv.x < ${activeClip.right.wgsl()} && in.uv.y >= ${activeClip.top.wgsl()} && in.uv.y < ${activeClip.bottom.wgsl()});
         color = mix(color, $fill, rect$index * $alpha);
         """.trimIndent()
     }.joinToString("\n    ")
@@ -468,6 +557,26 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 """.trimIndent()
 }
+
+private fun ReplayCommand.toJson(indent: String): String =
+    when (this) {
+        is ReplayCommand.Clear -> buildString {
+            appendLine("{")
+            appendLine("$indent  \"label\": ${label.json()},")
+            appendLine("$indent  \"family\": ${family.json()},")
+            appendLine("$indent  \"supported\": true,")
+            appendLine("$indent  \"color\": {")
+            appendLine("$indent    \"r\": ${color.r.formatJsonNumber()},")
+            appendLine("$indent    \"g\": ${color.g.formatJsonNumber()},")
+            appendLine("$indent    \"b\": ${color.b.formatJsonNumber()},")
+            appendLine("$indent    \"a\": ${color.a.formatJsonNumber()}")
+            appendLine("$indent  }")
+            append("$indent}")
+        }
+        is ReplayCommand.FillRect -> toJson(indent)
+        is ReplayCommand.ClipRect -> toJson(indent)
+        is ReplayCommand.ExpectedUnsupported -> toJson(indent)
+    }
 
 private fun String.json(): String =
     buildString {

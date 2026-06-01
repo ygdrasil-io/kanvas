@@ -114,3 +114,13 @@ tasks.register<JavaExec>("pipelineM77BlendAlphaReplay") {
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m77-blend-alpha-replay"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM78ClipReplay") {
+    group = "verification"
+    description = "Generates M78 bounded ClipRect replay evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M78ClipReplayKt")
+    args(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m78-clip-replay").asFile.absolutePath)
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m78-clip-replay"))
+    outputs.upToDateWhen { false }
+}

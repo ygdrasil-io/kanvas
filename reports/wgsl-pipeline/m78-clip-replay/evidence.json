@@ -1,0 +1,358 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "kadre-runtime:M78ClipReplay",
+  "linearIssues": ["FOR-94", "FOR-124", "FOR-125", "FOR-126", "FOR-127", "FOR-128"],
+  "packId": "m78-clip-replay-v1",
+  "claimLevel": "bounded-cliprect-intersect-replay-evidence",
+  "readinessDelta": 0,
+  "sceneCount": 3,
+  "renderableSceneCount": 2,
+  "expectedUnsupportedSceneCount": 1,
+  "failedSceneCount": 0,
+  "clipRectCommandCount": 3,
+  "clipIntersectCommandCount": 3,
+  "srcOverCommandCount": 3,
+  "partialAlphaCommandCount": 2,
+  "unsupportedClipReason": "m78.clip.unsupported-complex-clip",
+  "nonClaims": [
+    "M78 supports only simple axis-aligned ClipRect intersect replay commands for subsequent rect fills.",
+    "M78 does not add rounded clips, path clips, difference clips, saveLayer clip stacks, or arbitrary SkCanvas clip replay.",
+    "Complex clip rows are stable expected-unsupported evidence and do not count as rendering failures."
+  ],
+  "scenes": [
+    {
+      "id": "m78-clipped-solid-rect-replay-v1",
+      "title": "M78 clipped solid rect replay",
+      "sourceSceneId": "m78-clipped-solid-rect",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m78.replay-scene-cliprect-intersect-renderable",
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/m78-clip-replay/evidence.json#m78-clipped-solid-rect-replay-v1",
+        "cpuRoute": "cpu.replay.clip-rect.intersect.solid-oracle",
+        "gpuRoute": "webgpu.kadre-replay.clip-rect.intersect.solid",
+        "pipelineKey": "coverage=analyticRect clip=rectIntersect state=[blendMode=kSrcOver] source=m78"
+      },
+      "commandCounters": {
+        "total": 3,
+        "supported": 3,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "clipRect": 1,
+        "clipIntersect": 1,
+        "fillRect": 1,
+        "animatedFillRect": 0,
+        "srcOver": 1,
+        "partialAlpha": 0
+      },
+      "unsupportedCommands": [],
+      "sceneContract": {
+        "id": "m78-clipped-solid-rect-replay-v1",
+        "title": "M78 clipped solid rect replay",
+        "status": "renderable",
+        "renderedByKadre": true,
+        "source": "kanvas-replay-data",
+        "sourceSceneId": "m78-clipped-solid-rect",
+        "version": 1,
+        "claimLevel": "single-scene-replay-contract",
+        "commandSource": "m78-typed-cliprect-replay-contract",
+        "gpuExecution": "wgsl-generated-from-kadre-replay-scene",
+        "cpuReferenceSource": "typed Kadre replay CPU oracle for same selected commands",
+        "fallbackPolicy": "refuse-unsupported-replay-command",
+        "sourceEvidence": {
+          "dashboardRow": "reports/wgsl-pipeline/m78-clip-replay/evidence.json#m78-clipped-solid-rect-replay-v1",
+          "cpuRoute": "cpu.replay.clip-rect.intersect.solid-oracle",
+          "gpuRoute": "webgpu.kadre-replay.clip-rect.intersect.solid",
+          "pipelineKey": "coverage=analyticRect clip=rectIntersect state=[blendMode=kSrcOver] source=m78"
+        },
+        "commandCounters": {
+          "total": 3,
+          "supported": 3,
+          "unsupported": 0,
+          "backgroundClear": 1,
+          "fillRect": 1,
+          "animatedFillRect": 0,
+          "clipRect": 1,
+          "clipIntersect": 1,
+          "srcOver": 1,
+          "partialAlpha": 0
+        },
+        "unsupportedCommands": [],
+        "commands": [
+          {
+            "label": "background-clear",
+            "family": "backgroundClear",
+            "supported": true,
+            "color": {
+              "r": 0.0300,
+              "g": 0.0340,
+              "b": 0.0440,
+              "a": 1.0000
+            }
+          },
+          {
+            "label": "center-intersect-clip",
+            "family": "clipRect",
+            "supported": true,
+            "operation": "intersect",
+            "bounds": {
+              "x": 0.2400,
+              "y": 0.2000,
+              "width": 0.4800,
+              "height": 0.4200,
+              "left": 0.2400,
+              "top": 0.2000,
+              "right": 0.7200,
+              "bottom": 0.6200
+            }
+          },
+          {
+            "label": "solid-rect-clipped-by-center",
+            "family": "fillRect",
+            "supported": true,
+            "fillKind": "solid",
+            "blendMode": "SrcOver",
+            "alpha": 1.0000,
+            "endAlpha": 1.0000,
+            "x": 0.1000,
+            "y": 0.1200,
+            "width": 0.7600,
+            "height": 0.6600,
+            "dx": 0.0000
+          }
+
+        ]
+      },
+      "cpuOracle": {
+        "width": 640,
+        "height": 420,
+        "checksum": 7657149549507766923,
+        "nonTransparentPixels": 5520,
+        "oracle": "clip-rect-intersect-sampled-reference"
+      }
+    },
+    {
+      "id": "m78-clipped-alpha-gradient-replay-v1",
+      "title": "M78 clipped alpha gradient replay",
+      "sourceSceneId": "m78-clipped-alpha-gradient",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m78.replay-scene-cliprect-intersect-renderable",
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/m78-clip-replay/evidence.json#m78-clipped-alpha-gradient-replay-v1",
+        "cpuRoute": "cpu.replay.clip-rect.intersect.linear-gradient-alpha-oracle",
+        "gpuRoute": "webgpu.kadre-replay.clip-rect.intersect.linear-gradient-alpha",
+        "pipelineKey": "shaderFamily=linearGradient coverage=analyticRect clip=rectIntersect state=[blendMode=kSrcOver alpha=partial] source=m78"
+      },
+      "commandCounters": {
+        "total": 5,
+        "supported": 5,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "clipRect": 2,
+        "clipIntersect": 2,
+        "fillRect": 2,
+        "animatedFillRect": 0,
+        "srcOver": 2,
+        "partialAlpha": 2
+      },
+      "unsupportedCommands": [],
+      "sceneContract": {
+        "id": "m78-clipped-alpha-gradient-replay-v1",
+        "title": "M78 clipped alpha gradient replay",
+        "status": "renderable",
+        "renderedByKadre": true,
+        "source": "kanvas-replay-data",
+        "sourceSceneId": "m78-clipped-alpha-gradient",
+        "version": 1,
+        "claimLevel": "single-scene-replay-contract",
+        "commandSource": "m78-typed-cliprect-replay-contract",
+        "gpuExecution": "wgsl-generated-from-kadre-replay-scene",
+        "cpuReferenceSource": "typed Kadre replay CPU oracle for same selected commands",
+        "fallbackPolicy": "refuse-unsupported-replay-command",
+        "sourceEvidence": {
+          "dashboardRow": "reports/wgsl-pipeline/m78-clip-replay/evidence.json#m78-clipped-alpha-gradient-replay-v1",
+          "cpuRoute": "cpu.replay.clip-rect.intersect.linear-gradient-alpha-oracle",
+          "gpuRoute": "webgpu.kadre-replay.clip-rect.intersect.linear-gradient-alpha",
+          "pipelineKey": "shaderFamily=linearGradient coverage=analyticRect clip=rectIntersect state=[blendMode=kSrcOver alpha=partial] source=m78"
+        },
+        "commandCounters": {
+          "total": 5,
+          "supported": 5,
+          "unsupported": 0,
+          "backgroundClear": 1,
+          "fillRect": 2,
+          "animatedFillRect": 0,
+          "clipRect": 2,
+          "clipIntersect": 2,
+          "srcOver": 2,
+          "partialAlpha": 2
+        },
+        "unsupportedCommands": [],
+        "commands": [
+          {
+            "label": "background-clear",
+            "family": "backgroundClear",
+            "supported": true,
+            "color": {
+              "r": 0.0240,
+              "g": 0.0280,
+              "b": 0.0380,
+              "a": 1.0000
+            }
+          },
+          {
+            "label": "wide-intersect-clip",
+            "family": "clipRect",
+            "supported": true,
+            "operation": "intersect",
+            "bounds": {
+              "x": 0.1800,
+              "y": 0.1400,
+              "width": 0.6800,
+              "height": 0.5800,
+              "left": 0.1800,
+              "top": 0.1400,
+              "right": 0.8600,
+              "bottom": 0.7200
+            }
+          },
+          {
+            "label": "partial-alpha-gradient-clipped",
+            "family": "linearGradientRect",
+            "supported": true,
+            "fillKind": "linearGradient",
+            "blendMode": "SrcOver",
+            "alpha": 0.4200,
+            "endAlpha": 0.6800,
+            "x": 0.0800,
+            "y": 0.1800,
+            "width": 0.8400,
+            "height": 0.3000,
+            "dx": 0.0000
+          },
+          {
+            "label": "lower-intersect-clip",
+            "family": "clipRect",
+            "supported": true,
+            "operation": "intersect",
+            "bounds": {
+              "x": 0.3000,
+              "y": 0.3400,
+              "width": 0.4000,
+              "height": 0.3400,
+              "left": 0.3000,
+              "top": 0.3400,
+              "right": 0.7000,
+              "bottom": 0.6800
+            }
+          },
+          {
+            "label": "violet-overlay-clipped",
+            "family": "fillRect",
+            "supported": true,
+            "fillKind": "solid",
+            "blendMode": "SrcOver",
+            "alpha": 0.5500,
+            "endAlpha": 0.5500,
+            "x": 0.1800,
+            "y": 0.3800,
+            "width": 0.6400,
+            "height": 0.2600,
+            "dx": 0.0000
+          }
+
+        ]
+      },
+      "cpuOracle": {
+        "width": 640,
+        "height": 420,
+        "checksum": -2941497501745922321,
+        "nonTransparentPixels": 5520,
+        "oracle": "clip-rect-intersect-sampled-reference"
+      }
+    },
+    {
+      "id": "m78-complex-clip-refusal-v1",
+      "title": "M78 complex clip refusal",
+      "sourceSceneId": "m60-bounded-nested-rrect-clip",
+      "status": "expected-unsupported",
+      "renderedByKadre": false,
+      "reason": "m78.clip.unsupported-complex-clip",
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json#m60-bounded-nested-rrect-clip",
+        "cpuRoute": "cpu.coverage.nested-rrect-clip-oracle",
+        "gpuRoute": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+        "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported source=m78"
+      },
+      "commandCounters": {
+        "total": 2,
+        "supported": 1,
+        "unsupported": 1,
+        "backgroundClear": 1,
+        "clipRect": 0,
+        "clipIntersect": 0,
+        "fillRect": 0,
+        "animatedFillRect": 0,
+        "srcOver": 0,
+        "partialAlpha": 0
+      },
+      "unsupportedCommands": ["m78.clip.unsupported-complex-clip"],
+      "sceneContract": {
+        "id": "m78-complex-clip-refusal-v1",
+        "title": "M78 complex clip refusal",
+        "status": "expected-unsupported",
+        "renderedByKadre": false,
+        "source": "kanvas-replay-data",
+        "sourceSceneId": "m60-bounded-nested-rrect-clip",
+        "version": 1,
+        "claimLevel": "single-scene-replay-contract",
+        "commandSource": "m78-typed-cliprect-replay-contract",
+        "gpuExecution": "wgsl-generated-from-kadre-replay-scene",
+        "cpuReferenceSource": "typed Kadre replay CPU oracle for same selected commands",
+        "fallbackPolicy": "refuse-unsupported-replay-command",
+        "sourceEvidence": {
+          "dashboardRow": "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json#m60-bounded-nested-rrect-clip",
+          "cpuRoute": "cpu.coverage.nested-rrect-clip-oracle",
+          "gpuRoute": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+          "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported source=m78"
+        },
+        "commandCounters": {
+          "total": 2,
+          "supported": 1,
+          "unsupported": 1,
+          "backgroundClear": 1,
+          "fillRect": 0,
+          "animatedFillRect": 0,
+          "clipRect": 0,
+          "clipIntersect": 0,
+          "srcOver": 0,
+          "partialAlpha": 0
+        },
+        "unsupportedCommands": ["m78.clip.unsupported-complex-clip"],
+        "commands": [
+          {
+            "label": "background-clear",
+            "family": "backgroundClear",
+            "supported": true,
+            "color": {
+              "r": 0.0400,
+              "g": 0.0400,
+              "b": 0.0500,
+              "a": 1.0000
+            }
+          },
+          {
+            "label": "nested-rrect-difference-clip",
+            "family": "clip",
+            "supported": false,
+            "reason": "m78.clip.unsupported-complex-clip"
+          }
+
+        ]
+      },
+      "cpuOracle": null
+    }
+
+  ]
+}

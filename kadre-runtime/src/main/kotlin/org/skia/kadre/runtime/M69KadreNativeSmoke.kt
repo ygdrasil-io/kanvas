@@ -791,7 +791,7 @@ private val NativeSmokeConfig.frameClockSource: String
     }
 
 private val NativeSmokeConfig.replayScene: ReplaySceneEvidence?
-    get() = if (mode == "demo") M73_REPLAY_SCENES_BY_ID[sceneContractId] else null
+    get() = if (mode == "demo") replayScenesById()[sceneContractId] else null
 
 private fun configMilestone(mode: String): String = if (mode == "demo") "M70-A/M71/M72/M73/M74" else "M69"
 
