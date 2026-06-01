@@ -1,0 +1,11 @@
+{
+    "schemaVersion": 1,
+    "id": "m84-negative-p95-threshold-fixture",
+    "lane": "frame.kadre-windowed",
+    "status": "expected-fail",
+    "reason": "m84.negative-fixture-p95-threshold-exceeded",
+    "mutatesBaseline": false,
+    "thresholdP95Ms": 8.0,
+    "observedP95Ms": 18.114,
+    "assertion": "Candidate timing gate rejects a too-low p95 threshold without rewriting checked-in baselines."
+}
