@@ -66,6 +66,8 @@ tasks.register<JavaExec>("runM70KadreNativeDemo") {
         providers.gradleProperty("kadreDemoWarmupFrames").orElse("120").get(),
         "--scene-contract-id",
         "m70-a-kanvas-owned-kadre-native-scene",
+        "--capture-output",
+        rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png").asFile.absolutePath,
     )
     jvmArgs(buildList {
         if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
