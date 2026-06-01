@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("buildsrc.convention.kotlin-jvm")
     application
@@ -57,9 +59,16 @@ tasks.register<JavaExec>("runM70KadreNativeDemo") {
     description = "Runs the PM-visible M70-M73 Kadre native WebGPU demo and writes reporting-only runtime telemetry."
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("org.skia.kadre.runtime.M69KadreNativeSmokeKt")
+    fun projectRootPath(value: String): String {
+        val file = File(value)
+        return if (file.isAbsolute) file.absolutePath else rootProject.layout.projectDirectory.file(value).asFile.absolutePath
+    }
     args(
         "--output",
-        rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo.json").asFile.absolutePath,
+        providers.gradleProperty("kadreDemoOutput")
+            .map(::projectRootPath)
+            .orElse(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo.json").asFile.absolutePath)
+            .get(),
         "--frames",
         providers.gradleProperty("kadreDemoFrames").orElse("420").get(),
         "--mode",
@@ -69,7 +78,10 @@ tasks.register<JavaExec>("runM70KadreNativeDemo") {
         "--scene-contract-id",
         providers.gradleProperty("kadreReplaySceneId").orElse("m73-linear-gradient-rect-replay-v1").get(),
         "--capture-output",
-        rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png").asFile.absolutePath,
+        providers.gradleProperty("kadreDemoCaptureOutput")
+            .map(::projectRootPath)
+            .orElse(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png").asFile.absolutePath)
+            .get(),
     )
     jvmArgs(buildList {
         if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
@@ -169,5 +181,20 @@ tasks.register<JavaExec>("pipelineM82InputResizeRuntimeLoop") {
     mainClass.set("org.skia.kadre.runtime.M82KadreInputResizeRuntimeLoopKt")
     args(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop").asFile.absolutePath)
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<JavaExec>("pipelineM83DisplayListReplay") {
+    group = "verification"
+    description = "Generates M83 Kanvas display-list replay through Kadre evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M83DisplayListReplayKt")
+    args(
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+        rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m83-display-list-replay").asFile.absolutePath,
+    )
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo-readback.png"))
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m83-display-list-replay"))
     outputs.upToDateWhen { false }
 }

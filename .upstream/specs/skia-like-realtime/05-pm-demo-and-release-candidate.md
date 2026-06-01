@@ -76,6 +76,28 @@ The release candidate should report:
 | Performance | P0 gate status and quarantine list. |
 | Operability | How to run demo, regenerate dashboard, inspect artifacts. |
 
+## M83 Display-List PM Evidence
+
+For M83 and later display-list replay work, the PM demo package must distinguish
+three facts:
+
+- selected display-list scene contract;
+- native Kadre/WebGPU execution evidence;
+- unsupported display-list nodes and their stable refusal reasons.
+
+Minimum PM artifacts:
+
+- `reports/wgsl-pipeline/m83-display-list-replay/native-demo.json`;
+- `reports/wgsl-pipeline/m83-display-list-replay/native-demo-readback.png`;
+- `reports/wgsl-pipeline/m83-display-list-replay/evidence.json`;
+- `reports/wgsl-pipeline/m83-display-list-replay/evidence.md`;
+- PM bundle manifest entry `m83DisplayListReplay`.
+
+The native JSON must name `m83-display-list-pm-scene-v1` as the selected
+`sceneContract.id`, and the evidence JSON must report
+`nativePixelsProducedFromDisplayListByThisTask=true`. If either condition is
+missing, the sprint is not done; it is only route-prep evidence.
+
 ## PM Language
 
 Use this framing:

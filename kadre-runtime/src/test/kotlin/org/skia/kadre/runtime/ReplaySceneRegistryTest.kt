@@ -228,7 +228,14 @@ class ReplaySceneRegistryTest {
     fun m78ReplayScenesAreSelectableByLiveReplayRegistry() {
         val replayScenes = replayScenesById()
 
-        assertEquals(M73_REPLAY_SCENES.size + M77_BLEND_ALPHA_REPLAY_SCENES.size + M78_CLIP_REPLAY_SCENES.size + M79_BITMAP_REPLAY_SCENES.size, replayScenes.size)
+        assertEquals(
+            M73_REPLAY_SCENES.size +
+                M77_BLEND_ALPHA_REPLAY_SCENES.size +
+                M78_CLIP_REPLAY_SCENES.size +
+                M79_BITMAP_REPLAY_SCENES.size +
+                M83_DISPLAY_LIST_REPLAY_SCENES.size,
+            replayScenes.size,
+        )
         assertEquals("renderable", requireNotNull(replayScenes["m78-clipped-solid-rect-replay-v1"]).status)
         assertEquals("renderable", requireNotNull(replayScenes["m78-clipped-alpha-gradient-replay-v1"]).status)
         assertEquals("expected-unsupported", requireNotNull(replayScenes["m78-complex-clip-refusal-v1"]).status)
@@ -551,6 +558,57 @@ class ReplaySceneRegistryTest {
         assertEquals("refused-blank-artifact", blankArtifact.captureStatus)
         assertEquals(true, "m81.blank-artifact" in blankArtifact.unsupportedCaptureReasons)
         assertEquals(true, "m81.window-surface-readback-not-implemented" in blankArtifact.unsupportedCaptureReasons)
+    }
+
+    @Test
+    fun m83DisplayListScenesAreSelectableAndKeepStableRefusals() {
+        val replayScenes = replayScenesById()
+        val renderable = requireNotNull(replayScenes[M83_DISPLAY_LIST_PM_SCENE_ID])
+        val unsupported = requireNotNull(replayScenes[M83_DISPLAY_LIST_PLACEHOLDER_SCENE_ID])
+
+        assertEquals("kanvas-display-list", renderable.source)
+        assertEquals("renderable", renderable.status)
+        assertEquals(true, renderable.renderedByKadre)
+        assertEquals(5, renderable.totalCommandCount)
+        assertEquals(1, renderable.clipRectCommandCount)
+        assertEquals(1, renderable.bitmapCommandCount)
+        assertEquals(2, renderable.fillRectCount)
+        assertContains(renderable.toJson("  "), "\"commandSource\": \"bounded-kanvas-display-list-lowered-to-typed-kadre-replay-contract\"")
+        assertContains(renderable.toWgsl(0.0), "bitmapPixels")
+
+        val cpuOracle = renderReplayCpuOracle(640, 420, renderable)
+        assertEquals(REPLAY_CPU_ORACLE_API, cpuOracle.api)
+        assertEquals(true, cpuOracle.rendered)
+        assertEquals(true, cpuOracle.nonTransparentPixels > 0)
+        assertEquals(true, cpuOracle.bitmapSampledPixels > 0)
+
+        assertEquals("expected-unsupported", unsupported.status)
+        assertEquals(false, unsupported.renderedByKadre)
+        assertEquals(
+            listOf(
+                "m83.text.placeholder-glyph-run-not-routed",
+                "m83.filter.placeholder-dag-not-routed",
+                "m83.runtime-effect.placeholder-descriptor-not-registered",
+            ),
+            unsupported.unsupportedCommands,
+        )
+    }
+
+    @Test
+    fun m83DisplayListEvidenceRequiresNativeSceneArtifact() {
+        val missing = buildM83DisplayListReplayEvidence(Path("missing-m83-fixture-root"))
+        val missingJson = missing.toJsonElement().toString()
+
+        assertEquals(false, missing.nativeEvidence.nativePixelsProducedFromDisplayListByThisTask)
+        assertEquals("blocked", missing.nativeEvidence.status)
+        assertEquals("m83.native-display-list-artifact-missing", missing.nativeEvidence.reason)
+        assertEquals(2, missing.sceneCount)
+        assertEquals(1, missing.renderableSceneCount)
+        assertEquals(1, missing.expectedUnsupportedSceneCount)
+        assertEquals(0, missing.supportStateMismatchCount)
+        assertContains(missingJson, "\"packId\":\"m83-display-list-replay-through-kadre-v1\"")
+        assertContains(missingJson, "\"nativePixelsProducedFromDisplayListByThisTask\":false")
+        assertContains(missingJson, "\"m83.native-display-list-artifact-missing\"")
     }
 
     private fun m76ManifestFixture(): String = """

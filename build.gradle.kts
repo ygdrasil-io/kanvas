@@ -4298,6 +4298,7 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM80SharedReplayOracle")
     mustRunAfter(":kadre-runtime:pipelineM81NativeFrameCapture")
     mustRunAfter(":kadre-runtime:pipelineM82InputResizeRuntimeLoop")
+    mustRunAfter(":kadre-runtime:pipelineM83DisplayListReplay")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4334,6 +4335,7 @@ tasks.register("pipelinePmBundle") {
     val m80SharedReplayOracleDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m80-shared-replay-oracle")
     val m81NativeFrameCaptureDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m81-native-frame-capture")
     val m82InputResizeRuntimeLoopDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop")
+    val m83DisplayListReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m83-display-list-replay")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4359,6 +4361,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m80SharedReplayOracleDir)
     inputs.dir(m81NativeFrameCaptureDir)
     inputs.dir(m82InputResizeRuntimeLoopDir)
+    inputs.dir(m83DisplayListReplayDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4402,6 +4405,7 @@ tasks.register("pipelinePmBundle") {
         val m80SharedReplayOracleRoot = m80SharedReplayOracleDir.asFile
         val m81NativeFrameCaptureRoot = m81NativeFrameCaptureDir.asFile
         val m82InputResizeRuntimeLoopRoot = m82InputResizeRuntimeLoopDir.asFile
+        val m83DisplayListReplayRoot = m83DisplayListReplayDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4486,6 +4490,9 @@ tasks.register("pipelinePmBundle") {
         }
         if (m82InputResizeRuntimeLoopRoot.isDirectory) {
             m82InputResizeRuntimeLoopRoot.copyRecursively(targetRoot.resolve("runtime/m82-kadre-input-resize-runtime-loop"), overwrite = true)
+        }
+        if (m83DisplayListReplayRoot.isDirectory) {
+            m83DisplayListReplayRoot.copyRecursively(targetRoot.resolve("runtime/m83-display-list-replay"), overwrite = true)
         }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
@@ -5507,6 +5514,87 @@ tasks.register("pipelinePmBundle") {
         ) {
             throw GradleException("M82 refusal reason taxonomy changed unexpectedly: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
         }
+        val m83DisplayListReplayFile = m83DisplayListReplayRoot.resolve("evidence.json")
+        val m83DisplayListReplay = if (m83DisplayListReplayFile.isFile) {
+            JsonSlurper().parse(m83DisplayListReplayFile) as? Map<*, *>
+                ?: throw GradleException("M83 display-list replay evidence must be a JSON object: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M83 display-list replay evidence: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
+        }
+        fun m83String(field: String): String = (m83DisplayListReplay[field] as? String).orEmpty()
+        fun m83Int(field: String): Int = (m83DisplayListReplay[field] as? Number)?.toInt() ?: 0
+        fun m83Bool(field: String): Boolean = (m83DisplayListReplay[field] as? Boolean) ?: false
+        val m83NativeEvidence = (m83DisplayListReplay["nativeEvidence"] as? Map<*, *>).orEmpty()
+        val m83Scenes = (m83DisplayListReplay["scenes"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m83ValidationRows = (m83DisplayListReplay["validationRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m83ArtifactPaths = (m83DisplayListReplay["artifactPaths"] as? List<*>)
+            ?.map { it.toString() }
+            .orEmpty()
+        val m83RenderableScene = m83Scenes.singleOrNull { it["id"] == "m83-display-list-pm-scene-v1" }.orEmpty()
+        val m83UnsupportedScene = m83Scenes.singleOrNull { it["id"] == "m83-display-list-placeholder-refusal-v1" }.orEmpty()
+        val m83RenderableCounters = (m83RenderableScene["commandCounters"] as? Map<*, *>).orEmpty()
+        val m83UnsupportedCommands = (m83UnsupportedScene["unsupportedCommands"] as? List<*>)
+            ?.map { it.toString() }
+            .orEmpty()
+        if (
+            m83String("packId") != "m83-display-list-replay-through-kadre-v1" ||
+            m83String("claimLevel") != "bounded-kanvas-display-list-replay-through-native-kadre" ||
+            !m83Bool("nativePixelsProducedFromDisplayListByThisTask")
+        ) {
+            throw GradleException("M83 display-list replay evidence has unexpected pack/claim/native fields: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
+        }
+        if (
+            m83Int("sceneCount") != 2 ||
+            m83Int("renderableSceneCount") != 1 ||
+            m83Int("expectedUnsupportedSceneCount") != 1 ||
+            m83Int("failedSceneCount") != 0 ||
+            m83Int("supportStateMismatchCount") != 0
+        ) {
+            throw GradleException("M83 display-list replay evidence counters are invalid: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
+        }
+        if (
+            m83NativeEvidence["status"] != "native-display-list-produced" ||
+            m83NativeEvidence["reason"] != "m83.native-display-list-presented" ||
+            m83NativeEvidence["sceneContractId"] != "m83-display-list-pm-scene-v1" ||
+            m83NativeEvidence["nativePixelsProducedFromDisplayListByThisTask"] != true ||
+            (m83NativeEvidence["captureNonTransparentPixels"] as? Number)?.toInt()?.takeIf { it > 0 } == null ||
+            (m83NativeEvidence["presentedFrames"] as? Number)?.toInt()?.takeIf { it > 0 } == null
+        ) {
+            throw GradleException("M83 native display-list evidence does not prove nonblank native M83 pixels: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
+        }
+        if (m83ArtifactPaths.size < 4) {
+            throw GradleException("M83 display-list replay evidence missing artifact paths: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
+        }
+        m83ArtifactPaths.forEach { artifactPath ->
+            val sourceArtifact = rootDir.resolve(artifactPath)
+            val bundledArtifact = targetRoot.resolve(artifactPath.removePrefix("reports/wgsl-pipeline/"))
+            if (!sourceArtifact.isFile && !bundledArtifact.isFile && !targetRoot.resolve(artifactPath).isFile) {
+                throw GradleException("M83 display-list replay evidence references missing artifact `$artifactPath`: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
+            }
+        }
+        if (m83ValidationRows.size < 4 || m83ValidationRows.any { it["status"] != "pass" }) {
+            throw GradleException("M83 display-list replay evidence has missing or non-pass validation rows: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
+        }
+        if (
+            m83RenderableScene["status"] != "renderable" ||
+            (m83RenderableCounters["clipRect"] as? Number)?.toInt() != 1 ||
+            (m83RenderableCounters["bitmapRect"] as? Number)?.toInt() != 1 ||
+            (m83RenderableCounters["fillRect"] as? Number)?.toInt() != 2
+        ) {
+            throw GradleException("M83 renderable display-list scene is missing expected node coverage: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
+        }
+        if (
+            m83UnsupportedScene["status"] != "expected-unsupported" ||
+            "m83.text.placeholder-glyph-run-not-routed" !in m83UnsupportedCommands ||
+            "m83.filter.placeholder-dag-not-routed" !in m83UnsupportedCommands ||
+            "m83.runtime-effect.placeholder-descriptor-not-registered" !in m83UnsupportedCommands
+        ) {
+            throw GradleException("M83 unsupported display-list node refusals changed unexpectedly: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5994,6 +6082,28 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M82 adds deterministic Kadre-backed input/resize runtime-loop evidence with pointer, keyboard, resize, scale-factor, close, telemetry, and stable refusals. It does not claim real desktop OS event injection or release-grade timing.",
             ),
+            "m83DisplayListReplay" to linkedMapOf<String, Any>(
+                "status" to ((m83NativeEvidence["status"] as? String).orEmpty()),
+                "packId" to m83String("packId"),
+                "claimLevel" to m83String("claimLevel"),
+                "nativePixelsProducedFromDisplayListByThisTask" to m83Bool("nativePixelsProducedFromDisplayListByThisTask"),
+                "sceneContractId" to ((m83NativeEvidence["sceneContractId"] as? String).orEmpty()),
+                "sceneCount" to m83Int("sceneCount"),
+                "renderableSceneCount" to m83Int("renderableSceneCount"),
+                "expectedUnsupportedSceneCount" to m83Int("expectedUnsupportedSceneCount"),
+                "failedSceneCount" to m83Int("failedSceneCount"),
+                "supportStateMismatchCount" to m83Int("supportStateMismatchCount"),
+                "totalCommandCount" to m83Int("totalCommandCount"),
+                "supportedCommandCount" to m83Int("supportedCommandCount"),
+                "unsupportedCommandCount" to m83Int("unsupportedCommandCount"),
+                "captureNonTransparentPixels" to ((m83NativeEvidence["captureNonTransparentPixels"] as? Number)?.toInt() ?: 0),
+                "presentedFrames" to ((m83NativeEvidence["presentedFrames"] as? Number)?.toInt() ?: 0),
+                "artifactPaths" to m83ArtifactPaths,
+                "report" to "runtime/m83-display-list-replay/evidence.md",
+                "evidenceJson" to "runtime/m83-display-list-replay/evidence.json",
+                "releaseBlocking" to false,
+                "notice" to "M83 proves one bounded Kanvas display-list scene selected through the Kadre native WebGPU demo path with a nonblank offscreen readback. Text, image-filter DAG, runtime-effect, broad SkCanvas op streams, and release-grade timing remain explicit non-claims.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -6082,6 +6192,7 @@ tasks.register("pipelinePmBundle") {
                 "M80 hardens the bounded replay CPU reference behind a shared typed oracle result. It does not add broad SkCanvas/display-list replay or any new rendering breadth.",
                 "M81 packages native frame artifact capture evidence for PM review, but the current produced image remains a wgpu4k native offscreen texture readback. Window-surface screenshot/readback is still unsupported and refused with m81.window-surface-readback-not-implemented.",
                 "M82 verifies deterministic Kadre-backed input/resize runtime-loop semantics and telemetry. It does not synthesize real desktop OS input events in CI, does not claim full window-manager resize coverage, and keeps dropped-frame counters reporting-only until M84.",
+                "M83 verifies one bounded Kanvas display-list scene through the Kadre native WebGPU demo path with nonblank offscreen readback evidence. Broad SkCanvas op replay, text, image-filter DAGs, arbitrary runtime effects, and release-grade timing remain outside the claim.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -6144,6 +6255,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M81 native frame capture counters live in `manifest.json` under `m81NativeFrameCapture`; the current image is offscreen texture readback evidence, not window-surface readback.")
                 appendLine("- `runtime/m82-kadre-input-resize-runtime-loop/`: M82 deterministic Kadre input/resize runtime-loop evidence JSON and Markdown when `:kadre-runtime:pipelineM82InputResizeRuntimeLoop` has been run.")
                 appendLine("- M82 input/resize runtime counters live in `manifest.json` under `m82InputResizeRuntimeLoop`; OS event injection and release-grade timing remain non-claims.")
+                appendLine("- `runtime/m83-display-list-replay/`: M83 bounded Kanvas display-list replay evidence, native demo JSON, and native readback PNG.")
+                appendLine("- M83 display-list replay counters live in `manifest.json` under `m83DisplayListReplay`; it proves one selected display-list scene, not broad SkCanvas op replay.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
