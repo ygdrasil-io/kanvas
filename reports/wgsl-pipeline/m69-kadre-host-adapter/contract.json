@@ -1,10 +1,11 @@
 {
+  "auditWarnings": [],
   "capabilities": {
     "diagnostics": {
-      "evidenceReadiness": "ready",
+      "evidenceReadiness": "native-runnable",
       "kadreEvidenceStatus": "partial-host-diagnostics-available",
-      "kanvasAdapterStatus": "route-contract-defined",
-      "nativePresented": false,
+      "kanvasAdapterStatus": "native-kadre-standalone-present-loop-implemented",
+      "nativePresented": true,
       "requiredBehavior": "Expose host, backend, adapter, surface format, and failure reason in telemetry.",
       "requiredEvidenceReady": true,
       "sourceEvidence": {
@@ -61,22 +62,22 @@
       }
     },
     "nativePresentation": {
-      "evidenceReadiness": "blocked-native-present",
+      "evidenceReadiness": "native-runnable",
       "kadreEvidenceStatus": "host-capable-via-sample",
-      "kanvasAdapterStatus": "blocked-native-kanvas-frame-loop-not-implemented",
-      "nativePresented": false,
-      "requiredBehavior": "Present actual Kanvas-rendered pixels in a Kadre native window.",
-      "requiredEvidenceReady": false,
+      "kanvasAdapterStatus": "native-kadre-standalone-present-loop-implemented",
+      "nativePresented": true,
+      "requiredBehavior": "Present a bounded WebGPU frame in a Kadre native window and keep Kanvas display-list replay as a separate claim.",
+      "requiredEvidenceReady": true,
       "sourceEvidence": {
-        "HelloTriangle.SurfaceTextureStatus.Success": false,
+        "HelloTriangle.SurfaceTextureStatus.success": true,
         "HelloTriangle.present()": true
       }
     },
     "present": {
-      "evidenceReadiness": "ready",
+      "evidenceReadiness": "native-runnable",
       "kadreEvidenceStatus": "available-in-wgpu4k-sample",
-      "kanvasAdapterStatus": "blocked-native-present-not-wired",
-      "nativePresented": false,
+      "kanvasAdapterStatus": "native-kadre-standalone-present-loop-implemented",
+      "nativePresented": true,
       "requiredBehavior": "Present a completed Kanvas frame and expose present timing proxy where available.",
       "requiredEvidenceReady": true,
       "sourceEvidence": {
@@ -102,10 +103,10 @@
       }
     },
     "surfaceCreation": {
-      "evidenceReadiness": "ready",
+      "evidenceReadiness": "native-runnable",
       "kadreEvidenceStatus": "available-in-window-api-and-wgpu4k-sample",
-      "kanvasAdapterStatus": "route-contract-defined",
-      "nativePresented": false,
+      "kanvasAdapterStatus": "native-kadre-standalone-present-loop-implemented",
+      "nativePresented": true,
       "requiredBehavior": "Create a WebGPU/wgpu4-compatible drawable surface with adapter/device metadata.",
       "requiredEvidenceReady": true,
       "sourceEvidence": {
@@ -119,7 +120,7 @@
       }
     }
   },
-  "generatedAt": "2026-06-01T13:25:11Z",
+  "generatedAt": "2026-06-01T14:04:40Z",
   "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
   "kadreCoreFiles": {
     "activeEventLoop": {
@@ -192,14 +193,14 @@
     "FOR-59"
   ],
   "nonClaims": [
-    "No native Kadre screenshot or present timing is claimed by M69.",
-    "M69 proves the route contract and headless bridge only unless a future native artifact is produced."
+    "No native screenshot or frame PNG is claimed by M69.",
+    "Native timing is present-call duration only; release-grade FPS, Kanvas display-list replay, and input-driven interaction remain future work."
   ],
   "repository": {
     "gitmodulesEntryPresent": true,
     "kadreSubmoduleCommit": "b5e3ebd89e3e04b208d8d0308b6c61d1a31b316c",
     "kadreSubmodulePath": "external/poc-koreos",
-    "rootCommit": "b48ce1cda9d104cbe4f70d996f18e420d5d2b01d",
+    "rootCommit": "6c5d4a7a6622427f9ff41c260ba892d434c6dbd0",
     "settingsIncludeBuildPresent": true
   },
   "schemaVersion": 1,

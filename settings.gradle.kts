@@ -46,7 +46,22 @@ plugins {
 // Kadre is not assumed to be available from Maven Central during Kanvas integration.
 // Keep it as an independent source build so Kanvas modules can depend on
 // org.graphiks.kadre:* coordinates without vendoring Kadre modules into this build.
-includeBuild("external/poc-koreos")
+val kadreSourceBuildHasPublishedModules =
+    file("external/poc-koreos/settings.gradle.kts").takeIf { it.isFile }
+        ?.readText()
+        ?.contains("include(\":kadre\")")
+        ?: false
+
+includeBuild("external/poc-koreos") {
+    if (kadreSourceBuildHasPublishedModules) {
+        dependencySubstitution {
+            substitute(module("org.graphiks.kadre:kadre")).using(project(":kadre"))
+            substitute(module("org.graphiks.kadre:kadre-win32")).using(project(":kadre-win32"))
+            substitute(module("org.graphiks.kadre:kadre-x11")).using(project(":kadre-x11"))
+            substitute(module("org.graphiks.kadre:kadre-wayland")).using(project(":kadre-wayland"))
+        }
+    }
+}
 
 include(":math")
 include(":kanvas-skia")
@@ -77,5 +92,6 @@ include(":cpu-raster")
 // restored here so :gpu-raster:test (ClearRedTest) actually runs.
 include(":gpu-raster")
 include(":render-pipeline")
+include(":kadre-runtime")
 include(":skia-integration-tests")
 include(":integration-tests")

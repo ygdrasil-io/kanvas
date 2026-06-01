@@ -5,7 +5,7 @@
     "python": "3.14.5"
   },
   "failures": [],
-  "generatedAt": "2026-06-01T13:25:11Z",
+  "generatedAt": "2026-06-01T14:04:40Z",
   "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
   "linearIssues": [
     "FOR-56",
@@ -13,8 +13,8 @@
     "FOR-58",
     "FOR-59"
   ],
-  "nativePresented": false,
-  "routeStatus": "headless-bridge",
+  "nativePresented": true,
+  "routeStatus": "native-runnable",
   "schemaVersion": 1,
   "status": "pass"
 }

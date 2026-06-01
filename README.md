@@ -15,7 +15,7 @@ product target is broader: make Kanvas render more of the practical Skia CPU
 surface while building a measured real-time WebGPU lane with live telemetry,
 feature diagnostics, and PM-visible demos.
 
-New target readiness is approximately 60% after M69 closeout. This is intentionally lower
+New target readiness is approximately 62% after the M69 native Kadre continuation. This is intentionally lower
 than the completed MEP score because the scope has expanded from evidence
 infrastructure to feature breadth, fidelity, runtime behavior, and release
 operability. The score is based on counted denominators in the target doc, not
@@ -25,11 +25,11 @@ manual sprint estimates.
 |---|---:|---:|---|
 | Rendering feature breadth | 30% | 60% | Path AA, bounded image-filter DAG, text/font, color/blend/color-filter, and registered runtime-effect evidence now have selected generated contracts; broad layers and fallbacks remain incomplete. |
 | Skia-like fidelity | 20% | 50% | M66 raises selected GM/reference evidence to 50/100 rows. Only 37/100 are Skia-comparable today; CPU-oracle rows are breadth/refusal evidence until comparable Skia references land. |
-| Real-time runtime | 20% | 60% | M65 adds a reporting-only headless runtime smoke lane, M68 verifies the Kadre source-build bridge, and M69 defines an executable Kanvas/Kadre host adapter route contract. Native Kanvas/Kadre presentation remains blocked by `m69.native-kanvas-kadre-present-not-implemented`. |
-| Performance and cache readiness | 15% | 40% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry and adds family budgets plus quarantine/rebaseline fixture. Only `core paint/blend` is measured; native Kadre timing remains reporting-only. |
-| PM/demo operability | 15% | 95% | PM bundle now includes M65 runtime smoke, M66 counters, M67 performance tiering, M68 Kadre bridge/demo evidence, and M69 host adapter smoke artifacts. A runnable native demo is still blocked by the missing native present loop. |
+| Real-time runtime | 20% | 65% | M65 adds a reporting-only headless runtime smoke lane, M68 verifies the Kadre source-build bridge, and M69 now runs a bounded standalone Kadre/AppKit/Metal WebGPU present loop with 3 presented frames. Native input, broad Kanvas display-list replay, and screenshot capture remain incomplete. |
+| Performance and cache readiness | 15% | 40% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry and adds family budgets plus quarantine/rebaseline fixture. M69 native timing is present-call duration only, not a release-grade FPS gate. |
+| PM/demo operability | 15% | 100% | PM bundle now includes M65 runtime smoke, M66 counters, M67 performance tiering, M68 Kadre bridge/demo evidence, and M69 native Kadre present evidence. |
 
-Weighted PM readiness for the new target: **60%**.
+Weighted PM readiness for the new target: **62%**.
 
 Active planning entry points:
 
@@ -49,7 +49,7 @@ Active planning entry points:
 | M66 | Skia GM Promotion Wave | 19 cumulative GM/reference rows become generated support/refusal evidence, bringing selected fidelity evidence to 50/100 rows. |
 | M67 | Performance Tiering | `frame.headless-webgpu` candidate gate, family budgets, and deterministic quarantine fixture are generated and bundled. |
 | M68 | Native Real-Time Demo | Kadre source-build bridge and flagship scene inputs are generated; native windowed launch is blocked until the Kanvas/Kadre host adapter lands. |
-| M69 | Kanvas/Kadre Host Adapter V1 | Host adapter contract, route smoke, first scene route, and PM bundle counters are generated; native Kadre-presented Kanvas pixels remain the next blocker. |
+| M69 | Kanvas/Kadre Host Adapter V1 | Host adapter contract, route smoke, first scene route, PM bundle counters, and a bounded standalone native Kadre/WebGPU present loop are generated. |
 | M70 | Release Candidate Renderer | Renderer API, runtime, demos, CI gates, and known limitations are frozen for RC. |
 
 ## Completed MEP Evidence Target (Historical)
