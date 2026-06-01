@@ -806,6 +806,42 @@ tasks.register("pipelineM66GmPromotionWave") {
     }
 }
 
+tasks.register("pipelineM86FidelityBurndown") {
+    group = "verification"
+    description = "Generates M86 fidelity burn-down ranking, root-cause classification, and PM evidence."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m86_fidelity_burndown.py")
+    val m66ContractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json")
+    val generatedManifestFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json")
+    val artifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    val generatedArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/generated/artifacts")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m86-fidelity-burndown")
+    val reportFile = layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md")
+    inputs.file(scriptFile)
+    inputs.file(m66ContractFile)
+    inputs.file(generatedManifestFile)
+    inputs.dir(artifactDir)
+    inputs.dir(generatedArtifactDir)
+    outputs.dir(outputDir)
+    outputs.file(reportFile)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--output-dir",
+                outputDir.asFile.relativeTo(rootDir).path,
+                "--report",
+                reportFile.asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineM57PathAaClipMicroPromotionPack") {
     group = "verification"
     description = "Materializes M57 bounded Path AA / clip micro-promotion generated scene rows and artifacts."
@@ -4304,6 +4340,7 @@ tasks.register("pipelinePmBundle") {
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
+        "pipelineM86FidelityBurndown",
         "pipelineSceneDashboardGate",
         "pipelineDashboardFrontQa",
         "pipelinePerformanceTrendWarnings",
@@ -4340,6 +4377,7 @@ tasks.register("pipelinePmBundle") {
     val m83DisplayListReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m83-display-list-replay")
     val m84NativeFrameTimingDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m84-native-frame-timing")
     val m85ResourceLifetimeCacheDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m85-resource-lifetime-cache")
+    val m86FidelityBurndownDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m86-fidelity-burndown")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4368,6 +4406,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m83DisplayListReplayDir)
     inputs.dir(m84NativeFrameTimingDir)
     inputs.dir(m85ResourceLifetimeCacheDir)
+    inputs.dir(m86FidelityBurndownDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4379,6 +4418,7 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m69-kadre-host-adapter-smoke.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m69-sprint-report-and-readiness-accounting.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
@@ -4414,6 +4454,7 @@ tasks.register("pipelinePmBundle") {
         val m83DisplayListReplayRoot = m83DisplayListReplayDir.asFile
         val m84NativeFrameTimingRoot = m84NativeFrameTimingDir.asFile
         val m85ResourceLifetimeCacheRoot = m85ResourceLifetimeCacheDir.asFile
+        val m86FidelityBurndownRoot = m86FidelityBurndownDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4508,6 +4549,9 @@ tasks.register("pipelinePmBundle") {
         if (m85ResourceLifetimeCacheRoot.isDirectory) {
             m85ResourceLifetimeCacheRoot.copyRecursively(targetRoot.resolve("runtime/m85-resource-lifetime-cache"), overwrite = true)
         }
+        if (m86FidelityBurndownRoot.isDirectory) {
+            m86FidelityBurndownRoot.copyRecursively(targetRoot.resolve("fidelity/m86-fidelity-burndown"), overwrite = true)
+        }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
         }
@@ -4566,6 +4610,7 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-06-01-m69-kadre-host-adapter-smoke.md",
             "reports/wgsl-pipeline/2026-06-01-m69-sprint-report-and-readiness-accounting.md",
             "reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md",
+            "reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
@@ -5771,6 +5816,64 @@ tasks.register("pipelinePmBundle") {
                 throw GradleException("M85 resource/cache evidence references missing artifact `$artifactPath`: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
             }
         }
+        val m86FidelityBurndownFile = m86FidelityBurndownRoot.resolve("evidence.json")
+        val m86FidelityBurndown = if (m86FidelityBurndownFile.isFile) {
+            JsonSlurper().parse(m86FidelityBurndownFile) as? Map<*, *>
+                ?: throw GradleException("M86 fidelity burn-down evidence must be a JSON object: ${m86FidelityBurndownFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M86 fidelity burn-down evidence: ${m86FidelityBurndownFile.relativeTo(rootDir)}")
+        }
+        val m86Counters = (m86FidelityBurndown["counters"] as? Map<*, *>).orEmpty()
+        val m86BurnDown = (m86FidelityBurndown["burnDown"] as? Map<*, *>).orEmpty()
+        val m86DashboardGateExpectation = (m86FidelityBurndown["dashboardGateExpectation"] as? Map<*, *>).orEmpty()
+        val m86ReadinessDelta = (m86FidelityBurndown["readinessDelta"] as? Map<*, *>).orEmpty()
+        val m86SelectedRows = (m86BurnDown["selectedRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m86ClassifiedRows = (m86BurnDown["classifiedRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m86RemediationTargets = (m86BurnDown["highValueRemediationTargets"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        if (
+            m86FidelityBurndown["generatedBy"] != "pipelineM86FidelityBurndown" ||
+            ((m86Counters["rankedCandidates"] as? Number)?.toInt() ?: 0) < 19 ||
+            ((m86Counters["supportRows"] as? Number)?.toInt() ?: 0) < 16 ||
+            ((m86Counters["unsupportedRows"] as? Number)?.toInt() ?: 0) < 3 ||
+            ((m86Counters["classifiedRows"] as? Number)?.toInt() ?: 0) < 7 ||
+            ((m86Counters["skiaComparableSupportRows"] as? Number)?.toInt() ?: 0) < 6 ||
+            m86DashboardGateExpectation["globalThresholdWeakened"] != false ||
+            ((m86ReadinessDelta["weightedPercentBefore"] as? Number)?.toDouble() ?: -1.0) != 67.75 ||
+            ((m86ReadinessDelta["weightedPercentAfter"] as? Number)?.toDouble() ?: -1.0) != 67.75
+        ) {
+            throw GradleException("M86 fidelity burn-down counters or readiness accounting are invalid: ${m86FidelityBurndownFile.relativeTo(rootDir)}")
+        }
+        if (m86SelectedRows.size < 19 || m86ClassifiedRows.size < 7 || m86RemediationTargets.size < 3) {
+            throw GradleException("M86 fidelity burn-down evidence is missing ranked/classified/remediation rows: ${m86FidelityBurndownFile.relativeTo(rootDir)}")
+        }
+        listOf(
+            "m66-clip-rect-difference-skia",
+            "m66-crop-image-filter-nonnull-prepass-skia",
+            "m66-path-aa-stroke-primitive-oracle",
+        ).forEach { rowId ->
+            if (m86RemediationTargets.none { it["id"] == rowId }) {
+                throw GradleException("M86 remediation targets missing `$rowId`: ${m86FidelityBurndownFile.relativeTo(rootDir)}")
+            }
+        }
+        m86SelectedRows.forEach { row ->
+            val rowId = (row["id"] as? String).orEmpty()
+            val artifacts = (row["artifacts"] as? Map<*, *>).orEmpty()
+            if (artifacts.isEmpty()) {
+                throw GradleException("M86 selected row `$rowId` is missing artifact links: ${m86FidelityBurndownFile.relativeTo(rootDir)}")
+            }
+            artifacts.values.forEach { rawPath ->
+                val artifactPath = rawPath.toString()
+                if (!artifactPath.startsWith("dashboard/artifacts/") || !targetRoot.resolve(artifactPath).isFile) {
+                    throw GradleException("M86 selected row `$rowId` references a non-portable or missing PM bundle artifact `$artifactPath`: ${m86FidelityBurndownFile.relativeTo(rootDir)}")
+                }
+            }
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5908,6 +6011,9 @@ tasks.register("pipelinePmBundle") {
             "m84NativeFrameTimingJson" to "runtime/m84-native-frame-timing/evidence.json",
             "m85ResourceLifetimeCacheMarkdown" to "runtime/m85-resource-lifetime-cache/evidence.md",
             "m85ResourceLifetimeCacheJson" to "runtime/m85-resource-lifetime-cache/evidence.json",
+            "m86FidelityBurndownMarkdown" to "fidelity/m86-fidelity-burndown/evidence.md",
+            "m86FidelityBurndownJson" to "fidelity/m86-fidelity-burndown/evidence.json",
+            "m86FidelityBurndownSprintReport" to "reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -6338,6 +6444,24 @@ tasks.register("pipelinePmBundle") {
                 "cachePressureJson" to "runtime/m85-resource-lifetime-cache/cache-pressure.json",
                 "notice" to "M85 makes selected realtime resource lifetime and cache pressure auditable as a deterministic selected-scene ledger: cache counters, bounded key spaces, resize resource invalidation, and stable device-loss unsupported diagnostics. It is not observed WebGPU runtime cache telemetry, is not counted as a cache readiness gate, and does not claim arbitrary scene cache behavior or real device-lost recovery.",
             ),
+            "m86FidelityBurndown" to linkedMapOf<String, Any>(
+                "rankedCandidates" to ((m86Counters["rankedCandidates"] as? Number)?.toInt() ?: 0),
+                "supportRows" to ((m86Counters["supportRows"] as? Number)?.toInt() ?: 0),
+                "unsupportedRows" to ((m86Counters["unsupportedRows"] as? Number)?.toInt() ?: 0),
+                "classifiedRows" to ((m86Counters["classifiedRows"] as? Number)?.toInt() ?: 0),
+                "skiaComparableSupportRows" to ((m86Counters["skiaComparableSupportRows"] as? Number)?.toInt() ?: 0),
+                "familyCounts" to (m86Counters["familyCounts"] as? Map<*, *>).orEmpty(),
+                "referenceKindCounts" to (m86Counters["referenceKindCounts"] as? Map<*, *>).orEmpty(),
+                "rootCauseCounts" to (m86Counters["rootCauseCounts"] as? Map<*, *>).orEmpty(),
+                "remediationTargets" to m86RemediationTargets,
+                "globalThresholdWeakened" to (m86DashboardGateExpectation["globalThresholdWeakened"] == true),
+                "weightedPercentBefore" to ((m86ReadinessDelta["weightedPercentBefore"] as? Number)?.toDouble() ?: 0.0),
+                "weightedPercentAfter" to ((m86ReadinessDelta["weightedPercentAfter"] as? Number)?.toDouble() ?: 0.0),
+                "report" to "fidelity/m86-fidelity-burndown/evidence.md",
+                "evidenceJson" to "fidelity/m86-fidelity-burndown/evidence.json",
+                "sprintReport" to "reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md",
+                "notice" to "M86 turns selected GM/reference rows into a fidelity burn-down queue with root-cause classification and remediation targets. It does not claim renderer visual fixes or readiness movement without before/after rendered artifacts.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -6429,6 +6553,7 @@ tasks.register("pipelinePmBundle") {
                 "M83 verifies one bounded Kanvas display-list scene through the Kadre native WebGPU demo path with nonblank offscreen readback evidence. Broad SkCanvas op replay, text, image-filter DAGs, arbitrary runtime effects, and release-grade timing remain outside the claim.",
                 "M84 turns native Kadre frame timing into candidate/reporting-only evidence with explicit quarantine and a negative fixture. It does not promote frame.kadre-windowed to a release-blocking gate or claim full end-to-end FPS.",
                 "M85 verifies a deterministic selected-scene resource/cache ledger, bounded key spaces, resize invalidation, and stable device-loss unsupported diagnostics. It does not claim observed WebGPU runtime cache telemetry, arbitrary scene cache behavior, cache-readiness gate movement, or real device-lost recovery.",
+                "M86 ranks and classifies selected GM/reference fidelity rows and names remediation targets. It does not claim renderer visual fixes, global threshold changes, or readiness movement without before/after rendered artifacts.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -6497,6 +6622,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M84 native frame timing counters live in `manifest.json` under `m84NativeFrameTiming`; the lane remains candidate/reporting-only and not release-blocking.")
                 appendLine("- `runtime/m85-resource-lifetime-cache/`: M85 selected realtime resource lifetime, cache pressure, resize invalidation, and device-loss diagnostic evidence.")
                 appendLine("- M85 resource/cache counters live in `manifest.json` under `m85ResourceLifetimeCache`; they are a deterministic selected-scene ledger, not observed runtime cache telemetry, and device-loss recovery remains expected-unsupported.")
+                appendLine("- `fidelity/m86-fidelity-burndown/`: M86 fidelity burn-down ranking, root-cause classification, and remediation target evidence.")
+                appendLine("- M86 fidelity counters live in `manifest.json` under `m86FidelityBurndown`; this is classification and planning evidence, not a renderer visual-fix claim.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
