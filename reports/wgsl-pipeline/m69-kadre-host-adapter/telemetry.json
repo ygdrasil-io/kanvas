@@ -1,0 +1,47 @@
+{
+  "claimLevel": "headless-bridge",
+  "environment": {
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "python": "3.14.5"
+  },
+  "frameClock": {
+    "headless": "m65.synthetic-monotonic",
+    "native": "blocked",
+    "targetFrames": 120
+  },
+  "generatedAt": "2026-06-01T13:25:11Z",
+  "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
+  "headlessTimingSummary": {
+    "medianFrameMsMax": 12.9778,
+    "medianFrameMsMin": 8.9599,
+    "notNativeTiming": true,
+    "p95FrameMsMax": 13.249,
+    "slotCount": 3,
+    "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
+  },
+  "linearIssues": [
+    "FOR-56",
+    "FOR-57",
+    "FOR-58",
+    "FOR-59"
+  ],
+  "nativeFrameTimingClaim": "none",
+  "nativePresented": false,
+  "presentation": {
+    "headlessBridge": {
+      "pixelProof": "M65 first/final frame nonblank telemetry and PNG artifacts",
+      "status": "pass"
+    },
+    "native": {
+      "reason": "m69.native-kanvas-kadre-present-not-implemented",
+      "status": "blocked"
+    }
+  },
+  "routeCounters": {
+    "blockedRoutes": 1,
+    "headlessBridgeRoutes": 1,
+    "nativeRoutes": 1,
+    "nativeRunnableRoutes": 0
+  },
+  "schemaVersion": 1
+}

@@ -1,0 +1,61 @@
+{
+  "evidence": {
+    "failures": [],
+    "m65NonblankPixelProof": true,
+    "nativePresentationSourceReady": false,
+    "requiredM65Files": [
+      {
+        "bytes": 6375,
+        "exists": true,
+        "path": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json",
+        "sha256": "9a7b1b5efb348b034710341c44a91a809c65d9d40b226e04d0c34a9f58f25eb0"
+      },
+      {
+        "bytes": 5344,
+        "exists": true,
+        "path": "reports/wgsl-pipeline/m65-runtime-smoke/slots.json",
+        "sha256": "7545c1c670aab0615fc1574e11f3dd2f444db324dbc163bff939f16c374aba13"
+      },
+      {
+        "bytes": 12574,
+        "exists": true,
+        "path": "reports/wgsl-pipeline/m65-runtime-smoke/artifacts/baseline-first-frame.png",
+        "sha256": "0dbf82e88b7c137086bd417a6860e92665783dd61a25c22d7bf7e674f96a2f70"
+      },
+      {
+        "bytes": 12642,
+        "exists": true,
+        "path": "reports/wgsl-pipeline/m65-runtime-smoke/artifacts/baseline-final-frame.png",
+        "sha256": "5e4ea8a5f74c1eb45e64873ee0120bb2a315f1e7343b7fba2ba5d30d83c88d31"
+      }
+    ],
+    "sourceAuditReady": true
+  },
+  "generatedAt": "2026-06-01T13:25:11Z",
+  "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
+  "linearIssues": [
+    "FOR-56",
+    "FOR-57",
+    "FOR-58",
+    "FOR-59"
+  ],
+  "nativePresentationReason": "m69.native-kanvas-kadre-present-not-implemented",
+  "nativePresented": false,
+  "reason": "m69.kadre-contract-ready-m65-headless-pixel-proof",
+  "routes": {
+    "headlessBridge": {
+      "nativePresented": false,
+      "reason": "none",
+      "route": "m65.headless.offscreen.pixel-proof-plus-kadre-contract",
+      "status": "pass"
+    },
+    "nativeWindowed": {
+      "nativePresented": false,
+      "reason": "m69.native-kanvas-kadre-present-not-implemented",
+      "route": "kadre.native.windowed",
+      "status": "blocked"
+    }
+  },
+  "schemaVersion": 1,
+  "status": "headless-bridge"
+}
