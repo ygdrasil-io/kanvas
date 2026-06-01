@@ -1,0 +1,421 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "kadre-runtime:M82KadreInputResizeRuntimeLoop",
+  "linearIssues": ["FOR-98", "FOR-144", "FOR-145", "FOR-146", "FOR-147", "FOR-148"],
+  "packId": "m82-kadre-input-resize-runtime-loop-v1",
+  "status": "pass",
+  "claimLevel": "deterministic-kadre-runtime-event-model-and-telemetry",
+  "readinessDelta": 0,
+  "artifactPaths": [
+    "reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/evidence.json",
+    "reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/evidence.md"
+  ],
+  "backingHost": {
+    "host": "Kadre",
+    "dependency": "org.graphiks.kadre:kadre:1.0.0",
+    "nativeRoute": "kadre-runtime:M69KadreNativeSmoke",
+    "eventFamilies": ["WindowEvent.RedrawRequested", "WindowEvent.Resized", "WindowEvent.ScaleFactorChanged", "WindowEvent.PointerMoved", "WindowEvent.KeyboardInput", "WindowEvent.CloseRequested"],
+    "sourceEvidence": ["reports/wgsl-pipeline/2026-06-01-m65-kadre-audit.md", "reports/wgsl-pipeline/2026-06-01-for75-kadre-frame-clock-audit.md"]
+  },
+  "unsupportedEventReason": "m82.kadre-event-family-unsupported",
+  "invalidResizeReason": "m82.resize.invalid-surface-size",
+  "invalidScaleFactorReason": "m82.scale-factor.invalid",
+  "ciPath": "deterministic.kadre-runtime.fixture",
+  "nativeOsEventInjectionClaimed": false,
+  "telemetry": {
+    "frameClockSource": "kadre.appkit.ControlFlow.Poll",
+    "gatePhase": "reportingOnly",
+    "reportingOnly": true,
+    "eventCount": 12,
+    "frameTickCount": 3,
+    "pointerEventCount": 2,
+    "keyboardEventCount": 3,
+    "resizeEventCount": 1,
+    "scaleFactorEventCount": 1,
+    "closeEventCount": 1,
+    "unsupportedEventCount": 1,
+    "reconfigureCount": 2,
+    "reconfigureFailureCount": 0,
+    "droppedFrameCount": 1,
+    "hostDiagnosticCount": 1
+  },
+  "surfaceReconfigureEvidence": [
+    {
+      "sequence": 6,
+      "reason": "m82.surface-reconfigured.resize",
+      "oldSurface": {
+        "width": 640,
+        "height": 420,
+        "scaleFactor": 1.0000,
+        "surfaceFormat": "BGRA8Unorm",
+        "resourceGeneration": 0
+      },
+      "newSurface": {
+        "width": 800,
+        "height": 500,
+        "scaleFactor": 1.0000,
+        "surfaceFormat": "BGRA8Unorm",
+        "resourceGeneration": 1
+      },
+      "invalidatesWebGpuResources": true
+    },
+    {
+      "sequence": 7,
+      "reason": "m82.surface-reconfigured.scale-factor",
+      "oldSurface": {
+        "width": 800,
+        "height": 500,
+        "scaleFactor": 1.0000,
+        "surfaceFormat": "BGRA8Unorm",
+        "resourceGeneration": 1
+      },
+      "newSurface": {
+        "width": 800,
+        "height": 500,
+        "scaleFactor": 2.0000,
+        "surfaceFormat": "BGRA8Unorm",
+        "resourceGeneration": 2
+      },
+      "invalidatesWebGpuResources": true
+    }
+
+  ],
+  "finalSceneState": {
+    "playing": false,
+    "overlayVisible": false,
+    "pointerX": 640.0000,
+    "pointerY": 250.0000,
+    "pointerControl": 0.6500,
+    "animationPhase": 0.0000,
+    "resetCount": 1,
+    "closeRequested": true
+  },
+  "validationRows": [
+    {
+      "id": "m82.event-model",
+      "status": "pass",
+      "assertion": "M82 exposes bounded Kadre frame, resize, scale-factor, pointer, keyboard, close, and unsupported event families."
+    },
+    {
+      "id": "m82.input-affects-scene-state",
+      "status": "pass",
+      "assertion": "Pointer and keyboard events update deterministic live scene state."
+    },
+    {
+      "id": "m82.resize-reconfigures-surface",
+      "status": "pass",
+      "assertion": "Resize and scale-factor events increment surface resource generation and mark WebGPU resources invalidated."
+    },
+    {
+      "id": "m82.telemetry-schema",
+      "status": "pass",
+      "assertion": "Telemetry includes input, resize, scale-factor, reconfigure, dropped-frame, and host diagnostic counters."
+    },
+    {
+      "id": "m82.refusal-taxonomy",
+      "status": "pass",
+      "assertion": "Unsupported event, invalid resize, and invalid scale-factor paths emit stable expected-unsupported diagnostics."
+    }
+
+  ],
+  "fixtures": [
+    {
+      "fixtureId": "m82-deterministic-input-resize-live-state",
+      "status": "pass",
+      "route": "deterministic.kadre-runtime.fixture",
+      "initialSurface": {
+        "width": 640,
+        "height": 420,
+        "scaleFactor": 1.0000,
+        "surfaceFormat": "BGRA8Unorm",
+        "resourceGeneration": 0
+      },
+      "finalSurface": {
+        "width": 800,
+        "height": 500,
+        "scaleFactor": 2.0000,
+        "surfaceFormat": "BGRA8Unorm",
+        "resourceGeneration": 2
+      },
+      "finalSceneState": {
+        "playing": false,
+        "overlayVisible": false,
+        "pointerX": 640.0000,
+        "pointerY": 250.0000,
+        "pointerControl": 0.6500,
+        "animationPhase": 0.0000,
+        "resetCount": 1,
+        "closeRequested": true
+      },
+      "telemetry": {
+        "frameClockSource": "kadre.appkit.ControlFlow.Poll",
+        "gatePhase": "reportingOnly",
+        "reportingOnly": true,
+        "eventCount": 12,
+        "frameTickCount": 3,
+        "pointerEventCount": 2,
+        "keyboardEventCount": 3,
+        "resizeEventCount": 1,
+        "scaleFactorEventCount": 1,
+        "closeEventCount": 1,
+        "unsupportedEventCount": 1,
+        "reconfigureCount": 2,
+        "reconfigureFailureCount": 0,
+        "droppedFrameCount": 1,
+        "hostDiagnosticCount": 1
+      },
+      "reconfigures": [
+        {
+          "sequence": 6,
+          "reason": "m82.surface-reconfigured.resize",
+          "oldSurface": {
+            "width": 640,
+            "height": 420,
+            "scaleFactor": 1.0000,
+            "surfaceFormat": "BGRA8Unorm",
+            "resourceGeneration": 0
+          },
+          "newSurface": {
+            "width": 800,
+            "height": 500,
+            "scaleFactor": 1.0000,
+            "surfaceFormat": "BGRA8Unorm",
+            "resourceGeneration": 1
+          },
+          "invalidatesWebGpuResources": true
+        },
+        {
+          "sequence": 7,
+          "reason": "m82.surface-reconfigured.scale-factor",
+          "oldSurface": {
+            "width": 800,
+            "height": 500,
+            "scaleFactor": 1.0000,
+            "surfaceFormat": "BGRA8Unorm",
+            "resourceGeneration": 1
+          },
+          "newSurface": {
+            "width": 800,
+            "height": 500,
+            "scaleFactor": 2.0000,
+            "surfaceFormat": "BGRA8Unorm",
+            "resourceGeneration": 2
+          },
+          "invalidatesWebGpuResources": true
+        }
+
+      ],
+      "hostDiagnostics": [
+        {
+          "sequence": 12,
+          "status": "expected-unsupported",
+          "reason": "m82.kadre-event-family-unsupported",
+          "message": "Kadre event WindowEvent.Touch is outside the M82 bounded runtime input model."
+        }
+
+      ],
+      "events": [
+        {
+          "sequence": 1,
+          "family": "frameTick",
+          "kadreEvent": "WindowEvent.RedrawRequested",
+          "frameTimeMs": 16.7000,
+          "frameClockSource": "kadre.appkit.ControlFlow.Poll",
+          "droppedFrame": false
+        },
+        {
+          "sequence": 2,
+          "family": "pointer",
+          "kadreEvent": "WindowEvent.PointerMoved",
+          "action": "move",
+          "x": 120.0000,
+          "y": 96.0000,
+          "button": null
+        },
+        {
+          "sequence": 3,
+          "family": "keyboard",
+          "kadreEvent": "WindowEvent.KeyboardInput",
+          "key": "Space",
+          "pressed": true
+        },
+        {
+          "sequence": 4,
+          "family": "frameTick",
+          "kadreEvent": "WindowEvent.RedrawRequested",
+          "frameTimeMs": 16.5000,
+          "frameClockSource": "kadre.appkit.ControlFlow.Poll",
+          "droppedFrame": false
+        },
+        {
+          "sequence": 5,
+          "family": "keyboard",
+          "kadreEvent": "WindowEvent.KeyboardInput",
+          "key": "O",
+          "pressed": true
+        },
+        {
+          "sequence": 6,
+          "family": "resize",
+          "kadreEvent": "WindowEvent.Resized",
+          "width": 800,
+          "height": 500,
+          "scaleFactor": 1.0000,
+          "surfaceFormat": "BGRA8Unorm"
+        },
+        {
+          "sequence": 7,
+          "family": "scaleFactor",
+          "kadreEvent": "WindowEvent.ScaleFactorChanged",
+          "scaleFactor": 2.0000,
+          "width": 800,
+          "height": 500,
+          "surfaceFormat": "BGRA8Unorm"
+        },
+        {
+          "sequence": 8,
+          "family": "pointer",
+          "kadreEvent": "WindowEvent.PointerMoved",
+          "action": "move",
+          "x": 640.0000,
+          "y": 250.0000,
+          "button": null
+        },
+        {
+          "sequence": 9,
+          "family": "keyboard",
+          "kadreEvent": "WindowEvent.KeyboardInput",
+          "key": "R",
+          "pressed": true
+        },
+        {
+          "sequence": 10,
+          "family": "frameTick",
+          "kadreEvent": "WindowEvent.RedrawRequested",
+          "frameTimeMs": 40.0000,
+          "frameClockSource": "kadre.appkit.ControlFlow.Poll",
+          "droppedFrame": true
+        },
+        {
+          "sequence": 11,
+          "family": "close",
+          "kadreEvent": "WindowEvent.CloseRequested",
+          "requested": true
+        },
+        {
+          "sequence": 12,
+          "family": "unsupported",
+          "kadreEvent": "WindowEvent.Touch",
+          "reason": "m82.kadre-event-family-unsupported",
+          "status": "expected-unsupported"
+        }
+
+      ]
+    },
+    {
+      "fixtureId": "m82-invalid-resize-and-scale-refusal",
+      "status": "expected-unsupported",
+      "route": "deterministic.kadre-runtime.refusal-fixture",
+      "initialSurface": {
+        "width": 640,
+        "height": 420,
+        "scaleFactor": 1.0000,
+        "surfaceFormat": "BGRA8Unorm",
+        "resourceGeneration": 0
+      },
+      "finalSurface": {
+        "width": 640,
+        "height": 420,
+        "scaleFactor": 1.0000,
+        "surfaceFormat": "BGRA8Unorm",
+        "resourceGeneration": 0
+      },
+      "finalSceneState": {
+        "playing": true,
+        "overlayVisible": true,
+        "pointerX": 0.0000,
+        "pointerY": 0.0000,
+        "pointerControl": 0.0000,
+        "animationPhase": 0.0000,
+        "resetCount": 0,
+        "closeRequested": false
+      },
+      "telemetry": {
+        "frameClockSource": "kadre.appkit.ControlFlow.Poll",
+        "gatePhase": "reportingOnly",
+        "reportingOnly": true,
+        "eventCount": 3,
+        "frameTickCount": 0,
+        "pointerEventCount": 0,
+        "keyboardEventCount": 0,
+        "resizeEventCount": 1,
+        "scaleFactorEventCount": 1,
+        "closeEventCount": 0,
+        "unsupportedEventCount": 1,
+        "reconfigureCount": 0,
+        "reconfigureFailureCount": 2,
+        "droppedFrameCount": 0,
+        "hostDiagnosticCount": 3
+      },
+      "reconfigures": [
+
+
+      ],
+      "hostDiagnostics": [
+        {
+          "sequence": 1,
+          "status": "expected-unsupported",
+          "reason": "m82.resize.invalid-surface-size",
+          "message": "Refused m82.surface-reconfigured.resize because Kadre reported invalid physical size 0x500."
+        },
+        {
+          "sequence": 2,
+          "status": "expected-unsupported",
+          "reason": "m82.scale-factor.invalid",
+          "message": "Refused m82.surface-reconfigured.scale-factor because Kadre reported invalid scale factor 0.0000."
+        },
+        {
+          "sequence": 3,
+          "status": "expected-unsupported",
+          "reason": "m82.kadre-event-family-unsupported",
+          "message": "Kadre event DeviceEvent.Motion is outside the M82 bounded runtime input model."
+        }
+
+      ],
+      "events": [
+        {
+          "sequence": 1,
+          "family": "resize",
+          "kadreEvent": "WindowEvent.Resized",
+          "width": 0,
+          "height": 500,
+          "scaleFactor": 1.0000,
+          "surfaceFormat": "BGRA8Unorm"
+        },
+        {
+          "sequence": 2,
+          "family": "scaleFactor",
+          "kadreEvent": "WindowEvent.ScaleFactorChanged",
+          "scaleFactor": 0.0000,
+          "width": 640,
+          "height": 420,
+          "surfaceFormat": "BGRA8Unorm"
+        },
+        {
+          "sequence": 3,
+          "family": "unsupported",
+          "kadreEvent": "DeviceEvent.Motion",
+          "reason": "m82.kadre-event-family-unsupported",
+          "status": "expected-unsupported"
+        }
+
+      ]
+    }
+  ],
+  "nonClaims": [
+    "M82 defines and tests a bounded Kadre-backed runtime event model; CI does not synthesize real desktop OS pointer, keyboard, resize, or close events.",
+    "M82 records resize/scale-factor reconfiguration intent and WebGPU resource invalidation evidence, but deterministic CI does not prove every host window manager delivers resize events identically.",
+    "Frame timing and dropped-frame counters are reporting-only and are not an M84 release-grade performance gate.",
+    "Unsupported Kadre event families remain stable expected-unsupported diagnostics and do not count as rendering failures."
+  ]
+}
