@@ -1,5 +1,9 @@
 package org.skia.kadre.runtime
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlin.io.path.Path
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -436,6 +440,117 @@ class ReplaySceneRegistryTest {
         assertContains(json, "\"bitmapSampledPixels\"")
         assertContains(json, "\"failedValidationRowCount\": 0")
         assertContains(json, "\"id\": \"invalid-fixture-and-bounds\"")
+    }
+
+    @Test
+    fun m81NativeFrameCaptureKeepsTruthfulOffscreenReadbackSchema() {
+        val evidence = buildM81NativeFrameCaptureEvidence(Path("..").toAbsolutePath().normalize())
+        val json = evidence.toJsonElement().toString()
+
+        assertEquals("offscreen-texture-readback-produced", evidence.captureStatus)
+        assertEquals(180, evidence.frameCount)
+        assertEquals(true, evidence.nativePresented)
+        assertEquals(true, evidence.realOffscreenReadback)
+        assertEquals(false, evidence.windowSurfaceReadback)
+        assertEquals(1, evidence.unsupportedCaptureCount)
+        assertContains(json, "\"packId\":\"m81-native-frame-capture-v1\"")
+        assertContains(json, "\"linearIssues\":[\"FOR-97\",\"FOR-139\",\"FOR-140\",\"FOR-141\",\"FOR-142\",\"FOR-143\"]")
+        assertContains(json, "\"captureStatus\":\"offscreen-texture-readback-produced\"")
+        assertContains(json, "\"realNativeWindowSurfaceReadback\":false")
+        assertContains(json, "\"realNativeOffscreenTextureReadback\":true")
+        assertContains(json, "\"m81.window-surface-readback-not-implemented\"")
+        assertContains(json, "\"imagePath\":\"reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png\"")
+        assertContains(json, "\"format\":\"RGBA8Unorm\"")
+        assertContains(json, "\"backend\":\"wgpu4k-native\"")
+    }
+
+    @Test
+    fun m81NativeFrameCaptureSerializesUnsupportedHostRefusalSchema() {
+        val evidence = M81NativeFrameCaptureEvidence(
+            nativeDemo = buildJsonObject {
+                put("nativePresented", false)
+                put("presentedFrames", 0)
+                put("requestedFrames", 3)
+                put("adapterInfo", "")
+                put("surface", JsonObject(emptyMap()))
+                put("capture", JsonObject(emptyMap()))
+            },
+            routeStatus = buildJsonObject {
+                put("status", "blocked")
+                put("reason", "fixture.host-unavailable")
+                put("capture", JsonObject(emptyMap()))
+            },
+            nativeSmoke = buildJsonObject {
+                put("status", "blocked")
+                put("presentedFrames", 0)
+            },
+        )
+        val json = evidence.toJsonElement().toString()
+
+        assertEquals("refused-host-unsupported", evidence.captureStatus)
+        assertEquals(false, evidence.realOffscreenReadback)
+        assertEquals(false, evidence.windowSurfaceReadback)
+        assertEquals(
+            listOf(
+                "m81.host-unsupported",
+                "m81.adapter-unavailable",
+                "m81.capture-unsupported",
+                "m81.window-surface-readback-not-implemented",
+            ),
+            evidence.unsupportedCaptureReasons,
+        )
+        assertContains(json, "\"captureStatus\":\"refused-host-unsupported\"")
+        assertContains(json, "\"unsupportedCaptureCount\":4")
+        assertContains(json, "\"m81.host-unsupported\"")
+        assertContains(json, "\"m81.adapter-unavailable\"")
+        assertContains(json, "\"m81.capture-unsupported\"")
+        assertContains(json, "\"m81.window-surface-readback-not-implemented\"")
+        assertContains(json, "\"id\":\"m81.refusal-taxonomy\"")
+    }
+
+    @Test
+    fun m81NativeFrameCaptureSerializesMissingSourceAndBlankArtifactRefusals() {
+        val missingSource = M81NativeFrameCaptureEvidence(
+            nativeDemo = JsonObject(emptyMap()),
+            routeStatus = JsonObject(emptyMap()),
+            nativeSmoke = JsonObject(emptyMap()),
+        )
+        val blankArtifact = M81NativeFrameCaptureEvidence(
+            nativeDemo = buildJsonObject {
+                put("nativePresented", true)
+                put("presentedFrames", 1)
+                put("requestedFrames", 1)
+                put("adapterInfo", "AdapterInfo(device=fixture)")
+                put("surface", buildJsonObject {
+                    put("width", 64)
+                    put("height", 64)
+                    put("format", "BGRA8Unorm")
+                })
+                put("capture", buildJsonObject {
+                    put("status", "produced")
+                    put("reason", "m70.native-offscreen-texture-readback")
+                    put("imagePath", "reports/wgsl-pipeline/fixture/blank.png")
+                    put("realNativeReadback", true)
+                    put("windowSurfaceReadback", false)
+                    put("nonTransparentPixels", 0)
+                })
+            },
+            routeStatus = buildJsonObject {
+                put("status", "native-runnable")
+                put("reason", "fixture")
+                put("capture", JsonObject(emptyMap()))
+            },
+            nativeSmoke = buildJsonObject {
+                put("status", "native-runnable")
+                put("presentedFrames", 1)
+            },
+        )
+
+        assertEquals("refused-infrastructure-source-missing", missingSource.captureStatus)
+        assertEquals(true, "m81.infrastructure-source-evidence-missing" in missingSource.unsupportedCaptureReasons)
+        assertEquals("refused-blank-artifact", blankArtifact.captureStatus)
+        assertEquals(true, "m81.blank-artifact" in blankArtifact.unsupportedCaptureReasons)
+        assertEquals(true, "m81.window-surface-readback-not-implemented" in blankArtifact.unsupportedCaptureReasons)
     }
 
     private fun m76ManifestFixture(): String = """

@@ -144,3 +144,20 @@ tasks.register<JavaExec>("pipelineM80SharedReplayOracle") {
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m80-shared-replay-oracle"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM81NativeFrameCapture") {
+    group = "verification"
+    description = "Generates M81 PM-visible native frame artifact capture evidence from current Kadre/WebGPU readback artifacts."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M81NativeFrameCaptureKt")
+    args(
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+        rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m81-native-frame-capture").asFile.absolutePath,
+    )
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m69-kadre-native/native-smoke.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-live-runtime/route-status.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png"))
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m81-native-frame-capture"))
+    outputs.upToDateWhen { false }
+}
