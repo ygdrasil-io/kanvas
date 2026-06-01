@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "kadre-runtime:M75ReplayPackEvidence",
+  "linearIssues": ["FOR-91", "FOR-110", "FOR-111", "FOR-112", "FOR-113"],
+  "packId": "m75-kadre-replay-pack-evidence-v1",
+  "sourcePackId": "m73-kadre-replay-pack-v1",
+  "claimLevel": "multi-scene-replay-evidence",
+  "readinessDelta": 0,
+  "sceneCount": 5,
+  "renderableSceneCount": 4,
+  "expectedUnsupportedSceneCount": 1,
+  "failedSceneCount": 0,
+  "defaultSceneId": "m73-linear-gradient-rect-replay-v1",
+  "nonClaims": [
+    "M75 aggregates replay-pack evidence; it does not claim broad display-list replay.",
+    "Native/readback evidence is recorded only where a selected scene route has produced artifacts.",
+    "Expected-unsupported replay scenes are counted separately from failures."
+  ],
+  "scenes": [
+    {
+      "id": "m72-solid-rect-replay-v1",
+      "title": "M72 solid-rect replay",
+      "sourceSceneId": "solid-rect",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m75.replay-scene-renderable",
+      "commandCounters": {
+        "total": 2,
+        "supported": 2,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 1,
+        "animatedFillRect": 0
+      },
+      "unsupportedCommands": [],
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#solid-rect",
+        "cpuRoute": "cpu.descriptor.coverage-plan.solid-rect",
+        "gpuRoute": "webgpu.coverage.analytic-rect",
+        "pipelineKey": "coverageKind=analyticRect"
+      },
+      "cpuReference": {
+        "width": 640,
+        "height": 420,
+        "checksum": 6278179505048423371,
+        "nonTransparentPixels": 5520
+      },
+      "nativeEvidence": {
+        "status": "not-generated",
+        "reason": "m75.native-route-not-generated-for-pack-row",
+        "nativeDemoJson": null,
+        "readbackImage": null
+      }
+    },
+    {
+      "id": "m73-linear-gradient-rect-replay-v1",
+      "title": "M73 linear-gradient rect replay",
+      "sourceSceneId": "linear-gradient-rect",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m75.replay-scene-renderable",
+      "commandCounters": {
+        "total": 2,
+        "supported": 2,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 1,
+        "animatedFillRect": 0
+      },
+      "unsupportedCommands": [],
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#linear-gradient-rect",
+        "cpuRoute": "cpu.shader.linear-gradient.rect",
+        "gpuRoute": "webgpu.generated.linear-gradient.rect",
+        "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]"
+      },
+      "cpuReference": {
+        "width": 640,
+        "height": 420,
+        "checksum": 766127960160601107,
+        "nonTransparentPixels": 5520
+      },
+      "nativeEvidence": {
+        "status": "available",
+        "reason": "m75.default-scene-native-demo-artifact",
+        "nativeDemoJson": "reports/wgsl-pipeline/m70-kadre-native/native-demo.json",
+        "readbackImage": "reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png"
+      }
+    },
+    {
+      "id": "m73-bitmap-rect-nearest-replay-v1",
+      "title": "M73 bitmap-rect nearest replay",
+      "sourceSceneId": "bitmap-rect-nearest",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m75.replay-scene-renderable",
+      "commandCounters": {
+        "total": 2,
+        "supported": 2,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 1,
+        "animatedFillRect": 0
+      },
+      "unsupportedCommands": [],
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#bitmap-rect-nearest",
+        "cpuRoute": "cpu.image-rect.strict-nearest",
+        "gpuRoute": "webgpu.image-rect.strict-nearest",
+        "pipelineKey": "imageRect.strictNearest.promotedSmoke"
+      },
+      "cpuReference": {
+        "width": 640,
+        "height": 420,
+        "checksum": -7802753964421501890,
+        "nonTransparentPixels": 5520
+      },
+      "nativeEvidence": {
+        "status": "available",
+        "reason": "m75.bitmap-scene-native-demo-artifact",
+        "nativeDemoJson": "reports/wgsl-pipeline/m73-kadre-replay-pack/renderable-bitmap-native-demo.json",
+        "readbackImage": "reports/wgsl-pipeline/m70-kadre-native/native-demo-readback.png"
+      }
+    },
+    {
+      "id": "m73-gradient-color-filter-kplus-replay-v1",
+      "title": "M73 gradient color-filter kPlus replay",
+      "sourceSceneId": "gradient-color-filter-linear-kplus",
+      "status": "renderable",
+      "renderedByKadre": true,
+      "reason": "m75.replay-scene-renderable",
+      "commandCounters": {
+        "total": 2,
+        "supported": 2,
+        "unsupported": 0,
+        "backgroundClear": 1,
+        "fillRect": 1,
+        "animatedFillRect": 0
+      },
+      "unsupportedCommands": [],
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#gradient-color-filter-linear-kplus",
+        "cpuRoute": "cpu.shader.linear-gradient.color-filter.blend-kplus-oracle",
+        "gpuRoute": "webgpu.generated.linear-gradient.color-filter.blend-kplus",
+        "pipelineKey": "shaderFamily=linearGradient colorFilter=Blend(red,kPlus) coverage=analyticRect state=[blendMode=kSrcOver]"
+      },
+      "cpuReference": {
+        "width": 640,
+        "height": 420,
+        "checksum": -1850474044133108053,
+        "nonTransparentPixels": 5520
+      },
+      "nativeEvidence": {
+        "status": "not-generated",
+        "reason": "m75.native-route-not-generated-for-pack-row",
+        "nativeDemoJson": null,
+        "readbackImage": null
+      }
+    },
+    {
+      "id": "m73-nested-rrect-clip-refusal-v1",
+      "title": "M73 nested rrect clip refusal",
+      "sourceSceneId": "m60-bounded-nested-rrect-clip",
+      "status": "expected-unsupported",
+      "renderedByKadre": false,
+      "reason": "m75.replay-scene-expected-unsupported",
+      "commandCounters": {
+        "total": 2,
+        "supported": 1,
+        "unsupported": 1,
+        "backgroundClear": 1,
+        "fillRect": 0,
+        "animatedFillRect": 0
+      },
+      "unsupportedCommands": ["nested-rrect-difference-clip"],
+      "sourceEvidence": {
+        "dashboardRow": "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json#m60-bounded-nested-rrect-clip",
+        "cpuRoute": "cpu.coverage.nested-rrect-clip-oracle",
+        "gpuRoute": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+        "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported"
+      },
+      "cpuReference": {
+        "width": 640,
+        "height": 420,
+        "checksum": -5166315637198820477,
+        "nonTransparentPixels": 5520
+      },
+      "nativeEvidence": {
+        "status": "expected-unsupported",
+        "reason": "m73.kadre-replay-scene-expected-unsupported",
+        "nativeDemoJson": "reports/wgsl-pipeline/m73-kadre-replay-pack/expected-unsupported-native-demo.json",
+        "readbackImage": null
+      }
+    }
+
+  ]
+}

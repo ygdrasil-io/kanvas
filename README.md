@@ -15,7 +15,7 @@ product target is broader: make Kanvas render more of the practical Skia CPU
 surface while building a measured real-time WebGPU lane with live telemetry,
 feature diagnostics, and PM-visible demos.
 
-New target readiness is 67.75%, rounded for PM to approximately 70%, after the M74 replay-command foundation slice. This is intentionally lower
+New target readiness is 67.75%, rounded for PM to approximately 70%, after the M75 multi-scene replay evidence slice. This is intentionally lower
 than the completed MEP score because the scope has expanded from evidence
 infrastructure to feature breadth, fidelity, runtime behavior, and release
 operability. The score is based on counted denominators in the target doc, not
@@ -25,9 +25,9 @@ manual sprint estimates.
 |---|---:|---:|---|
 | Rendering feature breadth | 30% | 60% | Path AA, bounded image-filter DAG, text/font, color/blend/color-filter, and registered runtime-effect evidence now have selected generated contracts; broad layers and fallbacks remain incomplete. |
 | Skia-like fidelity | 20% | 50% | M66 raises selected GM/reference evidence to 50/100 rows. Only 37/100 are Skia-comparable today; CPU-oracle rows are breadth/refusal evidence until comparable Skia references land. |
-| Real-time runtime | 20% | 90% | M65 adds a reporting-only headless runtime smoke lane, M68 verifies the Kadre source-build bridge, M69 runs a bounded native Kadre/WebGPU present loop, M70-A adds a PM-visible Kadre demo task, M70-B/C confirm normalized native surface success plus a produced wgpu4k offscreen texture readback, M71 drives the selected route from Kadre/AppKit `ControlFlow.Poll`, M72 renders one selected `solid-rect` replay contract in Kadre, M73 adds a bounded typed replay-pack registry with selected scene-id routing, and M74 extracts that replay model into closed typed commands for future scene work. Native input, broad display-list replay, arbitrary op streams, dynamic multi-scene live switching, and window-surface screenshot/readback remain incomplete. |
+| Real-time runtime | 20% | 90% | M65 adds a reporting-only headless runtime smoke lane, M68 verifies the Kadre source-build bridge, M69 runs a bounded native Kadre/WebGPU present loop, M70-A adds a PM-visible Kadre demo task, M70-B/C confirm normalized native surface success plus a produced wgpu4k offscreen texture readback, M71 drives the selected route from Kadre/AppKit `ControlFlow.Poll`, M72 renders one selected `solid-rect` replay contract in Kadre, M73 adds a bounded typed replay-pack registry with selected scene-id routing, M74 extracts that replay model into closed typed commands, and M75 emits deterministic multi-scene replay-pack evidence. Native input, broad display-list replay, arbitrary op streams, dynamic multi-scene live switching, and window-surface screenshot/readback remain incomplete. |
 | Performance and cache readiness | 15% | 45% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry and adds family budgets plus quarantine/rebaseline fixture. M70-A adds reporting-only `frame.kadre-windowed` telemetry with warmup/measured samples, but no release-grade FPS gate. |
-| PM/demo operability | 15% | 100% | PM bundle now includes M65 runtime smoke, M66 counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 native Kadre present evidence, M70-A/B/C live-runtime/readback evidence, M71 autonomous frame-clock evidence, M72 single-scene replay evidence, M73 replay-pack registry evidence, and M74 replay-command foundation evidence. |
+| PM/demo operability | 15% | 100% | PM bundle now includes M65 runtime smoke, M66 counters, M67 performance tiering, M68 Kadre bridge/demo evidence, M69 native Kadre present evidence, M70-A/B/C live-runtime/readback evidence, M71 autonomous frame-clock evidence, M72 single-scene replay evidence, M73 replay-pack registry evidence, M74 replay-command foundation evidence, and M75 multi-scene replay-pack evidence. |
 
 Weighted PM readiness for the new target: **67.75%**, reported to PM as **approximately 70%**.
 
@@ -57,6 +57,7 @@ Active planning entry points:
 | M72 | Kadre Scene Replay V1 | The selected Kadre live route renders one `solid-rect` replay contract with command counters and CPU/GPU evidence; broad display-list replay remains a non-claim. |
 | M73 | Kadre Replay Pack V1 | The selected Kadre live route can choose from a bounded typed replay-pack registry, render selected pack scenes, and keep unsupported scenes as explicit refusals; broad display-list replay remains a non-claim. |
 | M74 | Replay Commands V2 | The replay registry/model is extracted into closed typed commands so M75-M88 can add feature scenes without turning the native smoke into a display-list replay implementation. Readiness stays at 67.75% because this is foundation work that preserves M73 behavior. |
+| M75 | Multi-Scene Replay Evidence | The M73/M74 registry now emits deterministic pack evidence for 5 scenes, including CPU reference checksums, native/readback facts where available, explicit expected-unsupported accounting, and PM bundle links. Readiness stays at 67.75% because this is evidence aggregation, not new rendering breadth. |
 | M70 | Release Candidate Renderer | Renderer API, runtime, demos, CI gates, and known limitations are frozen for RC. |
 
 ## Completed MEP Evidence Target (Historical)
