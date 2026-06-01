@@ -149,6 +149,36 @@ recovery until those are backed by route evidence. PM wording must also avoid
 counting M85 as a cache-readiness gate until observed runtime cache telemetry
 lands.
 
+## M86 Fidelity Burn-Down PM Evidence
+
+M86 packages the fidelity backlog into PM-readable evidence. It should help PM
+answer "what visual gaps are next?" without implying that a renderer fix has
+already landed.
+
+Minimum PM artifacts:
+
+- `reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json`;
+- `reports/wgsl-pipeline/m86-fidelity-burndown/evidence.md`;
+- `reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md`;
+- PM bundle manifest entry `m86FidelityBurndown`.
+
+The evidence JSON must report:
+
+- ranked candidate count;
+- support and expected-unsupported row counts;
+- `referenceKind` counters;
+- root-cause counters;
+- high-value remediation targets;
+- `globalThresholdWeakened=false`;
+- unchanged readiness percentage unless a renderer fix with before/after
+  artifacts is included.
+
+PM wording must distinguish:
+
+- classified visual debt;
+- stable expected unsupported rows;
+- actual renderer fixes with before/after proof.
+
 ## PM Language
 
 Use this framing:

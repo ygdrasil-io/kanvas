@@ -1,0 +1,963 @@
+{
+  "burnDown": {
+    "classifiedRows": [
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+          "cpuDiff": "dashboard/artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+          "gpu": "dashboard/artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+          "gpuDiff": "dashboard/artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+          "reference": "dashboard/artifacts/crop-image-filter-nonnull-prepass/skia.png",
+          "routeCpu": "dashboard/artifacts/crop-image-filter-nonnull-prepass/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+          "stats": "dashboard/artifacts/crop-image-filter-nonnull-prepass/stats.json"
+        },
+        "baseArtifactScene": "crop-image-filter-nonnull-prepass",
+        "cpuSimilarity": 84.88,
+        "cpuThreshold": 50.0,
+        "expectedRoute": "webgpu.image-filter.crop-nonnull.prepass",
+        "fallbackReason": "none",
+        "family": "Image filters",
+        "fidelityScoreEligible": true,
+        "gpuSimilarity": 98.13,
+        "gpuThreshold": 50.0,
+        "id": "m66-crop-image-filter-nonnull-prepass-skia",
+        "inventoryId": "skia-gm-imagefilters-cropped",
+        "nonClaim": "Promotes a bounded crop/non-null prepass row only; arbitrary picture prepass and recursive filter graphs remain unsupported.",
+        "pmValue": 5,
+        "referenceKind": "skia-upstream",
+        "risk": "high",
+        "rootCause": "filter.bounds-prepass",
+        "routeDiagnostics": {
+          "cpu": "cpu.image-filter.crop-nonnull.offset-oracle",
+          "gpu": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite"
+        },
+        "status": "pass",
+        "threshold": 50.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/m57-aaclip-bounded-grid/cpu.png",
+          "cpuDiff": "dashboard/artifacts/m57-aaclip-bounded-grid/cpu-diff.png",
+          "gpu": "dashboard/artifacts/m57-aaclip-bounded-grid/gpu.png",
+          "gpuDiff": "dashboard/artifacts/m57-aaclip-bounded-grid/gpu-diff.png",
+          "reference": "dashboard/artifacts/m57-aaclip-bounded-grid/skia.png",
+          "routeCpu": "dashboard/artifacts/m57-aaclip-bounded-grid/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/m57-aaclip-bounded-grid/route-gpu.json",
+          "stats": "dashboard/artifacts/m57-aaclip-bounded-grid/stats.json"
+        },
+        "baseArtifactScene": "m57-aaclip-bounded-grid",
+        "cpuSimilarity": 97.0,
+        "cpuThreshold": 98.78,
+        "expectedRoute": "webgpu.coverage.aaclip-bounded-grid",
+        "fallbackReason": "none",
+        "family": "Path AA / coverage",
+        "fidelityScoreEligible": true,
+        "gpuSimilarity": 98.83,
+        "gpuThreshold": 98.78,
+        "id": "m66-aaclip-bounded-grid-skia",
+        "inventoryId": "skia-gm-aaclip",
+        "nonClaim": "Promotes only the bounded AA clip grid row; arbitrary AA clips, complex clips, inverse clips, dash, stroke-outline, and edge-budget increases remain out of scope.",
+        "pmValue": 5,
+        "referenceKind": "skia-upstream",
+        "risk": "high",
+        "rootCause": "coverage.aa-grid-threshold",
+        "routeDiagnostics": {
+          "cpu": "cpu.coverage.aaclip-bounded-grid-oracle",
+          "gpu": "webgpu.coverage.aaclip-bounded-grid"
+        },
+        "status": "pass",
+        "threshold": 98.78
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/clip-rect-difference/cpu.png",
+          "cpuDiff": "dashboard/artifacts/clip-rect-difference/cpu-diff.png",
+          "gpu": "dashboard/artifacts/clip-rect-difference/gpu.png",
+          "gpuDiff": "dashboard/artifacts/clip-rect-difference/gpu-diff.png",
+          "reference": "dashboard/artifacts/clip-rect-difference/skia.png",
+          "routeCpu": "dashboard/artifacts/clip-rect-difference/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/clip-rect-difference/route-gpu.json",
+          "stats": "dashboard/artifacts/clip-rect-difference/stats.json"
+        },
+        "baseArtifactScene": "clip-rect-difference",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 80.0,
+        "expectedRoute": "webgpu.coverage.clip-difference.analytic-rect",
+        "fallbackReason": "none",
+        "family": "Path AA / coverage",
+        "fidelityScoreEligible": true,
+        "gpuSimilarity": 84.44,
+        "gpuThreshold": 80.0,
+        "id": "m66-clip-rect-difference-skia",
+        "inventoryId": "skia-gm-cliprect-difference-derived",
+        "nonClaim": "Promotes only rectangular difference coverage; arbitrary path boolean clips and complex clip stacks remain unsupported.",
+        "pmValue": 5,
+        "referenceKind": "skia-upstream",
+        "risk": "high",
+        "rootCause": "coverage.edge-delta",
+        "routeDiagnostics": {
+          "cpu": "cpu.coverage.clip-rect-difference",
+          "gpu": "webgpu.coverage.clip-difference.analytic-rrect-mask"
+        },
+        "status": "pass",
+        "threshold": 80.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/path-aa-stroke-primitive/cpu.png",
+          "cpuDiff": "dashboard/artifacts/path-aa-stroke-primitive/cpu-diff.png",
+          "gpu": "dashboard/artifacts/path-aa-stroke-primitive/gpu.png",
+          "gpuDiff": "dashboard/artifacts/path-aa-stroke-primitive/gpu-diff.png",
+          "reference": "dashboard/artifacts/path-aa-stroke-primitive/skia.png",
+          "routeCpu": "dashboard/artifacts/path-aa-stroke-primitive/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/path-aa-stroke-primitive/route-gpu.json",
+          "stats": "dashboard/artifacts/path-aa-stroke-primitive/stats.json"
+        },
+        "baseArtifactScene": "path-aa-stroke-primitive",
+        "cpuSimilarity": 90.21,
+        "cpuThreshold": 90.0,
+        "expectedRoute": "webgpu.coverage.path-aa-stroke-primitive",
+        "fallbackReason": "none",
+        "family": "Path AA / coverage",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 91.81,
+        "gpuThreshold": 91.76,
+        "id": "m66-path-aa-stroke-primitive-oracle",
+        "inventoryId": "",
+        "nonClaim": "Promotes only the bounded stroke primitive oracle; cap/join matrix, hairline, dash, and stroke-outline parity are not claimed.",
+        "pmValue": 5,
+        "referenceKind": "test-oracle",
+        "risk": "high",
+        "rootCause": "coverage.stroke-raster-delta",
+        "routeDiagnostics": {
+          "cpu": "cpu.raster.path-aa-stroke-primitive-oracle",
+          "gpu": "webgpu.coverage.path-aa-stroke-primitive"
+        },
+        "status": "pass",
+        "threshold": 0.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/cpu.png",
+          "cpuDiff": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/cpu-diff.png",
+          "reference": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/skia.png",
+          "routeCpu": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
+          "stats": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/stats.json"
+        },
+        "baseArtifactScene": "image-filter-crop-nonnull-prepass-required",
+        "cpuSimilarity": 0.0,
+        "cpuThreshold": 0.0,
+        "expectedRoute": "webgpu.image-filter.refuse.crop-input-nonnull-prepass-required",
+        "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+        "family": "Image filters",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": null,
+        "gpuThreshold": 0.0,
+        "id": "m66-image-filter-crop-prepass-refusal",
+        "inventoryId": "skia-gm-imagefilters-cropped-null-input",
+        "nonClaim": "Keeps null-input/picture-prepass crop filter shapes refused; the supported crop row remains bounded to non-null generated evidence.",
+        "pmValue": 5,
+        "referenceKind": "cpu-oracle",
+        "risk": "high",
+        "rootCause": "filter.picture-prepass-required",
+        "routeDiagnostics": {
+          "cpu": "cpu.image-filter.crop-nonnull-reference",
+          "gpu": "webgpu.image-filter.refuse.crop-input-nonnull-prepass-required"
+        },
+        "status": "expected-unsupported",
+        "threshold": 0.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/path-aa-dashing-edge-budget/cpu.png",
+          "cpuDiff": "dashboard/artifacts/path-aa-dashing-edge-budget/cpu-diff.png",
+          "reference": "dashboard/artifacts/path-aa-dashing-edge-budget/skia.png",
+          "routeCpu": "dashboard/artifacts/path-aa-dashing-edge-budget/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/path-aa-dashing-edge-budget/route-gpu.json",
+          "stats": "dashboard/artifacts/path-aa-dashing-edge-budget/stats.json"
+        },
+        "baseArtifactScene": "path-aa-dashing-edge-budget",
+        "cpuSimilarity": 0.0,
+        "cpuThreshold": 0.0,
+        "expectedRoute": "webgpu.coverage.refuse.edge-count",
+        "fallbackReason": "coverage.edge-count-exceeded",
+        "family": "Path AA / coverage",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": null,
+        "gpuThreshold": 0.0,
+        "id": "m66-path-aa-dashing-edge-budget-refusal",
+        "inventoryId": "skia-gm-dashcircle",
+        "nonClaim": "Keeps dashed Path AA over-budget coverage refused; no global edge-budget or dash support increase is claimed.",
+        "pmValue": 5,
+        "referenceKind": "cpu-oracle",
+        "risk": "high",
+        "rootCause": "coverage.edge-count-exceeded",
+        "routeDiagnostics": {
+          "cpu": "cpu.path-coverage.dashing-oracle",
+          "gpu": "webgpu.coverage.refuse.edge-count"
+        },
+        "status": "expected-unsupported",
+        "threshold": 0.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/font-complex-shaping-refusal/cpu.png",
+          "cpuDiff": "dashboard/artifacts/font-complex-shaping-refusal/cpu-diff.png",
+          "reference": "dashboard/artifacts/font-complex-shaping-refusal/skia.png",
+          "routeCpu": "dashboard/artifacts/font-complex-shaping-refusal/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/font-complex-shaping-refusal/route-gpu.json",
+          "stats": "dashboard/artifacts/font-complex-shaping-refusal/stats.json"
+        },
+        "baseArtifactScene": "font-complex-shaping-refusal",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 0.0,
+        "expectedRoute": "webgpu.text.refuse.complex-shaping",
+        "fallbackReason": "font.complex-shaping-requires-explicit-shaper",
+        "family": "Text/glyphs",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": null,
+        "gpuThreshold": 0.0,
+        "id": "m66-font-complex-shaping-refusal",
+        "inventoryId": "skia-gm-shaping-derived",
+        "nonClaim": "Keeps shaping-heavy text refused until an explicit deterministic shaper lands; no substitute font or shaping stack is added.",
+        "pmValue": 3,
+        "referenceKind": "cpu-oracle",
+        "risk": "dependency-gated",
+        "rootCause": "glyph.complex-shaping-dependency",
+        "routeDiagnostics": {
+          "cpu": "cpu.text.refusal-oracle.complex-shaping",
+          "gpu": "webgpu.text.refuse"
+        },
+        "status": "expected-unsupported",
+        "threshold": 0.0
+      }
+    ],
+    "fixNonClaim": "M86 ranks, classifies, and exposes burn-down targets. It does not claim a renderer visual fix unless a later patch provides before/after rendered artifacts.",
+    "fixesAppliedInThisSprint": [],
+    "highValueRemediationTargets": [
+      {
+        "id": "m66-clip-rect-difference-skia",
+        "nextAction": "Implement or tighten rectangular difference coverage parity, then raise the row threshold with before/after artifacts.",
+        "reason": "GPU passes only under a family-specific 80.0 threshold; keep support but track coverage edge delta before raising fidelity confidence."
+      },
+      {
+        "id": "m66-crop-image-filter-nonnull-prepass-skia",
+        "nextAction": "Make crop bounds/prepass semantics explicit and regenerate CPU/GPU/reference diffs before counting broader image-filter fidelity.",
+        "reason": "GPU route is close, CPU/reference parity is weak because filter bounds/prepass behavior is still provisional."
+      },
+      {
+        "id": "m66-path-aa-stroke-primitive-oracle",
+        "nextAction": "Attach Skia reference or promote a narrower stroke primitive with higher parity; keep CPU-oracle rows out of Skia fidelity score.",
+        "reason": "The row is useful PM evidence but is test-oracle, not Skia-comparable, and still has visible AA/stroke raster deltas."
+      }
+    ],
+    "selectedRows": [
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+          "cpuDiff": "dashboard/artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+          "gpu": "dashboard/artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+          "gpuDiff": "dashboard/artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+          "reference": "dashboard/artifacts/crop-image-filter-nonnull-prepass/skia.png",
+          "routeCpu": "dashboard/artifacts/crop-image-filter-nonnull-prepass/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+          "stats": "dashboard/artifacts/crop-image-filter-nonnull-prepass/stats.json"
+        },
+        "baseArtifactScene": "crop-image-filter-nonnull-prepass",
+        "cpuSimilarity": 84.88,
+        "cpuThreshold": 50.0,
+        "expectedRoute": "webgpu.image-filter.crop-nonnull.prepass",
+        "fallbackReason": "none",
+        "family": "Image filters",
+        "fidelityScoreEligible": true,
+        "gpuSimilarity": 98.13,
+        "gpuThreshold": 50.0,
+        "id": "m66-crop-image-filter-nonnull-prepass-skia",
+        "inventoryId": "skia-gm-imagefilters-cropped",
+        "nonClaim": "Promotes a bounded crop/non-null prepass row only; arbitrary picture prepass and recursive filter graphs remain unsupported.",
+        "pmValue": 5,
+        "referenceKind": "skia-upstream",
+        "risk": "high",
+        "rootCause": "filter.bounds-prepass",
+        "routeDiagnostics": {
+          "cpu": "cpu.image-filter.crop-nonnull.offset-oracle",
+          "gpu": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite"
+        },
+        "status": "pass",
+        "threshold": 50.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/image-filter-compose-cf-matrix-transform/cpu.png",
+          "cpuDiff": "dashboard/artifacts/image-filter-compose-cf-matrix-transform/cpu-diff.png",
+          "gpu": "dashboard/artifacts/image-filter-compose-cf-matrix-transform/gpu.png",
+          "gpuDiff": "dashboard/artifacts/image-filter-compose-cf-matrix-transform/gpu-diff.png",
+          "reference": "dashboard/artifacts/image-filter-compose-cf-matrix-transform/skia.png",
+          "routeCpu": "dashboard/artifacts/image-filter-compose-cf-matrix-transform/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json",
+          "stats": "dashboard/artifacts/image-filter-compose-cf-matrix-transform/stats.json"
+        },
+        "baseArtifactScene": "image-filter-compose-cf-matrix-transform",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.0,
+        "expectedRoute": "webgpu.image-filter.compose.cf-matrix-transform",
+        "fallbackReason": "none",
+        "family": "Image filters",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.0,
+        "id": "m66-image-filter-compose-cf-matrix-transform-oracle",
+        "inventoryId": "",
+        "nonClaim": "Promotes the bounded compose/color-filter/matrix-transform oracle only; arbitrary recursive image-filter DAGs and picture prepass remain unsupported.",
+        "pmValue": 5,
+        "referenceKind": "test-oracle",
+        "risk": "high",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.image-filter.compose.cf-matrix-transform-oracle",
+          "gpu": "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite"
+        },
+        "status": "pass",
+        "threshold": 99.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/m57-aaclip-bounded-grid/cpu.png",
+          "cpuDiff": "dashboard/artifacts/m57-aaclip-bounded-grid/cpu-diff.png",
+          "gpu": "dashboard/artifacts/m57-aaclip-bounded-grid/gpu.png",
+          "gpuDiff": "dashboard/artifacts/m57-aaclip-bounded-grid/gpu-diff.png",
+          "reference": "dashboard/artifacts/m57-aaclip-bounded-grid/skia.png",
+          "routeCpu": "dashboard/artifacts/m57-aaclip-bounded-grid/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/m57-aaclip-bounded-grid/route-gpu.json",
+          "stats": "dashboard/artifacts/m57-aaclip-bounded-grid/stats.json"
+        },
+        "baseArtifactScene": "m57-aaclip-bounded-grid",
+        "cpuSimilarity": 97.0,
+        "cpuThreshold": 98.78,
+        "expectedRoute": "webgpu.coverage.aaclip-bounded-grid",
+        "fallbackReason": "none",
+        "family": "Path AA / coverage",
+        "fidelityScoreEligible": true,
+        "gpuSimilarity": 98.83,
+        "gpuThreshold": 98.78,
+        "id": "m66-aaclip-bounded-grid-skia",
+        "inventoryId": "skia-gm-aaclip",
+        "nonClaim": "Promotes only the bounded AA clip grid row; arbitrary AA clips, complex clips, inverse clips, dash, stroke-outline, and edge-budget increases remain out of scope.",
+        "pmValue": 5,
+        "referenceKind": "skia-upstream",
+        "risk": "high",
+        "rootCause": "coverage.aa-grid-threshold",
+        "routeDiagnostics": {
+          "cpu": "cpu.coverage.aaclip-bounded-grid-oracle",
+          "gpu": "webgpu.coverage.aaclip-bounded-grid"
+        },
+        "status": "pass",
+        "threshold": 98.78
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/analytic-aa-convex/cpu.png",
+          "cpuDiff": "dashboard/artifacts/analytic-aa-convex/cpu-diff.png",
+          "gpu": "dashboard/artifacts/analytic-aa-convex/gpu.png",
+          "gpuDiff": "dashboard/artifacts/analytic-aa-convex/gpu-diff.png",
+          "reference": "dashboard/artifacts/analytic-aa-convex/skia.png",
+          "routeCpu": "dashboard/artifacts/analytic-aa-convex/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/analytic-aa-convex/route-gpu.json",
+          "stats": "dashboard/artifacts/analytic-aa-convex/stats.json"
+        },
+        "baseArtifactScene": "analytic-aa-convex",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.85,
+        "expectedRoute": "webgpu.coverage.analytic-aa-convex",
+        "fallbackReason": "none",
+        "family": "Path AA / coverage",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.85,
+        "id": "m66-analytic-aa-convex-cpu-oracle",
+        "inventoryId": "skia-gm-convexpaths-derived",
+        "nonClaim": "CPU-oracle breadth row only; it does not move Skia fidelity and does not claim full Path AA, stroke, dash, or complex clip parity.",
+        "pmValue": 5,
+        "referenceKind": "cpu-oracle",
+        "risk": "high",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.path-coverage.analytic-aa-convex-composited-oracle",
+          "gpu": "webgpu.coverage.analytic-aa-convex"
+        },
+        "status": "pass",
+        "threshold": 99.85
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/clip-rect-difference/cpu.png",
+          "cpuDiff": "dashboard/artifacts/clip-rect-difference/cpu-diff.png",
+          "gpu": "dashboard/artifacts/clip-rect-difference/gpu.png",
+          "gpuDiff": "dashboard/artifacts/clip-rect-difference/gpu-diff.png",
+          "reference": "dashboard/artifacts/clip-rect-difference/skia.png",
+          "routeCpu": "dashboard/artifacts/clip-rect-difference/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/clip-rect-difference/route-gpu.json",
+          "stats": "dashboard/artifacts/clip-rect-difference/stats.json"
+        },
+        "baseArtifactScene": "clip-rect-difference",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 80.0,
+        "expectedRoute": "webgpu.coverage.clip-difference.analytic-rect",
+        "fallbackReason": "none",
+        "family": "Path AA / coverage",
+        "fidelityScoreEligible": true,
+        "gpuSimilarity": 84.44,
+        "gpuThreshold": 80.0,
+        "id": "m66-clip-rect-difference-skia",
+        "inventoryId": "skia-gm-cliprect-difference-derived",
+        "nonClaim": "Promotes only rectangular difference coverage; arbitrary path boolean clips and complex clip stacks remain unsupported.",
+        "pmValue": 5,
+        "referenceKind": "skia-upstream",
+        "risk": "high",
+        "rootCause": "coverage.edge-delta",
+        "routeDiagnostics": {
+          "cpu": "cpu.coverage.clip-rect-difference",
+          "gpu": "webgpu.coverage.clip-difference.analytic-rrect-mask"
+        },
+        "status": "pass",
+        "threshold": 80.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/path-aa-stroke-primitive/cpu.png",
+          "cpuDiff": "dashboard/artifacts/path-aa-stroke-primitive/cpu-diff.png",
+          "gpu": "dashboard/artifacts/path-aa-stroke-primitive/gpu.png",
+          "gpuDiff": "dashboard/artifacts/path-aa-stroke-primitive/gpu-diff.png",
+          "reference": "dashboard/artifacts/path-aa-stroke-primitive/skia.png",
+          "routeCpu": "dashboard/artifacts/path-aa-stroke-primitive/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/path-aa-stroke-primitive/route-gpu.json",
+          "stats": "dashboard/artifacts/path-aa-stroke-primitive/stats.json"
+        },
+        "baseArtifactScene": "path-aa-stroke-primitive",
+        "cpuSimilarity": 90.21,
+        "cpuThreshold": 90.0,
+        "expectedRoute": "webgpu.coverage.path-aa-stroke-primitive",
+        "fallbackReason": "none",
+        "family": "Path AA / coverage",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 91.81,
+        "gpuThreshold": 91.76,
+        "id": "m66-path-aa-stroke-primitive-oracle",
+        "inventoryId": "",
+        "nonClaim": "Promotes only the bounded stroke primitive oracle; cap/join matrix, hairline, dash, and stroke-outline parity are not claimed.",
+        "pmValue": 5,
+        "referenceKind": "test-oracle",
+        "risk": "high",
+        "rootCause": "coverage.stroke-raster-delta",
+        "routeDiagnostics": {
+          "cpu": "cpu.raster.path-aa-stroke-primitive-oracle",
+          "gpu": "webgpu.coverage.path-aa-stroke-primitive"
+        },
+        "status": "pass",
+        "threshold": 0.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/cpu.png",
+          "cpuDiff": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/cpu-diff.png",
+          "reference": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/skia.png",
+          "routeCpu": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
+          "stats": "dashboard/artifacts/image-filter-crop-nonnull-prepass-required/stats.json"
+        },
+        "baseArtifactScene": "image-filter-crop-nonnull-prepass-required",
+        "cpuSimilarity": 0.0,
+        "cpuThreshold": 0.0,
+        "expectedRoute": "webgpu.image-filter.refuse.crop-input-nonnull-prepass-required",
+        "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+        "family": "Image filters",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": null,
+        "gpuThreshold": 0.0,
+        "id": "m66-image-filter-crop-prepass-refusal",
+        "inventoryId": "skia-gm-imagefilters-cropped-null-input",
+        "nonClaim": "Keeps null-input/picture-prepass crop filter shapes refused; the supported crop row remains bounded to non-null generated evidence.",
+        "pmValue": 5,
+        "referenceKind": "cpu-oracle",
+        "risk": "high",
+        "rootCause": "filter.picture-prepass-required",
+        "routeDiagnostics": {
+          "cpu": "cpu.image-filter.crop-nonnull-reference",
+          "gpu": "webgpu.image-filter.refuse.crop-input-nonnull-prepass-required"
+        },
+        "status": "expected-unsupported",
+        "threshold": 0.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/path-aa-dashing-edge-budget/cpu.png",
+          "cpuDiff": "dashboard/artifacts/path-aa-dashing-edge-budget/cpu-diff.png",
+          "reference": "dashboard/artifacts/path-aa-dashing-edge-budget/skia.png",
+          "routeCpu": "dashboard/artifacts/path-aa-dashing-edge-budget/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/path-aa-dashing-edge-budget/route-gpu.json",
+          "stats": "dashboard/artifacts/path-aa-dashing-edge-budget/stats.json"
+        },
+        "baseArtifactScene": "path-aa-dashing-edge-budget",
+        "cpuSimilarity": 0.0,
+        "cpuThreshold": 0.0,
+        "expectedRoute": "webgpu.coverage.refuse.edge-count",
+        "fallbackReason": "coverage.edge-count-exceeded",
+        "family": "Path AA / coverage",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": null,
+        "gpuThreshold": 0.0,
+        "id": "m66-path-aa-dashing-edge-budget-refusal",
+        "inventoryId": "skia-gm-dashcircle",
+        "nonClaim": "Keeps dashed Path AA over-budget coverage refused; no global edge-budget or dash support increase is claimed.",
+        "pmValue": 5,
+        "referenceKind": "cpu-oracle",
+        "risk": "high",
+        "rootCause": "coverage.edge-count-exceeded",
+        "routeDiagnostics": {
+          "cpu": "cpu.path-coverage.dashing-oracle",
+          "gpu": "webgpu.coverage.refuse.edge-count"
+        },
+        "status": "expected-unsupported",
+        "threshold": 0.0
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/bitmap-rect-nearest/cpu.png",
+          "cpuDiff": "dashboard/artifacts/bitmap-rect-nearest/cpu-diff.png",
+          "gpu": "dashboard/artifacts/bitmap-rect-nearest/gpu.png",
+          "gpuDiff": "dashboard/artifacts/bitmap-rect-nearest/gpu-diff.png",
+          "reference": "dashboard/artifacts/bitmap-rect-nearest/skia.png",
+          "routeCpu": "dashboard/artifacts/bitmap-rect-nearest/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/bitmap-rect-nearest/route-gpu.json",
+          "stats": "dashboard/artifacts/bitmap-rect-nearest/stats.json"
+        },
+        "baseArtifactScene": "bitmap-rect-nearest",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.95,
+        "expectedRoute": "webgpu.image-rect.strict-nearest",
+        "fallbackReason": "none",
+        "family": "Bitmap/image sampling",
+        "fidelityScoreEligible": true,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.95,
+        "id": "m66-bitmap-rect-nearest-skia",
+        "inventoryId": "skia-gm-drawbitmaprect",
+        "nonClaim": "Promotes nearest bitmap-rect sampling only; bicubic, mipmapped, codec, color-managed, and arbitrary tiling paths remain outside this row.",
+        "pmValue": 4,
+        "referenceKind": "skia-upstream",
+        "risk": "medium",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.image-rect.strict-nearest",
+          "gpu": "webgpu.image-rect.strict-nearest"
+        },
+        "status": "pass",
+        "threshold": 99.95
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
+          "cpuDiff": "dashboard/artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+          "gpu": "dashboard/artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
+          "gpuDiff": "dashboard/artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
+          "reference": "dashboard/artifacts/bitmap-subset-local-matrix-repeat/skia.png",
+          "routeCpu": "dashboard/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
+          "stats": "dashboard/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
+        },
+        "baseArtifactScene": "bitmap-subset-local-matrix-repeat",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.94,
+        "expectedRoute": "webgpu.shader.bitmap.subset-local-matrix-repeat",
+        "fallbackReason": "none",
+        "family": "Bitmap/image sampling",
+        "fidelityScoreEligible": true,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.94,
+        "id": "m66-bitmap-subset-local-matrix-repeat-skia",
+        "inventoryId": "skia-gm-bitmapshaders-localmatrix",
+        "nonClaim": "Promotes the selected subset/local-matrix repeat fixture only; arbitrary bitmap shader tiling, filtering, codecs, and color spaces remain separate work.",
+        "pmValue": 4,
+        "referenceKind": "skia-upstream",
+        "risk": "medium",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.shader.bitmap.subset-local-matrix-repeat",
+          "gpu": "webgpu.shader.bitmap.subset-local-matrix-repeat"
+        },
+        "status": "pass",
+        "threshold": 99.94
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/gradient-color-filter-linear-kplus/cpu.png",
+          "cpuDiff": "dashboard/artifacts/gradient-color-filter-linear-kplus/cpu-diff.png",
+          "gpu": "dashboard/artifacts/gradient-color-filter-linear-kplus/gpu.png",
+          "gpuDiff": "dashboard/artifacts/gradient-color-filter-linear-kplus/gpu-diff.png",
+          "reference": "dashboard/artifacts/gradient-color-filter-linear-kplus/skia.png",
+          "routeCpu": "dashboard/artifacts/gradient-color-filter-linear-kplus/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/gradient-color-filter-linear-kplus/route-gpu.json",
+          "stats": "dashboard/artifacts/gradient-color-filter-linear-kplus/stats.json"
+        },
+        "baseArtifactScene": "gradient-color-filter-linear-kplus",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.95,
+        "expectedRoute": "webgpu.generated.linear-gradient.color-filter.blend-kplus",
+        "fallbackReason": "none",
+        "family": "Paint/blend/color",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.95,
+        "id": "m66-linear-gradient-kplus-oracle",
+        "inventoryId": "",
+        "nonClaim": "Promotes one formula/test-oracle color-filter blend row only; arbitrary color-filter chains and color-space conversion remain out of scope.",
+        "pmValue": 4,
+        "referenceKind": "test-oracle",
+        "risk": "medium",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.shader.linear-gradient.color-filter.blend-kplus-oracle",
+          "gpu": "webgpu.generated.linear-gradient.color-filter.blend-kplus"
+        },
+        "status": "pass",
+        "threshold": 99.95
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/src-over-stack/cpu.png",
+          "cpuDiff": "dashboard/artifacts/src-over-stack/cpu-diff.png",
+          "gpu": "dashboard/artifacts/src-over-stack/gpu.png",
+          "gpuDiff": "dashboard/artifacts/src-over-stack/gpu-diff.png",
+          "reference": "dashboard/artifacts/src-over-stack/skia.png",
+          "routeCpu": "dashboard/artifacts/src-over-stack/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/src-over-stack/route-gpu.json",
+          "stats": "dashboard/artifacts/src-over-stack/stats.json"
+        },
+        "baseArtifactScene": "src-over-stack",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.95,
+        "expectedRoute": "webgpu.blend.src-over.fixed-function",
+        "fallbackReason": "none",
+        "family": "Paint/blend/color",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.95,
+        "id": "m66-src-over-alpha-stack-oracle",
+        "inventoryId": "",
+        "nonClaim": "Promotes bounded SrcOver alpha stacking only; advanced blend chains, destination reads, HDR, and wide-gamut conversion remain outside this row.",
+        "pmValue": 4,
+        "referenceKind": "test-oracle",
+        "risk": "medium",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.blend.src-over-stack",
+          "gpu": "webgpu.blend.src-over.fixed-function"
+        },
+        "status": "pass",
+        "threshold": 99.95
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/sweep-gradient-path-clamp/cpu.png",
+          "cpuDiff": "dashboard/artifacts/sweep-gradient-path-clamp/cpu-diff.png",
+          "gpu": "dashboard/artifacts/sweep-gradient-path-clamp/gpu.png",
+          "gpuDiff": "dashboard/artifacts/sweep-gradient-path-clamp/gpu-diff.png",
+          "reference": "dashboard/artifacts/sweep-gradient-path-clamp/skia.png",
+          "routeCpu": "dashboard/artifacts/sweep-gradient-path-clamp/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/sweep-gradient-path-clamp/route-gpu.json",
+          "stats": "dashboard/artifacts/sweep-gradient-path-clamp/stats.json"
+        },
+        "baseArtifactScene": "sweep-gradient-path-clamp",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.95,
+        "expectedRoute": "webgpu.generated.sweep-gradient.path-aa",
+        "fallbackReason": "none",
+        "family": "Paint/blend/color",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.95,
+        "id": "m66-sweep-gradient-path-clamp-oracle",
+        "inventoryId": "",
+        "nonClaim": "Promotes bounded sweep-gradient clamp over a convex path only; two-point conical gradients and broad gradient tile parity remain outside this row.",
+        "pmValue": 4,
+        "referenceKind": "test-oracle",
+        "risk": "medium",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.shader.sweep-gradient.path-aa-oracle",
+          "gpu": "webgpu.generated.sweep-gradient.path-aa"
+        },
+        "status": "pass",
+        "threshold": 99.95
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/runtime-effect-simple/cpu.png",
+          "cpuDiff": "dashboard/artifacts/runtime-effect-simple/cpu-diff.png",
+          "gpu": "dashboard/artifacts/runtime-effect-simple/gpu.png",
+          "gpuDiff": "dashboard/artifacts/runtime-effect-simple/gpu-diff.png",
+          "reference": "dashboard/artifacts/runtime-effect-simple/skia.png",
+          "routeCpu": "dashboard/artifacts/runtime-effect-simple/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/runtime-effect-simple/route-gpu.json",
+          "stats": "dashboard/artifacts/runtime-effect-simple/stats.json"
+        },
+        "baseArtifactScene": "runtime-effect-simple",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.95,
+        "expectedRoute": "webgpu.runtime-effect.descriptor.simple_rt",
+        "fallbackReason": "none",
+        "family": "Runtime effects",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.95,
+        "id": "m66-runtime-effect-simple-descriptor-oracle",
+        "inventoryId": "",
+        "nonClaim": "Promotes only the registered SimpleRT descriptor path; arbitrary SkSL and unregistered runtime effects remain refused.",
+        "pmValue": 3,
+        "referenceKind": "test-oracle",
+        "risk": "medium",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.runtime-effect.descriptor.simple_rt",
+          "gpu": "webgpu.runtime-effect.descriptor.simple_rt"
+        },
+        "status": "pass",
+        "threshold": 99.95
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/scaled-rects-transform-stack/cpu.png",
+          "cpuDiff": "dashboard/artifacts/scaled-rects-transform-stack/cpu-diff.png",
+          "gpu": "dashboard/artifacts/scaled-rects-transform-stack/gpu.png",
+          "gpuDiff": "dashboard/artifacts/scaled-rects-transform-stack/gpu-diff.png",
+          "reference": "dashboard/artifacts/scaled-rects-transform-stack/skia.png",
+          "routeCpu": "dashboard/artifacts/scaled-rects-transform-stack/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/scaled-rects-transform-stack/route-gpu.json",
+          "stats": "dashboard/artifacts/scaled-rects-transform-stack/stats.json"
+        },
+        "baseArtifactScene": "scaled-rects-transform-stack",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.99,
+        "expectedRoute": "webgpu.transform.scaled-rects.color-stack",
+        "fallbackReason": "none",
+        "family": "Transforms/layers",
+        "fidelityScoreEligible": true,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.99,
+        "id": "m66-scaled-rects-transform-stack-skia",
+        "inventoryId": "skia-gm-scaledrects",
+        "nonClaim": "Promotes bounded rect transform stacking only; perspective transforms, saveLayer blend chains, and advanced color-space behavior remain out of scope.",
+        "pmValue": 3,
+        "referenceKind": "skia-upstream",
+        "risk": "medium",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.gm.scaled-rects.reference-oracle",
+          "gpu": "webgpu.transform.scaled-rects.convex-polygon"
+        },
+        "status": "pass",
+        "threshold": 99.99
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/font-kerning-style-fixture/cpu.png",
+          "cpuDiff": "dashboard/artifacts/font-kerning-style-fixture/cpu-diff.png",
+          "gpu": "dashboard/artifacts/font-kerning-style-fixture/gpu.png",
+          "gpuDiff": "dashboard/artifacts/font-kerning-style-fixture/gpu-diff.png",
+          "reference": "dashboard/artifacts/font-kerning-style-fixture/skia.png",
+          "routeCpu": "dashboard/artifacts/font-kerning-style-fixture/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/font-kerning-style-fixture/route-gpu.json",
+          "stats": "dashboard/artifacts/font-kerning-style-fixture/stats.json"
+        },
+        "baseArtifactScene": "font-kerning-style-fixture",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.95,
+        "expectedRoute": "webgpu.text.outline.kerning-style-fixture",
+        "fallbackReason": "none",
+        "family": "Text/glyphs",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.95,
+        "id": "m66-font-kerning-style-cpu-oracle",
+        "inventoryId": "",
+        "nonClaim": "CPU-oracle text breadth row only; it does not claim full shaping, glyph atlas, LCD, SDF, emoji, or font fallback support.",
+        "pmValue": 3,
+        "referenceKind": "cpu-oracle",
+        "risk": "dependency-gated",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.text.outline.kerning-style",
+          "gpu": "webgpu.text.outline.kerning-style-fixture"
+        },
+        "status": "pass",
+        "threshold": 99.95
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/font-latin-outline-drawstring/cpu.png",
+          "cpuDiff": "dashboard/artifacts/font-latin-outline-drawstring/cpu-diff.png",
+          "gpu": "dashboard/artifacts/font-latin-outline-drawstring/gpu.png",
+          "gpuDiff": "dashboard/artifacts/font-latin-outline-drawstring/gpu-diff.png",
+          "reference": "dashboard/artifacts/font-latin-outline-drawstring/skia.png",
+          "routeCpu": "dashboard/artifacts/font-latin-outline-drawstring/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/font-latin-outline-drawstring/route-gpu.json",
+          "stats": "dashboard/artifacts/font-latin-outline-drawstring/stats.json"
+        },
+        "baseArtifactScene": "font-latin-outline-drawstring",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.95,
+        "expectedRoute": "webgpu.text.outline.simple-latin",
+        "fallbackReason": "none",
+        "family": "Text/glyphs",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.95,
+        "id": "m66-font-latin-outline-cpu-oracle",
+        "inventoryId": "",
+        "nonClaim": "CPU-oracle text breadth row only; it does not claim Skia text fidelity, shaping, glyph atlas, LCD, SDF, emoji, or font fallback support.",
+        "pmValue": 3,
+        "referenceKind": "cpu-oracle",
+        "risk": "dependency-gated",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.text.outline.simple-latin",
+          "gpu": "webgpu.text.outline.simple-latin"
+        },
+        "status": "pass",
+        "threshold": 99.95
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/font-textblob-positioned-glyph-run/cpu.png",
+          "cpuDiff": "dashboard/artifacts/font-textblob-positioned-glyph-run/cpu-diff.png",
+          "gpu": "dashboard/artifacts/font-textblob-positioned-glyph-run/gpu.png",
+          "gpuDiff": "dashboard/artifacts/font-textblob-positioned-glyph-run/gpu-diff.png",
+          "reference": "dashboard/artifacts/font-textblob-positioned-glyph-run/skia.png",
+          "routeCpu": "dashboard/artifacts/font-textblob-positioned-glyph-run/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/font-textblob-positioned-glyph-run/route-gpu.json",
+          "stats": "dashboard/artifacts/font-textblob-positioned-glyph-run/stats.json"
+        },
+        "baseArtifactScene": "font-textblob-positioned-glyph-run",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 99.95,
+        "expectedRoute": "webgpu.text.outline.positioned-glyph-run",
+        "fallbackReason": "none",
+        "family": "Text/glyphs",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": 100.0,
+        "gpuThreshold": 99.95,
+        "id": "m66-font-positioned-glyph-run-cpu-oracle",
+        "inventoryId": "",
+        "nonClaim": "CPU-oracle text breadth row only; it does not claim shaping-heavy TextBlob parity, glyph atlas, LCD, SDF, emoji, or font fallback support.",
+        "pmValue": 3,
+        "referenceKind": "cpu-oracle",
+        "risk": "dependency-gated",
+        "rootCause": "none",
+        "routeDiagnostics": {
+          "cpu": "cpu.text.outline.positioned-glyph-run",
+          "gpu": "webgpu.text.outline.positioned-glyph-run"
+        },
+        "status": "pass",
+        "threshold": 99.95
+      },
+      {
+        "artifacts": {
+          "cpu": "dashboard/artifacts/font-complex-shaping-refusal/cpu.png",
+          "cpuDiff": "dashboard/artifacts/font-complex-shaping-refusal/cpu-diff.png",
+          "reference": "dashboard/artifacts/font-complex-shaping-refusal/skia.png",
+          "routeCpu": "dashboard/artifacts/font-complex-shaping-refusal/route-cpu.json",
+          "routeGpu": "dashboard/artifacts/font-complex-shaping-refusal/route-gpu.json",
+          "stats": "dashboard/artifacts/font-complex-shaping-refusal/stats.json"
+        },
+        "baseArtifactScene": "font-complex-shaping-refusal",
+        "cpuSimilarity": 100.0,
+        "cpuThreshold": 0.0,
+        "expectedRoute": "webgpu.text.refuse.complex-shaping",
+        "fallbackReason": "font.complex-shaping-requires-explicit-shaper",
+        "family": "Text/glyphs",
+        "fidelityScoreEligible": false,
+        "gpuSimilarity": null,
+        "gpuThreshold": 0.0,
+        "id": "m66-font-complex-shaping-refusal",
+        "inventoryId": "skia-gm-shaping-derived",
+        "nonClaim": "Keeps shaping-heavy text refused until an explicit deterministic shaper lands; no substitute font or shaping stack is added.",
+        "pmValue": 3,
+        "referenceKind": "cpu-oracle",
+        "risk": "dependency-gated",
+        "rootCause": "glyph.complex-shaping-dependency",
+        "routeDiagnostics": {
+          "cpu": "cpu.text.refusal-oracle.complex-shaping",
+          "gpu": "webgpu.text.refuse"
+        },
+        "status": "expected-unsupported",
+        "threshold": 0.0
+      }
+    ]
+  },
+  "counters": {
+    "classifiedRows": 7,
+    "familyCounts": {
+      "Bitmap/image sampling": 2,
+      "Image filters": 3,
+      "Paint/blend/color": 3,
+      "Path AA / coverage": 5,
+      "Runtime effects": 1,
+      "Text/glyphs": 4,
+      "Transforms/layers": 1
+    },
+    "rankedCandidates": 19,
+    "referenceKindCounts": {
+      "cpu-oracle": 7,
+      "skia-upstream": 6,
+      "test-oracle": 6
+    },
+    "rootCauseCounts": {
+      "coverage.aa-grid-threshold": 1,
+      "coverage.edge-count-exceeded": 1,
+      "coverage.edge-delta": 1,
+      "coverage.stroke-raster-delta": 1,
+      "filter.bounds-prepass": 1,
+      "filter.picture-prepass-required": 1,
+      "glyph.complex-shaping-dependency": 1,
+      "none": 12
+    },
+    "skiaComparableSupportRows": 6,
+    "statusCounts": {
+      "expected-unsupported": 3,
+      "pass": 16
+    },
+    "supportRows": 16,
+    "unsupportedRows": 3
+  },
+  "dashboardGateExpectation": {
+    "globalThresholdWeakened": false,
+    "trackedGap": 0,
+    "unexpectedFail": 0
+  },
+  "generatedBy": "pipelineM86FidelityBurndown",
+  "gitCommit": "95b3b9c47d31eda932f6ccacf7f3e446a54e2b2e",
+  "linear": {
+    "epic": "FOR-102",
+    "tickets": [
+      "FOR-164",
+      "FOR-165",
+      "FOR-166",
+      "FOR-167",
+      "FOR-168"
+    ]
+  },
+  "milestone": "M86 Fidelity Burn-Down Wave 2",
+  "readinessDelta": {
+    "reason": "No new generated support row, Skia-comparable row, runtime capability, or measured gate denominator changed; M86 improves fidelity operability and next-fix selection.",
+    "weightedPercentAfter": 67.75,
+    "weightedPercentBefore": 67.75
+  },
+  "schemaVersion": 1,
+  "source": {
+    "dashboardContract": "reports/wgsl-pipeline/scenes/generated/results.json",
+    "promotionContract": "reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json",
+    "spec": ".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md"
+  }
+}

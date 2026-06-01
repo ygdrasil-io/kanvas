@@ -61,6 +61,7 @@ sprints:
 | M71-M83 Runtime/display-list replay evidence | `02`, `04`, `05` | Kadre frame clock, bounded replay scenes, native artifacts, input/resize telemetry, and one bounded display-list route become PM evidence without broad SkCanvas replay claims. |
 | M84 Native Frame Timing Candidate Gate | `04`, `05` | `frame.kadre-windowed` timing is serialized as candidate/reporting-only evidence with quarantine and a negative fixture, not a release-blocking FPS gate. |
 | M85 Runtime Resource Lifetime And Cache Hardening | `02`, `04`, `05` | Selected realtime route resource/cache ledger, bounded key spaces, resize invalidation, and device-loss unsupported diagnostics become PM evidence without claiming observed runtime cache telemetry. |
+| M86 Fidelity Burn-Down Wave 2 | `03`, `05` | Selected GM/reference rows are ranked and classified by root cause with PM-visible remediation targets, without claiming visual fixes or readiness movement unless before/after artifacts exist. |
 
 ## Definition Of Done For Any Future Milestone
 
