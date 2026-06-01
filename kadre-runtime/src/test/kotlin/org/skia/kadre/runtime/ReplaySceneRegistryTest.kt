@@ -89,4 +89,56 @@ class ReplaySceneRegistryTest {
         assertContains(json, "\"reason\": \"m73.kadre-replay-scene-expected-unsupported\"")
         assertContains(json, "\"status\": \"not-generated\"")
     }
+
+    @Test
+    fun m76GeneratedMetadataReplayMapsSelectedScenesAndRefusesUnsupportedMetadata() {
+        val evidence = buildGeneratedMetadataReplayEvidence(m76ManifestFixture())
+        val json = evidence.toJson()
+
+        assertEquals(6, evidence.sceneCount)
+        assertEquals(4, evidence.mappedSceneCount)
+        assertEquals(2, evidence.refusedMetadataCount)
+        assertEquals(0, evidence.failedSceneCount)
+        assertContains(json, "\"packId\": \"m76-generated-metadata-replay-v1\"")
+        assertContains(json, "\"sourceManifest\": \"reports/wgsl-pipeline/scenes/generated/results.json\"")
+        assertContains(json, "\"replaySceneId\": \"m76-solid-rect-metadata-replay-v1\"")
+        assertContains(json, "\"replaySceneId\": \"m76-linear-gradient-rect-metadata-replay-v1\"")
+        assertContains(json, "\"reason\": \"m76.metadata.source-status-not-pass\"")
+        assertContains(json, "\"reason\": \"m76.metadata.unsupported-route-family\"")
+        assertContains(json, "\"sourceSceneId\": \"path-aa-convexpaths-edge-budget\"")
+        assertContains(json, "\"sourceSceneId\": \"runtime-effect-simple\"")
+    }
+
+    private fun m76ManifestFixture(): String = """
+        {
+          "scenes": [
+            ${m76SceneFixture("solid-rect", "Solid filled rect", "pass", "reports/wgsl-pipeline/2026-05-30-m46-solid-rect-generated-evidence.md", "artifacts/solid-rect", listOf("source.generated", "feature.shape.solid", "feature.coverage.analytic-rect", "route.cpu.descriptor", "route.gpu.webgpu"))},
+            ${m76SceneFixture("linear-gradient-rect", "Linear gradient rect generated WGSL route", "pass", "reports/wgsl-pipeline/2026-05-28-m39-gradient-srcover-dashboard-scenes.md", "artifacts/linear-gradient-rect", listOf("source.generated", "feature.gradient.linear", "feature.coverage.analytic-rect", "route.cpu.shader", "route.gpu.webgpu"))},
+            ${m76SceneFixture("bitmap-rect-nearest", "Bitmap rect nearest sampling", "pass", "reports/wgsl-pipeline/2026-05-27-m32-drawbitmaprect-skbug4734-resolution.md", "artifacts/bitmap-rect-nearest", listOf("source.generated", "feature.image.bitmap", "feature.sampling.nearest", "route.cpu.image-rect", "route.gpu.webgpu"))},
+            ${m76SceneFixture("gradient-color-filter-linear-kplus", "Linear gradient color-filter kPlus route", "pass", "reports/wgsl-pipeline/2026-05-31-m48-paint-blend-transform-generated-evidence.md", "artifacts/gradient-color-filter-linear-kplus", listOf("source.generated", "feature.gradient.linear", "feature.color-filter", "feature.blend.plus", "route.gpu.webgpu"))},
+            ${m76SceneFixture("path-aa-convexpaths-edge-budget", "Path AA ConvexPaths edge-budget refusal", "expected-unsupported", "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md", "artifacts/path-aa-convexpaths-edge-budget", listOf("source.generated", "feature.path-aa", "feature.coverage.aa", "route.cpu.oracle", "route.gpu.expected-unsupported"))},
+            ${m76SceneFixture("runtime-effect-simple", "Registered SimpleRT runtime-effect route", "pass", "reports/wgsl-pipeline/2026-05-31-m47-runtime-effect-simple-generated-evidence.md", "artifacts/runtime-effect-simple", listOf("source.generated", "feature.runtime-effect", "feature.coverage.analytic-rect", "route.cpu.descriptor", "route.gpu.webgpu"))}
+          ]
+        }
+    """.trimIndent()
+
+    private fun m76SceneFixture(
+        id: String,
+        title: String,
+        status: String,
+        sourceReport: String,
+        artifactRoot: String,
+        tags: List<String>,
+    ): String = """
+        {
+          "id": "$id",
+          "title": "$title",
+          "status": "$status",
+          "tags": [${tags.joinToString(", ") { "\"$it\"" }}],
+          "generation": {
+            "sourceReport": "$sourceReport",
+            "artifactRoot": "$artifactRoot"
+          }
+        }
+    """.trimIndent()
 }
