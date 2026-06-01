@@ -120,6 +120,35 @@ The evidence JSON must report `lane=frame.kadre-windowed`,
 release-grade FPS until a later milestone promotes it with accepted variance and
 resource telemetry.
 
+## M85 Resource/Cache PM Evidence
+
+For M85 and later resource work, the PM demo package must show whether the
+selected realtime route has auditable resource lifetime and cache pressure.
+M85 evidence is a deterministic selected-scene ledger, not observed WebGPU
+runtime cache telemetry.
+
+Minimum PM artifacts:
+
+- `reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json`;
+- `reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.md`;
+- `reports/wgsl-pipeline/m85-resource-lifetime-cache/cache-pressure.json`;
+- PM bundle manifest entry `m85ResourceLifetimeCache`.
+
+The evidence JSON must report:
+
+- per-frame resource ledger counters;
+- bounded cache key spaces;
+- resize/surface invalidation with zero invalid-resource reuse;
+- cache pressure before/after;
+- stable device-loss diagnostic
+  `m85.device-loss-recreate-observation-unsupported` when real recovery is not
+  observable.
+
+PM wording must not imply arbitrary scene cache coverage or real device-lost
+recovery until those are backed by route evidence. PM wording must also avoid
+counting M85 as a cache-readiness gate until observed runtime cache telemetry
+lands.
+
 ## PM Language
 
 Use this framing:

@@ -1,0 +1,192 @@
+{
+    "schemaVersion": 1,
+    "generatedBy": "kadre-runtime:M85ResourceLifetimeCacheHardening",
+    "linearIssues": [
+        "FOR-101",
+        "FOR-159",
+        "FOR-160",
+        "FOR-161",
+        "FOR-162",
+        "FOR-163"
+    ],
+    "packId": "m85-resource-lifetime-cache-hardening-v1",
+    "status": "pass",
+    "claimLevel": "selected-runtime-resource-cache-ledger-candidate",
+    "readinessDelta": 0,
+    "lane": "frame.kadre-windowed",
+    "sceneContractId": "m83-display-list-pm-scene-v1",
+    "observedRuntimeCounters": false,
+    "countedAsCacheReadinessGate": false,
+    "counterSource": "derived-selected-scene-resource-ledger",
+    "sourceEvidence": [
+        "reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/evidence.json",
+        "reports/wgsl-pipeline/m83-display-list-replay/native-demo.json",
+        "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"
+    ],
+    "perFrameResourceTelemetry": {
+        "frameCount": 180,
+        "pipelineCacheMisses": 1,
+        "pipelineCacheHits": 179,
+        "shaderModuleCount": 1,
+        "pipelineCount": 1,
+        "bindGroupCount": 1,
+        "textureCount": 2,
+        "textureUploadBytes": 1075200,
+        "intermediateTextureBytes": 0,
+        "bindGroupChurn": 0,
+        "resourceGenerationCount": 3,
+        "invalidResourceReuseCount": 0
+    },
+    "cacheOwnership": {
+        "owner": "kadre-runtime",
+        "pipelineKeyPolicy": "layout-code-resource-pipeline-state-only",
+        "uniformValuesInPipelineKey": false,
+        "boundedKeySpaceCount": 6,
+        "keySpaces": [
+            {
+                "cache": "shaderModule",
+                "basis": "selected scene contract id + generated WGSL source id",
+                "maxDistinctKeys": 1,
+                "example": "m83-display-list-pm-scene-v1",
+                "finite": true
+            },
+            {
+                "cache": "pipeline",
+                "basis": "layout + shader entry point + color target + blend state",
+                "maxDistinctKeys": 1,
+                "example": "m83.display-list.pipeline.src-over",
+                "finite": true
+            },
+            {
+                "cache": "bindGroup",
+                "basis": "layout + uniform/storage/texture resource binding shape",
+                "maxDistinctKeys": 1,
+                "example": "m83.display-list.bind-group.v1",
+                "finite": true
+            },
+            {
+                "cache": "texture",
+                "basis": "selected native offscreen readback texture + bitmap fixture handles",
+                "maxDistinctKeys": 2,
+                "example": "m79/m83 bounded fixtures",
+                "finite": true
+            },
+            {
+                "cache": "intermediateTexture",
+                "basis": "image-filter intermediate DAG nodes",
+                "maxDistinctKeys": 0,
+                "example": "no M85 selected filter DAG intermediates",
+                "finite": true
+            },
+            {
+                "cache": "glyphAtlas",
+                "basis": "glyph atlas pages",
+                "maxDistinctKeys": 0,
+                "example": "text remains expected-unsupported for M83 display-list placeholder",
+                "finite": true
+            }
+        ]
+    },
+    "resizeInvalidation": {
+        "source": "reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/evidence.json",
+        "reconfigureCount": 2,
+        "reconfigureFailureCount": 0,
+        "generationsStrictlyAdvance": true,
+        "generationSequenceMonotonic": true,
+        "resourceGenerations": [
+            1,
+            2
+        ],
+        "resourceGenerationTransitions": [
+            {
+                "sequence": 6,
+                "oldGeneration": 0,
+                "newGeneration": 1,
+                "strictlyAdvances": true,
+                "invalidatesWebGpuResources": true
+            },
+            {
+                "sequence": 7,
+                "oldGeneration": 1,
+                "newGeneration": 2,
+                "strictlyAdvances": true,
+                "invalidatesWebGpuResources": true
+            }
+        ],
+        "invalidatesWebGpuResources": true,
+        "invalidResourceReuseCount": 0,
+        "failureReason": ""
+    },
+    "deviceLossDiagnostics": {
+        "status": "expected-unsupported",
+        "reason": "m85.device-loss-recreate-observation-unsupported",
+        "surfaceLostCount": 0,
+        "deviceLostCount": 0,
+        "recreateClaimed": false,
+        "message": "The selected M85 evidence names device/surface loss and recreate diagnostics, but does not claim real device-lost recovery without an observable supported host path."
+    },
+    "cachePressureReport": {
+        "before": {
+            "pipelineCacheHits": 0,
+            "pipelineCacheMisses": 0,
+            "textureUploadBytes": 0,
+            "intermediateTextureBytes": 0
+        },
+        "after": {
+            "frameCount": 180,
+            "pipelineCacheMisses": 1,
+            "pipelineCacheHits": 179,
+            "shaderModuleCount": 1,
+            "pipelineCount": 1,
+            "bindGroupCount": 1,
+            "textureCount": 2,
+            "textureUploadBytes": 1075200,
+            "intermediateTextureBytes": 0,
+            "bindGroupChurn": 0,
+            "resourceGenerationCount": 3,
+            "invalidResourceReuseCount": 0
+        },
+        "boundedGrowth": true,
+        "p95Ms": 18.114
+    },
+    "artifactPaths": [
+        "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.md",
+        "reports/wgsl-pipeline/m85-resource-lifetime-cache/cache-pressure.json",
+        "reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/evidence.json",
+        "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"
+    ],
+    "validationRows": [
+        {
+            "id": "m85.per-frame-resource-ledger",
+            "status": "pass",
+            "assertion": "Selected-scene resource ledger includes cache hits/misses, allocations, uploaded bytes, bind groups, textures, pipelines, intermediate bytes, and bind group churn."
+        },
+        {
+            "id": "m85.resize-resource-invalidation",
+            "status": "pass",
+            "assertion": "Resize/scale-factor evidence strictly advances resource generations and does not reuse invalid WebGPU resources in the selected ledger."
+        },
+        {
+            "id": "m85.device-loss-diagnostic",
+            "status": "pass",
+            "assertion": "Device/surface loss has a stable expected-unsupported diagnostic and no fake recovery claim."
+        },
+        {
+            "id": "m85.cache-keyspace-bounded",
+            "status": "pass",
+            "assertion": "Selected realtime scene cache key spaces are bounded and PipelineKey axes exclude uniform values."
+        },
+        {
+            "id": "m85.pm-bundle-link",
+            "status": "pass",
+            "assertion": "PM bundle can link M85 cache/resource evidence from checked-in artifacts."
+        }
+    ],
+    "nonClaims": [
+        "M85 resource/cache counters are a selected-scene deterministic ledger, not observed WebGPU runtime cache telemetry.",
+        "M85 does not prove arbitrary realtime cache behavior for every scene.",
+        "M85 does not claim real device-lost recovery; unsupported observation is explicit.",
+        "M85 does not add broad image-filter intermediate ownership beyond the selected scene evidence."
+    ]
+}

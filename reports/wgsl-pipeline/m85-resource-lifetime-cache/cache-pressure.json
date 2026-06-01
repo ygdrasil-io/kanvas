@@ -1,0 +1,71 @@
+{
+    "schemaVersion": 1,
+    "packId": "m85-cache-pressure-v1",
+    "sceneContractId": "m83-display-list-pm-scene-v1",
+    "lane": "frame.kadre-windowed",
+    "before": {
+        "pipelineCacheHits": 0,
+        "pipelineCacheMisses": 0,
+        "textureUploadBytes": 0,
+        "intermediateTextureBytes": 0
+    },
+    "after": {
+        "frameCount": 180,
+        "pipelineCacheMisses": 1,
+        "pipelineCacheHits": 179,
+        "shaderModuleCount": 1,
+        "pipelineCount": 1,
+        "bindGroupCount": 1,
+        "textureCount": 2,
+        "textureUploadBytes": 1075200,
+        "intermediateTextureBytes": 0,
+        "bindGroupChurn": 0,
+        "resourceGenerationCount": 3,
+        "invalidResourceReuseCount": 0
+    },
+    "boundedKeySpaces": [
+        {
+            "cache": "shaderModule",
+            "basis": "selected scene contract id + generated WGSL source id",
+            "maxDistinctKeys": 1,
+            "example": "m83-display-list-pm-scene-v1",
+            "finite": true
+        },
+        {
+            "cache": "pipeline",
+            "basis": "layout + shader entry point + color target + blend state",
+            "maxDistinctKeys": 1,
+            "example": "m83.display-list.pipeline.src-over",
+            "finite": true
+        },
+        {
+            "cache": "bindGroup",
+            "basis": "layout + uniform/storage/texture resource binding shape",
+            "maxDistinctKeys": 1,
+            "example": "m83.display-list.bind-group.v1",
+            "finite": true
+        },
+        {
+            "cache": "texture",
+            "basis": "selected native offscreen readback texture + bitmap fixture handles",
+            "maxDistinctKeys": 2,
+            "example": "m79/m83 bounded fixtures",
+            "finite": true
+        },
+        {
+            "cache": "intermediateTexture",
+            "basis": "image-filter intermediate DAG nodes",
+            "maxDistinctKeys": 0,
+            "example": "no M85 selected filter DAG intermediates",
+            "finite": true
+        },
+        {
+            "cache": "glyphAtlas",
+            "basis": "glyph atlas pages",
+            "maxDistinctKeys": 0,
+            "example": "text remains expected-unsupported for M83 display-list placeholder",
+            "finite": true
+        }
+    ],
+    "deviceLossReason": "m85.device-loss-recreate-observation-unsupported"
+}
