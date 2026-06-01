@@ -98,6 +98,28 @@ The native JSON must name `m83-display-list-pm-scene-v1` as the selected
 `nativePixelsProducedFromDisplayListByThisTask=true`. If either condition is
 missing, the sprint is not done; it is only route-prep evidence.
 
+## M84 Native Timing PM Evidence
+
+For M84 and later timing work, the PM demo package must distinguish three
+separate facts:
+
+- native timing samples were serialized;
+- the lane remains candidate/reporting-only;
+- the timing is not counted as a release-blocking measured gate.
+
+Minimum PM artifacts:
+
+- `reports/wgsl-pipeline/m84-native-frame-timing/evidence.json`;
+- `reports/wgsl-pipeline/m84-native-frame-timing/evidence.md`;
+- `reports/wgsl-pipeline/m84-native-frame-timing/negative-fixture.json`;
+- PM bundle manifest entry `m84NativeFrameTiming`.
+
+The evidence JSON must report `lane=frame.kadre-windowed`,
+`gatePhase=candidate-reporting-only`, `releaseBlocking=false`, and
+`countedAsMeasuredGate=false`. The PM wording must not describe the lane as
+release-grade FPS until a later milestone promotes it with accepted variance and
+resource telemetry.
+
 ## PM Language
 
 Use this framing:

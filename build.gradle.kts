@@ -4299,6 +4299,7 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM81NativeFrameCapture")
     mustRunAfter(":kadre-runtime:pipelineM82InputResizeRuntimeLoop")
     mustRunAfter(":kadre-runtime:pipelineM83DisplayListReplay")
+    mustRunAfter(":kadre-runtime:pipelineM84NativeFrameTimingCandidate")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4336,6 +4337,7 @@ tasks.register("pipelinePmBundle") {
     val m81NativeFrameCaptureDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m81-native-frame-capture")
     val m82InputResizeRuntimeLoopDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop")
     val m83DisplayListReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m83-display-list-replay")
+    val m84NativeFrameTimingDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m84-native-frame-timing")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4362,6 +4364,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m81NativeFrameCaptureDir)
     inputs.dir(m82InputResizeRuntimeLoopDir)
     inputs.dir(m83DisplayListReplayDir)
+    inputs.dir(m84NativeFrameTimingDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4406,6 +4409,7 @@ tasks.register("pipelinePmBundle") {
         val m81NativeFrameCaptureRoot = m81NativeFrameCaptureDir.asFile
         val m82InputResizeRuntimeLoopRoot = m82InputResizeRuntimeLoopDir.asFile
         val m83DisplayListReplayRoot = m83DisplayListReplayDir.asFile
+        val m84NativeFrameTimingRoot = m84NativeFrameTimingDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4493,6 +4497,9 @@ tasks.register("pipelinePmBundle") {
         }
         if (m83DisplayListReplayRoot.isDirectory) {
             m83DisplayListReplayRoot.copyRecursively(targetRoot.resolve("runtime/m83-display-list-replay"), overwrite = true)
+        }
+        if (m84NativeFrameTimingRoot.isDirectory) {
+            m84NativeFrameTimingRoot.copyRecursively(targetRoot.resolve("runtime/m84-native-frame-timing"), overwrite = true)
         }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
@@ -5595,6 +5602,82 @@ tasks.register("pipelinePmBundle") {
         ) {
             throw GradleException("M83 unsupported display-list node refusals changed unexpectedly: ${m83DisplayListReplayFile.relativeTo(rootDir)}")
         }
+        val m84NativeFrameTimingFile = m84NativeFrameTimingRoot.resolve("evidence.json")
+        val m84NativeFrameTiming = if (m84NativeFrameTimingFile.isFile) {
+            JsonSlurper().parse(m84NativeFrameTimingFile) as? Map<*, *>
+                ?: throw GradleException("M84 native frame timing evidence must be a JSON object: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M84 native frame timing evidence: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
+        }
+        fun m84String(field: String): String = (m84NativeFrameTiming[field] as? String).orEmpty()
+        fun m84Bool(field: String): Boolean = (m84NativeFrameTiming[field] as? Boolean) ?: false
+        val m84MeasuredPayload = (m84NativeFrameTiming["measuredPayload"] as? Map<*, *>).orEmpty()
+        val m84Eligibility = (m84NativeFrameTiming["eligibility"] as? Map<*, *>).orEmpty()
+        val m84Host = (m84NativeFrameTiming["host"] as? Map<*, *>).orEmpty()
+        val m84Adapter = (m84NativeFrameTiming["adapter"] as? Map<*, *>).orEmpty()
+        val m84CacheCounters = (m84NativeFrameTiming["cacheCounters"] as? Map<*, *>).orEmpty()
+        val m84NegativeFixture = (m84NativeFrameTiming["negativeFixture"] as? Map<*, *>).orEmpty()
+        val m84ValidationRows = (m84NativeFrameTiming["validationRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m84ArtifactPaths = (m84NativeFrameTiming["artifactPaths"] as? List<*>)
+            ?.map { it.toString() }
+            .orEmpty()
+        if (
+            m84String("packId") != "m84-native-frame-timing-candidate-v1" ||
+            m84String("lane") != "frame.kadre-windowed" ||
+            m84String("gatePhase") != "candidate-reporting-only" ||
+            m84Bool("releaseBlocking") ||
+            m84Bool("countedAsMeasuredGate")
+        ) {
+            throw GradleException("M84 native timing evidence has unexpected pack/lane/gate fields: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
+        }
+        if (
+            m84MeasuredPayload["status"] != "measured" ||
+            ((m84MeasuredPayload["warmupFrameCount"] as? Number)?.toInt() ?: 0) < 60 ||
+            ((m84MeasuredPayload["measuredSampleCount"] as? Number)?.toInt() ?: 0) < 120 ||
+            ((m84MeasuredPayload["p50Ms"] as? Number)?.toDouble() ?: 0.0) <= 0.0 ||
+            ((m84MeasuredPayload["p95Ms"] as? Number)?.toDouble() ?: 0.0) <= 0.0 ||
+            ((m84MeasuredPayload["worstMs"] as? Number)?.toDouble() ?: 0.0) <= 0.0 ||
+            ((m84MeasuredPayload["estimatedMetricCount"] as? Number)?.toInt() ?: -1) != 0 ||
+            ((m84MeasuredPayload["missingMetricCount"] as? Number)?.toInt() ?: -1) != 0
+        ) {
+            throw GradleException("M84 measured payload is missing required warmup/sample/timing fields: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
+        }
+        if (
+            m84Eligibility["reportingOnly"] != true ||
+            (m84Eligibility["quarantineReasons"] as? List<*>)?.contains("m84.reporting-only-until-owner-accepts-variance") != true
+        ) {
+            throw GradleException("M84 eligibility must preserve reporting-only quarantine rationale: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
+        }
+        if (
+            m84Host["javaVersion"].toString().isBlank() ||
+            m84Host["osName"].toString().isBlank() ||
+            m84Adapter["info"].toString().isBlank() ||
+            m84CacheCounters["source"] != "m84.schema-placeholder-until-m85-resource-telemetry"
+        ) {
+            throw GradleException("M84 host, adapter, or cache counter metadata is incomplete: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
+        }
+        if (
+            m84NegativeFixture["status"] != "expected-fail" ||
+            m84NegativeFixture["reason"] != "m84.negative-fixture-p95-threshold-exceeded" ||
+            m84NegativeFixture["mutatesBaseline"] != false
+        ) {
+            throw GradleException("M84 negative timing fixture changed unexpectedly: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
+        }
+        if (m84ValidationRows.size < 4 || m84ValidationRows.any { it["status"] != "pass" }) {
+            throw GradleException("M84 native timing evidence has missing or non-pass validation rows: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
+        }
+        if (m84ArtifactPaths.size < 4) {
+            throw GradleException("M84 native timing evidence missing artifact paths: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
+        }
+        m84ArtifactPaths.forEach { artifactPath ->
+            val sourceArtifact = rootDir.resolve(artifactPath)
+            val bundledArtifact = targetRoot.resolve(artifactPath.removePrefix("reports/wgsl-pipeline/"))
+            if (!sourceArtifact.isFile && !bundledArtifact.isFile && !targetRoot.resolve(artifactPath).isFile) {
+                throw GradleException("M84 native timing evidence references missing artifact `$artifactPath`: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
+            }
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5728,6 +5811,8 @@ tasks.register("pipelinePmBundle") {
             "m81NativeFrameCaptureJson" to "runtime/m81-native-frame-capture/evidence.json",
             "m82InputResizeRuntimeLoopMarkdown" to "runtime/m82-kadre-input-resize-runtime-loop/evidence.md",
             "m82InputResizeRuntimeLoopJson" to "runtime/m82-kadre-input-resize-runtime-loop/evidence.json",
+            "m84NativeFrameTimingMarkdown" to "runtime/m84-native-frame-timing/evidence.md",
+            "m84NativeFrameTimingJson" to "runtime/m84-native-frame-timing/evidence.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -6104,6 +6189,30 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M83 proves one bounded Kanvas display-list scene selected through the Kadre native WebGPU demo path with a nonblank offscreen readback. Text, image-filter DAG, runtime-effect, broad SkCanvas op streams, and release-grade timing remain explicit non-claims.",
             ),
+            "m84NativeFrameTiming" to linkedMapOf<String, Any>(
+                "packId" to m84String("packId"),
+                "claimLevel" to m84String("claimLevel"),
+                "lane" to m84String("lane"),
+                "gateStatus" to m84String("gateStatus"),
+                "gatePhase" to m84String("gatePhase"),
+                "releaseBlocking" to m84Bool("releaseBlocking"),
+                "countedAsMeasuredGate" to m84Bool("countedAsMeasuredGate"),
+                "sceneContractId" to m84String("sceneContractId"),
+                "warmupFrameCount" to ((m84MeasuredPayload["warmupFrameCount"] as? Number)?.toInt() ?: 0),
+                "measuredSampleCount" to ((m84MeasuredPayload["measuredSampleCount"] as? Number)?.toInt() ?: 0),
+                "p50Ms" to ((m84MeasuredPayload["p50Ms"] as? Number)?.toDouble() ?: 0.0),
+                "p95Ms" to ((m84MeasuredPayload["p95Ms"] as? Number)?.toDouble() ?: 0.0),
+                "worstMs" to ((m84MeasuredPayload["worstMs"] as? Number)?.toDouble() ?: 0.0),
+                "estimatedMetricCount" to ((m84MeasuredPayload["estimatedMetricCount"] as? Number)?.toInt() ?: -1),
+                "missingMetricCount" to ((m84MeasuredPayload["missingMetricCount"] as? Number)?.toInt() ?: -1),
+                "negativeFixtureStatus" to ((m84NegativeFixture["status"] as? String).orEmpty()),
+                "negativeFixtureReason" to ((m84NegativeFixture["reason"] as? String).orEmpty()),
+                "artifactPaths" to m84ArtifactPaths,
+                "report" to "runtime/m84-native-frame-timing/evidence.md",
+                "evidenceJson" to "runtime/m84-native-frame-timing/evidence.json",
+                "negativeFixtureJson" to "runtime/m84-native-frame-timing/negative-fixture.json",
+                "notice" to "M84 exposes native Kadre frame timing as a measured candidate/reporting payload with quarantine and a negative fixture. It is not release-blocking, not counted as a measured release gate, and present-call duration is not a full end-to-end FPS guarantee.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -6193,6 +6302,7 @@ tasks.register("pipelinePmBundle") {
                 "M81 packages native frame artifact capture evidence for PM review, but the current produced image remains a wgpu4k native offscreen texture readback. Window-surface screenshot/readback is still unsupported and refused with m81.window-surface-readback-not-implemented.",
                 "M82 verifies deterministic Kadre-backed input/resize runtime-loop semantics and telemetry. It does not synthesize real desktop OS input events in CI, does not claim full window-manager resize coverage, and keeps dropped-frame counters reporting-only until M84.",
                 "M83 verifies one bounded Kanvas display-list scene through the Kadre native WebGPU demo path with nonblank offscreen readback evidence. Broad SkCanvas op replay, text, image-filter DAGs, arbitrary runtime effects, and release-grade timing remain outside the claim.",
+                "M84 turns native Kadre frame timing into candidate/reporting-only evidence with explicit quarantine and a negative fixture. It does not promote frame.kadre-windowed to a release-blocking gate or claim full end-to-end FPS.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -6257,6 +6367,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M82 input/resize runtime counters live in `manifest.json` under `m82InputResizeRuntimeLoop`; OS event injection and release-grade timing remain non-claims.")
                 appendLine("- `runtime/m83-display-list-replay/`: M83 bounded Kanvas display-list replay evidence, native demo JSON, and native readback PNG.")
                 appendLine("- M83 display-list replay counters live in `manifest.json` under `m83DisplayListReplay`; it proves one selected display-list scene, not broad SkCanvas op replay.")
+                appendLine("- `runtime/m84-native-frame-timing/`: M84 candidate native Kadre frame timing evidence, Markdown, and negative fixture.")
+                appendLine("- M84 native frame timing counters live in `manifest.json` under `m84NativeFrameTiming`; the lane remains candidate/reporting-only and not release-blocking.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }

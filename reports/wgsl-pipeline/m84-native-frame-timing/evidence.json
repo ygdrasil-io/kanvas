@@ -1,0 +1,110 @@
+{
+    "schemaVersion": 1,
+    "generatedBy": "kadre-runtime:M84NativeFrameTimingCandidate",
+    "linearIssues": [
+        "FOR-100",
+        "FOR-154",
+        "FOR-155",
+        "FOR-156",
+        "FOR-157",
+        "FOR-158"
+    ],
+    "packId": "m84-native-frame-timing-candidate-v1",
+    "claimLevel": "native-frame-timing-candidate-reporting",
+    "readinessDelta": 0,
+    "lane": "frame.kadre-windowed",
+    "gateStatus": "candidate-reporting-only",
+    "gatePhase": "candidate-reporting-only",
+    "releaseBlocking": false,
+    "countedAsMeasuredGate": false,
+    "sourceNativeDemo": "reports/wgsl-pipeline/m83-display-list-replay/native-demo.json",
+    "sceneContractId": "m83-display-list-pm-scene-v1",
+    "measuredPayload": {
+        "status": "measured",
+        "warmupFrameCount": 60,
+        "measuredSampleCount": 120,
+        "totalSampleCount": 180,
+        "p50Ms": 16.6495,
+        "p95Ms": 18.114,
+        "worstMs": 18.3875,
+        "nativeTimingClaim": "present-call-duration-only",
+        "estimatedMetricCount": 0,
+        "missingMetricCount": 0
+    },
+    "eligibility": {
+        "eligibleHost": true,
+        "reportingOnly": true,
+        "quarantineReasons": [
+            "m84.reporting-only-until-owner-accepts-variance"
+        ]
+    },
+    "host": {
+        "osName": "Mac OS X",
+        "osVersion": "26.5",
+        "osArch": "aarch64",
+        "javaVersion": "25.0.1"
+    },
+    "adapter": {
+        "info": "AdapterInfo(architecture=, description=, device=Apple M2 Max, subgroupMaxSize=0, subgroupMinSize=0, vendor=, isFallbackAdapter=false)",
+        "ownedBaselineFamily": "apple-silicon"
+    },
+    "cacheCounters": {
+        "pipelineCacheHits": 0,
+        "pipelineCacheMisses": 0,
+        "textureUploadBytes": 0,
+        "intermediateTextureBytes": 0,
+        "source": "m84.schema-placeholder-until-m85-resource-telemetry"
+    },
+    "surfaceStatusSummary": {
+        "success": 180,
+        "timeout": 0,
+        "lost": 0,
+        "outdated": 0,
+        "outOfMemory": 0,
+        "deviceLost": 0
+    },
+    "negativeFixture": {
+        "schemaVersion": 1,
+        "id": "m84-negative-p95-threshold-fixture",
+        "lane": "frame.kadre-windowed",
+        "status": "expected-fail",
+        "reason": "m84.negative-fixture-p95-threshold-exceeded",
+        "mutatesBaseline": false,
+        "thresholdP95Ms": 8.0,
+        "observedP95Ms": 18.114,
+        "assertion": "Candidate timing gate rejects a too-low p95 threshold without rewriting checked-in baselines."
+    },
+    "artifactPaths": [
+        "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json",
+        "reports/wgsl-pipeline/m84-native-frame-timing/evidence.md",
+        "reports/wgsl-pipeline/m84-native-frame-timing/negative-fixture.json",
+        "reports/wgsl-pipeline/m83-display-list-replay/native-demo.json"
+    ],
+    "validationRows": [
+        {
+            "id": "m84.measured-payload-schema",
+            "status": "pass",
+            "assertion": "Warmup, measured sample count, p50, p95, worst frame, host, JDK, adapter, and cache counters are serialized."
+        },
+        {
+            "id": "m84.reporting-only-policy",
+            "status": "pass",
+            "assertion": "Native timing remains candidate/reporting-only and is not a release-blocking measured gate."
+        },
+        {
+            "id": "m84.quarantine-policy",
+            "status": "pass",
+            "assertion": "Policy records why this native timing payload is visible but not counted as a release gate."
+        },
+        {
+            "id": "m84.negative-fixture",
+            "status": "pass",
+            "assertion": "Negative fixture proves threshold failure path without mutating baselines."
+        }
+    ],
+    "nonClaims": [
+        "M84 does not make frame.kadre-windowed release-blocking.",
+        "Present-call duration is not a full end-to-end FPS guarantee.",
+        "Cache counters use the M84 schema placeholder until M85 resource lifetime telemetry lands."
+    ]
+}
