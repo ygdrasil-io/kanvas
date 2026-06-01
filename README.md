@@ -15,7 +15,7 @@ product target is broader: make Kanvas render more of the practical Skia CPU
 surface while building a measured real-time WebGPU lane with live telemetry,
 feature diagnostics, and PM-visible demos.
 
-New target readiness is approximately 35% after M63 closeout. This is intentionally lower
+New target readiness is approximately 39% after M64 closeout. This is intentionally lower
 than the completed MEP score because the scope has expanded from evidence
 infrastructure to feature breadth, fidelity, runtime behavior, and release
 operability. The score is based on counted denominators in the target doc, not
@@ -23,13 +23,13 @@ manual sprint estimates.
 
 | Area | Weight | Current progress | PM interpretation |
 |---|---:|---:|---|
-| Rendering feature breadth | 30% | 50% | Path AA, bounded image-filter DAG, text/font, and M63 color/blend/color-filter evidence now have selected generated contracts; runtime effects, broad layers, and fallbacks remain incomplete. |
-| Skia-like fidelity | 20% | 30% | Reference/CPU/GPU diffs exist for selected scenes; M63 adds three supported color/blend/gradient rows, but broad GM parity and diff burn-down remain ahead. |
-| Real-time runtime | 20% | 10% | Static dashboard evidence exists; interactive frame loop, invalidation, and live telemetry are not productized yet. |
+| Rendering feature breadth | 30% | 60% | Path AA, bounded image-filter DAG, text/font, color/blend/color-filter, and registered runtime-effect evidence now have selected generated contracts; broad layers and fallbacks remain incomplete. |
+| Skia-like fidelity | 20% | 31% | Reference/CPU/GPU diffs exist for selected scenes; M64 adds one supported descriptor-backed runtime-effect row, but broad GM parity and diff burn-down remain ahead. |
+| Real-time runtime | 20% | 10% | Static dashboard evidence exists and registered runtime-effect parameter metadata is now available for the future live Kadre lane; frame loop, invalidation, and live telemetry are not productized yet. |
 | Performance and cache readiness | 15% | 35% | M59 selected performance gate is strong; family budgets, frame budgets, warm/cold cache gates, and runtime gates remain missing. |
-| PM/demo operability | 15% | 50% | PM dashboard works and now exposes graph/glyph diagnostics plus M63 color/blend refusal boundaries; live demo packaging, hosted artifacts, and release-candidate workflow remain incomplete. |
+| PM/demo operability | 15% | 55% | PM dashboard works and now exposes graph/glyph diagnostics plus M63/M64 refusal boundaries; live demo packaging, hosted artifacts, and release-candidate workflow remain incomplete. |
 
-Weighted PM readiness for the new target: **35%**.
+Weighted PM readiness for the new target: **39%**.
 
 Active planning entry points:
 
@@ -44,7 +44,7 @@ Active planning entry points:
 | M61 | Image Filter DAG V2 | Bounded multi-node filter graphs render with graph diagnostics and intermediate texture ownership. |
 | M62 | Text & Glyph Rendering V1 | Simple text renders through real font loading with outline/path glyph routes; glyph atlas, fallback-family selection, emoji, and complex shaping remain explicit non-claims. |
 | M63 | Color, Blend & ColorFilter Parity | Bounded SrcOver, linear-gradient color-filter kPlus, and sweep-gradient clamp rows render; wide-gamut color-space and advanced blend chains refuse with stable reasons. |
-| M64 | Registered Runtime Effects | Known effects render through registered Kotlin/WGSL descriptors and parser-reflected uniforms. |
+| M64 | Registered Runtime Effects | SimpleRT renders through a registered Kotlin/WGSL descriptor with parser-reflected uniforms; SpiralRT and arbitrary SkSL refuse with stable reasons. |
 | M65 | Real-Time Scene Runtime | Kadre-hosted scene loop exposes FPS, frame breakdown, invalidation, cache telemetry, and route diagnostics. |
 | M66 | Skia GM Promotion Wave | 50-100 high-value GM-derived rows become generated support/refusal evidence. |
 | M67 | Performance Tiering | Family-level correctness and performance budgets become release-owned gates. |
