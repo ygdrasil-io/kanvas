@@ -4294,6 +4294,7 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM76GeneratedMetadataReplay")
     mustRunAfter(":kadre-runtime:pipelineM77BlendAlphaReplay")
     mustRunAfter(":kadre-runtime:pipelineM78ClipReplay")
+    mustRunAfter(":kadre-runtime:pipelineM79BitmapReplay")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4326,6 +4327,7 @@ tasks.register("pipelinePmBundle") {
     val m76GeneratedMetadataReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m76-generated-metadata-replay")
     val m77BlendAlphaReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m77-blend-alpha-replay")
     val m78ClipReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m78-clip-replay")
+    val m79BitmapReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m79-bitmap-replay")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4347,6 +4349,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m76GeneratedMetadataReplayDir)
     inputs.dir(m77BlendAlphaReplayDir)
     inputs.dir(m78ClipReplayDir)
+    inputs.dir(m79BitmapReplayDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4386,6 +4389,7 @@ tasks.register("pipelinePmBundle") {
         val m76GeneratedMetadataReplayRoot = m76GeneratedMetadataReplayDir.asFile
         val m77BlendAlphaReplayRoot = m77BlendAlphaReplayDir.asFile
         val m78ClipReplayRoot = m78ClipReplayDir.asFile
+        val m79BitmapReplayRoot = m79BitmapReplayDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4459,6 +4463,9 @@ tasks.register("pipelinePmBundle") {
         if (m78ClipReplayRoot.isDirectory) {
             m78ClipReplayRoot.copyRecursively(targetRoot.resolve("runtime/m78-clip-replay"), overwrite = true)
         }
+        if (m79BitmapReplayRoot.isDirectory) {
+            m79BitmapReplayRoot.copyRecursively(targetRoot.resolve("runtime/m79-bitmap-replay"), overwrite = true)
+        }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
         }
@@ -4525,6 +4532,8 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json",
             "reports/wgsl-pipeline/m78-clip-replay/evidence.md",
             "reports/wgsl-pipeline/m78-clip-replay/evidence.json",
+            "reports/wgsl-pipeline/m79-bitmap-replay/evidence.md",
+            "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json",
         )
         referencedPaths += m56ReportPaths
 
@@ -5083,6 +5092,151 @@ tasks.register("pipelinePmBundle") {
                     "failedSceneCount=$m78FailedSceneCount",
             )
         }
+        val m79BitmapReplayFile = m79BitmapReplayRoot.resolve("evidence.json")
+        val m79BitmapReplay = if (m79BitmapReplayFile.isFile) {
+            JsonSlurper().parse(m79BitmapReplayFile) as? Map<*, *>
+                ?: throw GradleException("M79 bitmap replay evidence must be a JSON object: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M79 bitmap replay evidence: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+        }
+        fun m79String(field: String): String =
+            (m79BitmapReplay[field] as? String)
+                ?.takeIf { it.isNotBlank() }
+                ?: throw GradleException("M79 bitmap replay evidence missing string `$field`: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+        fun m79Int(field: String): Int =
+            (m79BitmapReplay[field] as? Number)?.toInt()
+                ?: throw GradleException("M79 bitmap replay evidence missing numeric `$field`: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+        val m79SceneCount = m79Int("sceneCount")
+        val m79RenderableSceneCount = m79Int("renderableSceneCount")
+        val m79ExpectedUnsupportedSceneCount = m79Int("expectedUnsupportedSceneCount")
+        val m79FailedSceneCount = m79Int("failedSceneCount")
+        val m79BitmapCommandCount = m79Int("bitmapCommandCount")
+        val m79FixtureBackedBitmapCommandCount = m79Int("fixtureBackedBitmapCommandCount")
+        val m79NearestSamplerCommandCount = m79Int("nearestSamplerCommandCount")
+        val m79LinearSamplerCommandCount = m79Int("linearSamplerCommandCount")
+        val m79UnsupportedBitmapCommandCount = m79Int("unsupportedBitmapCommandCount")
+        val m79ClipRectCommandCount = m79Int("clipRectCommandCount")
+        val m79ClipIntersectCommandCount = m79Int("clipIntersectCommandCount")
+        val m79SrcOverCommandCount = m79Int("srcOverCommandCount")
+        val m79PartialAlphaCommandCount = m79Int("partialAlphaCommandCount")
+        val m79UnsupportedBitmapReason = m79String("unsupportedBitmapReason")
+        if (m79String("packId") != "m79-bitmap-replay-v1" || m79UnsupportedBitmapReason != "m79.bitmap.unsupported-sampler.mipmap") {
+            throw GradleException("M79 bitmap replay evidence has unexpected pack id or unsupported reason: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+        }
+        val m79Scenes = (m79BitmapReplay["scenes"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            ?: throw GradleException("M79 bitmap replay evidence missing scenes[]: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+        val m79ScenesById = m79Scenes.associateBy { it["id"] as? String }
+        listOf(
+            "m79-bitmap-fixture-nearest-replay-v1",
+            "m79-bitmap-fixture-linear-alpha-replay-v1",
+            "m79-bitmap-fixture-clipped-nearest-replay-v1",
+            "m79-bitmap-mipmap-sampler-refusal-v1",
+        ).forEach { sceneId ->
+            if (m79ScenesById[sceneId] == null) {
+                throw GradleException("M79 bitmap replay evidence missing scene `$sceneId`: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+            }
+        }
+        val m79ExpectedBitmapContracts = mapOf(
+            "m79-bitmap-fixture-nearest-replay-v1" to mapOf(
+                "fixtureId" to "m79-fixture-checker-rgba8-4x4",
+                "sampler" to "nearest",
+                "clipRect" to 0,
+            ),
+            "m79-bitmap-fixture-linear-alpha-replay-v1" to mapOf(
+                "fixtureId" to "m79-fixture-alpha-swatch-rgba8-4x4",
+                "sampler" to "linear",
+                "clipRect" to 0,
+            ),
+            "m79-bitmap-fixture-clipped-nearest-replay-v1" to mapOf(
+                "fixtureId" to "m79-fixture-checker-rgba8-4x4",
+                "sampler" to "nearest",
+                "clipRect" to 1,
+            ),
+        )
+        m79ExpectedBitmapContracts.forEach { (sceneId, expected) ->
+            val scene = m79ScenesById.getValue(sceneId)
+            if (scene["status"] != "renderable") {
+                throw GradleException("M79 renderable scene `$sceneId` is not renderable: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+            }
+            val sceneContract = scene["sceneContract"] as? Map<*, *>
+                ?: throw GradleException("M79 scene `$sceneId` missing sceneContract: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+            val commands = sceneContract["commands"] as? List<*>
+                ?: throw GradleException("M79 scene `$sceneId` missing sceneContract.commands[]: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+            val bitmapCommands = commands.filterIsInstance<Map<*, *>>().filter { it["family"] == "bitmapRect" }
+            if (bitmapCommands.isEmpty()) {
+                throw GradleException("M79 scene `$sceneId` missing BitmapRect command details: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+            }
+            val clipCommands = commands.filterIsInstance<Map<*, *>>().filter { it["family"] == "clipRect" && it["operation"] == "intersect" }
+            if (clipCommands.size != expected.getValue("clipRect")) {
+                throw GradleException("M79 scene `$sceneId` has unexpected ClipRect count: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+            }
+            bitmapCommands.forEach { command ->
+                if (
+                    command["fixtureId"] !is String ||
+                    command["sourceBounds"] !is Map<*, *> ||
+                    command["destinationBounds"] !is Map<*, *> ||
+                    command["sampler"] !is String ||
+                    command["blendMode"] != "SrcOver" ||
+                    command["alpha"] !is Number ||
+                    command["provenance"] !is Map<*, *>
+                ) {
+                    throw GradleException("M79 BitmapRect command missing fixture/bounds/sampler/blend/alpha/provenance fields: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+                }
+                if (command["fixtureId"] != expected.getValue("fixtureId") || command["sampler"] != expected.getValue("sampler")) {
+                    throw GradleException("M79 BitmapRect command has unexpected fixture or sampler for `$sceneId`: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+                }
+                val sourceBounds = command["sourceBounds"] as? Map<*, *>
+                    ?: throw GradleException("M79 BitmapRect command missing source bounds object: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+                val destinationBounds = command["destinationBounds"] as? Map<*, *>
+                    ?: throw GradleException("M79 BitmapRect command missing destination bounds object: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+                listOf("x", "y", "width", "height", "left", "top", "right", "bottom").forEach { field ->
+                    if (sourceBounds[field] !is Number || destinationBounds[field] !is Number) {
+                        throw GradleException("M79 BitmapRect command has non-numeric bounds field `$field`: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+                    }
+                }
+            }
+            val cpuOracle = scene["cpuOracle"] as? Map<*, *>
+                ?: throw GradleException("M79 renderable scene `$sceneId` missing cpuOracle: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+            if (
+                (cpuOracle["bitmapSampledPixels"] as? Number)?.toInt()?.takeIf { it > 0 } == null ||
+                (cpuOracle["checksum"] as? Number) == null ||
+                (cpuOracle["nonTransparentPixels"] as? Number)?.toInt()?.takeIf { it > 0 } == null
+            ) {
+                throw GradleException("M79 renderable scene `$sceneId` missing bitmap CPU oracle facts: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+            }
+        }
+        val m79UnsupportedScene = m79ScenesById.getValue("m79-bitmap-mipmap-sampler-refusal-v1")
+        if (m79UnsupportedScene["status"] != "expected-unsupported" || m79UnsupportedScene["reason"] != m79UnsupportedBitmapReason) {
+            throw GradleException("M79 unsupported bitmap scene has unexpected status/reason: ${m79BitmapReplayFile.relativeTo(rootDir)}")
+        }
+        if (
+            m79SceneCount < 4 ||
+            m79RenderableSceneCount < 3 ||
+            m79ExpectedUnsupportedSceneCount < 1 ||
+            m79BitmapCommandCount < 3 ||
+            m79FixtureBackedBitmapCommandCount < 3 ||
+            m79NearestSamplerCommandCount < 2 ||
+            m79LinearSamplerCommandCount < 1 ||
+            m79UnsupportedBitmapCommandCount < 1 ||
+            m79ClipRectCommandCount < 1 ||
+            m79ClipIntersectCommandCount < 1 ||
+            m79SrcOverCommandCount < 4 ||
+            m79PartialAlphaCommandCount < 2 ||
+            m79FailedSceneCount != 0
+        ) {
+            throw GradleException(
+                "M79 bitmap replay evidence counters are invalid: " +
+                    "sceneCount=$m79SceneCount renderableSceneCount=$m79RenderableSceneCount " +
+                    "expectedUnsupportedSceneCount=$m79ExpectedUnsupportedSceneCount bitmapCommandCount=$m79BitmapCommandCount " +
+                    "fixtureBackedBitmapCommandCount=$m79FixtureBackedBitmapCommandCount " +
+                    "nearestSamplerCommandCount=$m79NearestSamplerCommandCount linearSamplerCommandCount=$m79LinearSamplerCommandCount " +
+                    "unsupportedBitmapCommandCount=$m79UnsupportedBitmapCommandCount " +
+                    "clipRectCommandCount=$m79ClipRectCommandCount clipIntersectCommandCount=$m79ClipIntersectCommandCount " +
+                    "srcOverCommandCount=$m79SrcOverCommandCount partialAlphaCommandCount=$m79PartialAlphaCommandCount " +
+                    "failedSceneCount=$m79FailedSceneCount",
+            )
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5208,6 +5362,8 @@ tasks.register("pipelinePmBundle") {
             "m77BlendAlphaReplayJson" to "reports/wgsl-pipeline/m77-blend-alpha-replay/evidence.json",
             "m78ClipReplayMarkdown" to "reports/wgsl-pipeline/m78-clip-replay/evidence.md",
             "m78ClipReplayJson" to "reports/wgsl-pipeline/m78-clip-replay/evidence.json",
+            "m79BitmapReplayMarkdown" to "reports/wgsl-pipeline/m79-bitmap-replay/evidence.md",
+            "m79BitmapReplayJson" to "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -5470,6 +5626,29 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M78 adds bounded ClipRect intersect replay evidence for simple rect-fill scenes and preserves complex clip refusals. It does not add rounded clips, path clips, difference clips, saveLayer clip stacks, arbitrary SkCanvas clip replay, or broad clip-stack support.",
             ),
+            "m79BitmapReplay" to linkedMapOf<String, Any>(
+                "status" to m79String("claimLevel"),
+                "packId" to m79String("packId"),
+                "sceneCount" to m79SceneCount,
+                "renderableSceneCount" to m79RenderableSceneCount,
+                "expectedUnsupportedSceneCount" to m79ExpectedUnsupportedSceneCount,
+                "failedSceneCount" to m79FailedSceneCount,
+                "bitmapCommandCount" to m79BitmapCommandCount,
+                "fixtureBackedBitmapCommandCount" to m79FixtureBackedBitmapCommandCount,
+                "nearestSamplerCommandCount" to m79NearestSamplerCommandCount,
+                "linearSamplerCommandCount" to m79LinearSamplerCommandCount,
+                "unsupportedBitmapCommandCount" to m79UnsupportedBitmapCommandCount,
+                "clipRectCommandCount" to m79ClipRectCommandCount,
+                "clipIntersectCommandCount" to m79ClipIntersectCommandCount,
+                "srcOverCommandCount" to m79SrcOverCommandCount,
+                "partialAlphaCommandCount" to m79PartialAlphaCommandCount,
+                "unsupportedBitmapReason" to m79UnsupportedBitmapReason,
+                "readinessDelta" to m79Int("readinessDelta"),
+                "report" to "reports/wgsl-pipeline/m79-bitmap-replay/evidence.md",
+                "evidenceJson" to "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json",
+                "releaseBlocking" to false,
+                "notice" to "M79 adds bounded BitmapRect replay evidence for owned in-repo fixtures with nearest and linear samplers, alpha/blend/provenance fields, and stable unsupported sampler refusals. It does not add arbitrary SkImage, codec decode, mipmap, texture atlas, tile-mode, or color-managed image support.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -5554,6 +5733,7 @@ tasks.register("pipelinePmBundle") {
                 "M76 verifies a selected generated-metadata to replay-contract bridge for known bounded templates and stable refusals. It does not add arbitrary generated scene replay, broad display-list replay, or new feature-family support.",
                 "M77 verifies bounded SrcOver partial-alpha replay scenes and one unsupported blend-mode refusal. It does not add arbitrary blend modes, layer compositing, or broad display-list replay.",
                 "M78 verifies bounded ClipRect intersect replay scenes and one complex clip refusal. It does not add rounded clips, path clips, difference clips, saveLayer clip stacks, arbitrary SkCanvas clip replay, or broad clip-stack support.",
+                "M79 verifies bounded fixture-backed BitmapRect replay scenes with nearest/linear samplers and one unsupported mipmap sampler refusal. It does not add arbitrary SkImage, codec decode, texture atlas, mipmap, tile-mode, or color-managed image support.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -5608,6 +5788,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M77 blend/alpha replay counters live in `manifest.json` under `m77BlendAlphaReplay`; unsupported blend modes remain stable refusals.")
                 appendLine("- `runtime/m78-clip-replay/`: M78 bounded ClipRect intersect replay evidence JSON and Markdown.")
                 appendLine("- M78 clip replay counters live in `manifest.json` under `m78ClipReplay`; complex rounded/path/difference clips remain stable refusals.")
+                appendLine("- `runtime/m79-bitmap-replay/`: M79 bounded fixture-backed BitmapRect replay evidence JSON and Markdown.")
+                appendLine("- M79 bitmap replay counters live in `manifest.json` under `m79BitmapReplay`; unsupported mipmap/texture sampler paths remain stable refusals.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }

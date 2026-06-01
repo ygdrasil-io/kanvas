@@ -124,3 +124,13 @@ tasks.register<JavaExec>("pipelineM78ClipReplay") {
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m78-clip-replay"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM79BitmapReplay") {
+    group = "verification"
+    description = "Generates M79 bounded fixture-backed bitmap replay evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M79BitmapReplayKt")
+    args(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m79-bitmap-replay").asFile.absolutePath)
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m79-bitmap-replay"))
+    outputs.upToDateWhen { false }
+}
