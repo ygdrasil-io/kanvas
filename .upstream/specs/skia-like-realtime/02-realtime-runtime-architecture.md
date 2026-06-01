@@ -178,6 +178,9 @@ Initial curated scenes:
 Initial environment:
 
 - Apple M-series adapter as the first measured lane;
+- JDK 25;
+- 120 warm frames plus 300 measured frames for candidate gates;
+- 60 FPS target, 30 FPS warning until M67 promotes a lane.
 
 ## M83 Display-List Replay Through Kadre
 
@@ -198,9 +201,29 @@ evidence shape is:
 M83 does not claim broad SkCanvas op streams, saveLayer replay, arbitrary
 clip stacks, arbitrary images/text/effects, or release-grade frame timing.
 Those areas remain later runtime/feature work.
-- JDK 25;
-- 120 warm frames plus 300 measured frames for candidate gates;
-- 60 FPS target, 30 FPS warning until M67 promotes a lane.
+
+## M85 Resource Lifetime And Cache Hardening
+
+M85 makes the selected Kadre/WebGPU realtime route auditable with a deterministic
+selected-scene resource/cache ledger. It does not claim observed WebGPU runtime
+cache telemetry or arbitrary scene cache behavior.
+
+Required runtime evidence:
+
+- per-frame resource ledger with cache hits/misses, shader modules,
+  pipelines, bind groups, textures, texture upload bytes, intermediate texture
+  bytes, bind group churn, and resource generations;
+- cache ownership ids and bounded key spaces for the selected scene;
+- proof that resize/scale-factor surface reconfiguration increments resource
+  generations and does not reuse invalid WebGPU resources;
+- stable failure reason `m85.invalid-resource-generation-reuse` if invalid
+  generation reuse is observed;
+- stable expected-unsupported device-loss diagnostic
+  `m85.device-loss-recreate-observation-unsupported` until a real supported
+  device-lost/recreate path is observable.
+
+Pipeline cache keys must stay based on layout, code, resource, and pipeline
+state. Uniform values must not become `PipelineKey` axes.
 
 ## PM Demo Requirements
 
