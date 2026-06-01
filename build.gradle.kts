@@ -4297,6 +4297,7 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM79BitmapReplay")
     mustRunAfter(":kadre-runtime:pipelineM80SharedReplayOracle")
     mustRunAfter(":kadre-runtime:pipelineM81NativeFrameCapture")
+    mustRunAfter(":kadre-runtime:pipelineM82InputResizeRuntimeLoop")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4332,6 +4333,7 @@ tasks.register("pipelinePmBundle") {
     val m79BitmapReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m79-bitmap-replay")
     val m80SharedReplayOracleDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m80-shared-replay-oracle")
     val m81NativeFrameCaptureDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m81-native-frame-capture")
+    val m82InputResizeRuntimeLoopDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4356,6 +4358,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m79BitmapReplayDir)
     inputs.dir(m80SharedReplayOracleDir)
     inputs.dir(m81NativeFrameCaptureDir)
+    inputs.dir(m82InputResizeRuntimeLoopDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4398,6 +4401,7 @@ tasks.register("pipelinePmBundle") {
         val m79BitmapReplayRoot = m79BitmapReplayDir.asFile
         val m80SharedReplayOracleRoot = m80SharedReplayOracleDir.asFile
         val m81NativeFrameCaptureRoot = m81NativeFrameCaptureDir.asFile
+        val m82InputResizeRuntimeLoopRoot = m82InputResizeRuntimeLoopDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4479,6 +4483,9 @@ tasks.register("pipelinePmBundle") {
         }
         if (m81NativeFrameCaptureRoot.isDirectory) {
             m81NativeFrameCaptureRoot.copyRecursively(targetRoot.resolve("runtime/m81-native-frame-capture"), overwrite = true)
+        }
+        if (m82InputResizeRuntimeLoopRoot.isDirectory) {
+            m82InputResizeRuntimeLoopRoot.copyRecursively(targetRoot.resolve("runtime/m82-kadre-input-resize-runtime-loop"), overwrite = true)
         }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
@@ -5419,6 +5426,87 @@ tasks.register("pipelinePmBundle") {
                 throw GradleException("M81 refused capture evidence must include stable refusal reasons: ${m81NativeFrameCaptureFile.relativeTo(rootDir)}")
             }
         }
+        val m82InputResizeRuntimeLoopFile = m82InputResizeRuntimeLoopRoot.resolve("evidence.json")
+        val m82InputResizeRuntimeLoop = if (m82InputResizeRuntimeLoopFile.isFile) {
+            JsonSlurper().parse(m82InputResizeRuntimeLoopFile) as? Map<*, *>
+                ?: throw GradleException("M82 input/resize runtime evidence must be a JSON object: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M82 input/resize runtime evidence: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+        }
+        fun m82String(field: String): String = (m82InputResizeRuntimeLoop[field] as? String).orEmpty()
+        fun m82Int(field: String): Int = (m82InputResizeRuntimeLoop[field] as? Number)?.toInt() ?: 0
+        fun m82Bool(field: String): Boolean = (m82InputResizeRuntimeLoop[field] as? Boolean) ?: false
+        val m82Telemetry = (m82InputResizeRuntimeLoop["telemetry"] as? Map<*, *>).orEmpty()
+        val m82FinalSceneState = (m82InputResizeRuntimeLoop["finalSceneState"] as? Map<*, *>).orEmpty()
+        val m82BackingHost = (m82InputResizeRuntimeLoop["backingHost"] as? Map<*, *>).orEmpty()
+        val m82ArtifactPaths = (m82InputResizeRuntimeLoop["artifactPaths"] as? List<*>)
+            ?.map { it.toString() }
+            .orEmpty()
+        val m82ValidationRows = (m82InputResizeRuntimeLoop["validationRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m82Fixtures = (m82InputResizeRuntimeLoop["fixtures"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m82SurfaceReconfigures = (m82InputResizeRuntimeLoop["surfaceReconfigureEvidence"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        fun m82TelemetryInt(field: String): Int = (m82Telemetry[field] as? Number)?.toInt() ?: 0
+        if (
+            m82String("packId") != "m82-kadre-input-resize-runtime-loop-v1" ||
+            m82String("status") != "pass" ||
+            m82String("claimLevel") != "deterministic-kadre-runtime-event-model-and-telemetry" ||
+            m82Bool("nativeOsEventInjectionClaimed")
+        ) {
+            throw GradleException("M82 input/resize runtime evidence has unexpected pack/status/claim fields: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+        }
+        if (m82ArtifactPaths.size < 2) {
+            throw GradleException("M82 input/resize runtime evidence missing artifact paths: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+        }
+        m82ArtifactPaths.forEach { artifactPath ->
+            val sourceArtifact = rootDir.resolve(artifactPath)
+            val bundledArtifact = targetRoot.resolve(artifactPath.removePrefix("reports/wgsl-pipeline/"))
+            if (!sourceArtifact.isFile && !bundledArtifact.isFile && !targetRoot.resolve(artifactPath).isFile) {
+                throw GradleException("M82 input/resize runtime evidence references missing artifact `$artifactPath`: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+            }
+        }
+        if (m82ValidationRows.size < 5 || m82ValidationRows.any { it["status"] != "pass" }) {
+            throw GradleException("M82 input/resize runtime evidence has missing or non-pass validation rows: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+        }
+        if (m82Fixtures.size < 2 || m82Fixtures.none { it["status"] == "pass" } || m82Fixtures.none { it["status"] == "expected-unsupported" }) {
+            throw GradleException("M82 input/resize runtime evidence must include pass and expected-unsupported fixtures: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+        }
+        if (
+            m82TelemetryInt("eventCount") <= 0 ||
+            m82TelemetryInt("pointerEventCount") <= 0 ||
+            m82TelemetryInt("keyboardEventCount") <= 0 ||
+            m82TelemetryInt("resizeEventCount") <= 0 ||
+            m82TelemetryInt("scaleFactorEventCount") <= 0 ||
+            m82TelemetryInt("reconfigureCount") < 2 ||
+            m82TelemetryInt("droppedFrameCount") <= 0 ||
+            m82TelemetryInt("hostDiagnosticCount") <= 0 ||
+            (m82Telemetry["reportingOnly"] as? Boolean) != true
+        ) {
+            throw GradleException("M82 input/resize runtime telemetry is incomplete or overclaims a gate: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+        }
+        if (m82SurfaceReconfigures.size < 2 || m82SurfaceReconfigures.any { it["invalidatesWebGpuResources"] != true }) {
+            throw GradleException("M82 surface reconfigure evidence must invalidate WebGPU resources: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+        }
+        if (
+            m82FinalSceneState["playing"] !is Boolean ||
+            m82FinalSceneState["overlayVisible"] !is Boolean ||
+            (m82FinalSceneState["resetCount"] as? Number)?.toInt()?.takeIf { it > 0 } == null ||
+            m82FinalSceneState["closeRequested"] != true
+        ) {
+            throw GradleException("M82 final scene state does not prove input-driven state changes: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+        }
+        if (
+            m82String("unsupportedEventReason") != "m82.kadre-event-family-unsupported" ||
+            m82String("invalidResizeReason") != "m82.resize.invalid-surface-size" ||
+            m82String("invalidScaleFactorReason") != "m82.scale-factor.invalid"
+        ) {
+            throw GradleException("M82 refusal reason taxonomy changed unexpectedly: ${m82InputResizeRuntimeLoopFile.relativeTo(rootDir)}")
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5550,6 +5638,8 @@ tasks.register("pipelinePmBundle") {
             "m80SharedReplayOracleJson" to "reports/wgsl-pipeline/m80-shared-replay-oracle/evidence.json",
             "m81NativeFrameCaptureMarkdown" to "runtime/m81-native-frame-capture/evidence.md",
             "m81NativeFrameCaptureJson" to "runtime/m81-native-frame-capture/evidence.json",
+            "m82InputResizeRuntimeLoopMarkdown" to "runtime/m82-kadre-input-resize-runtime-loop/evidence.md",
+            "m82InputResizeRuntimeLoopJson" to "runtime/m82-kadre-input-resize-runtime-loop/evidence.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -5873,6 +5963,37 @@ tasks.register("pipelinePmBundle") {
                 "releaseBlocking" to false,
                 "notice" to "M81 packages current M69/M70 Kadre/WebGPU frame artifact evidence for PM review. The produced image is a wgpu4k native offscreen texture readback, not a system screenshot or window-surface readback; unsupported window capture remains explicit.",
             ),
+            "m82InputResizeRuntimeLoop" to linkedMapOf<String, Any>(
+                "status" to m82String("status").ifBlank { "not-generated" },
+                "packId" to m82String("packId").ifBlank { "m82-kadre-input-resize-runtime-loop-v1" },
+                "claimLevel" to m82String("claimLevel"),
+                "readinessDelta" to m82Int("readinessDelta"),
+                "ciPath" to m82String("ciPath"),
+                "nativeOsEventInjectionClaimed" to m82Bool("nativeOsEventInjectionClaimed"),
+                "host" to ((m82BackingHost["host"] as? String).orEmpty()),
+                "nativeRoute" to ((m82BackingHost["nativeRoute"] as? String).orEmpty()),
+                "eventCount" to m82TelemetryInt("eventCount"),
+                "pointerEventCount" to m82TelemetryInt("pointerEventCount"),
+                "keyboardEventCount" to m82TelemetryInt("keyboardEventCount"),
+                "resizeEventCount" to m82TelemetryInt("resizeEventCount"),
+                "scaleFactorEventCount" to m82TelemetryInt("scaleFactorEventCount"),
+                "reconfigureCount" to m82TelemetryInt("reconfigureCount"),
+                "reconfigureFailureCount" to m82TelemetryInt("reconfigureFailureCount"),
+                "droppedFrameCount" to m82TelemetryInt("droppedFrameCount"),
+                "hostDiagnosticCount" to m82TelemetryInt("hostDiagnosticCount"),
+                "surfaceReconfigureCount" to m82SurfaceReconfigures.size,
+                "validationRowCount" to m82ValidationRows.size,
+                "fixtureCount" to m82Fixtures.size,
+                "unsupportedEventReason" to m82String("unsupportedEventReason"),
+                "invalidResizeReason" to m82String("invalidResizeReason"),
+                "invalidScaleFactorReason" to m82String("invalidScaleFactorReason"),
+                "finalSceneState" to m82FinalSceneState,
+                "artifactPaths" to m82ArtifactPaths,
+                "report" to "runtime/m82-kadre-input-resize-runtime-loop/evidence.md",
+                "evidenceJson" to "runtime/m82-kadre-input-resize-runtime-loop/evidence.json",
+                "releaseBlocking" to false,
+                "notice" to "M82 adds deterministic Kadre-backed input/resize runtime-loop evidence with pointer, keyboard, resize, scale-factor, close, telemetry, and stable refusals. It does not claim real desktop OS event injection or release-grade timing.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -5960,6 +6081,7 @@ tasks.register("pipelinePmBundle") {
                 "M79 verifies bounded fixture-backed BitmapRect replay scenes with nearest/linear samplers and one unsupported mipmap sampler refusal. It does not add arbitrary SkImage, codec decode, texture atlas, mipmap, tile-mode, or color-managed image support.",
                 "M80 hardens the bounded replay CPU reference behind a shared typed oracle result. It does not add broad SkCanvas/display-list replay or any new rendering breadth.",
                 "M81 packages native frame artifact capture evidence for PM review, but the current produced image remains a wgpu4k native offscreen texture readback. Window-surface screenshot/readback is still unsupported and refused with m81.window-surface-readback-not-implemented.",
+                "M82 verifies deterministic Kadre-backed input/resize runtime-loop semantics and telemetry. It does not synthesize real desktop OS input events in CI, does not claim full window-manager resize coverage, and keeps dropped-frame counters reporting-only until M84.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -6020,6 +6142,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M80 shared replay oracle counters live in `manifest.json` under `m80SharedReplayOracle`; this is reference hardening, not broad display-list replay or new readiness.")
                 appendLine("- `runtime/m81-native-frame-capture/`: M81 native frame artifact capture evidence JSON and Markdown when `:kadre-runtime:pipelineM81NativeFrameCapture` has been run.")
                 appendLine("- M81 native frame capture counters live in `manifest.json` under `m81NativeFrameCapture`; the current image is offscreen texture readback evidence, not window-surface readback.")
+                appendLine("- `runtime/m82-kadre-input-resize-runtime-loop/`: M82 deterministic Kadre input/resize runtime-loop evidence JSON and Markdown when `:kadre-runtime:pipelineM82InputResizeRuntimeLoop` has been run.")
+                appendLine("- M82 input/resize runtime counters live in `manifest.json` under `m82InputResizeRuntimeLoop`; OS event injection and release-grade timing remain non-claims.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
