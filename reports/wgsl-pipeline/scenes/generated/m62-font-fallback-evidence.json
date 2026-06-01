@@ -23,6 +23,7 @@
         "textInput": "KANVAS U+10FFFF",
         "shapingMode": "simple-glyph-id-map-missing-glyph",
         "glyphDiagnostics": "artifacts/m62-missing-glyph-fallback-refusal/font-diagnostics.json",
+        "atlasPolicy": "not-claimed",
         "fallbackPolicy": "fallback-family-selection-unsupported"
       },
       "cpuRoute": "cpu.text.outline.missing-glyph-oracle",

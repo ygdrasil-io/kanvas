@@ -633,6 +633,7 @@
       if (scene.diffs) paths.push(scene.diffs.cpu, scene.diffs.gpu);
       if (scene.routeDiagnostics) paths.push(scene.routeDiagnostics.cpu, scene.routeDiagnostics.gpu);
       if (scene.graphDiagnostics) paths.push(scene.graphDiagnostics);
+      if (scene.font) paths.push(scene.font.glyphDiagnostics);
       if (scene.generation) paths.push(scene.generation.sourceReport);
       if (Array.isArray(scene.evidence)) paths.push(...scene.evidence);
       return paths.filter(Boolean).map((path) => `<li><code>${path}</code></li>`).join('');
@@ -824,6 +825,10 @@
       const blocker = scene.gpu && scene.gpu.route ? scene.gpu.route.blockerReason : undefined;
       const followUp = scene.gpu && scene.gpu.route ? scene.gpu.route.followUp : undefined;
       const generation = scene.generation || {};
+      const font = scene.font || {};
+      const fontRoute = font.source
+        ? `font=${text(font.source)}; text=${text(font.textInput)}; shaping=${text(font.shapingMode)}; glyphDiagnostics=${text(font.glyphDiagnostics)}; atlas=${text(font.atlasPolicy, 'not-claimed')}; fallback=${text(font.fallbackPolicy, 'not-claimed')}`
+        : 'none';
       const generationText = generation.mode
         ? `${text(generation.mode)} via ${text(generation.producer)}`
         : 'static';
@@ -842,6 +847,7 @@
           <p>GPU fallback: <code>${text(fallback, 'none')}</code></p>
           <p>GPU blocker: <code>${text(blocker, 'none')}</code></p>
           <p>Follow-up: <code>${text(followUp, 'none')}</code></p>
+          <p>Glyph route: <code>${fontRoute}</code></p>
           <p>Generation: <code>${generationText}</code></p>
           <p>Raw source: <code>${text(generation.sourceTest || generation.sourceTask || generation.sourceReport)}</code></p>
           <p>CPU perf: <code>${performanceText(scene.cpu)}</code></p>
