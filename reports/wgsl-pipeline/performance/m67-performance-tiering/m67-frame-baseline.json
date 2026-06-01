@@ -1,0 +1,206 @@
+{
+  "commit": "9211e89c7c88",
+  "counters": {
+    "measuredRows": 3,
+    "rows": 3
+  },
+  "fixture": "normal",
+  "generatedAt": "2026-06-01T12:23:11Z",
+  "generatedBy": "scripts/m67_performance_tiering.py",
+  "rows": [
+    {
+      "adapter": "not-measured",
+      "artifacts": {
+        "finalFrame": "artifacts/baseline-final-frame.png",
+        "firstFrame": "artifacts/baseline-first-frame.png"
+      },
+      "backend": "headless-offscreen",
+      "baseline": {
+        "commit": "9211e89c7c88",
+        "name": "m65-headless-offscreen-baseline",
+        "owner": "FOR-45/FOR-46",
+        "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
+      },
+      "claimLevel": "candidate",
+      "command": "rtk ./gradlew --no-daemon pipelineM67PerformanceTiering",
+      "counters": {
+        "bindGroupChurn": 0,
+        "fallbackRefusalCount": 0,
+        "frameCount": 120,
+        "glyphAtlasMisses": 0,
+        "intermediateTextureBytes": 0,
+        "pipelineCacheMisses": 0,
+        "textureUploadBytes": 0,
+        "warmupFrameCount": 0
+      },
+      "gatePhase": "candidate",
+      "host": {
+        "adapter": "not-measured",
+        "backend": "headless-offscreen",
+        "host": "Omega",
+        "jdk": "not-measured-by-m65-python-smoke",
+        "kadreRefusalReason": "m65.kadre-host-not-wired",
+        "kadreStatus": "blocked-not-wired",
+        "m65Cwd": "/private/tmp/kanvas-m67-m68",
+        "osArchitecture": "macOS-26.5-arm64-arm-64bit-Mach-O",
+        "python": "3.14.5"
+      },
+      "lane": "frame.headless-webgpu",
+      "medianMs": 8.9599,
+      "nonClaims": [
+        "This is not native Kadre present timing.",
+        "This is not a release-blocking FPS gate.",
+        "M65 synthetic/offscreen timing is measured only for the Python smoke lane."
+      ],
+      "nonblank": true,
+      "p95Ms": 9.3046,
+      "payloadStatus": "measured",
+      "quarantineReasons": [
+        "GPU adapter is not measured by the M65 Python smoke lane"
+      ],
+      "regressionLabel": "m67.headless-offscreen-candidate-without-native-adapter",
+      "releaseBlocking": false,
+      "requiredWarmupFrames": 120,
+      "sampleCount": 120,
+      "sceneId": "p0-live-baseline",
+      "sourceSlot": "baseline",
+      "status": "pass",
+      "targetMeasuredFrames": 300,
+      "targetMedianMs": 16.7,
+      "tier": "P0 frame",
+      "title": "M65 baseline transform smoke",
+      "warningP95Ms": 33.3,
+      "worstFrameMs": 9.3046
+    },
+    {
+      "adapter": "not-measured",
+      "artifacts": {
+        "finalFrame": "artifacts/m63-final-frame.png",
+        "firstFrame": "artifacts/m63-first-frame.png"
+      },
+      "backend": "headless-offscreen",
+      "baseline": {
+        "commit": "9211e89c7c88",
+        "name": "m65-headless-offscreen-baseline",
+        "owner": "FOR-45/FOR-46",
+        "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
+      },
+      "claimLevel": "candidate",
+      "command": "rtk ./gradlew --no-daemon pipelineM67PerformanceTiering",
+      "counters": {
+        "bindGroupChurn": 0,
+        "fallbackRefusalCount": 1,
+        "frameCount": 120,
+        "glyphAtlasMisses": 0,
+        "intermediateTextureBytes": 0,
+        "pipelineCacheMisses": 0,
+        "textureUploadBytes": 0,
+        "warmupFrameCount": 0
+      },
+      "gatePhase": "candidate",
+      "host": {
+        "adapter": "not-measured",
+        "backend": "headless-offscreen",
+        "host": "Omega",
+        "jdk": "not-measured-by-m65-python-smoke",
+        "kadreRefusalReason": "m65.kadre-host-not-wired",
+        "kadreStatus": "blocked-not-wired",
+        "m65Cwd": "/private/tmp/kanvas-m67-m68",
+        "osArchitecture": "macOS-26.5-arm64-arm-64bit-Mach-O",
+        "python": "3.14.5"
+      },
+      "lane": "frame.headless-webgpu",
+      "medianMs": 12.9778,
+      "nonClaims": [
+        "This is not native Kadre present timing.",
+        "This is not a release-blocking FPS gate.",
+        "M65 synthetic/offscreen timing is measured only for the Python smoke lane."
+      ],
+      "nonblank": true,
+      "p95Ms": 13.249,
+      "payloadStatus": "measured",
+      "quarantineReasons": [
+        "slot is timed by the synthetic/offscreen smoke lane but runtime display-list replay remains refused"
+      ],
+      "regressionLabel": "m65.runtime-display-list-replay-not-wired",
+      "releaseBlocking": false,
+      "requiredWarmupFrames": 120,
+      "sampleCount": 120,
+      "sceneId": "p0-live-m63",
+      "sourceSlot": "m63",
+      "status": "warn",
+      "targetMeasuredFrames": 300,
+      "targetMedianMs": 16.7,
+      "tier": "P1 family",
+      "title": "M63 color/blend scene slot",
+      "warningP95Ms": 33.3,
+      "worstFrameMs": 13.249
+    },
+    {
+      "adapter": "not-measured",
+      "artifacts": {
+        "finalFrame": "artifacts/m64-final-frame.png",
+        "firstFrame": "artifacts/m64-first-frame.png"
+      },
+      "backend": "headless-offscreen",
+      "baseline": {
+        "commit": "9211e89c7c88",
+        "name": "m65-headless-offscreen-baseline",
+        "owner": "FOR-45/FOR-46",
+        "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
+      },
+      "claimLevel": "candidate",
+      "command": "rtk ./gradlew --no-daemon pipelineM67PerformanceTiering",
+      "counters": {
+        "bindGroupChurn": 0,
+        "fallbackRefusalCount": 1,
+        "frameCount": 120,
+        "glyphAtlasMisses": 0,
+        "intermediateTextureBytes": 0,
+        "pipelineCacheMisses": 0,
+        "textureUploadBytes": 0,
+        "warmupFrameCount": 0
+      },
+      "gatePhase": "candidate",
+      "host": {
+        "adapter": "not-measured",
+        "backend": "headless-offscreen",
+        "host": "Omega",
+        "jdk": "not-measured-by-m65-python-smoke",
+        "kadreRefusalReason": "m65.kadre-host-not-wired",
+        "kadreStatus": "blocked-not-wired",
+        "m65Cwd": "/private/tmp/kanvas-m67-m68",
+        "osArchitecture": "macOS-26.5-arm64-arm-64bit-Mach-O",
+        "python": "3.14.5"
+      },
+      "lane": "frame.headless-webgpu",
+      "medianMs": 12.4671,
+      "nonClaims": [
+        "This is not native Kadre present timing.",
+        "This is not a release-blocking FPS gate.",
+        "M65 synthetic/offscreen timing is measured only for the Python smoke lane."
+      ],
+      "nonblank": true,
+      "p95Ms": 12.702,
+      "payloadStatus": "measured",
+      "quarantineReasons": [
+        "slot is timed by the synthetic/offscreen smoke lane but runtime display-list replay remains refused"
+      ],
+      "regressionLabel": "m65.runtime-display-list-replay-not-wired",
+      "releaseBlocking": false,
+      "requiredWarmupFrames": 120,
+      "sampleCount": 120,
+      "sceneId": "p0-live-m64",
+      "sourceSlot": "m64",
+      "status": "warn",
+      "targetMeasuredFrames": 300,
+      "targetMedianMs": 16.7,
+      "tier": "P1 family",
+      "title": "M64 registered runtime-effect scene slot",
+      "warningP95Ms": 33.3,
+      "worstFrameMs": 12.702
+    }
+  ],
+  "schemaVersion": 1,
+  "sourceTelemetry": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json"
+}

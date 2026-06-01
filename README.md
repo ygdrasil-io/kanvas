@@ -15,7 +15,7 @@ product target is broader: make Kanvas render more of the practical Skia CPU
 surface while building a measured real-time WebGPU lane with live telemetry,
 feature diagnostics, and PM-visible demos.
 
-New target readiness is approximately 53% after M65/M66 closeout. This is intentionally lower
+New target readiness is approximately 58% after M67/M68 closeout. This is intentionally lower
 than the completed MEP score because the scope has expanded from evidence
 infrastructure to feature breadth, fidelity, runtime behavior, and release
 operability. The score is based on counted denominators in the target doc, not
@@ -25,11 +25,11 @@ manual sprint estimates.
 |---|---:|---:|---|
 | Rendering feature breadth | 30% | 60% | Path AA, bounded image-filter DAG, text/font, color/blend/color-filter, and registered runtime-effect evidence now have selected generated contracts; broad layers and fallbacks remain incomplete. |
 | Skia-like fidelity | 20% | 50% | M66 raises selected GM/reference evidence to 50/100 rows. Only 37/100 are Skia-comparable today; CPU-oracle rows are breadth/refusal evidence until comparable Skia references land. |
-| Real-time runtime | 20% | 40% | M65 adds a reporting-only headless runtime smoke lane with 120-frame telemetry, nonblank frame artifacts, full-redraw invalidation diagnostics, and explicit Kadre-host refusal. Live Kadre presentation remains future work. |
-| Performance and cache readiness | 15% | 35% | M59 selected performance gate is strong; family budgets, frame budgets, warm/cold cache gates, and runtime gates remain missing. |
-| PM/demo operability | 15% | 80% | PM dashboard now includes M66 family/reference counters and the PM bundle includes M65 runtime smoke telemetry/artifacts; live hosted demo packaging and release-candidate workflow remain incomplete. |
+| Real-time runtime | 20% | 50% | M65 adds a reporting-only headless runtime smoke lane; M68 verifies the Kadre source-build bridge and host-contract inputs from `external/poc-koreos`. Native Kanvas/Kadre presentation remains blocked by `m68.kadre-host-adapter-not-implemented`. |
+| Performance and cache readiness | 15% | 40% | M67 promotes `frame.headless-webgpu` to a candidate gate from M65 telemetry and adds family budgets plus quarantine/rebaseline fixture. Only `core paint/blend` is measured; native Kadre timing remains reporting-only. |
+| PM/demo operability | 15% | 90% | PM bundle now includes M65 runtime smoke, M66 counters, M67 performance tiering, and M68 Kadre bridge/demo evidence. A runnable native demo is still blocked by the missing Kanvas/Kadre host adapter. |
 
-Weighted PM readiness for the new target: **53%**.
+Weighted PM readiness for the new target: **58%**.
 
 Active planning entry points:
 
@@ -47,8 +47,8 @@ Active planning entry points:
 | M64 | Registered Runtime Effects | SimpleRT renders through a registered Kotlin/WGSL descriptor with parser-reflected uniforms; SpiralRT and arbitrary SkSL refuse with stable reasons. |
 | M65 | Real-Time Scene Runtime | Headless/offscreen runtime smoke exposes 120-frame telemetry, nonblank frame artifacts, invalidation diagnostics, and explicit Kadre-host blocker. |
 | M66 | Skia GM Promotion Wave | 19 cumulative GM/reference rows become generated support/refusal evidence, bringing selected fidelity evidence to 50/100 rows. |
-| M67 | Performance Tiering | Family-level correctness and performance budgets become release-owned gates. |
-| M68 | Native Real-Time Demo | Runnable Kadre demo shows animation, text, filters, paths, runtime effects, controls, and telemetry. |
+| M67 | Performance Tiering | `frame.headless-webgpu` candidate gate, family budgets, and deterministic quarantine fixture are generated and bundled. |
+| M68 | Native Real-Time Demo | Kadre source-build bridge and flagship scene inputs are generated; native windowed launch is blocked until the Kanvas/Kadre host adapter lands. |
 | M69 | Fidelity Hardening Toward Skia CPU | Visual diff burn-down improves promoted families without weakening thresholds globally. |
 | M70 | Release Candidate Renderer | Renderer API, runtime, demos, CI gates, and known limitations are frozen for RC. |
 
