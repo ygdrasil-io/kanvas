@@ -1,0 +1,151 @@
+{
+  "claimLevel": "headless-bridge",
+  "generatedAt": "2026-06-01T13:25:11Z",
+  "generatedBy": "scripts/m69_kadre_host_adapter_smoke.py",
+  "headlessPixelProof": {
+    "frameCount": 120,
+    "mode": "headless-offscreen",
+    "slots": [
+      {
+        "finalFrameNonblank": true,
+        "firstFrameNonblank": true,
+        "medianFrameMs": 8.9599,
+        "p95FrameMs": 9.3046,
+        "runtimeRoute": "headless.offscreen.smoke-renderer.v1",
+        "slot": "baseline",
+        "status": "pass",
+        "title": "M65 baseline transform smoke"
+      },
+      {
+        "finalFrameNonblank": true,
+        "firstFrameNonblank": true,
+        "medianFrameMs": 12.9778,
+        "p95FrameMs": 13.249,
+        "runtimeRoute": "headless.offscreen.slot-preview",
+        "slot": "m63",
+        "status": "expected-unsupported",
+        "title": "M63 color/blend scene slot"
+      },
+      {
+        "finalFrameNonblank": true,
+        "firstFrameNonblank": true,
+        "medianFrameMs": 12.4671,
+        "p95FrameMs": 12.702,
+        "runtimeRoute": "headless.offscreen.slot-preview",
+        "slot": "m64",
+        "status": "expected-unsupported",
+        "title": "M64 registered runtime-effect scene slot"
+      }
+    ],
+    "source": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json",
+    "surface": {
+      "format": "rgba8unorm-srgb",
+      "height": 128,
+      "width": 192
+    }
+  },
+  "linearIssues": [
+    "FOR-56",
+    "FOR-57",
+    "FOR-58",
+    "FOR-59"
+  ],
+  "nativePresentationReason": "m69.native-kanvas-kadre-present-not-implemented",
+  "nativePresented": false,
+  "requestedContent": [
+    "animated transform",
+    "gradient or bitmap",
+    "simple shape/path"
+  ],
+  "sceneId": "m69-first-kanvas-kadre-host-adapter-scene",
+  "schemaVersion": 1,
+  "sourceFeatures": [
+    {
+      "artifacts": [
+        {
+          "bytes": 12574,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/m65-runtime-smoke/artifacts/baseline-first-frame.png",
+          "sha256": "0dbf82e88b7c137086bd417a6860e92665783dd61a25c22d7bf7e674f96a2f70"
+        },
+        {
+          "bytes": 12642,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/m65-runtime-smoke/artifacts/baseline-final-frame.png",
+          "sha256": "5e4ea8a5f74c1eb45e64873ee0120bb2a315f1e7343b7fba2ba5d30d83c88d31"
+        },
+        {
+          "bytes": 6375,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/m65-runtime-smoke/telemetry.json",
+          "sha256": "9a7b1b5efb348b034710341c44a91a809c65d9d40b226e04d0c34a9f58f25eb0"
+        }
+      ],
+      "feature": "animated transform",
+      "nativePresentationReason": "m69.native-kanvas-kadre-present-not-implemented",
+      "nativePresented": false,
+      "requirement": "M69 first scene animation proof",
+      "status": "source-evidence-ready"
+    },
+    {
+      "artifacts": [
+        {
+          "bytes": 534,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-rect-nearest/gpu.png",
+          "sha256": "fb6031e61005fa613fca2da73d3b7715b51f87eb0c0e25db5a91380283f206e6"
+        },
+        {
+          "bytes": 771,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-rect-nearest/route-gpu.json",
+          "sha256": "e53a9eef74f7f5dd103bd098f9a437961b5e198f607bf02964688411effbe287"
+        },
+        {
+          "bytes": 137,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/gpu.png",
+          "sha256": "ebe02361e7d7a989211d75d087d2d8e23f053b23ebc83fc00c58a0b8db3a49e4"
+        },
+        {
+          "bytes": 858,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/route-gpu.json",
+          "sha256": "b598db8a9855a2331507cef9a2b3035f4def8c8a7e37836415836b1708dc7462"
+        }
+      ],
+      "feature": "gradient or bitmap",
+      "nativePresentationReason": "m69.native-kanvas-kadre-present-not-implemented",
+      "nativePresented": false,
+      "requirement": "M69 first scene paint/image proof",
+      "status": "source-evidence-ready"
+    },
+    {
+      "artifacts": [
+        {
+          "bytes": 89246,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/cpu.png",
+          "sha256": "49c612b7b2622c83118bdc1d52e48e5089491f0c253c64e06638474b1ab04f94"
+        },
+        {
+          "bytes": 18824,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/gpu.png",
+          "sha256": "15091abd1833ee4c74719205860d4a651eca99c7e730aa9abbf929f7934d44fe"
+        },
+        {
+          "bytes": 743,
+          "exists": true,
+          "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/route-gpu.json",
+          "sha256": "8d7cef628408a839e6cd3d62b2b88019e65a6f8ea79c1f504564bb94cafe58da"
+        }
+      ],
+      "feature": "simple shape/path",
+      "nativePresentationReason": "m69.native-kanvas-kadre-present-not-implemented",
+      "nativePresented": false,
+      "requirement": "M69 first scene geometry proof",
+      "status": "source-evidence-ready"
+    }
+  ]
+}
