@@ -12,7 +12,7 @@ a packaged Kadre demo.
 
 ## Scope
 
-The pack covers M60-M84 and continues to be extended by later runtime/display-list
+The pack covers M60-M85 and continues to be extended by later runtime/display-list
 sprints:
 
 | Spec | Scope |
@@ -60,6 +60,7 @@ sprints:
 | M70 Release Candidate Renderer | all | Renderer RC with API, demos, CI gates, and known limitations. |
 | M71-M83 Runtime/display-list replay evidence | `02`, `04`, `05` | Kadre frame clock, bounded replay scenes, native artifacts, input/resize telemetry, and one bounded display-list route become PM evidence without broad SkCanvas replay claims. |
 | M84 Native Frame Timing Candidate Gate | `04`, `05` | `frame.kadre-windowed` timing is serialized as candidate/reporting-only evidence with quarantine and a negative fixture, not a release-blocking FPS gate. |
+| M85 Runtime Resource Lifetime And Cache Hardening | `02`, `04`, `05` | Selected realtime route resource/cache ledger, bounded key spaces, resize invalidation, and device-loss unsupported diagnostics become PM evidence without claiming observed runtime cache telemetry. |
 
 ## Definition Of Done For Any Future Milestone
 

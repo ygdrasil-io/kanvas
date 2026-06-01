@@ -212,3 +212,19 @@ tasks.register<JavaExec>("pipelineM84NativeFrameTimingCandidate") {
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m84-native-frame-timing"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM85ResourceLifetimeCacheHardening") {
+    group = "verification"
+    description = "Generates M85 runtime resource lifetime and cache hardening evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M85ResourceLifetimeCacheHardeningKt")
+    args(
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+        rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m85-resource-lifetime-cache").asFile.absolutePath,
+    )
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/evidence.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"))
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m85-resource-lifetime-cache"))
+    outputs.upToDateWhen { false }
+}

@@ -4300,6 +4300,7 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM82InputResizeRuntimeLoop")
     mustRunAfter(":kadre-runtime:pipelineM83DisplayListReplay")
     mustRunAfter(":kadre-runtime:pipelineM84NativeFrameTimingCandidate")
+    mustRunAfter(":kadre-runtime:pipelineM85ResourceLifetimeCacheHardening")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4338,6 +4339,7 @@ tasks.register("pipelinePmBundle") {
     val m82InputResizeRuntimeLoopDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop")
     val m83DisplayListReplayDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m83-display-list-replay")
     val m84NativeFrameTimingDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m84-native-frame-timing")
+    val m85ResourceLifetimeCacheDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m85-resource-lifetime-cache")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4365,6 +4367,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m82InputResizeRuntimeLoopDir)
     inputs.dir(m83DisplayListReplayDir)
     inputs.dir(m84NativeFrameTimingDir)
+    inputs.dir(m85ResourceLifetimeCacheDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4410,6 +4413,7 @@ tasks.register("pipelinePmBundle") {
         val m82InputResizeRuntimeLoopRoot = m82InputResizeRuntimeLoopDir.asFile
         val m83DisplayListReplayRoot = m83DisplayListReplayDir.asFile
         val m84NativeFrameTimingRoot = m84NativeFrameTimingDir.asFile
+        val m85ResourceLifetimeCacheRoot = m85ResourceLifetimeCacheDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4500,6 +4504,9 @@ tasks.register("pipelinePmBundle") {
         }
         if (m84NativeFrameTimingRoot.isDirectory) {
             m84NativeFrameTimingRoot.copyRecursively(targetRoot.resolve("runtime/m84-native-frame-timing"), overwrite = true)
+        }
+        if (m85ResourceLifetimeCacheRoot.isDirectory) {
+            m85ResourceLifetimeCacheRoot.copyRecursively(targetRoot.resolve("runtime/m85-resource-lifetime-cache"), overwrite = true)
         }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
@@ -5678,6 +5685,92 @@ tasks.register("pipelinePmBundle") {
                 throw GradleException("M84 native timing evidence references missing artifact `$artifactPath`: ${m84NativeFrameTimingFile.relativeTo(rootDir)}")
             }
         }
+        val m85ResourceLifetimeCacheFile = m85ResourceLifetimeCacheRoot.resolve("evidence.json")
+        val m85ResourceLifetimeCache = if (m85ResourceLifetimeCacheFile.isFile) {
+            JsonSlurper().parse(m85ResourceLifetimeCacheFile) as? Map<*, *>
+                ?: throw GradleException("M85 resource/cache evidence must be a JSON object: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M85 resource/cache evidence: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+        }
+        fun m85String(field: String): String = (m85ResourceLifetimeCache[field] as? String).orEmpty()
+        fun m85Int(field: String): Int = (m85ResourceLifetimeCache[field] as? Number)?.toInt() ?: 0
+        val m85Telemetry = (m85ResourceLifetimeCache["perFrameResourceTelemetry"] as? Map<*, *>).orEmpty()
+        val m85CacheOwnership = (m85ResourceLifetimeCache["cacheOwnership"] as? Map<*, *>).orEmpty()
+        val m85ResizeInvalidation = (m85ResourceLifetimeCache["resizeInvalidation"] as? Map<*, *>).orEmpty()
+        val m85DeviceLossDiagnostics = (m85ResourceLifetimeCache["deviceLossDiagnostics"] as? Map<*, *>).orEmpty()
+        val m85CachePressureReport = (m85ResourceLifetimeCache["cachePressureReport"] as? Map<*, *>).orEmpty()
+        val m85ValidationRows = (m85ResourceLifetimeCache["validationRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m85ArtifactPaths = (m85ResourceLifetimeCache["artifactPaths"] as? List<*>)
+            ?.map { it.toString() }
+            .orEmpty()
+        if (
+            m85String("packId") != "m85-resource-lifetime-cache-hardening-v1" ||
+            m85String("status") != "pass" ||
+            m85String("lane") != "frame.kadre-windowed" ||
+            m85String("sceneContractId") != "m83-display-list-pm-scene-v1" ||
+            m85ResourceLifetimeCache["observedRuntimeCounters"] != false ||
+            m85ResourceLifetimeCache["countedAsCacheReadinessGate"] != false ||
+            m85ResourceLifetimeCache["counterSource"] != "derived-selected-scene-resource-ledger"
+        ) {
+            throw GradleException("M85 resource/cache evidence has unexpected pack/status/lane fields: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+        }
+        if (
+            ((m85Telemetry["frameCount"] as? Number)?.toInt() ?: 0) <= 0 ||
+            ((m85Telemetry["pipelineCacheMisses"] as? Number)?.toInt() ?: -1) < 0 ||
+            ((m85Telemetry["pipelineCacheHits"] as? Number)?.toInt() ?: -1) < 0 ||
+            ((m85Telemetry["shaderModuleCount"] as? Number)?.toInt() ?: -1) < 0 ||
+            ((m85Telemetry["pipelineCount"] as? Number)?.toInt() ?: -1) < 0 ||
+            ((m85Telemetry["bindGroupCount"] as? Number)?.toInt() ?: -1) < 0 ||
+            ((m85Telemetry["textureCount"] as? Number)?.toInt() ?: -1) < 0 ||
+            ((m85Telemetry["textureUploadBytes"] as? Number)?.toInt() ?: -1) < 0 ||
+            ((m85Telemetry["intermediateTextureBytes"] as? Number)?.toInt() ?: -1) < 0 ||
+            ((m85Telemetry["bindGroupChurn"] as? Number)?.toInt() ?: -1) < 0 ||
+            ((m85Telemetry["invalidResourceReuseCount"] as? Number)?.toInt() ?: -1) != 0
+        ) {
+            throw GradleException("M85 per-frame resource telemetry is incomplete or reports invalid resource reuse: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+        }
+        if (
+            m85CacheOwnership["pipelineKeyPolicy"] != "layout-code-resource-pipeline-state-only" ||
+            m85CacheOwnership["uniformValuesInPipelineKey"] != false ||
+            ((m85CacheOwnership["boundedKeySpaceCount"] as? Number)?.toInt() ?: 0) < 6
+        ) {
+            throw GradleException("M85 cache ownership/keyspace policy changed unexpectedly: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+        }
+        if (
+            ((m85ResizeInvalidation["reconfigureCount"] as? Number)?.toInt() ?: 0) < 2 ||
+            ((m85ResizeInvalidation["reconfigureFailureCount"] as? Number)?.toInt() ?: -1) != 0 ||
+            m85ResizeInvalidation["generationsStrictlyAdvance"] != true ||
+            m85ResizeInvalidation["generationSequenceMonotonic"] != true ||
+            m85ResizeInvalidation["invalidatesWebGpuResources"] != true ||
+            ((m85ResizeInvalidation["invalidResourceReuseCount"] as? Number)?.toInt() ?: -1) != 0
+        ) {
+            throw GradleException("M85 resize/surface invalidation evidence is incomplete: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+        }
+        if (
+            m85DeviceLossDiagnostics["status"] != "expected-unsupported" ||
+            m85DeviceLossDiagnostics["reason"] != "m85.device-loss-recreate-observation-unsupported" ||
+            m85DeviceLossDiagnostics["recreateClaimed"] != false
+        ) {
+            throw GradleException("M85 device loss diagnostics changed unexpectedly: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+        }
+        if (m85CachePressureReport["boundedGrowth"] != true) {
+            throw GradleException("M85 cache pressure report must prove bounded selected-scene growth: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+        }
+        if (m85ValidationRows.size < 5 || m85ValidationRows.any { it["status"] != "pass" }) {
+            throw GradleException("M85 resource/cache evidence has missing or non-pass validation rows: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+        }
+        if (m85ArtifactPaths.size < 5) {
+            throw GradleException("M85 resource/cache evidence missing artifact paths: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+        }
+        m85ArtifactPaths.forEach { artifactPath ->
+            val sourceArtifact = rootDir.resolve(artifactPath)
+            val bundledArtifact = targetRoot.resolve(artifactPath.removePrefix("reports/wgsl-pipeline/"))
+            if (!sourceArtifact.isFile && !bundledArtifact.isFile && !targetRoot.resolve(artifactPath).isFile) {
+                throw GradleException("M85 resource/cache evidence references missing artifact `$artifactPath`: ${m85ResourceLifetimeCacheFile.relativeTo(rootDir)}")
+            }
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -5813,6 +5906,8 @@ tasks.register("pipelinePmBundle") {
             "m82InputResizeRuntimeLoopJson" to "runtime/m82-kadre-input-resize-runtime-loop/evidence.json",
             "m84NativeFrameTimingMarkdown" to "runtime/m84-native-frame-timing/evidence.md",
             "m84NativeFrameTimingJson" to "runtime/m84-native-frame-timing/evidence.json",
+            "m85ResourceLifetimeCacheMarkdown" to "runtime/m85-resource-lifetime-cache/evidence.md",
+            "m85ResourceLifetimeCacheJson" to "runtime/m85-resource-lifetime-cache/evidence.json",
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -6213,6 +6308,36 @@ tasks.register("pipelinePmBundle") {
                 "negativeFixtureJson" to "runtime/m84-native-frame-timing/negative-fixture.json",
                 "notice" to "M84 exposes native Kadre frame timing as a measured candidate/reporting payload with quarantine and a negative fixture. It is not release-blocking, not counted as a measured release gate, and present-call duration is not a full end-to-end FPS guarantee.",
             ),
+            "m85ResourceLifetimeCache" to linkedMapOf<String, Any>(
+                "packId" to m85String("packId"),
+                "claimLevel" to m85String("claimLevel"),
+                "status" to m85String("status"),
+                "observedRuntimeCounters" to (m85ResourceLifetimeCache["observedRuntimeCounters"] == true),
+                "countedAsCacheReadinessGate" to (m85ResourceLifetimeCache["countedAsCacheReadinessGate"] == true),
+                "counterSource" to ((m85ResourceLifetimeCache["counterSource"] as? String).orEmpty()),
+                "lane" to m85String("lane"),
+                "sceneContractId" to m85String("sceneContractId"),
+                "frameCount" to ((m85Telemetry["frameCount"] as? Number)?.toInt() ?: 0),
+                "pipelineCacheHits" to ((m85Telemetry["pipelineCacheHits"] as? Number)?.toInt() ?: 0),
+                "pipelineCacheMisses" to ((m85Telemetry["pipelineCacheMisses"] as? Number)?.toInt() ?: 0),
+                "shaderModuleCount" to ((m85Telemetry["shaderModuleCount"] as? Number)?.toInt() ?: 0),
+                "pipelineCount" to ((m85Telemetry["pipelineCount"] as? Number)?.toInt() ?: 0),
+                "bindGroupCount" to ((m85Telemetry["bindGroupCount"] as? Number)?.toInt() ?: 0),
+                "textureCount" to ((m85Telemetry["textureCount"] as? Number)?.toInt() ?: 0),
+                "textureUploadBytes" to ((m85Telemetry["textureUploadBytes"] as? Number)?.toInt() ?: 0),
+                "intermediateTextureBytes" to ((m85Telemetry["intermediateTextureBytes"] as? Number)?.toInt() ?: 0),
+                "bindGroupChurn" to ((m85Telemetry["bindGroupChurn"] as? Number)?.toInt() ?: 0),
+                "resourceGenerationCount" to ((m85Telemetry["resourceGenerationCount"] as? Number)?.toInt() ?: 0),
+                "invalidResourceReuseCount" to ((m85Telemetry["invalidResourceReuseCount"] as? Number)?.toInt() ?: 0),
+                "deviceLossStatus" to ((m85DeviceLossDiagnostics["status"] as? String).orEmpty()),
+                "deviceLossReason" to ((m85DeviceLossDiagnostics["reason"] as? String).orEmpty()),
+                "boundedGrowth" to (m85CachePressureReport["boundedGrowth"] == true),
+                "artifactPaths" to m85ArtifactPaths,
+                "report" to "runtime/m85-resource-lifetime-cache/evidence.md",
+                "evidenceJson" to "runtime/m85-resource-lifetime-cache/evidence.json",
+                "cachePressureJson" to "runtime/m85-resource-lifetime-cache/cache-pressure.json",
+                "notice" to "M85 makes selected realtime resource lifetime and cache pressure auditable as a deterministic selected-scene ledger: cache counters, bounded key spaces, resize resource invalidation, and stable device-loss unsupported diagnostics. It is not observed WebGPU runtime cache telemetry, is not counted as a cache readiness gate, and does not claim arbitrary scene cache behavior or real device-lost recovery.",
+            ),
             "m56UnsupportedToPass" to linkedMapOf<String, Any>(
                 "targetReadiness" to 97,
                 "finalReadiness" to 96,
@@ -6303,6 +6428,7 @@ tasks.register("pipelinePmBundle") {
                 "M82 verifies deterministic Kadre-backed input/resize runtime-loop semantics and telemetry. It does not synthesize real desktop OS input events in CI, does not claim full window-manager resize coverage, and keeps dropped-frame counters reporting-only until M84.",
                 "M83 verifies one bounded Kanvas display-list scene through the Kadre native WebGPU demo path with nonblank offscreen readback evidence. Broad SkCanvas op replay, text, image-filter DAGs, arbitrary runtime effects, and release-grade timing remain outside the claim.",
                 "M84 turns native Kadre frame timing into candidate/reporting-only evidence with explicit quarantine and a negative fixture. It does not promote frame.kadre-windowed to a release-blocking gate or claim full end-to-end FPS.",
+                "M85 verifies a deterministic selected-scene resource/cache ledger, bounded key spaces, resize invalidation, and stable device-loss unsupported diagnostics. It does not claim observed WebGPU runtime cache telemetry, arbitrary scene cache behavior, cache-readiness gate movement, or real device-lost recovery.",
             ),
             "unavailableReferences" to unavailable,
         )
@@ -6369,6 +6495,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M83 display-list replay counters live in `manifest.json` under `m83DisplayListReplay`; it proves one selected display-list scene, not broad SkCanvas op replay.")
                 appendLine("- `runtime/m84-native-frame-timing/`: M84 candidate native Kadre frame timing evidence, Markdown, and negative fixture.")
                 appendLine("- M84 native frame timing counters live in `manifest.json` under `m84NativeFrameTiming`; the lane remains candidate/reporting-only and not release-blocking.")
+                appendLine("- `runtime/m85-resource-lifetime-cache/`: M85 selected realtime resource lifetime, cache pressure, resize invalidation, and device-loss diagnostic evidence.")
+                appendLine("- M85 resource/cache counters live in `manifest.json` under `m85ResourceLifetimeCache`; they are a deterministic selected-scene ledger, not observed runtime cache telemetry, and device-loss recovery remains expected-unsupported.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }

@@ -164,6 +164,30 @@ milestone promotes the lane.
 The M84 negative fixture must use a too-low p95 threshold, report
 `expected-fail`, keep a stable reason, and never rewrite checked-in baselines.
 
+## M85 Runtime Resource/Cache Evidence
+
+M85 replaces the M84 cache-counter placeholder for the selected realtime route
+with an auditable deterministic selected-scene resource/cache ledger. It must
+not move a performance/cache readiness denominator until observed runtime cache
+telemetry exists. The ledger is acceptable only when all of these are true:
+
+- per-frame resource ledger is serialized for the selected route;
+- cache hits/misses, shader modules, pipelines, bind groups, textures, texture
+  upload bytes, intermediate texture bytes, bind group churn, resource
+  generations, and invalid-resource reuse count are present;
+- cache key spaces are bounded or explicitly finite for the selected scene;
+- `PipelineKey` policy excludes uniform values and remains limited to layout,
+  code, resource, and pipeline-state axes;
+- resize/scale-factor reconfiguration evidence proves resource generation
+  invalidation and zero invalid-resource reuse;
+- device/surface loss is either supported with real recreate evidence or
+  refused with stable reason
+  `m85.device-loss-recreate-observation-unsupported`.
+
+M85 does not make arbitrary scene caches release-ready. It proves the selected
+route's cache/resource ledger and the failure taxonomy required before broader
+cache gates can become release-blocking.
+
 ## Acceptance
 
 - P0 frame demo has measured telemetry.
