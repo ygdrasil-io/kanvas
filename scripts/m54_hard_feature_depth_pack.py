@@ -133,6 +133,9 @@ def materialize_scene(
     required = PASS_ARTIFACTS if status == "pass" else UNSUPPORTED_ARTIFACTS
     for artifact in required:
         copy_required(source_root / artifact, target_root / artifact, scene_id, artifact)
+    font_diagnostics = source_root / "font-diagnostics.json"
+    if font_diagnostics.is_file():
+        copy_required(font_diagnostics, target_root / "font-diagnostics.json", scene_id, "font-diagnostics.json")
 
     copy_performance = bool(scene.get("copyPerformance"))
     performance_source_scene_id = scene.get("performanceSourceScene", base_scene_id)
@@ -356,6 +359,10 @@ def materialize_scene(
         ],
         "tags": scene["tags"],
     }
+    if isinstance(scene.get("font"), dict):
+        row["font"] = scene["font"]
+        if font_diagnostics.is_file():
+            row["evidence"].append(f"build/reports/{output_evidence_dir}/artifacts/{scene_id}/font-diagnostics.json")
     if isinstance(inventory_id, str) and inventory_id:
         row["inventoryId"] = inventory_id
         row["generation"]["inventoryId"] = inventory_id
