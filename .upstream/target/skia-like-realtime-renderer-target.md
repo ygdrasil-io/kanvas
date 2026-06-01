@@ -82,15 +82,15 @@ corresponding denominator and is linked from the sprint report.
 
 Weighted starting readiness: approximately 25%.
 
-Current readiness after M63 closeout: approximately 35%.
+Current readiness after M64 closeout: approximately 39%.
 
 | Area | Weight | Current count | Current progress | Movement |
 |---|---:|---:|---:|---|
-| Rendering feature breadth | 30% | 5/10 | 50% | M63 adds selected color/blend/color-filter evidence and stable advanced color/blend refusal boundaries. |
-| Skia-like fidelity | 20% | 30/100 | 30% | M63 adds three supported reference/oracle rows without broad GM, HDR, or arbitrary blend-chain parity claims. |
-| Real-time runtime | 20% | 1/10 | 10% | No Kadre/frame-loop capability landed in M63. |
-| Performance and cache readiness | 15% | 7/20 | 35% | No new measured performance/cache gate denominator landed in M63. |
-| PM/demo operability | 15% | 10/20 | 50% | PM dashboard now exposes graph/glyph diagnostics plus M63 color/blend refusal boundaries. |
+| Rendering feature breadth | 30% | 6/10 | 60% | M64 adds selected registered runtime-effect evidence and stable arbitrary-SkSL/missing-WGSL refusal boundaries. |
+| Skia-like fidelity | 20% | 31/100 | 31% | M64 adds one supported descriptor-backed runtime-effect reference/oracle row without broad SkSL or runtime-effect family parity claims. |
+| Real-time runtime | 20% | 1/10 | 10% | Runtime-effect parameter metadata is now available for the future live Kadre lane, but no Kadre/frame-loop capability landed in M64. |
+| Performance and cache readiness | 15% | 7/20 | 35% | No new measured performance/cache gate denominator landed in M64. |
+| PM/demo operability | 15% | 11/20 | 55% | PM dashboard now exposes graph/glyph diagnostics plus M63/M64 refusal boundaries. |
 
 Expected milestone deltas are capped until evidence lands:
 
@@ -116,7 +116,7 @@ Expected milestone deltas are capped until evidence lands:
 | M61 | Image Filter DAG V2 | Render bounded multi-node image-filter graphs with explicit intermediate texture ownership. |
 | M62 | Text & Glyph Rendering V1 | Render simple text through the font spec pack, bundled Liberation references, glyph masks, and a WebGPU glyph atlas. |
 | M63 | Color, Blend & ColorFilter Parity | Promote bounded SrcOver, linear-gradient color-filter kPlus, and sweep-gradient clamp rows; refuse wide-gamut color-space and advanced blend chains with stable reasons. |
-| M64 | Registered Runtime Effects | Support known runtime effects through registered Kotlin/WGSL descriptors and parser-reflected uniforms. |
+| M64 | Registered Runtime Effects | Promote SimpleRT through a registered Kotlin/WGSL descriptor with parser-reflected uniforms; refuse SpiralRT without WGSL descriptor and arbitrary SkSL with stable reasons. |
 | M65 | Real-Time Scene Runtime | Add a Kadre-hosted frame loop, display-list replay boundary, invalidation diagnostics, cache telemetry, live controls, and reporting-only frame metrics. |
 | M66 | Skia GM Promotion Wave | Aggregate M60-M64 promotions and add only the missing rows needed to reach the selected 50-100 GM/reference set. |
 | M67 | Performance Tiering | Promote reporting-only M65 frame metrics plus family pipeline budgets into candidate/release gates with quarantine and rebaseline policy. |
