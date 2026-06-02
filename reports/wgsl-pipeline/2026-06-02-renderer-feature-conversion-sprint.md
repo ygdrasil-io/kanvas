@@ -2,10 +2,17 @@
 
 ## Outcome
 
-The sprint did not meet the minimum conversion threshold. It produced descriptor,
-WGSL-parser, adapter, and scene evidence for attempted runtime-effect and Path AA
-conversions, but no new row is promoted to supported in this closeout because
-the adapter-backed scene parity gates did not reach the required support floor.
+The original sprint did not meet the minimum conversion threshold. It produced
+descriptor, WGSL-parser, adapter, and scene evidence for attempted
+runtime-effect and Path AA conversions, but no new row was promoted in the
+initial closeout because the adapter-backed scene parity gates did not reach the
+required support floor.
+
+FOR-238 follow-up: `runtime.linear_gradient_rt` now stabilizes the registered
+WGSL output at the RGBA8 store boundary before the `RGBA16Float` intermediate
+can move a half-byte decision. The adapter-backed render reaches 100.00% strict
+parity (4096/4096 exact pixels, max delta 0), so
+`m64-linear-gradient-rt-descriptor-backed` is promoted to supported.
 
 Readiness remains 67.75%. No PM readiness percentage is moved by this sprint.
 
@@ -15,7 +22,7 @@ Readiness remains 67.75%. No PM readiness percentage is moved by this sprint.
 |---|---|---|---|
 | `m60-bounded-stroke-cap-join` | Clip/RRect/Path AA | `expected-unsupported` | Stroke width/cap/join facts are captured, but WebGPU refuses before rendering with `coverage.stroke-cap-join-visual-parity-below-threshold`. |
 | `m64-spiral-rt-descriptor-backed` | Registered runtime effects | `expected-unsupported` | Descriptor registry and WGSL parser evidence exist, but WebGPU execution remains unpromoted with `runtime-effect.spiral-visual-parity-below-threshold`. |
-| `m64-linear-gradient-rt-descriptor-backed` | Registered runtime effects | `expected-unsupported` | Descriptor registry and WGSL parser evidence exist, and diagnostic WebGPU rendering reaches 99.22% strict parity (4064/4096 exact pixels, max delta 1; tolerance=1 parity 100.00%). This remains below the 99.95 support floor with mismatch pattern `x=43 y=32..63 green channel -1 vs CPU`. |
+| `m64-linear-gradient-rt-descriptor-backed` | Registered runtime effects | `pass` | Descriptor registry and WGSL parser evidence exist, and FOR-238 WebGPU rendering reaches 100.00% strict parity (4096/4096 exact pixels, max delta 0). |
 
 ## Evidence
 
@@ -24,6 +31,10 @@ Readiness remains 67.75%. No PM readiness percentage is moved by this sprint.
 - `reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/`
 - `reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json`
 - `reports/wgsl-pipeline/scenes/generated/m64-registered-runtime-effects-pack.json`
+
+FOR-238 also refreshes
+`reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/` with
+pass routes, stats, CPU/GPU/reference PNGs, and diff artifacts.
 
 ## Validation
 
@@ -37,4 +48,6 @@ Readiness remains 67.75%. No PM readiness percentage is moved by this sprint.
   claimed.
 - Runtime effects remain limited to registered Kotlin/WGSL descriptors.
 - M60 stroke cap/join and the new runtime-effect WGSL rows remain explicit
-  blockers until adapter-backed scene parity reaches the support threshold.
+  blockers until adapter-backed scene parity reaches the support threshold,
+  except `runtime.linear_gradient_rt`, which FOR-238 promotes after strict
+  parity reaches 100.00%.

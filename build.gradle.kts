@@ -2867,7 +2867,6 @@ tasks.register("pipelineSceneDashboardGate") {
             "m63-advanced-blend-chain-refusal" to "blend.advanced-chain-unsupported",
             "m64-arbitrary-sksl-runtime-effect-refusal" to "runtime-effect.arbitrary-sksl-unsupported",
             "m64-spiral-rt-descriptor-backed" to "runtime-effect.spiral-visual-parity-below-threshold",
-            "m64-linear-gradient-rt-descriptor-backed" to "runtime-effect.linear-gradient-visual-parity-below-threshold; strictSimilarity=99.22; threshold=99.95; matchingPixels=4064/4096; maxChannelDelta=1; tolerance1Similarity=100.00; mismatchPattern=x=43 y=32..63 green channel -1 vs CPU",
             "m52-closed-capped-hairlines-edge-budget" to "coverage.edge-count-exceeded",
             "m52-big-tile-image-filter-dag-refusal" to "image-filter.dag-or-picture-prepass-required",
             "m52-color-emoji-blendmodes-refusal" to "font.color-glyph-emoji-unsupported",

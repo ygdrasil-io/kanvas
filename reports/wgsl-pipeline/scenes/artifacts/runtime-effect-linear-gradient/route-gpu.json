@@ -3,13 +3,13 @@
   "backend": "WebGPU",
   "adapter": "Apple M2 Max",
   "drawKind": "LinearGradientRTDescriptorGM",
-  "status": "expected-unsupported",
-  "selectedRoute": "webgpu.runtime-effect.descriptor.linear_gradient_rt.expected-unsupported",
-  "pipelineKey": "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
-  "fallbackReason": "runtime-effect.linear-gradient-visual-parity-below-threshold; strictSimilarity=99.22; threshold=99.95; matchingPixels=4064/4096; maxChannelDelta=1; tolerance1Similarity=100.00; mismatchPattern=x=43 y=32..63 green channel -1 vs CPU",
+  "status": "pass",
+  "selectedRoute": "webgpu.runtime-effect.descriptor.linear_gradient_rt",
+  "pipelineKey": "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=supported state=[blendMode=kSrcOver]",
+  "fallbackReason": "none",
   "runtimeEffectStableId": "runtime.linear_gradient_rt",
   "wgslImplementationId": "wgsl/runtime_linear_gradient_rt",
   "uniformBytes": 32,
-  "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest#LinearGradientRT descriptor scene captures visual parity blocker evidence",
+  "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest#LinearGradientRT descriptor scene captures supported evidence",
   "sourceReport": "reports/wgsl-pipeline/2026-06-02-renderer-feature-conversion-sprint.md"
 }

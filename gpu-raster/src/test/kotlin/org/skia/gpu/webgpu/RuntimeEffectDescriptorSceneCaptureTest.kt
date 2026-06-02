@@ -31,7 +31,7 @@ class RuntimeEffectDescriptorSceneCaptureTest {
     }
 
     @Test
-    fun `LinearGradientRT descriptor scene captures visual parity blocker evidence`() {
+    fun `LinearGradientRT descriptor scene captures supported evidence`() {
         capture(RuntimeScene.LinearGradient)
     }
 
@@ -173,7 +173,7 @@ class RuntimeEffectDescriptorSceneCaptureTest {
           "runtimeEffectStableId": "${scene.stableId}",
           "wgslImplementationId": "${scene.wgslImplementationId}",
           "uniformBytes": ${scene.uniformBytes},
-          "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest#${scene.displayName} descriptor scene captures visual parity blocker evidence",
+          "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest#${scene.captureTestName}",
           "sourceReport": "reports/wgsl-pipeline/2026-06-02-renderer-feature-conversion-sprint.md"
         }
     """.trimIndent() + "\n"
@@ -312,6 +312,7 @@ class RuntimeEffectDescriptorSceneCaptureTest {
         val uniformFloats: FloatArray,
         val gpuSupported: Boolean,
         val gpuCandidateDiagnostics: Boolean,
+        val captureTestName: String,
     ) {
         Spiral(
             sceneId = "runtime-effect-spiral",
@@ -328,6 +329,7 @@ class RuntimeEffectDescriptorSceneCaptureTest {
             uniformFloats = floatArrayOf(0.01f, 0f, 32f, 32f, 1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f),
             gpuSupported = false,
             gpuCandidateDiagnostics = false,
+            captureTestName = "SpiralRT descriptor scene captures visual parity blocker evidence",
         ),
         LinearGradient(
             sceneId = "runtime-effect-linear-gradient",
@@ -340,10 +342,11 @@ class RuntimeEffectDescriptorSceneCaptureTest {
             gpuRoute = "webgpu.runtime-effect.descriptor.linear_gradient_rt",
             gpuUnsupportedRoute = "webgpu.runtime-effect.descriptor.linear_gradient_rt.expected-unsupported",
             fallbackReason = "runtime-effect.linear-gradient-visual-parity-below-threshold",
-            pipelineKey = "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
+            pipelineKey = "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=supported state=[blendMode=kSrcOver]",
             uniformFloats = floatArrayOf(1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f),
-            gpuSupported = false,
-            gpuCandidateDiagnostics = true,
+            gpuSupported = true,
+            gpuCandidateDiagnostics = false,
+            captureTestName = "LinearGradientRT descriptor scene captures supported evidence",
         );
 
         val uniformBytes: Int get() = uniformFloats.size * Float.SIZE_BYTES

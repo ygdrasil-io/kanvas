@@ -1,7 +1,7 @@
 # M64 Registered Runtime Effect Audit
 
 Date: 2026-06-01
-Linear: FOR-25, FOR-26, FOR-27, FOR-28, FOR-29
+Linear: FOR-25, FOR-26, FOR-27, FOR-28, FOR-29, FOR-238
 
 ## Purpose
 
@@ -10,6 +10,11 @@ an arbitrary SkSL compiler. `SkRuntimeEffect` remains a compatibility facade:
 only explicitly registered Kotlin/WGSL descriptors can become GPU-backed pass
 rows.
 
+FOR-238 follow-up promotes `runtime.linear_gradient_rt` after row-specific
+WebGPU evidence reaches 100.00% strict parity. The original M64 audit decision
+for LinearGradientRT is superseded by the FOR-238 evidence under
+`reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/`.
+
 ## Current Support Matrix
 
 The descriptor support matrix reports three known runtime effects:
@@ -17,8 +22,8 @@ The descriptor support matrix reports three known runtime effects:
 | Stable id | Descriptor status | CPU support | GPU support | Decision |
 |---|---|---|---|---|
 | `runtime.simple_rt` | descriptor-backed | `supported:kotlin/simple_rt` | `supported:wgsl/runtime_simple_rt` | Promote as supported M64 pass row. |
-| `runtime.spiral_rt` | dispatch-only; missing descriptor | `supported:kotlin/spiral_rt` | unsupported, WGSL implementation id missing | Promote as expected-unsupported M64 refusal. |
-| `runtime.linear_gradient_rt` | dispatch-only; missing descriptor | `supported:kotlin/linear_gradient_rt` | unsupported, WGSL implementation id missing | Keep as audit nonclaim; it needs a separate row-specific artifact before dashboard promotion. |
+| `runtime.spiral_rt` | descriptor-backed | `supported:kotlin/spiral_rt` | unsupported, WGSL implementation id not promoted | Promote as expected-unsupported M64 refusal. |
+| `runtime.linear_gradient_rt` | descriptor-backed | `supported:kotlin/linear_gradient_rt` | `supported:wgsl/runtime_linear_gradient_rt` | Promote as supported M64 pass row after FOR-238 strict parity evidence. |
 
 Source: `reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md`.
 
@@ -27,15 +32,16 @@ Source: `reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md`.
 | Candidate | Status | Reference | CPU route | GPU route | Parser/reflection evidence | Fallback | Decision |
 |---|---|---|---|---|---|---|---|
 | `runtime-effect-simple` | pass | test-oracle | `cpu.runtime-effect.descriptor.simple_rt` | `webgpu.runtime-effect.descriptor.simple_rt` | `RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms`; `gColor` offset `0` | `none` | Promote as `m64-simple-rt-descriptor-backed`. |
-| `runtime.spiral_rt` | unsupported on GPU | support matrix / WebGPU diagnostic | `cpu.runtime-effect.dispatch.spiral_rt` | `webgpu.runtime-effect.refuse.missing-wgsl-descriptor` | none; WGSL descriptor missing | `runtime-effect.wgsl-descriptor-missing` | Promote as `m64-spiral-rt-wgsl-descriptor-refusal`. |
+| `runtime.spiral_rt` | unsupported on GPU | support matrix / WebGPU diagnostic | `cpu.runtime-effect.descriptor.spiral_rt` | `webgpu.runtime-effect.descriptor.spiral_rt.expected-unsupported` | `RuntimeEffectDescriptorWebGpuTest#runtime SpiralRT descriptor WGSL parses and reflects uniforms` | `runtime-effect.spiral-visual-parity-below-threshold` | Promote as `m64-spiral-rt-descriptor-backed` expected-unsupported row. |
 | arbitrary user SkSL | unsupported | policy boundary | `cpu.runtime-effect.refuse.arbitrary-sksl` | `webgpu.runtime-effect.refuse.arbitrary-sksl` | not applicable; no SkSL compiler exists | `runtime-effect.arbitrary-sksl-unsupported` | Promote as `m64-arbitrary-sksl-runtime-effect-refusal`. |
-| `runtime.linear_gradient_rt` | unsupported on GPU | support matrix | `cpu.runtime-effect.dispatch.linear_gradient_rt` | missing WGSL descriptor | none; WGSL descriptor missing | `runtime-effect.wgsl-descriptor-missing` | Do not promote in M64: no row-specific artifacts are present. |
+| `runtime.linear_gradient_rt` | pass | test-oracle | `cpu.runtime-effect.descriptor.linear_gradient_rt` | `webgpu.runtime-effect.descriptor.linear_gradient_rt` | `RuntimeEffectDescriptorWebGpuTest#runtime LinearGradientRT descriptor WGSL parses and reflects uniforms`; `in_colors0` offset `0`, `in_colors1` offset `16` | `none` | Promote as `m64-linear-gradient-rt-descriptor-backed` after FOR-238. |
 
 ## Selected M64 Rows
 
 Supported pass row:
 
 - `m64-simple-rt-descriptor-backed`
+- `m64-linear-gradient-rt-descriptor-backed`
 
 Stable expected-unsupported rows:
 
@@ -76,8 +82,7 @@ M64 does not claim:
 - silent approximation for unknown runtime effects;
 - runtime-effect color filters, blenders, or image filters beyond explicitly
   registered descriptor-backed rows;
-- GPU support for dispatch-only `runtime.spiral_rt` or
-  `runtime.linear_gradient_rt`.
+- GPU support for `runtime.spiral_rt` or unregistered runtime effects.
 
 ## Validation
 
