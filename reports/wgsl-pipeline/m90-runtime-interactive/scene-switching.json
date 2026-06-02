@@ -1,0 +1,98 @@
+{
+    "schemaVersion": 1,
+    "packId": "mep-next-scene-switching-v1",
+    "status": "pass",
+    "sceneCount": 5,
+    "renderableSceneCount": 4,
+    "unsupportedSceneCount": 1,
+    "selectionModel": "bounded-keyboard-config-scene-id",
+    "keyboardControls": [
+        "ArrowRight: next renderable scene",
+        "ArrowLeft: previous renderable scene",
+        "Scene id config: --scene-contract-id for native opt-in runs"
+    ],
+    "candidateScenes": [
+        {
+            "id": "m73-bitmap-rect-nearest-replay-v1",
+            "title": "M73 bitmap-rect nearest replay",
+            "status": "renderable",
+            "renderedByKadre": true,
+            "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#bitmap-rect-nearest",
+            "gpuRoute": "webgpu.image-rect.strict-nearest",
+            "fallbackReasons": []
+        },
+        {
+            "id": "m73-gradient-color-filter-kplus-replay-v1",
+            "title": "M73 gradient color-filter kPlus replay",
+            "status": "renderable",
+            "renderedByKadre": true,
+            "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#gradient-color-filter-linear-kplus",
+            "gpuRoute": "webgpu.generated.linear-gradient.color-filter.blend-kplus",
+            "fallbackReasons": []
+        },
+        {
+            "id": "m73-linear-gradient-rect-replay-v1",
+            "title": "M73 linear-gradient rect replay",
+            "status": "renderable",
+            "renderedByKadre": true,
+            "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#linear-gradient-rect",
+            "gpuRoute": "webgpu.generated.linear-gradient.rect",
+            "fallbackReasons": []
+        },
+        {
+            "id": "m73-nested-rrect-clip-refusal-v1",
+            "title": "M73 nested rrect clip refusal",
+            "status": "expected-unsupported",
+            "renderedByKadre": false,
+            "dashboardRow": "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json#m60-bounded-nested-rrect-clip",
+            "gpuRoute": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+            "fallbackReasons": [
+                "nested-rrect-difference-clip"
+            ]
+        },
+        {
+            "id": "m83-display-list-pm-scene-v1",
+            "title": "M83 Kanvas display-list PM scene replay",
+            "status": "renderable",
+            "renderedByKadre": true,
+            "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#m83-display-list-pm-scene",
+            "gpuRoute": "webgpu.kadre.native.display-list-replay.bounded",
+            "fallbackReasons": []
+        }
+    ],
+    "switchEvents": [
+        {
+            "sequence": 1,
+            "trigger": "keyboard.ArrowRight",
+            "fromSceneId": "m73-bitmap-rect-nearest-replay-v1",
+            "toSceneId": "m73-gradient-color-filter-kplus-replay-v1",
+            "status": "selected",
+            "fallbackReason": ""
+        },
+        {
+            "sequence": 2,
+            "trigger": "keyboard.ArrowRight",
+            "fromSceneId": "m73-gradient-color-filter-kplus-replay-v1",
+            "toSceneId": "m73-linear-gradient-rect-replay-v1",
+            "status": "selected",
+            "fallbackReason": ""
+        },
+        {
+            "sequence": 3,
+            "trigger": "keyboard.ArrowLeft",
+            "fromSceneId": "m73-linear-gradient-rect-replay-v1",
+            "toSceneId": "m73-gradient-color-filter-kplus-replay-v1",
+            "status": "selected",
+            "fallbackReason": ""
+        },
+        {
+            "sequence": 4,
+            "trigger": "config.sceneId",
+            "fromSceneId": "m83-display-list-pm-scene-v1",
+            "toSceneId": "m73-nested-rrect-clip-refusal-v1",
+            "status": "expected-unsupported",
+            "fallbackReason": "nested-rrect-difference-clip"
+        }
+    ],
+    "unsupportedFallbackReason": "mep-next.scene-switch.expected-unsupported"
+}

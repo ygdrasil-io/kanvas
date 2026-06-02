@@ -31,6 +31,37 @@ runtime effect is supportable only through a registered Kanvas descriptor with
 Kotlin CPU behavior and generated or registered WGSL that passes parser
 validation.
 
+## MEP-NEXT Feature Breadth Slice
+
+The post-RC-MEP `FOR-189` through `FOR-192` slice is PM breadth evidence for
+bounded visual families. It may aggregate already generated rows when the rows
+have reference, CPU, GPU, diff/stat, route, and refusal artifacts. It must not
+turn aggregation into a new broad support claim.
+
+The slice uses `reports/wgsl-pipeline/m89-feature-breadth/evidence.json` as
+the headless contract. The contract is valid only while:
+
+- dashboard expectations remain `0 fail` and `0 tracked-gap`;
+- image-filter support is limited to selected crop/non-null prepass and
+  bounded compose/color-filter/matrix-transform rows;
+- clip and Path AA support is limited to selected clip difference, AA clip,
+  nested/rrect, and stroke primitive rows already carrying row artifacts;
+- bitmap support is limited to selected nearest/local-matrix/subset/repeat and
+  fixture-backed replay rows;
+- runtime-effect support is limited to registered descriptors with Kotlin CPU
+  behavior, parser-validated WGSL, reflected layout, and stable live-edit
+  metadata;
+- SkSL wording remains compatibility/refusal context only.
+
+Stable non-goals for this slice:
+
+- arbitrary recursive image-filter DAGs and broad picture prepass;
+- broad Path AA, broad clip stacks, path boolean parity, and global AA budget
+  increases;
+- broad image, texture, codec, mipmap, perspective, or color-managed decode
+  support;
+- arbitrary Skia/SkSL runtime shader input, SkSL compiler, SkSL IR, or SkSL VM.
+
 ## M60 Coverage & Path AA Expansion
 
 ### Initial Numeric Budgets
