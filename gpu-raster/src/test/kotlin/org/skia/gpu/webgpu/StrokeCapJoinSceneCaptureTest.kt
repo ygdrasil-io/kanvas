@@ -102,6 +102,7 @@ class StrokeCapJoinSceneCaptureTest {
             val experimentalGpuCmp = TestUtils.compareBitmapsDetailed(experimentalGpu, reference, tolerance = 0)
             val experimentalGpuToleranceProfile = toleranceProfile(experimentalGpu, reference)
             val regionStats = strokeRegionStats(experimentalGpu, reference)
+            val residualStats = strokeResidualStats(experimentalGpu, reference)
             val adapter = ctx.adapterInfo ?: "unknown-adapter"
 
             println(
@@ -119,6 +120,7 @@ class StrokeCapJoinSceneCaptureTest {
                     experimentalGpuCmp = experimentalGpuCmp,
                     experimentalGpuToleranceProfile = experimentalGpuToleranceProfile,
                     regionStats = regionStats,
+                    residualStats = residualStats,
                     adapter = adapter,
                 )
             }
@@ -126,6 +128,8 @@ class StrokeCapJoinSceneCaptureTest {
             assertEquals(100.0, cpuCmp.similarity, 0.0)
             assertTrue(cpuCmp.matchingPixels == cpuCmp.totalPixels)
             assertTrue(experimentalGpuCmp.similarity < GPU_SUPPORT_THRESHOLD)
+            assertEquals(experimentalGpuCmp.totalPixels - experimentalGpuCmp.matchingPixels, residualStats.mismatchPixels)
+            assertTrue(residualStats.oneUnitMismatchPixels > residualStats.greaterThanEightPixels)
             assertTrue(
                 gpuError.message!!.contains("coverage.stroke-cap-join-visual-parity-below-threshold"),
                 "expected stable stroke cap/join blocker diagnostic, got ${gpuError.message}",
@@ -141,6 +145,7 @@ class StrokeCapJoinSceneCaptureTest {
         experimentalGpuCmp: BitmapComparison,
         experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
+        residualStats: StrokeResidualStats,
         adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join").apply { mkdirs() }
@@ -153,10 +158,13 @@ class StrokeCapJoinSceneCaptureTest {
         File(dir, "gpu-diff.png").delete()
         File(dir, "route-cpu.json").writeText(cpuRouteJson())
         File(dir, "route-gpu.json").writeText(gpuRouteJson(adapter))
+        File(dir, "aa-residual-diagnostic.json").writeText(residualStats.toJson(adapter))
         File(dir, "experimental-gpu-diagnostic.json").writeText(
-            experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, adapter),
+            experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
-        File(dir, "stats.json").writeText(statsJson(cpuCmp, experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, adapter))
+        File(dir, "stats.json").writeText(
+            statsJson(cpuCmp, experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
+        )
     }
 
     private fun writeNeutralAaEvidence(
@@ -250,7 +258,9 @@ class StrokeCapJoinSceneCaptureTest {
           "selectedRoute": "webgpu.coverage.refuse",
           "pipelineKey": "coverageKind=pathAaStrokeCapJoinBlocked pathFillRule=winding topology=triangleList budget=m60 source=LinePathGM-derived status=expected-unsupported",
           "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
-          "rootCause": "color-space.target-blend-required",
+          "rootCause": "coverage.stroke-cap-join-aa-residual",
+          "resolvedRootCause": "color-space.target-blend-required",
+          "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
           "pathVerbCount": 9,
           "pathVerbBudget": 96,
           "pathVerbReason": "not coverage.verb-budget-exceeded",
@@ -278,6 +288,7 @@ class StrokeCapJoinSceneCaptureTest {
         experimentalGpuCmp: BitmapComparison,
         experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
+        residualStats: StrokeResidualStats,
         adapter: String,
     ): String {
         val dominant = regionStats.minBy { it.similarity }
@@ -291,7 +302,9 @@ class StrokeCapJoinSceneCaptureTest {
               "selectedRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
               "normalRoute": "webgpu.coverage.refuse",
               "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
-              "rootCause": "color-space.target-blend-required",
+              "rootCause": "coverage.stroke-cap-join-aa-residual",
+              "resolvedRootCause": "color-space.target-blend-required",
+              "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
               "targetColorSpaceBlend": true,
               "experimentalGpuSimilarity": ${String.format(Locale.US, "%.2f", experimentalGpuCmp.similarity)},
               "experimentalGpuMatchingPixels": ${experimentalGpuCmp.matchingPixels},
@@ -302,10 +315,11 @@ class StrokeCapJoinSceneCaptureTest {
               ],
               "dominantMismatchRegion": ${dominant.id.jsonString()},
               "dominantMismatchDescription": ${dominant.description.jsonString()},
+              "residualSummary": ${residualStats.summaryJson().prependIndent("  ").trimStart()},
               "regions": [
             ${regionStats.joinToString(",\n") { it.toJson().prependIndent("    ") }}
               ],
-              "diagnosis": "Target-colorspace blending raises the exact diagnostic score but it remains below the support threshold. The isolated neutral AA fixture now matches CPU 128, while this full stroke scene still has residual cap/join AA differences. Normal route remains refused.",
+              "diagnosis": "Target-colorspace blending raises the exact diagnostic score but it remains below the support threshold. The isolated neutral AA fixture now matches CPU 128, while this full stroke scene still has byte-exact residuals plus a small cap/join AA boundary tail. Normal route remains refused.",
               "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
             }
         """.trimIndent() + "\n"
@@ -316,6 +330,7 @@ class StrokeCapJoinSceneCaptureTest {
         experimentalGpuCmp: BitmapComparison,
         experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
+        residualStats: StrokeResidualStats,
         adapter: String,
     ): String {
         val dominant = regionStats.minBy { it.similarity }
@@ -343,8 +358,11 @@ class StrokeCapJoinSceneCaptureTest {
           "dominantMismatchRegion": ${dominant.id.jsonString()},
           "dominantMismatchDescription": ${dominant.description.jsonString()},
           "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
-          "rootCause": "color-space.target-blend-required",
+          "rootCause": "coverage.stroke-cap-join-aa-residual",
+          "resolvedRootCause": "color-space.target-blend-required",
+          "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
           "targetColorSpaceBlend": true,
+          "residualSummary": ${residualStats.summaryJson().prependIndent("  ").trimStart()},
           "pathVerbCount": 9,
           "pathVerbBudget": 96,
           "edgeCount": 18,
@@ -399,6 +417,45 @@ class StrokeCapJoinSceneCaptureTest {
                 maxChannelDelta = maxDelta,
             )
         }
+    }
+
+    private fun strokeResidualStats(gpu: SkBitmap, reference: SkBitmap): StrokeResidualStats {
+        require(gpu.width == reference.width && gpu.height == reference.height)
+        val regions = listOf(
+            StrokeRegion("butt-bevel", "left band: butt cap with bevel join", 0, 48),
+            StrokeRegion("round-round", "middle band: round cap with round join", 48, 96),
+            StrokeRegion("square-bevel", "right band: square cap with bevel join", 96, reference.width),
+        )
+        val byRegion = regions.associate { it.id to MutableStrokeResidualRegion(it) }
+        var mismatchPixels = 0
+        var oneUnitMismatchPixels = 0
+        var greaterThanEightPixels = 0
+        var greaterThanThirtyTwoPixels = 0
+        var maxDelta = 0
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                val gpuPixel = gpu.getPixel(x, y)
+                val refPixel = reference.getPixel(x, y)
+                if (gpuPixel == refPixel) continue
+                val delta = maxChannelDelta(gpuPixel, refPixel)
+                val region = byRegion.values.first { x in it.region.xStart until it.region.xEnd }
+                region.add(delta, x, y)
+                mismatchPixels++
+                if (delta == 1) oneUnitMismatchPixels++
+                if (delta > TestUtils.TEXTUAL_GM_TOLERANCE) greaterThanEightPixels++
+                if (delta > 32) greaterThanThirtyTwoPixels++
+                maxDelta = maxOf(maxDelta, delta)
+            }
+        }
+        return StrokeResidualStats(
+            sceneId = "m60-bounded-stroke-cap-join",
+            mismatchPixels = mismatchPixels,
+            oneUnitMismatchPixels = oneUnitMismatchPixels,
+            greaterThanEightPixels = greaterThanEightPixels,
+            greaterThanThirtyTwoPixels = greaterThanThirtyTwoPixels,
+            maxChannelDelta = maxDelta,
+            regions = byRegion.values.map { it.toStats() },
+        )
     }
 
     private fun maxChannelDelta(a: Int, b: Int): Int {
@@ -535,6 +592,119 @@ class StrokeCapJoinSceneCaptureTest {
         val xStart: Int,
         val xEnd: Int,
     )
+
+    private class MutableStrokeResidualRegion(val region: StrokeRegion) {
+        var mismatchPixels: Int = 0
+        var oneUnitMismatchPixels: Int = 0
+        var greaterThanEightPixels: Int = 0
+        var greaterThanThirtyTwoPixels: Int = 0
+        var maxChannelDelta: Int = 0
+        var minX: Int = Int.MAX_VALUE
+        var minY: Int = Int.MAX_VALUE
+        var maxX: Int = Int.MIN_VALUE
+        var maxY: Int = Int.MIN_VALUE
+
+        fun add(delta: Int, x: Int, y: Int) {
+            mismatchPixels++
+            if (delta == 1) oneUnitMismatchPixels++
+            if (delta > TestUtils.TEXTUAL_GM_TOLERANCE) greaterThanEightPixels++
+            if (delta > 32) greaterThanThirtyTwoPixels++
+            maxChannelDelta = maxOf(maxChannelDelta, delta)
+            minX = minOf(minX, x)
+            minY = minOf(minY, y)
+            maxX = maxOf(maxX, x)
+            maxY = maxOf(maxY, y)
+        }
+
+        fun toStats(): StrokeResidualRegionStats =
+            StrokeResidualRegionStats(
+                id = region.id,
+                description = region.description,
+                mismatchPixels = mismatchPixels,
+                oneUnitMismatchPixels = oneUnitMismatchPixels,
+                greaterThanEightPixels = greaterThanEightPixels,
+                greaterThanThirtyTwoPixels = greaterThanThirtyTwoPixels,
+                maxChannelDelta = maxChannelDelta,
+                bounds = if (mismatchPixels == 0) null else ResidualBounds(minX, minY, maxX, maxY),
+            )
+    }
+
+    private data class StrokeResidualStats(
+        val sceneId: String,
+        val mismatchPixels: Int,
+        val oneUnitMismatchPixels: Int,
+        val greaterThanEightPixels: Int,
+        val greaterThanThirtyTwoPixels: Int,
+        val maxChannelDelta: Int,
+        val regions: List<StrokeResidualRegionStats>,
+    ) {
+        fun summaryJson(): String = """
+            {
+              "mismatchPixels": $mismatchPixels,
+              "oneUnitMismatchPixels": $oneUnitMismatchPixels,
+              "greaterThanEightPixels": $greaterThanEightPixels,
+              "greaterThanThirtyTwoPixels": $greaterThanThirtyTwoPixels,
+              "maxChannelDelta": $maxChannelDelta,
+              "classification": "mostly byte-exact target-color quantization residual; remaining >8 tail is localized to cap/join AA boundary pixels"
+            }
+        """.trimIndent()
+
+        fun toJson(adapter: String): String = """
+            {
+              "sceneId": ${jsonString(sceneId)},
+              "backend": "WebGPU",
+              "adapter": ${jsonString(adapter)},
+              "status": "diagnostic-only",
+              "supportClaim": false,
+              "targetColorSpaceBlend": true,
+              "resolvedRootCause": "color-space.target-blend-required",
+              "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
+              "mismatchPixels": $mismatchPixels,
+              "oneUnitMismatchPixels": $oneUnitMismatchPixels,
+              "greaterThanEightPixels": $greaterThanEightPixels,
+              "greaterThanThirtyTwoPixels": $greaterThanThirtyTwoPixels,
+              "maxChannelDelta": $maxChannelDelta,
+              "regions": [
+            ${regions.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "decision": "M60 remains expected-unsupported because exact similarity is below 99.95 even after the target-colorspace blend pilot.",
+              "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private data class StrokeResidualRegionStats(
+        val id: String,
+        val description: String,
+        val mismatchPixels: Int,
+        val oneUnitMismatchPixels: Int,
+        val greaterThanEightPixels: Int,
+        val greaterThanThirtyTwoPixels: Int,
+        val maxChannelDelta: Int,
+        val bounds: ResidualBounds?,
+    ) {
+        fun toJson(): String = """
+            {
+              "id": ${jsonString(id)},
+              "description": ${jsonString(description)},
+              "mismatchPixels": $mismatchPixels,
+              "oneUnitMismatchPixels": $oneUnitMismatchPixels,
+              "greaterThanEightPixels": $greaterThanEightPixels,
+              "greaterThanThirtyTwoPixels": $greaterThanThirtyTwoPixels,
+              "maxChannelDelta": $maxChannelDelta,
+              "bounds": ${bounds?.toJson() ?: "null"}
+            }
+        """.trimIndent()
+    }
+
+    private data class ResidualBounds(
+        val left: Int,
+        val top: Int,
+        val right: Int,
+        val bottom: Int,
+    ) {
+        fun toJson(): String = """{"left": $left, "top": $top, "right": $right, "bottom": $bottom}"""
+    }
 
     private data class StrokeRegionStats(
         val id: String,

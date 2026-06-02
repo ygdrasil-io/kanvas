@@ -1,68 +1,78 @@
-        {
-          "sceneId": "m60-bounded-stroke-cap-join",
-          "backend": "WebGPU",
-          "adapter": "Apple M2 Max",
-          "status": "diagnostic-only",
-          "supportClaim": false,
-          "selectedRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
-          "normalRoute": "webgpu.coverage.refuse",
-          "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
-          "rootCause": "color-space.target-blend-required",
-          "targetColorSpaceBlend": true,
-          "experimentalGpuSimilarity": 95.37,
-          "experimentalGpuMatchingPixels": 23437,
-          "experimentalGpuMaxChannelDelta": 49,
-          "threshold": 99.95,
-          "toleranceProfile": [
-            {
-  "tolerance": 0,
-  "similarity": 95.37,
-  "matchingPixels": 23437
+          {
+            "sceneId": "m60-bounded-stroke-cap-join",
+            "backend": "WebGPU",
+            "adapter": "Apple M2 Max",
+            "status": "diagnostic-only",
+            "supportClaim": false,
+            "selectedRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
+            "normalRoute": "webgpu.coverage.refuse",
+            "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+            "rootCause": "coverage.stroke-cap-join-aa-residual",
+            "resolvedRootCause": "color-space.target-blend-required",
+            "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
+            "targetColorSpaceBlend": true,
+            "experimentalGpuSimilarity": 95.37,
+            "experimentalGpuMatchingPixels": 23437,
+            "experimentalGpuMaxChannelDelta": 49,
+            "threshold": 99.95,
+            "toleranceProfile": [
+              {
+    "tolerance": 0,
+    "similarity": 95.37,
+    "matchingPixels": 23437
+  },
+  {
+    "tolerance": 8,
+    "similarity": 99.96,
+    "matchingPixels": 24566
+  },
+  {
+    "tolerance": 16,
+    "similarity": 99.96,
+    "matchingPixels": 24566
+  },
+  {
+    "tolerance": 32,
+    "similarity": 99.98,
+    "matchingPixels": 24570
+  }
+            ],
+            "dominantMismatchRegion": "round-round",
+            "dominantMismatchDescription": "middle band: round cap with round join",
+            "residualSummary": {
+  "mismatchPixels": 1139,
+  "oneUnitMismatchPixels": 1129,
+  "greaterThanEightPixels": 10,
+  "greaterThanThirtyTwoPixels": 6,
+  "maxChannelDelta": 49,
+  "classification": "mostly byte-exact target-color quantization residual; remaining >8 tail is localized to cap/join AA boundary pixels"
 },
-{
-  "tolerance": 8,
-  "similarity": 99.96,
-  "matchingPixels": 24566
-},
-{
-  "tolerance": 16,
-  "similarity": 99.96,
-  "matchingPixels": 24566
-},
-{
-  "tolerance": 32,
-  "similarity": 99.98,
-  "matchingPixels": 24570
-}
-          ],
-          "dominantMismatchRegion": "round-round",
-          "dominantMismatchDescription": "middle band: round cap with round join",
-          "regions": [
-            {
-  "id": "butt-bevel",
-  "description": "left band: butt cap with bevel join",
-  "pixels": 6144,
-  "matchingPixels": 5689,
-  "similarity": 92.59,
-  "maxChannelDelta": 24
-},
-{
-  "id": "round-round",
-  "description": "middle band: round cap with round join",
-  "pixels": 6144,
-  "matchingPixels": 5632,
-  "similarity": 91.67,
-  "maxChannelDelta": 49
-},
-{
-  "id": "square-bevel",
-  "description": "right band: square cap with bevel join",
-  "pixels": 12288,
-  "matchingPixels": 12116,
-  "similarity": 98.60,
-  "maxChannelDelta": 1
-}
-          ],
-          "diagnosis": "Target-colorspace blending raises the exact diagnostic score but it remains below the support threshold. The isolated neutral AA fixture now matches CPU 128, while this full stroke scene still has residual cap/join AA differences. Normal route remains refused.",
-          "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
-        }
+            "regions": [
+              {
+    "id": "butt-bevel",
+    "description": "left band: butt cap with bevel join",
+    "pixels": 6144,
+    "matchingPixels": 5689,
+    "similarity": 92.59,
+    "maxChannelDelta": 24
+  },
+  {
+    "id": "round-round",
+    "description": "middle band: round cap with round join",
+    "pixels": 6144,
+    "matchingPixels": 5632,
+    "similarity": 91.67,
+    "maxChannelDelta": 49
+  },
+  {
+    "id": "square-bevel",
+    "description": "right band: square cap with bevel join",
+    "pixels": 12288,
+    "matchingPixels": 12116,
+    "similarity": 98.60,
+    "maxChannelDelta": 1
+  }
+            ],
+            "diagnosis": "Target-colorspace blending raises the exact diagnostic score but it remains below the support threshold. The isolated neutral AA fixture now matches CPU 128, while this full stroke scene still has byte-exact residuals plus a small cap/join AA boundary tail. Normal route remains refused.",
+            "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+          }
