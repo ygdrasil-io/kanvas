@@ -114,35 +114,35 @@ class RuntimeEffectDescriptorWebGpuTest {
     }
 
     @Test
-    fun `SpiralRT runtime shader refuses WebGPU route until scene parity passes`() {
+    fun `SpiralRT runtime shader renders through descriptor-backed WGSL path`() {
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
         val effect = SkRuntimeEffect.MakeForShader(SkBuiltinShaderEffectsSimple.SPIRAL_RT_SKSL).effect!!
         val shader = effect.makeShader(
-            uniforms = SkData.MakeWithCopy(bytesOf(0.01f, 0f, 8f, 8f, 1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f)),
+            uniforms = SkData.MakeWithCopy(bytesOf(0.01f, 0f, 32f, 32f, 1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f)),
             children = emptyArray(),
         )!!
 
-        context!!.use { ctx ->
+        val pixels = context!!.use { ctx ->
             SkWebGpuDevice(ctx, W, H).use { device ->
                 device.setBackground(SK_ColorBLACK)
-                val error = assertThrows(IllegalStateException::class.java) {
-                    SkCanvas(device).drawRect(
-                        SkRect.MakeLTRB(0f, 0f, 48f, 48f),
-                        SkPaint().apply {
-                            this.shader = shader
-                            isAntiAlias = false
-                        },
-                    )
-                    device.flush()
-                }
-                assertTrue(
-                    error.message!!.contains("has no supported WGSL implementation"),
-                    "expected stable unsupported-WGSL diagnostic, got ${error.message}",
+                SkCanvas(device).drawRect(
+                    SkRect.MakeLTRB(0f, 0f, W.toFloat(), H.toFloat()),
+                    SkPaint().apply {
+                        this.shader = shader
+                        isAntiAlias = false
+                    },
                 )
+                val out = device.flush()
+                assertEquals(null, device.runtimeEffectFallbackReasonForDiagnostics())
+                out
             }
         }
+
+        assertEquals(listOf(62, 193, 0, 255), pixels.rgbaAt(32, 32))
+        assertEquals(listOf(194, 61, 0, 255), pixels.rgbaAt(40, 20))
+        assertEquals(listOf(170, 85, 0, 255), pixels.rgbaAt(20, 40))
     }
 
     @Test

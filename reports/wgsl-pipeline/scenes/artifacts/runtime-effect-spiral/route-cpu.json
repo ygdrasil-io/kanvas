@@ -4,11 +4,11 @@
   "drawKind": "SpiralRTDescriptorGM",
   "status": "pass",
   "selectedRoute": "cpu.runtime-effect.descriptor.spiral_rt",
-  "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
+  "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl parserReflected=true status=supported state=[blendMode=kSrcOver]",
   "fallbackReason": "none",
   "runtimeEffectStableId": "runtime.spiral_rt",
   "wgslImplementationId": "wgsl/runtime_spiral_rt",
   "uniformBytes": 48,
-  "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest#SpiralRT descriptor scene captures visual parity blocker evidence",
+  "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest#SpiralRT descriptor scene captures supported evidence",
   "sourceReport": "reports/wgsl-pipeline/2026-06-02-renderer-feature-conversion-sprint.md"
 }
