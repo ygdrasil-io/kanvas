@@ -15,7 +15,7 @@ Readiness remains 67.75%. No PM readiness percentage is moved by this sprint.
 |---|---|---|---|
 | `m60-bounded-stroke-cap-join` | Clip/RRect/Path AA | `expected-unsupported` | Stroke width/cap/join facts are captured, but WebGPU refuses before rendering with `coverage.stroke-cap-join-visual-parity-below-threshold`. |
 | `m64-spiral-rt-descriptor-backed` | Registered runtime effects | `expected-unsupported` | Descriptor registry and WGSL parser evidence exist, but WebGPU execution remains unpromoted with `runtime-effect.spiral-visual-parity-below-threshold`. |
-| `m64-linear-gradient-rt-descriptor-backed` | Registered runtime effects | `expected-unsupported` | Descriptor registry and WGSL parser evidence exist, but WebGPU execution remains unpromoted with `runtime-effect.linear-gradient-visual-parity-below-threshold`. |
+| `m64-linear-gradient-rt-descriptor-backed` | Registered runtime effects | `expected-unsupported` | Descriptor registry and WGSL parser evidence exist, and diagnostic WebGPU rendering reaches 99.22% strict parity (4064/4096 exact pixels, max delta 1; tolerance=1 parity 100.00%). This remains below the 99.95 support floor with mismatch pattern `x=43 y=32..63 green channel -1 vs CPU`. |
 
 ## Evidence
 
