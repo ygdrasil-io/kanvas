@@ -19,6 +19,12 @@ This is not a Ganesh or Graphite port. Kanvas keeps its WebGPU backend,
 Kotlin/WGSL pipeline, explicit fallback diagnostics, generated evidence
 discipline, and registered runtime-effect model.
 
+WGSL is the shader implementation target for this plan. SkSL is referenced only
+where Kanvas exposes or emulates Skia compatibility APIs such as
+`SkRuntimeEffect`; it is not a dynamic shader language for Kanvas RC/MEP work.
+Runtime effects that count as supported must have registered Kanvas
+descriptors, Kotlin/CPU behavior, and parser-validated WGSL GPU modules.
+
 ## Big Target
 
 Kanvas should become a Skia-like 2D renderer with a real-time lane:
@@ -134,7 +140,7 @@ Expected milestone deltas are capped until evidence lands:
 | M61 | Image Filter DAG V2 | Render bounded multi-node image-filter graphs with explicit intermediate texture ownership. |
 | M62 | Text & Glyph Rendering V1 | Render simple text through the font spec pack, bundled Liberation references, glyph masks, and a WebGPU glyph atlas. |
 | M63 | Color, Blend & ColorFilter Parity | Promote bounded SrcOver, linear-gradient color-filter kPlus, and sweep-gradient clamp rows; refuse wide-gamut color-space and advanced blend chains with stable reasons. |
-| M64 | Registered Runtime Effects | Promote SimpleRT through a registered Kotlin/WGSL descriptor with parser-reflected uniforms; refuse SpiralRT without WGSL descriptor and arbitrary SkSL with stable reasons. |
+| M64 | Registered Runtime Effects | Promote SimpleRT through a registered Kotlin/WGSL descriptor with parser-reflected uniforms; refuse SpiralRT without WGSL descriptor and arbitrary Skia/SkSL runtime shader input with stable reasons because SkSL compatibility is not a dynamic compiler target. |
 | M65 | Real-Time Scene Runtime | Add a Kadre-hosted frame loop, display-list replay boundary, invalidation diagnostics, cache telemetry, live controls, and reporting-only frame metrics. |
 | M66 | Skia GM Promotion Wave | Aggregate M60-M64 promotions and add only the missing rows needed to reach the selected 50-100 GM/reference set. |
 | M67 | Performance Tiering | Promote M65 frame metrics into a `frame.headless-webgpu` candidate gate, family budgets, and deterministic quarantine/rebaseline evidence. |
@@ -158,7 +164,7 @@ Expected milestone deltas are capped until evidence lands:
 | M84 | Native Frame Timing Candidate Gate | Turn native Kadre frame timing into a candidate/reporting-only payload with warmup/measured samples, host/adapter/JDK metadata, cache-counter schema placeholders, quarantine policy, and a negative threshold fixture without making `frame.kadre-windowed` release-blocking. |
 | M85 | Runtime Resource Lifetime And Cache Hardening | Make the selected realtime route's cache/resource behavior auditable with a deterministic selected-scene ledger, bounded cache key spaces, resize resource-generation invalidation, cache pressure before/after evidence, and stable device-loss unsupported diagnostics without claiming observed WebGPU runtime cache telemetry, arbitrary scene cache behavior, or real device-lost recovery. |
 | M86 | Fidelity Burn-Down Wave 2 | Rank selected GM/reference rows by PM value and reference quality, classify visible diffs and expected-unsupported rows by root cause, expose remediation targets, and keep readiness unchanged unless a later renderer fix provides before/after artifacts. |
-| M87 | Registered Runtime Effect Live Editing V2 | Promote selected `runtime.simple_rt` live parameter editing with reflected `gColor` uniform layout, bounded parameter metadata, edited-state CPU/GPU/diff artifacts, stable telemetry, and explicit refusals for arbitrary SkSL and missing WGSL descriptors without claiming broad runtime-effect live controls. |
+| M87 | Registered Runtime Effect Live Editing V2 | Promote selected `runtime.simple_rt` live parameter editing with reflected `gColor` uniform layout, bounded parameter metadata, edited-state CPU/GPU/diff artifacts, stable telemetry, and explicit refusals for arbitrary Skia/SkSL runtime shader input and missing WGSL descriptors without claiming broad runtime-effect live controls or dynamic SkSL compilation. |
 | M88 | Realtime Renderer Release Candidate 2 | Freeze the current realtime renderer API/demo surface, correctness/performance gate set, limitation matrix, PM demo script, and release notes without claiming new broad support or moving readiness denominators. |
 | M70 | Release Candidate Renderer | Freeze API, runtime, PM demo, CI gates, and known limitations for a renderer release candidate. |
 

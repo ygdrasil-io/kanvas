@@ -53,7 +53,7 @@ copy, split it into implementation, evidence, and PM packaging tickets.
 | M61 | Filter DAG planner, intermediate texture allocation, CPU/GPU filter parity rows, unsupported DAG diagnostics, graph visualization for PM. |
 | M62 | Font loading boundary, glyph mask raster, glyph atlas upload/cache, simple text scenes, text refusal policy for shaping/color/emoji gaps. |
 | M63 | Blend/color matrix/gradient expansion, premul policy, color-space diagnostics, GM-derived color scenes, diff thresholds. |
-| M64 | Runtime-effect registry, WGSL parser validation, uniform reflection and packing, CPU/GPU parity rows, unsupported SkSL facade diagnostics. |
+| M64 | Runtime-effect registry, WGSL parser validation, uniform reflection and packing, CPU/GPU parity rows, unsupported Skia/SkSL compatibility-facade diagnostics. |
 | M65 | Kadre-hosted scene runtime model, frame loop, invalidation, cache telemetry, interactive controls, live PM report export. |
 | M66 | GM candidate ranking, promotion batches, inventory-to-evidence migration, family counters, refusal burn-down. |
 | M67 | Family performance budgets, frame budget gates, warm/cold cache metrics, quarantine/rebaseline flow, release-blocking policy. |
@@ -82,6 +82,7 @@ Review agents should reject work that:
 - removes a refusal without a replacement support path;
 - treats static inventory as rendering proof;
 - adds font, codec, or SkSL substitutes to clear a label;
+- writes PM copy that presents SkSL as the Kanvas shader implementation target;
 - changes `PipelineKey` with axes that are only uniform values;
 - introduces GPU-only behavior without a CPU reference or explicit exception.
 - works around a suspected `wgsl4k` parser/IR/generator issue inside Kanvas
@@ -166,6 +167,10 @@ Kadre:
   M65/M68;
 - because it is incubating and unpublished, include it as a git submodule when
   implementation starts unless it has been published by then;
+- keep headless CI/package gates independent from Kadre resolution unless the
+  workflow explicitly initializes `external/poc-koreos`;
+- document native demo setup with `git submodule update --init --recursive
+  external/poc-koreos` when a ticket requires local Kadre execution;
 - do not substitute another window shell without updating this spec and the
   target document.
 

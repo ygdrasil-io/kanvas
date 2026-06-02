@@ -39,7 +39,7 @@ Skia-like fidelity score.
 | Text/glyphs | Upstream Skia reference when font fixture matches; otherwise bundled Liberation CPU oracle. | Kanvas CPU glyph oracle with exact font file recorded. | Counts toward fidelity only when font/reference provenance is comparable. |
 | Paint/blend/color | Upstream Skia GM PNG or scalar formula fixture derived from Skia semantics. | CPU Kanvas oracle for unsupported upstream coverage. | Formula fixture must cite operation and tolerance. |
 | Bitmap/image sampling | Upstream Skia GM PNG or Skia-rendered fixture. | CPU Kanvas oracle for route smoke. | Counts toward fidelity only with Skia or Skia-derived fixture. |
-| Runtime effects | Registered descriptor with CPU oracle plus generated WGSL. | No arbitrary SkSL reference. | Counts toward runtime-effect breadth; Skia fidelity only if matching upstream behavior is documented. |
+| Runtime effects | Registered descriptor with CPU oracle plus generated WGSL. | Skia/SkSL API compatibility rows may be refused, but arbitrary SkSL is not a shader implementation target. | Counts toward runtime-effect breadth; Skia fidelity only if matching upstream behavior is documented. |
 
 Rows with `reference.cpu-oracle` are valuable but must not be described as
 "closer to Skia" unless a Skia reference exists. They can move rendering

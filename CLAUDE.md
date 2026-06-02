@@ -61,6 +61,18 @@ For completed Linear backlog archival, use
 archive snapshots are historical evidence only; active backlog remains in
 Linear and the current target/spec documents.
 
+For RC/MEP wording, PM demos, and runtime-effect explanations, WGSL is the
+shader implementation target. SkSL may be mentioned only as Skia API
+compatibility context: Kanvas does not dynamically compile SkSL, does not build
+a SkSL compiler/IR/VM, and supports runtime effects through registered Kanvas
+descriptors with Kotlin CPU behavior plus parser-validated WGSL GPU modules.
+
+For RC/MEP CI and PM packages, keep mandatory headless validation separate from
+native Kadre demo execution. `pipelinePmBundle` and checked-in RC validators
+must not accidentally resolve unpublished Kadre artifacts or require an
+initialized `external/poc-koreos` submodule. Native Kadre demos are opt-in local
+evidence and must document when the submodule is required.
+
 Hard architecture decisions:
 
 - Do not port Ganesh or Graphite.

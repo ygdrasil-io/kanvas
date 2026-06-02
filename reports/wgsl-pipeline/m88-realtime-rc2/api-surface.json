@@ -2,6 +2,11 @@
     "schemaVersion": 1,
     "packId": "m88-api-surface-freeze-v1",
     "status": "frozen-for-rc2",
+    "shaderTarget": {
+        "implementationLanguage": "WGSL",
+        "skslScope": "Skia API compatibility facade only; no dynamic SkSL compilation.",
+        "runtimeEffectSupport": "Registered Kanvas descriptor with Kotlin CPU behavior and parser-validated WGSL GPU module."
+    },
     "entryPoints": [
         {
             "name": ":kadre-runtime:pipelineM88ReleaseCandidate2",
@@ -22,8 +27,8 @@
     ],
     "nonGoals": [
         "No Ganesh or Graphite port.",
-        "No SkSL compiler, SkSL IR, or SkSL VM.",
-        "No arbitrary SkSL runtime-effect support.",
+        "No SkSL compiler, SkSL IR, or SkSL VM; WGSL is the shader implementation target.",
+        "No arbitrary Skia/SkSL runtime shader input support.",
         "No full Skia parity claim.",
         "No release-grade windowed FPS gate in RC2.",
         "No window-surface screenshot/readback claim."
