@@ -98,14 +98,21 @@
       "cpuRoute": "cpu.runtime-effect.descriptor.linear_gradient_rt",
       "gpuRoute": "webgpu.runtime-effect.descriptor.linear_gradient_rt.expected-unsupported",
       "pipelineKey": "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true uniforms=in_colors0@0,in_colors1@16 status=expected-unsupported state=[blendMode=kSrcOver] milestone=renderer-feature-conversion",
-      "fallbackReason": "runtime-effect.linear-gradient-visual-parity-below-threshold",
+      "fallbackReason": "runtime-effect.linear-gradient-visual-parity-below-threshold; strictSimilarity=99.22; threshold=99.95; matchingPixels=4064/4096; maxChannelDelta=1; tolerance1Similarity=100.00; mismatchPattern=x=43 y=32..63 green channel -1 vs CPU",
       "pixels": 4096,
-      "matchingPixels": 0,
+      "matchingPixels": 4064,
+      "maxChannelDelta": 1,
       "threshold": 99.95,
+      "gpuSimilarity": 99.22,
+      "gpuMatchingPixelsTolerance1": 4096,
+      "gpuSimilarityTolerance1": 100.00,
+      "mismatchPattern": "x=43 y=32..63 green channel -1 vs CPU",
       "gpuRouteDetails": {
         "runtimeEffectStableId": "runtime.linear_gradient_rt",
         "wgslImplementationId": "wgsl/runtime_linear_gradient_rt",
         "parserEvidence": "RuntimeEffectDescriptorWebGpuTest#runtime LinearGradientRT descriptor WGSL parses and reflects uniforms",
+        "candidateRenderEvidence": "RuntimeEffectDescriptorSceneCaptureTest#LinearGradientRT descriptor scene captures visual parity blocker evidence",
+        "promotionDecision": "KEEP_UNSUPPORTED",
         "uniformLayout": {
           "in_colors0": 0,
           "in_colors1": 16

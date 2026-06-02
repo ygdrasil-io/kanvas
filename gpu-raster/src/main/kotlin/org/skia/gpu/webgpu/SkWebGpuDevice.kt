@@ -293,6 +293,12 @@ public class SkWebGpuDevice(
      */
     private val targetColorSpaceBlend: Boolean = false,
     /**
+     * FOR-237 diagnostic-only runtime-effect path. This lets focused evidence
+     * tests render known, parser-validated WGSL candidates without exposing
+     * them as supported WebGPU runtime effects.
+     */
+    internal val allowUnpromotedRuntimeEffectsForDiagnostics: Boolean = false,
+    /**
      * G6.2 — backing format of the intermediate render target. All draw
      * pipelines target this format. Default `RGBA16Float` (F16) buys
      * sub-byte precision on intermediate blends, gradient stop lerps,
@@ -2377,6 +2383,7 @@ public class SkWebGpuDevice(
             ),
         )
 
+    private val runtimeLinearGradientShader: GPUShaderModule = loadShader("shaders/runtime_linear_gradient_rt.wgsl")
     private val runtimeSimpleShader: GPUShaderModule = loadShader("shaders/runtime_simple_rt.wgsl")
     private val runtimeEffectPipelineCache: MutableMap<Pair<String, SkBlendMode>, GPURenderPipeline> = mutableMapOf()
     private var lastRuntimeEffectFallbackReason: String? = null
@@ -2404,6 +2411,7 @@ public class SkWebGpuDevice(
 
     private fun runtimeEffectShaderFor(wgslImplementationId: String): GPUShaderModule =
         when (wgslImplementationId) {
+            "wgsl/runtime_linear_gradient_rt" -> runtimeLinearGradientShader
             "wgsl/runtime_simple_rt" -> runtimeSimpleShader
             else -> error("Unsupported runtime-effect WGSL implementation: $wgslImplementationId")
         }
@@ -9226,7 +9234,11 @@ public class SkWebGpuDevice(
                 "runtime effect ${descriptor.stableId} has no supported WGSL implementation"
             return false
         }
-        if (wgslImplementationId !in SUPPORTED_RUNTIME_EFFECT_WGSL_IDS) {
+        if (
+            wgslImplementationId !in SUPPORTED_RUNTIME_EFFECT_WGSL_IDS &&
+            !(allowUnpromotedRuntimeEffectsForDiagnostics &&
+                wgslImplementationId in DIAGNOSTIC_RUNTIME_EFFECT_WGSL_IDS)
+        ) {
             lastRuntimeEffectFallbackReason =
                 "runtime effect ${descriptor.stableId} has no supported WGSL implementation"
             return false
@@ -9281,6 +9293,7 @@ public class SkWebGpuDevice(
 
     private fun runtimeEffectUniformBytesFor(wgslImplementationId: String): Int =
         when (wgslImplementationId) {
+            "wgsl/runtime_linear_gradient_rt" -> 32
             "wgsl/runtime_simple_rt" -> 16
             else -> error("Unsupported runtime-effect WGSL implementation: $wgslImplementationId")
         }
@@ -15770,6 +15783,7 @@ public class SkWebGpuDevice(
         radialGradientShader.close()
         sweepGradientShader.close()
         bitmapShader.close()
+        runtimeLinearGradientShader.close()
         runtimeSimpleShader.close()
         layerCompositeShader.close()
         blurGaussianShader.close()
@@ -15784,6 +15798,9 @@ public class SkWebGpuDevice(
     private companion object {
         private val SUPPORTED_RUNTIME_EFFECT_WGSL_IDS = setOf(
             "wgsl/runtime_simple_rt",
+        )
+        private val DIAGNOSTIC_RUNTIME_EFFECT_WGSL_IDS = setOf(
+            "wgsl/runtime_linear_gradient_rt",
         )
 
         /**

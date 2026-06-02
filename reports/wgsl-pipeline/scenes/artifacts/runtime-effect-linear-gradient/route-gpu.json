@@ -6,7 +6,7 @@
   "status": "expected-unsupported",
   "selectedRoute": "webgpu.runtime-effect.descriptor.linear_gradient_rt.expected-unsupported",
   "pipelineKey": "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
-  "fallbackReason": "runtime-effect.linear-gradient-visual-parity-below-threshold",
+  "fallbackReason": "runtime-effect.linear-gradient-visual-parity-below-threshold; strictSimilarity=99.22; threshold=99.95; matchingPixels=4064/4096; maxChannelDelta=1; tolerance1Similarity=100.00; mismatchPattern=x=43 y=32..63 green channel -1 vs CPU",
   "runtimeEffectStableId": "runtime.linear_gradient_rt",
   "wgslImplementationId": "wgsl/runtime_linear_gradient_rt",
   "uniformBytes": 32,
