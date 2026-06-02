@@ -37,6 +37,9 @@ def main() -> int:
 
     evidence_path = "reports/wgsl-pipeline/m88-realtime-rc2/rc2-evidence.json"
     evidence = load_json(root, evidence_path)
+    standalone_api_surface = load_json(root, "reports/wgsl-pipeline/m88-realtime-rc2/api-surface.json")
+    standalone_gate_freeze = load_json(root, "reports/wgsl-pipeline/m88-realtime-rc2/gate-freeze.json")
+    standalone_support = load_json(root, "reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json")
 
     require_value(evidence, "packId", "m88-realtime-renderer-rc2-v1")
     require_value(evidence, "status", "pass")
@@ -59,6 +62,7 @@ def main() -> int:
     require(not failed_rows, f"validationRows not passing: {', '.join(failed_rows)}")
 
     support = evidence.get("supportRefusalMatrix", {})
+    require(support == standalone_support, "support-refusal-matrix.json diverges from rc2-evidence.json")
     counters = support.get("dashboardCounters", {})
     require(counters.get("totalRows", 0) > 0, "dashboardCounters.totalRows must be positive")
     require(counters.get("failRows") == 0, "dashboardCounters.failRows must stay zero")
@@ -66,15 +70,50 @@ def main() -> int:
     require(counters.get("passRows") == 21, "dashboardCounters.passRows must stay frozen at 21")
     require(counters.get("expectedUnsupportedRows") == 5, "dashboardCounters.expectedUnsupportedRows must stay frozen at 5")
 
+    api_surface = evidence.get("apiSurface", {})
+    require(api_surface == standalone_api_surface, "api-surface.json diverges from rc2-evidence.json")
+    shader_target = api_surface.get("shaderTarget", {})
+    require(shader_target.get("implementationLanguage") == "WGSL", "M88 shader target must be WGSL")
+    require("no dynamic SkSL compilation" in shader_target.get("skslScope", ""), "SkSL scope must be compatibility-only")
+    require("parser-validated WGSL" in shader_target.get("runtimeEffectSupport", ""), "runtime-effect support must name parser-validated WGSL")
+
+    categories = support.get("categories", [])
+    required_categories = {"supported", "expected-unsupported", "dependency-gated", "implementation-gap", "reporting-only"}
+    seen_categories = {category.get("category") for category in categories}
+    require(seen_categories == required_categories, "support/refusal categories changed")
+    for category in categories:
+        require(category.get("pmMeaning"), f"missing pmMeaning for {category.get('category')}")
+        require(category.get("nextAction"), f"missing nextAction for {category.get('category')}")
+
+    stable_refusals = support.get("stableRefusals", [])
+    sksl_refusal = next((row for row in stable_refusals if row.get("fallbackReason") == "runtime-effect.arbitrary-sksl-unsupported"), None)
+    require(sksl_refusal is not None, "SkSL compatibility refusal row is missing")
+    require("WGSL" in sksl_refusal.get("summary", ""), "SkSL refusal summary must point back to WGSL")
+    require(sksl_refusal.get("pmImpact") == "high", "SkSL refusal PM impact must remain high")
+
+    triage = support.get("pmTriage", [])
+    triage_classifications = {row.get("classification") for row in triage}
+    require(required_categories - {"supported"} <= triage_classifications, "PM triage must cover refusal/reporting categories")
+
     gate_freeze = evidence.get("gateFreeze", {})
+    require(gate_freeze == standalone_gate_freeze, "gate-freeze.json diverges from rc2-evidence.json")
     required_gates = gate_freeze.get("requiredCorrectnessGates", [])
     require(any(gate.get("name") == "pipelinePmBundle" and gate.get("phase") == "blocking" for gate in required_gates), "pipelinePmBundle must remain a blocking correctness gate")
+    kadre_generation_gate = next((gate for gate in required_gates if gate.get("name") == ":kadre-runtime:pipelineM88ReleaseCandidate2"), None)
+    require(kadre_generation_gate is not None, "Kadre runtime source generation gate is missing")
+    require(kadre_generation_gate.get("phase") == "source-generation-local", "Kadre runtime source generation must stay local/non-CI")
+
+    pm_package = evidence.get("pmPackage", {})
+    require(pm_package.get("generationCommand") == "rtk ./gradlew --no-daemon pipelinePmBundle", "PM bundle generation must stay headless")
+    require(pm_package.get("headlessCiRequiresKadreSubmodule") is False, "Headless PM package must not require Kadre submodule")
+    require("external/poc-koreos" in pm_package.get("nativeKadreDemoSetup", ""), "Native Kadre demo setup command is missing")
 
     non_claims = "\n".join(evidence.get("nonClaims", []))
     require("does not add broad Skia parity" in non_claims, "broad Skia parity non-claim is missing")
     require("does not promote frame.kadre-windowed" in non_claims, "native frame timing non-claim is missing")
     require("does not claim observed WebGPU runtime cache telemetry" in non_claims, "runtime cache telemetry non-claim is missing")
     require("does not claim window-surface screenshot/readback" in non_claims, "window readback non-claim is missing")
+    require("WGSL remains the shader implementation target" in non_claims, "WGSL shader target non-claim is missing")
 
     for source in evidence.get("sourceEvidence", []):
         require((root / source).is_file(), f"source evidence is missing: {source}")

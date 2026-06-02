@@ -16,58 +16,104 @@
             "category": "supported",
             "reason": "selected-generated-and-runtime-evidence",
             "count": 21,
-            "summary": "Rows with CPU/GPU/reference or descriptor parity artifacts."
+            "summary": "Rows with CPU/GPU/reference or descriptor parity artifacts.",
+            "pmMeaning": "The selected row is supported inside its documented bounds.",
+            "nextAction": "Protect with dashboard gate and avoid broadening the claim without new evidence."
         },
         {
             "category": "expected-unsupported",
             "reason": "stable-fallback-diagnostics",
             "count": 5,
-            "summary": "Rows intentionally refused with stable fallback reasons."
+            "summary": "Rows intentionally refused with stable fallback reasons.",
+            "pmMeaning": "The limitation is known, intentional, and visible rather than a hidden failure.",
+            "nextAction": "Promote only when a CPU/GPU/reference route and diff evidence exist."
         },
         {
             "category": "dependency-gated",
             "reason": "external-delivery-required",
             "count": 3,
-            "summary": "Font shaping/color emoji/codec breadth depends on real dependencies, not substitutes."
+            "summary": "Font shaping/color emoji/codec breadth depends on real dependencies, not substitutes.",
+            "pmMeaning": "The feature should wait for the real dependency or upstream-quality delivery.",
+            "nextAction": "Track dependency status; do not add short-lived substitutes to clear the row."
         },
         {
             "category": "implementation-gap",
             "reason": "broad-rendering-family-incomplete",
             "count": 6,
-            "summary": "Broad Path AA, image-filter DAG, layers, display-list replay, runtime effects, and texture/image support remain incomplete."
+            "summary": "Broad Path AA, image-filter DAG, layers, display-list replay, runtime effects, and texture/image support remain incomplete.",
+            "pmMeaning": "The family has useful selected evidence but is not product-complete.",
+            "nextAction": "Open feature tickets with before/after artifacts instead of changing thresholds."
         },
         {
             "category": "reporting-only",
             "reason": "candidate-not-release-blocking",
             "count": 3,
-            "summary": "M84 native timing, M85 deterministic cache ledger, and selected live-edit telemetry are evidence but not release-grade broad gates."
+            "summary": "M84 native timing, M85 deterministic cache ledger, and selected live-edit telemetry are evidence but not release-grade broad gates.",
+            "pmMeaning": "The data is useful for decisions but does not block release yet.",
+            "nextAction": "Promote to release gate only after variance, adapter, and cache telemetry policy are accepted."
         }
     ],
     "stableRefusals": [
         {
             "status": "expected-unsupported",
             "fallbackReason": "runtime-effect.arbitrary-sksl-unsupported",
-            "summary": "M87/M88 keep arbitrary SkSL outside RC2 scope."
+            "summary": "M87/M88 refuse arbitrary Skia/SkSL runtime shader input because Kanvas targets registered descriptors plus WGSL, not dynamic SkSL compilation.",
+            "pmImpact": "high",
+            "nextTicketType": "runtime-effect WGSL descriptor registration"
         },
         {
             "status": "expected-unsupported",
             "fallbackReason": "runtime-effect.wgsl-descriptor-missing",
-            "summary": "Runtime effects need registered WGSL descriptors for GPU support."
+            "summary": "Runtime effects need registered WGSL descriptors for GPU support.",
+            "pmImpact": "high",
+            "nextTicketType": "runtime-effect WGSL descriptor registration"
         },
         {
             "status": "expected-unsupported",
             "fallbackReason": "m85.device-loss-recreate-observation-unsupported",
-            "summary": "Real device-loss recovery is not claimed in RC2."
+            "summary": "Real device-loss recovery is not claimed in RC2.",
+            "pmImpact": "medium",
+            "nextTicketType": "native runtime resilience"
         },
         {
             "status": "expected-unsupported",
             "fallbackReason": "m83.text.placeholder-glyph-run-not-routed",
-            "summary": "Broad display-list text replay is not claimed in RC2."
+            "summary": "Broad display-list text replay is not claimed in RC2.",
+            "pmImpact": "high",
+            "nextTicketType": "text/glyph replay promotion"
         },
         {
             "status": "expected-unsupported",
             "fallbackReason": "m83.filter.placeholder-dag-not-routed",
-            "summary": "Broad display-list image-filter replay is not claimed in RC2."
+            "summary": "Broad display-list image-filter replay is not claimed in RC2.",
+            "pmImpact": "high",
+            "nextTicketType": "image-filter DAG replay promotion"
+        }
+    ],
+    "pmTriage": [
+        {
+            "family": "image-filter DAG",
+            "classification": "implementation-gap",
+            "pmImpact": "high",
+            "rcMepAction": "Keep visible as expected-unsupported until bounded DAG replay has CPU/GPU/diff evidence."
+        },
+        {
+            "family": "text/glyphs",
+            "classification": "dependency-gated",
+            "pmImpact": "high",
+            "rcMepAction": "Do not use placeholder glyphs as support; wait for real font/glyph delivery."
+        },
+        {
+            "family": "runtime effects",
+            "classification": "expected-unsupported",
+            "pmImpact": "high",
+            "rcMepAction": "Promote only registered Kanvas descriptors backed by parser-validated WGSL."
+        },
+        {
+            "family": "native timing/cache",
+            "classification": "reporting-only",
+            "pmImpact": "medium",
+            "rcMepAction": "Keep candidate until windowed variance and observed runtime cache telemetry are accepted."
         }
     ]
 }

@@ -183,7 +183,7 @@ PM wording must distinguish:
 
 M87 packages one selected registered runtime effect as PM-visible live-editing
 evidence. It should answer "can a registered effect parameter be edited safely?"
-without implying arbitrary SkSL compatibility.
+without implying arbitrary SkSL compatibility or dynamic SkSL compilation.
 
 Minimum PM artifacts:
 
@@ -203,9 +203,10 @@ The evidence JSON must report:
 - stable refusal reasons `runtime-effect.arbitrary-sksl-unsupported` and
   `runtime-effect.wgsl-descriptor-missing`.
 
-PM wording must say that M87 proves selected SimpleRT live editing. It must not
-claim broad runtime-effect live controls, arbitrary SkSL compilation, or new
-WGSL support for dispatch-only runtime effects.
+PM wording must say that M87 proves selected SimpleRT live editing through a
+registered Kanvas descriptor and parser-validated WGSL. It must not claim broad
+runtime-effect live controls, dynamic SkSL compilation, or new WGSL support for
+dispatch-only runtime effects.
 
 ## M88 Realtime Renderer RC2 PM Evidence
 
@@ -237,8 +238,30 @@ The evidence JSON must report:
   dependency-gated, implementation-gap, and reporting-only scope.
 
 PM wording must say that M88 produces a reproducible RC2 handoff. It must not
-claim full Skia parity, arbitrary SkSL, release-grade windowed FPS, broad
-observed runtime cache telemetry, or window-surface screenshot/readback.
+claim full Skia parity, arbitrary Skia/SkSL runtime shader input, release-grade
+windowed FPS, broad observed runtime cache telemetry, or window-surface
+screenshot/readback. If a fallback reason contains `sksl`, PM copy must explain
+that SkSL names the Skia compatibility surface being refused; the shader target
+remains WGSL.
+
+## RC/MEP CI And Package Dependency Policy
+
+Mandatory RC/MEP gates must be runnable in headless CI without resolving Kadre
+from unpublished Maven artifacts and without requiring `external/poc-koreos` to
+be initialized. The checked-in RC validator should inspect repository artifacts
+and JSON contracts only.
+
+Native Kadre demos remain valuable PM evidence, but they are opt-in local
+checks. Agent docs and PM scripts must state when to run:
+
+```bash
+git submodule update --init --recursive external/poc-koreos
+```
+
+Do not make `pipelinePmBundle` depend on native Kadre tasks unless the CI job
+explicitly provisions the submodule and native runtime. Missing native Kadre
+setup should be reported as `dependency-gated` or opt-in demo unavailable, not
+as an opaque release-gate failure.
 
 ## PM Language
 
@@ -256,6 +279,7 @@ Avoid:
 - "all image filters";
 - "all text";
 - "runtime effects compatible with arbitrary SkSL";
+- "SkSL is the shader implementation target";
 - "GPU faster than CPU" without measured evidence.
 
 ## Open PM Questions

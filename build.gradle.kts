@@ -6142,7 +6142,7 @@ tasks.register("pipelinePmBundle") {
                 "reflectionVerified" to (m87Reflection["layoutVerified"] == true),
                 "pipelineKeyStableAcrossUniformEdits" to (m87Telemetry["pipelineKeyStableAcrossUniformEdits"] == true),
                 "claimLevel" to "selected-registered-runtime-effect-live-edit-evidence",
-                "notice" to "M87 proves selected SimpleRT live parameter editing with reflected layout and CPU/GPU parity artifacts; arbitrary SkSL and missing WGSL descriptors remain expected-unsupported.",
+                "notice" to "M87 proves selected SimpleRT live parameter editing with reflected layout and CPU/GPU parity artifacts; arbitrary Skia/SkSL runtime shader input and missing WGSL descriptors remain expected-unsupported because Kanvas targets registered WGSL implementations, not dynamic SkSL compilation.",
             ),
             "m88ReleaseCandidate2" to linkedMapOf<String, Any>(
                 "evidenceMarkdown" to "release/m88-realtime-rc2/rc2-evidence.md",
@@ -6160,9 +6160,9 @@ tasks.register("pipelinePmBundle") {
                 "readinessDelta" to 0.0,
                 "nativeTimingPhase" to "reporting-only",
                 "resourceCachePhase" to "reporting-only",
-                "pmPackageCommand" to "rtk ./gradlew --no-daemon :kadre-runtime:pipelineM88ReleaseCandidate2 pipelinePmBundle",
+                "pmPackageCommand" to "rtk ./gradlew --no-daemon pipelinePmBundle",
                 "releaseBlocking" to false,
-                "notice" to "M88 freezes the RC2 PM package, API surface, gate set, and support/refusal matrix. It keeps readiness at 67.75% and does not claim broad Skia parity, arbitrary SkSL, release-grade windowed FPS, or observed broad runtime cache telemetry.",
+                "notice" to "M88 freezes the RC2 PM package, API surface, gate set, and support/refusal matrix. It keeps readiness at 67.75% and does not claim broad Skia parity, arbitrary Skia/SkSL runtime shader input, release-grade windowed FPS, observed broad runtime cache telemetry, or dynamic SkSL compilation; WGSL remains the shader implementation target.",
             ),
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
@@ -6679,7 +6679,7 @@ tasks.register("pipelinePmBundle") {
                 "Expected-unsupported rows are planning evidence, not support claims.",
                 "Performance trend warnings remain non-blocking until an owner-approved release-blocking policy exists.",
                 "The bundle is a static PM review artifact and does not execute GPU captures.",
-                "The M50 font/text rows prove selected simple OpenType evidence and explicit refusals only; broad font, emoji, shaping, SDF, LCD, glyph-mask, codec, arbitrary SkSL, arbitrary image-filter DAG, and broad Path AA support remain outside this bundle's claims.",
+                "The M50 font/text rows prove selected simple OpenType evidence and explicit refusals only; broad font, emoji, shaping, SDF, LCD, glyph-mask, codec, arbitrary Skia/SkSL runtime shader input, arbitrary image-filter DAG, and broad Path AA support remain outside this bundle's claims.",
                 "M52 promoted 10 inventory-derived rows; the rows prove only their generated scene contracts and do not turn M51 inventory status into broad Skia GM support.",
                 "M53 promotes selected GM feature rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, font, codec, emoji, shaping, SDF, LCD, and glyph-mask support remain outside this bundle's claims.",
                 "M54 promotes selected hard feature depth rows only; broad Skia GM parity, broad image-filter DAGs, broad Path AA, dependency-gated font/codec/emoji substitutes, and release-blocking performance gates remain outside this bundle's claims.",
@@ -6775,7 +6775,7 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- `fidelity/m86-fidelity-burndown/`: M86 fidelity burn-down ranking, root-cause classification, and remediation target evidence.")
                 appendLine("- M86 fidelity counters live in `manifest.json` under `m86FidelityBurndown`; this is classification and planning evidence, not a renderer visual-fix claim.")
                 appendLine("- `runtime/m87-runtime-effect-live-editing/`: M87 selected registered runtime-effect live-editing evidence, edited-state PNGs, route JSON, and reflection metadata.")
-                appendLine("- M87 live-editing counters live in `manifest.json` under `m87RuntimeEffectLiveEditing`; this proves selected `runtime.simple_rt` parameter editing and keeps arbitrary SkSL and missing WGSL descriptors expected-unsupported.")
+                appendLine("- M87 live-editing counters live in `manifest.json` under `m87RuntimeEffectLiveEditing`; this proves selected `runtime.simple_rt` parameter editing and keeps arbitrary Skia/SkSL runtime shader input and missing WGSL descriptors expected-unsupported because WGSL remains the implementation target.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }

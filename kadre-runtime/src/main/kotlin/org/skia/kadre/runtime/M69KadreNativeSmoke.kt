@@ -61,6 +61,8 @@ private const val SCENE_CONTRACT_VERSION = 1
 private const val SCENE_CONTRACT_OWNER = "kanvas"
 private const val REPORTING_ONLY_GATE_PHASE = "reportingOnly"
 private const val CAPTURE_BYTES_PER_ROW_ALIGNMENT = 256
+private const val RC_MEP_PM_DEMO_FRAMES = 3600
+private const val RC_MEP_PM_DEMO_WARMUP_FRAMES = 120
 
 internal data class NativeSmokeConfig(
     val output: Path,
@@ -185,6 +187,7 @@ internal data class NativeSmokeResult(
             appendLine("    \"nativeTimingClaim\": \"present-call-duration-only\"")
             appendLine("  },")
             appendLine("  \"runtimeTelemetry\": $telemetryJson,")
+            appendLine("  \"runtimeLifecycle\": ${lifecycleJson("  ")},")
             appendLine("  \"capture\": ${capture.toJson("  ")},")
             appendLine("  \"surfaceStatusSummary\": ${surfaceStatusSummary(surfaceStatuses).toJson("  ")},")
             appendLine("  \"surfaceStatuses\": [${surfaceStatuses.joinToString(", ") { it.json() }}],")
@@ -203,6 +206,22 @@ internal data class NativeSmokeResult(
             appendLine("  \"error\": ${error?.json() ?: "null"}")
             appendLine("}")
         }
+    }
+
+    private fun lifecycleJson(indent: String): String = buildString {
+        appendLine("{")
+        appendLine("$indent  \"windowVisible\": true,")
+        appendLine("$indent  \"resizable\": true,")
+        appendLine("$indent  \"closePolicy\": \"WindowEvent.CloseRequested releases device/surface/instance and exits the event loop\",")
+        appendLine("$indent  \"resizePolicy\": \"WindowEvent.Resized reconfigures the WGPU surface when width and height are positive\",")
+        appendLine("$indent  \"scaleFactorPolicy\": \"WindowEvent.ScaleFactorChanged reconfigures from the current innerSize\",")
+        appendLine("$indent  \"resourceDisposePolicy\": \"releaseResources closes GPUDevice, NativeSurface and WGPU instance before clearing references\",")
+        appendLine("$indent  \"warningPolicy\": \"Kadre/KMP warnings are non-blocking unless status is blocked or error is non-null\",")
+        appendLine("$indent  \"completionPolicy\": \"Close window exits early; otherwise the run exits after requestedFrames\",")
+        appendLine("$indent  \"pmLongDemoCommand\": ${rcMepPmDemoCommand().json()},")
+        appendLine("$indent  \"pmLongDemoFrames\": $RC_MEP_PM_DEMO_FRAMES,")
+        appendLine("$indent  \"pmLongDemoWarmupFrames\": $RC_MEP_PM_DEMO_WARMUP_FRAMES")
+        append("$indent}")
     }
 }
 
@@ -816,12 +835,15 @@ private fun configWgslSource(mode: String): String = if (mode == "demo") {
 
 private fun configLinearIssues(mode: String, sceneContractId: String): List<String> = when {
     mode == "demo" && sceneContractId == M83_DISPLAY_LIST_PM_SCENE_ID ->
-        listOf("FOR-99", "FOR-149", "FOR-150", "FOR-151", "FOR-152", "FOR-153")
+        listOf("FOR-99", "FOR-149", "FOR-150", "FOR-151", "FOR-152", "FOR-153", "FOR-180", "FOR-181", "FOR-182")
     mode == "demo" ->
         listOf("FOR-61", "FOR-62", "FOR-64", "FOR-66", "FOR-67", "FOR-68", "FOR-69", "FOR-70", "FOR-71", "FOR-72", "FOR-73", "FOR-74", "FOR-75", "FOR-76", "FOR-77", "FOR-78", "FOR-79", "FOR-80", "FOR-81", "FOR-82", "FOR-83", "FOR-84", "FOR-85", "FOR-86", "FOR-87", "FOR-88", "FOR-89", "FOR-90", "FOR-105", "FOR-106", "FOR-107", "FOR-108", "FOR-109")
     else ->
         listOf("FOR-56", "FOR-57", "FOR-58", "FOR-59")
 }
+
+private fun rcMepPmDemoCommand(): String =
+    "./gradlew --no-daemon :kadre-runtime:runRcMepKadreNativePmDemo"
 
 private fun configNonClaims(mode: String, sceneContractId: String): List<String> = when {
     mode == "demo" && sceneContractId == M83_DISPLAY_LIST_PM_SCENE_ID -> listOf(
