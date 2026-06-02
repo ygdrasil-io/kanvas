@@ -1,0 +1,684 @@
+{
+  "candidates": [
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json"
+      },
+      "bucket": "candidate",
+      "candidateReason": "targetColorSpaceBlend improves the scene into tolerance-8 parity, but exact parity remains below 99.95 due to the recorded AA residual",
+      "currentCause": "coverage.stroke-cap-join-aa-residual",
+      "decision": "candidate-residual-aa",
+      "exactSimilarity": 0.0,
+      "pipelineKey": "coverageKind=pathAaStrokeCapJoinBlocked pathFillRule=winding topology=triangleList budget=m60 source=LinePathGM-derived status=expected-unsupported",
+      "sceneId": "m60-bounded-stroke-cap-join",
+      "targetColorSpaceBlendEvidence": true,
+      "targetColorSpaceBlendExactSimilarity": 95.37,
+      "threshold": 99.95,
+      "tolerance8Similarity": 99.96,
+      "webgpuRoute": "webgpu.coverage.refuse",
+      "webgpuStatus": "expected-unsupported"
+    }
+  ],
+  "diagnosticFixtures": [
+    {
+      "artifacts": {
+        "routeGpu": null,
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/m60-target-colorspace-neutral-aa/stats.json"
+      },
+      "bucket": "candidate-evidence",
+      "candidateReason": "isolated neutral AA fixture proves targetColorSpaceBlend can match the CPU sample for the covered solid-color AA path",
+      "currentCause": "none",
+      "decision": "diagnostic-fixture",
+      "exactSimilarity": null,
+      "pipelineKey": null,
+      "sceneId": "m60-target-colorspace-neutral-aa",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "missing-route-gpu.json",
+      "webgpuStatus": "diagnostic-pass"
+    }
+  ],
+  "generatedDate": "2026-06-02",
+  "id": "m60-target-color-candidate-inventory",
+  "linearIssue": "FOR-234",
+  "nonCandidates": [
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/analytic-aa-convex/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "current WebGPU evidence is already exact at or above 99.95, so targetColorSpaceBlend is not needed",
+      "currentCause": "none",
+      "decision": "not-candidate-already-exact",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "coverageKind=pathConvexFan",
+      "sceneId": "analytic-aa-convex",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.85,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.coverage.path-convex-fan",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-rect-nearest/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/bitmap-rect-nearest/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "bitmap shader path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "imageRect.strictNearest.promotedSmoke",
+      "sceneId": "bitmap-rect-nearest",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.image-rect.strict-nearest",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-local-matrix/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-local-matrix/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "bitmap shader path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp localMatrix=affineInverse state=[blendMode=kSrcOver]",
+      "sceneId": "bitmap-shader-local-matrix",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.shader.bitmap.local-matrix",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "bitmap shader path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat localMatrix=identity state=[blendMode=kSrcOver]",
+      "sceneId": "bitmap-shader-repeat-tile",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.shader.bitmap.repeat-tile",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "bitmap shader path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat subset=true localMatrix=scaleRotate state=[blendMode=kSrcOver]",
+      "sceneId": "bitmap-subset-local-matrix-repeat",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.94,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.shader.bitmap.subset-local-matrix-repeat",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "exact score is below 99.95, but artifacts provide no tolerance-8/color-space signal for the target blend pilot",
+      "currentCause": "none",
+      "decision": "not-candidate-no-target-color-signal",
+      "exactSimilarity": 84.44,
+      "pipelineKey": "clipOp=kDifference shape=rect+rrect maskFilter=blur",
+      "sceneId": "clip-rect-difference",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 80.0,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.coverage.clip-difference.analytic-rrect-mask",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "image-filter path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 98.13,
+      "pipelineKey": "layerComposite.materializeChildPrePass + imageFilterCropUvRemap",
+      "sceneId": "crop-image-filter-nonnull-prepass",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 50.0,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/draw-paint-clipped-rect/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/draw-paint-clipped-rect/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "current WebGPU evidence is already exact at or above 99.95, so targetColorSpaceBlend is not needed",
+      "currentCause": "none",
+      "decision": "not-candidate-already-exact",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "paint=solidColor draw=drawPaint clip=rect(10,10,30,30) state=[blendMode=kSrcOver]",
+      "sceneId": "draw-paint-clipped-rect",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.paint.draw-paint.clip-rect",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/draw-paint-full-clip/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/draw-paint-full-clip/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "current WebGPU evidence is already exact at or above 99.95, so targetColorSpaceBlend is not needed",
+      "currentCause": "none",
+      "decision": "not-candidate-already-exact",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "paint=solidColor draw=drawPaint clip=full state=[blendMode=kSrcOver]",
+      "sceneId": "draw-paint-full-clip",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.paint.draw-paint.full-clip",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "font/text path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "font.complex-shaping-requires-explicit-shaper",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": null,
+      "pipelineKey": "textRoute=complex-shaping glyphRepresentation=unsupported",
+      "sceneId": "font-complex-shaping-refusal",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.text.refuse",
+      "webgpuStatus": "expected-unsupported"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/font-emoji-color-glyph-refusal/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/font-emoji-color-glyph-refusal/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "font/text path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "font.color-glyph-emoji-unsupported",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": null,
+      "pipelineKey": "textRoute=emoji-color-glyph glyphRepresentation=unsupported",
+      "sceneId": "font-emoji-color-glyph-refusal",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.text.refuse",
+      "webgpuStatus": "expected-unsupported"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "font/text path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": null,
+      "pipelineKey": "textRoute=kerning-style glyphRepresentation=outline state=[blendMode=kSrcOver]",
+      "sceneId": "font-kerning-style-fixture",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.text.outline.kerning-style-fixture",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/font-latin-outline-drawstring/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/font-latin-outline-drawstring/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "font/text path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": null,
+      "pipelineKey": "textRoute=simple-latin glyphRepresentation=outline state=[blendMode=kSrcOver]",
+      "sceneId": "font-latin-outline-drawstring",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.text.outline.simple-latin",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/font-textblob-positioned-glyph-run/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/font-textblob-positioned-glyph-run/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "font/text path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": null,
+      "pipelineKey": "textRoute=positioned-glyph-run glyphRepresentation=outline state=[blendMode=kSrcOver]",
+      "sceneId": "font-textblob-positioned-glyph-run",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.text.outline.positioned-glyph-run",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/gradient-color-filter-linear-kplus/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "gradient path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "shaderFamily=linearGradient colorFilter=Blend(red,kPlus) coverage=analyticRect state=[blendMode=kSrcOver]",
+      "sceneId": "gradient-color-filter-linear-kplus",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.generated.linear-gradient.color-filter.blend-kplus",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "image-filter path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 100.0,
+      "pipelineKey": null,
+      "sceneId": "image-filter-compose-cf-matrix-transform",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.0,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "image-filter path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "image-filter.crop-input-nonnull-prepass-required",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": null,
+      "pipelineKey": "imageFilter=Crop(input=nonNull),prePass=required,selectedM38Shape=false",
+      "sceneId": "image-filter-crop-nonnull-prepass-required",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.image-filter.refuse",
+      "webgpuStatus": "expected-unsupported"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "gradient path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver]",
+      "sceneId": "linear-gradient-rect",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.generated.linear-gradient.rect",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "exact score is below 99.95, but artifacts provide no tolerance-8/color-space signal for the target blend pilot",
+      "currentCause": "none",
+      "decision": "not-candidate-no-target-color-signal",
+      "exactSimilarity": 98.83,
+      "pipelineKey": "pathAA=aaclip clip=aaRectGrid op=intersect budget=current source=AaclipGM",
+      "sceneId": "m57-aaclip-bounded-grid",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 98.78,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.coverage.aaclip-bounded-grid",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "current route is an expected-unsupported refusal with stable cause `coverage.nested-clip-visual-parity-below-threshold` and no targetColorSpaceBlend evidence",
+      "currentCause": "coverage.nested-clip-visual-parity-below-threshold",
+      "decision": "not-candidate-stable-refusal",
+      "exactSimilarity": 71.22,
+      "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported",
+      "sceneId": "m60-bounded-nested-rrect-clip",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+      "webgpuStatus": "expected-unsupported"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "current route is an expected-unsupported refusal with stable cause `coverage.edge-count-exceeded` and no targetColorSpaceBlend evidence",
+      "currentCause": "coverage.edge-count-exceeded",
+      "decision": "not-candidate-stable-refusal",
+      "exactSimilarity": null,
+      "pipelineKey": "coverageKind=pathCoverageUnsupported,pathFillRule=winding,topology=triangleList,source=ConvexPathsGM",
+      "sceneId": "path-aa-convexpaths-edge-budget",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.coverage.refuse",
+      "webgpuStatus": "expected-unsupported"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "current route is an expected-unsupported refusal with stable cause `coverage.edge-count-exceeded` and no targetColorSpaceBlend evidence",
+      "currentCause": "coverage.edge-count-exceeded",
+      "decision": "not-candidate-stable-refusal",
+      "exactSimilarity": null,
+      "pipelineKey": "coverageKind=pathStrokeDashOverflow,pathFillRule=winding,topology=triangleList,source=DashingGM",
+      "sceneId": "path-aa-dashing-edge-budget",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.coverage.refuse",
+      "webgpuStatus": "expected-unsupported"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "artifacts do not expose exact GPU similarity or targetColorSpaceBlend evidence",
+      "currentCause": "coverage.edge-count-exceeded",
+      "decision": "not-candidate-insufficient-metrics",
+      "exactSimilarity": null,
+      "pipelineKey": "coverageKind=pathCoverageUnsupported,pathFillRule=winding,topology=triangleList",
+      "sceneId": "path-aa-edge-budget-boundary",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.85,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.coverage.refuse",
+      "webgpuStatus": null
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-outline-fallback/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-outline-fallback/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "artifacts do not expose exact GPU similarity or targetColorSpaceBlend evidence",
+      "currentCause": "coverage.stroke-outline-edge-count-exceeded",
+      "decision": "not-candidate-insufficient-metrics",
+      "exactSimilarity": null,
+      "pipelineKey": "coverageKind=pathStrokeOutlineOverflow,pathFillRule=winding,topology=triangleList",
+      "sceneId": "path-aa-stroke-outline-fallback",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 95.91,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.coverage.refuse",
+      "webgpuStatus": null
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "exact score is below 99.95, but artifacts provide no tolerance-8/color-space signal for the target blend pilot",
+      "currentCause": "none",
+      "decision": "not-candidate-no-target-color-signal",
+      "exactSimilarity": 91.81,
+      "pipelineKey": "coverageKind=pathAaStrokePrimitive pathFillRule=winding topology=triangleList",
+      "sceneId": "path-aa-stroke-primitive",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.coverage.path-aa-stroke-primitive",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "gradient path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "runtime-effect.linear-gradient-visual-parity-below-threshold",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 0.0,
+      "pipelineKey": "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
+      "sceneId": "runtime-effect-linear-gradient",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.runtime-effect.descriptor.linear_gradient_rt.expected-unsupported",
+      "webgpuStatus": "expected-unsupported"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "runtime-effect descriptor path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+      "sceneId": "runtime-effect-simple",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.runtime-effect.descriptor.simple_rt",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "runtime-effect descriptor path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "runtime-effect.spiral-visual-parity-below-threshold",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 0.0,
+      "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
+      "sceneId": "runtime-effect-spiral",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.runtime-effect.descriptor.spiral_rt.expected-unsupported",
+      "webgpuStatus": "expected-unsupported"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/scaled-rects-transform-stack/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/scaled-rects-transform-stack/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "current WebGPU evidence is already exact at or above 99.95, so targetColorSpaceBlend is not needed",
+      "currentCause": "none",
+      "decision": "not-candidate-already-exact",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "gm=ScaledRects transform=rotate+skew coverage=convexPolygon state=[blendMode=kPlus]",
+      "sceneId": "scaled-rects-transform-stack",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.99,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.transform.scaled-rects.convex-polygon",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/solid-rect/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/solid-rect/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "current WebGPU evidence is already exact at or above 99.95, so targetColorSpaceBlend is not needed",
+      "currentCause": "none",
+      "decision": "not-candidate-already-exact",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "coverageKind=analyticRect",
+      "sceneId": "solid-rect",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.coverage.analytic-rect",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/src-over-stack/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/src-over-stack/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "current WebGPU evidence is already exact at or above 99.95, so targetColorSpaceBlend is not needed",
+      "currentCause": "none",
+      "decision": "not-candidate-already-exact",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "state=[blendMode=kSrc] + state=[blendMode=kSrcOver] fixedFunctionBlend",
+      "sceneId": "src-over-stack",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.blend.src-over.fixed-function",
+      "webgpuStatus": "pass"
+    },
+    {
+      "artifacts": {
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/sweep-gradient-path-clamp/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/sweep-gradient-path-clamp/stats.json"
+      },
+      "bucket": "non-candidate",
+      "candidateReason": "gradient path is outside the FOR-234 solid-color AA scope",
+      "currentCause": "none",
+      "decision": "not-candidate-out-of-scope",
+      "exactSimilarity": 100.0,
+      "pipelineKey": "shaderFamily=sweepGradient tile=kClamp coverage=pathConvexFan shape=circle state=[blendMode=kSrcOver]",
+      "sceneId": "sweep-gradient-path-clamp",
+      "targetColorSpaceBlendEvidence": false,
+      "targetColorSpaceBlendExactSimilarity": null,
+      "threshold": 99.95,
+      "tolerance8Similarity": null,
+      "webgpuRoute": "webgpu.generated.sweep-gradient.path-aa",
+      "webgpuStatus": "pass"
+    }
+  ],
+  "policy": {
+    "coveredPilotDrawKinds": [
+      "RectDraw",
+      "StencilCoverAaPolygonDraw"
+    ],
+    "globalTargetColorSpaceBlendEnabled": false,
+    "outOfScopeFamilies": [
+      "gradients",
+      "bitmaps",
+      "runtime effects",
+      "image filters",
+      "layers",
+      "text/font masks",
+      "blur/drop-shadow paths"
+    ],
+    "promotionRequiresExactSimilarityAtLeast": 99.95,
+    "stableRefusalsPreserved": true
+  },
+  "scope": "Inventory only: solid-color AA targetColorSpaceBlend candidates from existing WGSL scene artifacts.",
+  "summary": {
+    "candidateScenes": 1,
+    "diagnosticFixtures": 1,
+    "nonCandidateScenes": 32,
+    "promotableScenes": 0,
+    "scenesInspected": 34
+  },
+  "threshold": 99.95
+}
