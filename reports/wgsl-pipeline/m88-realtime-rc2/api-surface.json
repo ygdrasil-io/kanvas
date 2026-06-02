@@ -1,0 +1,31 @@
+{
+    "schemaVersion": 1,
+    "packId": "m88-api-surface-freeze-v1",
+    "status": "frozen-for-rc2",
+    "entryPoints": [
+        {
+            "name": ":kadre-runtime:pipelineM88ReleaseCandidate2",
+            "purpose": "Generates the RC2 evidence package."
+        },
+        {
+            "name": "pipelinePmBundle",
+            "purpose": "Builds the portable PM dashboard/report bundle including M88."
+        },
+        {
+            "name": "pipelineSceneDashboardGate",
+            "purpose": "Validates the generated scene dashboard support/refusal contract."
+        },
+        {
+            "name": "Kadre live demo tasks",
+            "purpose": "Remain the native/runtime demo shell for PM-facing live evidence."
+        }
+    ],
+    "nonGoals": [
+        "No Ganesh or Graphite port.",
+        "No SkSL compiler, SkSL IR, or SkSL VM.",
+        "No arbitrary SkSL runtime-effect support.",
+        "No full Skia parity claim.",
+        "No release-grade windowed FPS gate in RC2.",
+        "No window-surface screenshot/readback claim."
+    ]
+}

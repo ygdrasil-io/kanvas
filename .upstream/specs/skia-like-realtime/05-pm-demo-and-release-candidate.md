@@ -207,6 +207,39 @@ PM wording must say that M87 proves selected SimpleRT live editing. It must not
 claim broad runtime-effect live controls, arbitrary SkSL compilation, or new
 WGSL support for dispatch-only runtime effects.
 
+## M88 Realtime Renderer RC2 PM Evidence
+
+M88 freezes the next RC2 package. It is a packaging, gate-freeze, and PM handoff
+milestone, not a new rendering breadth milestone.
+
+Minimum PM artifacts:
+
+- `reports/wgsl-pipeline/m88-realtime-rc2/rc2-evidence.json`;
+- `reports/wgsl-pipeline/m88-realtime-rc2/rc2-evidence.md`;
+- `reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json`;
+- `reports/wgsl-pipeline/m88-realtime-rc2/gate-freeze.json`;
+- `reports/wgsl-pipeline/m88-realtime-rc2/api-surface.json`;
+- `reports/wgsl-pipeline/m88-realtime-rc2/pm-demo-script.md`;
+- `reports/wgsl-pipeline/m88-realtime-rc2/release-notes.md`;
+- PM bundle manifest entry `m88ReleaseCandidate2`.
+
+The evidence JSON must report:
+
+- pack id `m88-realtime-renderer-rc2-v1`;
+- status `pass`;
+- claim level `realtime-renderer-rc2-freeze-package`;
+- readiness before and after `67.75`;
+- readiness delta `0.0`;
+- API/demo surface frozen for RC2;
+- gate freeze that keeps `m84 frame.kadre-windowed` reporting-only;
+- gate freeze that keeps the M85 resource/cache ledger reporting-only;
+- support/refusal matrix categories for supported, expected-unsupported,
+  dependency-gated, implementation-gap, and reporting-only scope.
+
+PM wording must say that M88 produces a reproducible RC2 handoff. It must not
+claim full Skia parity, arbitrary SkSL, release-grade windowed FPS, broad
+observed runtime cache telemetry, or window-surface screenshot/readback.
+
 ## PM Language
 
 Use this framing:

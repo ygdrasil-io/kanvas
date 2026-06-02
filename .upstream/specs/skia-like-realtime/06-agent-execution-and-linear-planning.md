@@ -60,6 +60,7 @@ copy, split it into implementation, evidence, and PM packaging tickets.
 | M68 | Native demo packaging, flagship scene, telemetry overlay, reproducible PM script, artifact export. |
 | M69 | Diff burn-down by family, threshold policy, visual regression triage, Skia CPU reference alignment. |
 | M70 | Release-candidate checklist, API freeze, known limitation matrix, CI gate freeze, PM release package. |
+| M88 | RC2 API/demo freeze, gate freeze, support/refusal matrix, reproducible PM script, release notes, final M81-M88 Linear/GitHub audit. |
 
 ## Agent Handoff Contract
 
@@ -98,6 +99,17 @@ For a milestone to be complete:
   rationale;
 - README progress is recalculated from weighted target areas;
 - Linear status matches the repository evidence.
+
+For M88 specifically, completion also requires:
+
+- `FOR-104` and `FOR-174` through `FOR-178` are Done, or explicitly deferred
+  with evidence;
+- the PR is merged to `master`;
+- `reports/wgsl-pipeline/m88-realtime-rc2/rc2-evidence.json` validates as
+  `status=pass`;
+- the PM bundle manifest contains `m88ReleaseCandidate2`;
+- all M81-M88 issues are Done, Deferred with reason, or Blocked with precise
+  evidence before the overall sprint goal is marked complete.
 
 ## Readiness Accounting
 
