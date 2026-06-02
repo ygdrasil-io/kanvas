@@ -1,0 +1,64 @@
+    {
+      "sceneId": "m57-aaclip-bounded-grid",
+      "backend": "WebGPU",
+      "adapter": "Apple M2 Max",
+      "status": "diagnostic-only",
+      "supportClaim": false,
+      "normalRoute": "webgpu.coverage.aaclip-bounded-grid",
+      "normalRouteStatus": "pass",
+      "targetColorSpaceBlend": true,
+      "targetColorSpaceBlendEnabledGlobally": false,
+      "promotionThreshold": 99.95,
+      "normalSupportSimilarity": 98.83,
+      "targetSupportSimilarity": 94.73,
+      "normalExactSimilarity": 95.88,
+      "targetExactSimilarity": 94.71,
+      "exactSimilarityDelta": -1.17,
+      "exactDecision": "targetColorSpaceBlend degrades the exact score",
+      "normalToleranceProfile": [
+        {
+  "tolerance": 0,
+  "similarity": 95.88,
+  "matchingPixels": 27612
+},
+{
+  "tolerance": 8,
+  "similarity": 98.83,
+  "matchingPixels": 28464
+},
+{
+  "tolerance": 16,
+  "similarity": 98.83,
+  "matchingPixels": 28464
+},
+{
+  "tolerance": 32,
+  "similarity": 98.83,
+  "matchingPixels": 28464
+}
+      ],
+      "targetToleranceProfile": [
+        {
+  "tolerance": 0,
+  "similarity": 94.71,
+  "matchingPixels": 27276
+},
+{
+  "tolerance": 8,
+  "similarity": 94.73,
+  "matchingPixels": 27282
+},
+{
+  "tolerance": 16,
+  "similarity": 95.25,
+  "matchingPixels": 27432
+},
+{
+  "tolerance": 32,
+  "similarity": 96.54,
+  "matchingPixels": 27804
+}
+      ],
+      "decision": "Diagnostic only: targetColorSpaceBlend is measured for M57, the normal WebGPU route remains unchanged, and no 99.95 promotion is claimed.",
+      "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.AaclipSceneCaptureTest"
+    }
