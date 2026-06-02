@@ -1,0 +1,251 @@
+{
+    "schemaVersion": 1,
+    "generatedBy": "kadre-runtime:M87RuntimeEffectLiveEditing",
+    "linearIssues": [
+        "FOR-103",
+        "FOR-169",
+        "FOR-170",
+        "FOR-171",
+        "FOR-172",
+        "FOR-173"
+    ],
+    "packId": "m87-runtime-effect-live-editing-v1",
+    "status": "pass",
+    "claimLevel": "selected-registered-runtime-effect-live-edit-evidence",
+    "readinessDelta": 0,
+    "effect": {
+        "stableId": "runtime.simple_rt",
+        "kind": "shader",
+        "cpuImplementationId": "kotlin/simple_rt",
+        "wgslImplementationId": "wgsl/runtime_simple_rt",
+        "wgslSource": "gpu-raster/src/main/resources/shaders/runtime_simple_rt.wgsl",
+        "sourceSkSLPolicy": "registered-only",
+        "arbitrarySkSLFallbackReason": "runtime-effect.arbitrary-sksl-unsupported"
+    },
+    "liveParameterMetadata": [
+        {
+            "name": "gColor.b",
+            "uniform": "gColor",
+            "component": "b",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "default": 0.25,
+            "step": 0.01,
+            "uiControl": "slider",
+            "affectsOutput": true,
+            "pipelineKeyAxis": false,
+            "constraint": "clamp",
+            "invalidValueDiagnostic": "m87.runtime-effect.parameter-out-of-range"
+        }
+    ],
+    "reflectionValidation": {
+        "source": "wgsl4k-validation-report",
+        "shader": "gpu-raster/src/main/resources/shaders/runtime_simple_rt.wgsl",
+        "parserEvidence": "RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms",
+        "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms",
+        "binding": "uniforms@group=0,binding=0",
+        "uniform": "gColor",
+        "declaredOffset": 0,
+        "reflectedOffset": 0,
+        "sourceHasExpectedBinding": true,
+        "sourceHasExpectedUniform": true,
+        "layoutVerified": true,
+        "mismatchDiagnostic": "m87.runtime-effect.uniform-layout-mismatch",
+        "upstreamWgsl4kTicketRequired": false,
+        "upstreamWgsl4kTicket": ""
+    },
+    "liveRuntimeTelemetry": {
+        "lane": "kadre.runtime-effect-live-edit.selected",
+        "selectedRuntimeOutputAffected": true,
+        "nativeDemoParameterContractReady": true,
+        "actualNativeWindowRun": false,
+        "nativeWindowReadbackProducedByM87": false,
+        "frameUpdateCount": 2,
+        "parameterUpdateCount": 2,
+        "invalidEditPolicy": "clamp-with-diagnostic",
+        "invalidEdit": {
+            "parameter": "gColor.b",
+            "requestedBlue": 1.399999976158142,
+            "clampedBlue": 1.0,
+            "diagnostic": "m87.runtime-effect.parameter-out-of-range",
+            "policy": "clamp"
+        },
+        "uniformValuesInPipelineKey": false,
+        "pipelineKeyBefore": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+        "pipelineKeyAfter": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+        "pipelineKeyStableAcrossUniformEdits": true,
+        "telemetryStates": [
+            {
+                "id": "m87-simple-rt-blue-low",
+                "frame": 1,
+                "parameter": "gColor.b",
+                "requestedBlue": 0.25,
+                "clampedBlue": 0.25,
+                "uniformBytes": 16,
+                "uniformOffset": 8,
+                "uniformValues": [
+                    0.0,
+                    0.0,
+                    0.25,
+                    1.0
+                ]
+            },
+            {
+                "id": "m87-simple-rt-blue-high",
+                "frame": 2,
+                "parameter": "gColor.b",
+                "requestedBlue": 0.8199999928474426,
+                "clampedBlue": 0.8199999928474426,
+                "uniformBytes": 16,
+                "uniformOffset": 8,
+                "uniformValues": [
+                    0.0,
+                    0.0,
+                    0.8199999928474426,
+                    1.0
+                ]
+            }
+        ]
+    },
+    "parityEvidence": [
+        {
+            "id": "m87-simple-rt-blue-low",
+            "status": "pass",
+            "referenceKind": "descriptor-parity-oracle",
+            "cpuRoute": "cpu.runtime-effect.descriptor.simple_rt.live-edit",
+            "gpuRoute": "webgpu.runtime-effect.descriptor.simple_rt.live-edit",
+            "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+            "parameterState": {
+                "id": "m87-simple-rt-blue-low",
+                "frame": 1,
+                "parameter": "gColor.b",
+                "requestedBlue": 0.25,
+                "clampedBlue": 0.25,
+                "uniformBytes": 16,
+                "uniformOffset": 8,
+                "uniformValues": [
+                    0.0,
+                    0.0,
+                    0.25,
+                    1.0
+                ]
+            },
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "similarity": 100.0,
+            "threshold": 99.95,
+            "maxChannelDelta": 0,
+            "artifacts": {
+                "cpu": "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-low/cpu.png",
+                "gpu": "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-low/gpu.png",
+                "diff": "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-low/diff.png",
+                "routeCpu": "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-low/route-cpu.json",
+                "routeGpu": "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-low/route-gpu.json"
+            }
+        },
+        {
+            "id": "m87-simple-rt-blue-high",
+            "status": "pass",
+            "referenceKind": "descriptor-parity-oracle",
+            "cpuRoute": "cpu.runtime-effect.descriptor.simple_rt.live-edit",
+            "gpuRoute": "webgpu.runtime-effect.descriptor.simple_rt.live-edit",
+            "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+            "parameterState": {
+                "id": "m87-simple-rt-blue-high",
+                "frame": 2,
+                "parameter": "gColor.b",
+                "requestedBlue": 0.8199999928474426,
+                "clampedBlue": 0.8199999928474426,
+                "uniformBytes": 16,
+                "uniformOffset": 8,
+                "uniformValues": [
+                    0.0,
+                    0.0,
+                    0.8199999928474426,
+                    1.0
+                ]
+            },
+            "pixels": 4096,
+            "matchingPixels": 4096,
+            "similarity": 100.0,
+            "threshold": 99.95,
+            "maxChannelDelta": 0,
+            "artifacts": {
+                "cpu": "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-high/cpu.png",
+                "gpu": "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-high/gpu.png",
+                "diff": "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-high/diff.png",
+                "routeCpu": "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-high/route-cpu.json",
+                "routeGpu": "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-high/route-gpu.json"
+            }
+        }
+    ],
+    "stableRefusals": [
+        {
+            "id": "arbitrary-sksl",
+            "status": "expected-unsupported",
+            "fallbackReason": "runtime-effect.arbitrary-sksl-unsupported",
+            "message": "Kanvas does not compile arbitrary user SkSL to WGSL."
+        },
+        {
+            "id": "missing-wgsl-descriptor",
+            "status": "expected-unsupported",
+            "fallbackReason": "runtime-effect.wgsl-descriptor-missing",
+            "message": "Registered dispatch-only runtime effects need a WGSL descriptor before GPU support."
+        }
+    ],
+    "sourceEvidence": [
+        "gpu-raster/src/main/resources/shaders/runtime_simple_rt.wgsl",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json",
+        "reports/wgsl-pipeline/scenes/generated/m64-registered-runtime-effects-pack.json"
+    ],
+    "artifactPaths": [
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.md",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/edited-states.json",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-low/cpu.png",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-low/gpu.png",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-low/diff.png",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-low/route-cpu.json",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-low/route-gpu.json",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-high/cpu.png",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-high/gpu.png",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-high/diff.png",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-high/route-cpu.json",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/states/m87-simple-rt-blue-high/route-gpu.json"
+    ],
+    "validationRows": [
+        {
+            "id": "m87.parameter-metadata",
+            "status": "pass",
+            "assertion": "SimpleRT exposes gColor.b as a bounded live-editable parameter with clamp diagnostics."
+        },
+        {
+            "id": "m87.uniform-edit-telemetry",
+            "status": "pass",
+            "assertion": "Two frame updates record edited parameter state and keep uniform values out of PipelineKey."
+        },
+        {
+            "id": "m87.wgsl-reflection",
+            "status": "pass",
+            "assertion": "runtime_simple_rt.wgsl parser/reflection evidence verifies gColor offset 0."
+        },
+        {
+            "id": "m87.edited-state-parity",
+            "status": "pass",
+            "assertion": "Two edited states include CPU/GPU/diff artifacts at or above the similarity threshold."
+        },
+        {
+            "id": "m87.stable-refusals",
+            "status": "pass",
+            "assertion": "Arbitrary SkSL and missing WGSL descriptor remain stable expected-unsupported diagnostics."
+        }
+    ],
+    "nonClaims": [
+        "M87 promotes only registered SimpleRT live editing; it does not add arbitrary SkSL compilation, SkSL IR, or a SkSL VM.",
+        "M87 edited-state GPU artifacts are selected descriptor parity artifacts tied to existing WebGPU parser/render tests, not a broad runtime-effect GPU family claim.",
+        "M87 does not put uniform values in PipelineKey and does not generate a new shader per parameter value.",
+        "M87 does not promote SpiralRT or LinearGradientRT to WGSL-backed GPU support."
+    ]
+}

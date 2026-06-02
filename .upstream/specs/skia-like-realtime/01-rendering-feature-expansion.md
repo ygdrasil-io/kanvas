@@ -285,3 +285,38 @@ SkRuntimeEffect facade
 - CPU/GPU/reference artifacts;
 - unknown effect refusal diagnostic;
 - live PM controls for uniforms.
+
+## M87 Registered Runtime Effect Live Editing V2
+
+M87 narrows the live-editing promise to one registered effect before broad
+runtime-effect controls are claimed. The selected effect is `runtime.simple_rt`
+with WGSL implementation `wgsl/runtime_simple_rt`.
+
+### Target Subset
+
+- `runtime.simple_rt` only;
+- `gColor.b` as the first live-editable parameter;
+- bounded float range `[0.0, 1.0]` with clamp diagnostics;
+- reflected `gColor` uniform layout from the registered WGSL module;
+- at least two edited parameter states with CPU/GPU/diff artifacts;
+- stable refusals for arbitrary SkSL and registered effects without WGSL
+  descriptors.
+
+### Non-Goals
+
+- arbitrary SkSL parsing, compilation, IR, or VM;
+- promoting SpiralRT or LinearGradientRT to WGSL-backed GPU support;
+- GPU-only runtime-effect support without CPU/reference behavior;
+- adding uniform values to `PipelineKey`;
+- generating a new shader module per parameter value.
+
+### Acceptance
+
+- parameter metadata names the uniform, component, type, range, default, UI
+  constraint, and invalid-value diagnostic;
+- the reflected WGSL layout verifies `gColor` offset `0`;
+- telemetry records at least two parameter updates and keeps the pipeline key
+  stable across them;
+- edited-state artifacts include CPU, GPU, diff, and route JSON paths;
+- PM wording states that this is selected `SimpleRT` live editing, not broad
+  runtime-effect compatibility.

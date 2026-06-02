@@ -1,0 +1,23 @@
+{
+    "backend": "CPU",
+    "sceneId": "m87-simple-rt-blue-high",
+    "status": "pass",
+    "selectedRoute": "cpu.runtime-effect.descriptor.simple_rt.live-edit",
+    "runtimeEffectStableId": "runtime.simple_rt",
+    "parameterState": {
+        "id": "m87-simple-rt-blue-high",
+        "frame": 2,
+        "parameter": "gColor.b",
+        "requestedBlue": 0.8199999928474426,
+        "clampedBlue": 0.8199999928474426,
+        "uniformBytes": 16,
+        "uniformOffset": 8,
+        "uniformValues": [
+            0.0,
+            0.0,
+            0.8199999928474426,
+            1.0
+        ]
+    },
+    "fallbackReason": "none"
+}
