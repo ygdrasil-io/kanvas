@@ -7,41 +7,113 @@
           "targetColorSpaceBlend": true,
           "resolvedRootCause": "color-space.target-blend-required",
           "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
-          "mismatchPixels": 1139,
-          "oneUnitMismatchPixels": 1129,
+          "mismatchPixels": 1004,
+          "oneUnitMismatchPixels": 994,
           "greaterThanEightPixels": 10,
           "greaterThanThirtyTwoPixels": 6,
-          "maxChannelDelta": 49,
+          "maxChannelDelta": 48,
           "regions": [
             {
   "id": "butt-bevel",
   "description": "left band: butt cap with bevel join",
-  "mismatchPixels": 455,
-  "oneUnitMismatchPixels": 453,
+  "mismatchPixels": 394,
+  "oneUnitMismatchPixels": 392,
   "greaterThanEightPixels": 2,
   "greaterThanThirtyTwoPixels": 0,
-  "maxChannelDelta": 24,
+  "maxChannelDelta": 25,
   "bounds": {"left": 9, "top": 27, "right": 47, "bottom": 92}
 },
 {
   "id": "round-round",
   "description": "middle band: round cap with round join",
-  "mismatchPixels": 512,
-  "oneUnitMismatchPixels": 504,
+  "mismatchPixels": 523,
+  "oneUnitMismatchPixels": 515,
   "greaterThanEightPixels": 8,
   "greaterThanThirtyTwoPixels": 6,
-  "maxChannelDelta": 49,
-  "bounds": {"left": 48, "top": 38, "right": 93, "bottom": 81}
+  "maxChannelDelta": 48,
+  "bounds": {"left": 48, "top": 38, "right": 95, "bottom": 81}
 },
 {
   "id": "square-bevel",
   "description": "right band: square cap with bevel join",
-  "mismatchPixels": 172,
-  "oneUnitMismatchPixels": 172,
+  "mismatchPixels": 87,
+  "oneUnitMismatchPixels": 87,
   "greaterThanEightPixels": 0,
   "greaterThanThirtyTwoPixels": 0,
   "maxChannelDelta": 1,
-  "bounds": {"left": 99, "top": 37, "right": 191, "bottom": 84}
+  "bounds": {"left": 96, "top": 37, "right": 153, "bottom": 82}
+}
+          ],
+          "highDeltaSamples": [
+            {
+  "x": 92,
+  "y": 75,
+  "maxChannelDelta": 48,
+  "referenceRgba": [133, 150, 214, 255],
+  "gpuRgba": [181, 191, 230, 255]
+},
+{
+  "x": 91,
+  "y": 76,
+  "maxChannelDelta": 48,
+  "referenceRgba": [133, 150, 214, 255],
+  "gpuRgba": [181, 191, 230, 255]
+},
+{
+  "x": 90,
+  "y": 77,
+  "maxChannelDelta": 48,
+  "referenceRgba": [133, 150, 214, 255],
+  "gpuRgba": [181, 191, 230, 255]
+},
+{
+  "x": 89,
+  "y": 78,
+  "maxChannelDelta": 48,
+  "referenceRgba": [133, 150, 214, 255],
+  "gpuRgba": [181, 191, 230, 255]
+},
+{
+  "x": 88,
+  "y": 79,
+  "maxChannelDelta": 48,
+  "referenceRgba": [133, 150, 214, 255],
+  "gpuRgba": [181, 191, 230, 255]
+},
+{
+  "x": 87,
+  "y": 80,
+  "maxChannelDelta": 48,
+  "referenceRgba": [133, 150, 214, 255],
+  "gpuRgba": [181, 191, 230, 255]
+},
+{
+  "x": 21,
+  "y": 81,
+  "maxChannelDelta": 25,
+  "referenceRgba": [206, 213, 239, 255],
+  "gpuRgba": [181, 191, 230, 255]
+},
+{
+  "x": 93,
+  "y": 74,
+  "maxChannelDelta": 24,
+  "referenceRgba": [182, 192, 231, 255],
+  "gpuRgba": [206, 213, 238, 255]
+},
+{
+  "x": 17,
+  "y": 77,
+  "maxChannelDelta": 24,
+  "referenceRgba": [133, 150, 214, 255],
+  "gpuRgba": [157, 170, 222, 255]
+},
+{
+  "x": 69,
+  "y": 81,
+  "maxChannelDelta": 24,
+  "referenceRgba": [209, 222, 209, 255],
+  "gpuRgba": [185, 204, 185, 255]
 }
           ],
           "decision": "M60 remains expected-unsupported because exact similarity is below 99.95 even after the target-colorspace blend pilot.",
