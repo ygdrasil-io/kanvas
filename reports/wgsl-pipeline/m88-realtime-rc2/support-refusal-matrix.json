@@ -1,0 +1,73 @@
+{
+    "schemaVersion": 1,
+    "packId": "m88-support-refusal-matrix-v1",
+    "status": "pass",
+    "dashboardCounters": {
+        "totalRows": 26,
+        "passRows": 21,
+        "expectedUnsupportedRows": 5,
+        "failRows": 0,
+        "trackedGapRows": 0,
+        "generatedRows": 26,
+        "adapterBackedRows": 17
+    },
+    "categories": [
+        {
+            "category": "supported",
+            "reason": "selected-generated-and-runtime-evidence",
+            "count": 21,
+            "summary": "Rows with CPU/GPU/reference or descriptor parity artifacts."
+        },
+        {
+            "category": "expected-unsupported",
+            "reason": "stable-fallback-diagnostics",
+            "count": 5,
+            "summary": "Rows intentionally refused with stable fallback reasons."
+        },
+        {
+            "category": "dependency-gated",
+            "reason": "external-delivery-required",
+            "count": 3,
+            "summary": "Font shaping/color emoji/codec breadth depends on real dependencies, not substitutes."
+        },
+        {
+            "category": "implementation-gap",
+            "reason": "broad-rendering-family-incomplete",
+            "count": 6,
+            "summary": "Broad Path AA, image-filter DAG, layers, display-list replay, runtime effects, and texture/image support remain incomplete."
+        },
+        {
+            "category": "reporting-only",
+            "reason": "candidate-not-release-blocking",
+            "count": 3,
+            "summary": "M84 native timing, M85 deterministic cache ledger, and selected live-edit telemetry are evidence but not release-grade broad gates."
+        }
+    ],
+    "stableRefusals": [
+        {
+            "status": "expected-unsupported",
+            "fallbackReason": "runtime-effect.arbitrary-sksl-unsupported",
+            "summary": "M87/M88 keep arbitrary SkSL outside RC2 scope."
+        },
+        {
+            "status": "expected-unsupported",
+            "fallbackReason": "runtime-effect.wgsl-descriptor-missing",
+            "summary": "Runtime effects need registered WGSL descriptors for GPU support."
+        },
+        {
+            "status": "expected-unsupported",
+            "fallbackReason": "m85.device-loss-recreate-observation-unsupported",
+            "summary": "Real device-loss recovery is not claimed in RC2."
+        },
+        {
+            "status": "expected-unsupported",
+            "fallbackReason": "m83.text.placeholder-glyph-run-not-routed",
+            "summary": "Broad display-list text replay is not claimed in RC2."
+        },
+        {
+            "status": "expected-unsupported",
+            "fallbackReason": "m83.filter.placeholder-dag-not-routed",
+            "summary": "Broad display-list image-filter replay is not claimed in RC2."
+        }
+    ]
+}

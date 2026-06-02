@@ -1,0 +1,56 @@
+{
+    "schemaVersion": 1,
+    "packId": "m88-gate-freeze-v1",
+    "status": "pass",
+    "requiredCorrectnessGates": [
+        {
+            "name": "pipelineSceneDashboardGate",
+            "phase": "blocking",
+            "status": "pass",
+            "rationale": "Dashboard must have zero fail/tracked-gap rows and stable expected-unsupported reasons."
+        },
+        {
+            "name": "pipelinePmBundle",
+            "phase": "blocking",
+            "status": "pass",
+            "rationale": "Portable PM bundle must copy and validate M65-M88 evidence."
+        },
+        {
+            "name": ":kadre-runtime:pipelineM88ReleaseCandidate2",
+            "phase": "blocking",
+            "status": "pass",
+            "rationale": "RC2 evidence, matrix, gates, and PM script must regenerate."
+        }
+    ],
+    "performanceGates": [
+        {
+            "name": "pipelinePerformanceReleaseGate",
+            "phase": "blocking-selected-m59-rows",
+            "status": "pass",
+            "rationale": "Existing selected measured rows remain release-blocking."
+        },
+        {
+            "name": "m67 frame.headless-webgpu",
+            "phase": "candidate",
+            "status": "pass",
+            "rationale": "Candidate frame gate remains non-release-blocking."
+        },
+        {
+            "name": "m84 frame.kadre-windowed",
+            "phase": "reporting-only",
+            "status": "pass",
+            "rationale": "Native timing is serialized but not counted as a release gate."
+        },
+        {
+            "name": "m85 resource/cache ledger",
+            "phase": "reporting-only",
+            "status": "pass",
+            "rationale": "Deterministic resource ledger is not observed runtime cache telemetry."
+        }
+    ],
+    "quarantinePolicy": [
+        "Adapter/host mismatch quarantines frame results instead of silently failing RC2.",
+        "Estimated or missing metrics never count as measured evidence.",
+        "Correctness regressions remain rollback/blocking events."
+    ]
+}
