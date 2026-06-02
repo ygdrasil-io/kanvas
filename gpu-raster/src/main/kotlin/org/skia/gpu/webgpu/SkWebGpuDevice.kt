@@ -15074,7 +15074,7 @@ public class SkWebGpuDevice(
         // Layout shared with `aa_polygon.wgsl` / `aa_stencil_cover.wgsl` :
         //   offset    0 : color           (vec4)
         //   offset   16 : viewport        (vec4, only x/y used)
-        //   offset   32 : edgeCount + pad (u32 reinterp + 3 pad)
+        //   offset   32 : edgeCount + fillType + pad (u32 reinterp)
         //   offset   48 : edges[256]      (vec4 each, here (Ax, Ay, Bx, By))
         //   offset 4144 : clipShapeBounds (vec4) ; G2.x (closing slice)
         //   offset 4160 : clipShapeRadiiKind (vec4) ; G2.x (closing slice)
@@ -15085,7 +15085,8 @@ public class SkWebGpuDevice(
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
         packed[8] = Float.fromBits(d.edgeCount)
-        packed[9] = 0f; packed[10] = 0f; packed[11] = 0f
+        packed[9] = Float.fromBits(d.fillType.ordinal)
+        packed[10] = 0f; packed[11] = 0f
         System.arraycopy(d.edges, 0, packed, 12, d.edges.size)
         writeClipShape(packed, 12 + MAX_AA_EDGES * 4, d.clipShape)
         // Phase G-direct-colorFilter -- colour-filter payload at offset

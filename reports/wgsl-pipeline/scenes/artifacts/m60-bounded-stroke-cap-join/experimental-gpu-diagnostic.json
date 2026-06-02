@@ -7,10 +7,32 @@
           "selectedRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
           "normalRoute": "webgpu.coverage.refuse",
           "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
-          "experimentalGpuSimilarity": 89.49,
-          "experimentalGpuMatchingPixels": 21992,
-          "experimentalGpuMaxChannelDelta": 98,
+          "experimentalGpuSimilarity": 89.60,
+          "experimentalGpuMatchingPixels": 22019,
+          "experimentalGpuMaxChannelDelta": 39,
           "threshold": 99.95,
+          "toleranceProfile": [
+            {
+  "tolerance": 0,
+  "similarity": 89.60,
+  "matchingPixels": 22019
+},
+{
+  "tolerance": 8,
+  "similarity": 92.93,
+  "matchingPixels": 22838
+},
+{
+  "tolerance": 16,
+  "similarity": 99.37,
+  "matchingPixels": 24421
+},
+{
+  "tolerance": 32,
+  "similarity": 99.97,
+  "matchingPixels": 24568
+}
+          ],
           "dominantMismatchRegion": "round-round",
           "dominantMismatchDescription": "middle band: round cap with round join",
           "regions": [
@@ -20,7 +42,7 @@
   "pixels": 6144,
   "matchingPixels": 5410,
   "similarity": 88.05,
-  "maxChannelDelta": 64
+  "maxChannelDelta": 38
 },
 {
   "id": "round-round",
@@ -28,17 +50,17 @@
   "pixels": 6144,
   "matchingPixels": 5265,
   "similarity": 85.69,
-  "maxChannelDelta": 75
+  "maxChannelDelta": 39
 },
 {
   "id": "square-bevel",
   "description": "right band: square cap with bevel join",
   "pixels": 12288,
-  "matchingPixels": 11317,
-  "similarity": 92.10,
-  "maxChannelDelta": 98
+  "matchingPixels": 11344,
+  "similarity": 92.32,
+  "maxChannelDelta": 22
 }
           ],
-          "diagnosis": "Experimental render remains below threshold; the largest mismatch is isolated to the named stroke cap/join band. Normal route remains refused.",
+          "diagnosis": "Experimental render remains below the exact threshold. The 32-channel tolerance score reaches the threshold, which points to target-colorspace blending and AA quantization as the remaining blocker rather than missing stroke geometry. Normal route remains refused.",
           "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
         }

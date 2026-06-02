@@ -38,6 +38,7 @@ class StrokeCapJoinSceneCaptureTest {
             }
             val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = 0)
             val experimentalGpuCmp = TestUtils.compareBitmapsDetailed(experimentalGpu, reference, tolerance = 0)
+            val experimentalGpuToleranceProfile = toleranceProfile(experimentalGpu, reference)
             val regionStats = strokeRegionStats(experimentalGpu, reference)
             val adapter = ctx.adapterInfo ?: "unknown-adapter"
 
@@ -54,6 +55,7 @@ class StrokeCapJoinSceneCaptureTest {
                     experimentalGpu = experimentalGpu,
                     cpuCmp = cpuCmp,
                     experimentalGpuCmp = experimentalGpuCmp,
+                    experimentalGpuToleranceProfile = experimentalGpuToleranceProfile,
                     regionStats = regionStats,
                     adapter = adapter,
                 )
@@ -75,6 +77,7 @@ class StrokeCapJoinSceneCaptureTest {
         experimentalGpu: SkBitmap,
         cpuCmp: BitmapComparison,
         experimentalGpuCmp: BitmapComparison,
+        experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
         adapter: String,
     ) {
@@ -89,9 +92,9 @@ class StrokeCapJoinSceneCaptureTest {
         File(dir, "route-cpu.json").writeText(cpuRouteJson())
         File(dir, "route-gpu.json").writeText(gpuRouteJson(adapter))
         File(dir, "experimental-gpu-diagnostic.json").writeText(
-            experimentalGpuDiagnosticJson(experimentalGpuCmp, regionStats, adapter),
+            experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, adapter),
         )
-        File(dir, "stats.json").writeText(statsJson(cpuCmp, experimentalGpuCmp, regionStats, adapter))
+        File(dir, "stats.json").writeText(statsJson(cpuCmp, experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, adapter))
     }
 
     private fun writePng(file: File, bitmap: SkBitmap) {
@@ -175,6 +178,7 @@ class StrokeCapJoinSceneCaptureTest {
 
     private fun experimentalGpuDiagnosticJson(
         experimentalGpuCmp: BitmapComparison,
+        experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
         adapter: String,
     ): String {
@@ -193,12 +197,15 @@ class StrokeCapJoinSceneCaptureTest {
               "experimentalGpuMatchingPixels": ${experimentalGpuCmp.matchingPixels},
               "experimentalGpuMaxChannelDelta": ${experimentalGpuCmp.maxChannelDiff.max()},
               "threshold": $GPU_SUPPORT_THRESHOLD,
+              "toleranceProfile": [
+            ${experimentalGpuToleranceProfile.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
               "dominantMismatchRegion": ${dominant.id.jsonString()},
               "dominantMismatchDescription": ${dominant.description.jsonString()},
               "regions": [
             ${regionStats.joinToString(",\n") { it.toJson().prependIndent("    ") }}
               ],
-              "diagnosis": "Experimental render remains below threshold; the largest mismatch is isolated to the named stroke cap/join band. Normal route remains refused.",
+              "diagnosis": "Experimental render remains below the exact threshold. The 32-channel tolerance score reaches the threshold, which points to target-colorspace blending and AA quantization as the remaining blocker rather than missing stroke geometry. Normal route remains refused.",
               "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
             }
         """.trimIndent() + "\n"
@@ -207,6 +214,7 @@ class StrokeCapJoinSceneCaptureTest {
     private fun statsJson(
         cpuCmp: BitmapComparison,
         experimentalGpuCmp: BitmapComparison,
+        experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
         adapter: String,
     ): String {
@@ -229,6 +237,9 @@ class StrokeCapJoinSceneCaptureTest {
           "experimentalGpuSimilarity": ${String.format(Locale.US, "%.2f", experimentalGpuCmp.similarity)},
           "experimentalGpuMatchingPixels": ${experimentalGpuCmp.matchingPixels},
           "experimentalGpuMaxChannelDelta": ${experimentalGpuCmp.maxChannelDiff.max()},
+          "experimentalGpuToleranceProfile": [
+        ${experimentalGpuToleranceProfile.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+          ],
           "dominantMismatchRegion": ${dominant.id.jsonString()},
           "dominantMismatchDescription": ${dominant.description.jsonString()},
           "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
@@ -251,6 +262,12 @@ class StrokeCapJoinSceneCaptureTest {
         }
         """.trimIndent() + "\n"
     }
+
+    private fun toleranceProfile(gpu: SkBitmap, reference: SkBitmap): List<ToleranceStat> =
+        listOf(0, TestUtils.TEXTUAL_GM_TOLERANCE, 16, 32).map { tolerance ->
+            val cmp = TestUtils.compareBitmapsDetailed(gpu, reference, tolerance = tolerance)
+            ToleranceStat(tolerance, cmp.similarity, cmp.matchingPixels)
+        }
 
     private fun strokeRegionStats(gpu: SkBitmap, reference: SkBitmap): List<StrokeRegionStats> {
         require(gpu.width == reference.width && gpu.height == reference.height)
@@ -394,6 +411,20 @@ class StrokeCapJoinSceneCaptureTest {
               "matchingPixels": $matchingPixels,
               "similarity": ${String.format(Locale.US, "%.2f", similarity)},
               "maxChannelDelta": $maxChannelDelta
+            }
+        """.trimIndent()
+    }
+
+    private data class ToleranceStat(
+        val tolerance: Int,
+        val similarity: Double,
+        val matchingPixels: Int,
+    ) {
+        fun toJson(): String = """
+            {
+              "tolerance": $tolerance,
+              "similarity": ${String.format(Locale.US, "%.2f", similarity)},
+              "matchingPixels": $matchingPixels
             }
         """.trimIndent()
     }
