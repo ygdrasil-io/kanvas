@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 1,
+  "packId": "m91-mep-rc-scene-pack-v1",
+  "status": "pass",
+  "claimLevel": "release-candidate-evidence-selection",
+  "date": "2026-06-02",
+  "linearIssues": [
+    "FOR-215",
+    "FOR-216",
+    "FOR-218"
+  ],
+  "scope": {
+    "description": "Release-candidate MEP scene pack assembled from existing checked-in WGSL dashboard and runtime evidence.",
+    "shaderTarget": "WGSL",
+    "gpuBackend": "WebGPU",
+    "rendererChangesClaimed": false,
+    "kadreNativeRequiredForValidation": false
+  },
+  "thresholds": {
+    "minimumSceneRows": 8,
+    "maximumSceneRows": 12,
+    "allowedStatuses": [
+      "supported",
+      "partial",
+      "expected-unsupported",
+      "blocked-dependency"
+    ],
+    "renderedRowRequiredArtifacts": [
+      "reference",
+      "cpu",
+      "gpu",
+      "cpuDiff",
+      "gpuDiff",
+      "routeCpu",
+      "routeGpu",
+      "stats"
+    ],
+    "unsupportedDiagnosticRequired": true,
+    "blockedDependencyDiagnosticRequired": true,
+    "dashboardGateExpectation": {
+      "failRows": 0,
+      "trackedGapRows": 0
+    }
+  },
+  "sceneRows": [
+    {
+      "id": "solid-rect",
+      "title": "Solid rect SrcOver",
+      "status": "supported",
+      "family": "paint",
+      "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json"
+      ],
+      "thresholdPolicy": "existing dashboard similarity threshold; no RC threshold change",
+      "diagnostics": {
+        "cpuRoute": "cpu.pipeline.solid-rect",
+        "gpuRoute": "webgpu.generated.solid-rect",
+        "fallbackReason": "none"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/solid-rect/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/solid-rect/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/solid-rect/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/solid-rect/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/solid-rect/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/solid-rect/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/solid-rect/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/solid-rect/stats.json"
+      }
+    },
+    {
+      "id": "linear-gradient-rect",
+      "title": "Linear gradient rect",
+      "status": "supported",
+      "family": "gradient",
+      "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json"
+      ],
+      "thresholdPolicy": "existing dashboard similarity threshold; no RC threshold change",
+      "diagnostics": {
+        "cpuRoute": "cpu.generated.linear-gradient.rect",
+        "gpuRoute": "webgpu.generated.linear-gradient.rect",
+        "fallbackReason": "none"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/stats.json"
+      }
+    },
+    {
+      "id": "runtime-effect-simple",
+      "title": "Registered SimpleRT runtime effect",
+      "status": "supported",
+      "family": "registered-runtime-effect",
+      "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json"
+      ],
+      "thresholdPolicy": "existing dashboard similarity threshold; no RC threshold change",
+      "diagnostics": {
+        "stableId": "runtime.simple_rt",
+        "cpuRoute": "cpu.runtime-effect.descriptor.simple_rt",
+        "gpuRoute": "webgpu.runtime-effect.descriptor.simple_rt",
+        "fallbackReason": "none",
+        "wgslSource": "gpu-raster/src/main/resources/shaders/runtime_simple_rt.wgsl"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json"
+      }
+    },
+    {
+      "id": "crop-image-filter-nonnull-prepass",
+      "title": "Crop image filter non-null prepass",
+      "status": "supported",
+      "family": "image-filter",
+      "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/m89-feature-breadth/evidence.json"
+      ],
+      "thresholdPolicy": "existing dashboard similarity threshold; no RC threshold change",
+      "diagnostics": {
+        "cpuRoute": "cpu.image-filter.crop-nonnull.offset-oracle",
+        "gpuRoute": "webgpu.image-filter.crop-nonnull.prepass",
+        "fallbackReason": "none"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json"
+      }
+    },
+    {
+      "id": "clip-rect-difference",
+      "title": "Clip rect difference",
+      "status": "supported",
+      "family": "clip",
+      "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/m89-feature-breadth/evidence.json"
+      ],
+      "thresholdPolicy": "existing dashboard similarity threshold; no RC threshold change",
+      "diagnostics": {
+        "cpuRoute": "cpu.coverage.clip-rect-difference",
+        "gpuRoute": "webgpu.coverage.clip-difference.analytic-rect",
+        "fallbackReason": "none"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/clip-rect-difference/stats.json"
+      }
+    },
+    {
+      "id": "bitmap-subset-local-matrix-repeat",
+      "title": "Bitmap subset local matrix repeat",
+      "status": "supported",
+      "family": "bitmap",
+      "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/m89-feature-breadth/evidence.json"
+      ],
+      "thresholdPolicy": "existing dashboard similarity threshold; no RC threshold change",
+      "diagnostics": {
+        "cpuRoute": "cpu.shader.bitmap.subset-local-matrix-repeat",
+        "gpuRoute": "webgpu.shader.bitmap.subset-local-matrix-repeat",
+        "fallbackReason": "none"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
+      }
+    },
+    {
+      "id": "image-filter-compose-cf-matrix-transform",
+      "title": "Composed image filter plus color matrix transform",
+      "status": "partial",
+      "family": "image-filter",
+      "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/m89-feature-breadth/evidence.json"
+      ],
+      "thresholdPolicy": "existing dashboard similarity threshold; no RC threshold change",
+      "diagnostics": {
+        "cpuRoute": "cpu.image-filter.compose.cf-matrix-transform-oracle",
+        "gpuRoute": "webgpu.image-filter.compose.cf-matrix-transform",
+        "fallbackReason": "none",
+        "partialReason": "bounded selected DAG route only; arbitrary recursive image-filter DAGs remain outside RC scope"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/stats.json"
+      }
+    },
+    {
+      "id": "path-aa-dashing-edge-budget",
+      "title": "Path AA dashed path over edge budget",
+      "status": "expected-unsupported",
+      "family": "path-aa",
+      "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json"
+      ],
+      "thresholdPolicy": "not rendered by GPU; refusal diagnostic is the gate",
+      "diagnostics": {
+        "cpuRoute": "cpu.coverage.path-aa.edge-budget-diagnostic",
+        "gpuRoute": "webgpu.coverage.path-aa.refuse",
+        "fallbackReason": "coverage.edge-count-exceeded",
+        "diagnosticArtifact": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-gpu.json"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/cpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/cpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/stats.json"
+      }
+    },
+    {
+      "id": "image-filter-crop-nonnull-prepass-required",
+      "title": "Image filter crop requiring non-null input prepass",
+      "status": "expected-unsupported",
+      "family": "image-filter",
+      "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"
+      ],
+      "thresholdPolicy": "not rendered by GPU; refusal diagnostic is the gate",
+      "diagnostics": {
+        "cpuRoute": "cpu.image-filter.crop-nonnull.expected-unsupported",
+        "gpuRoute": "webgpu.image-filter.crop-nonnull.refuse",
+        "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+        "diagnosticArtifact": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/cpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/cpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/stats.json"
+      }
+    },
+    {
+      "id": "font-complex-shaping-refusal",
+      "title": "Complex text shaping dependency gate",
+      "status": "blocked-dependency",
+      "family": "font",
+      "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json"
+      ],
+      "thresholdPolicy": "not rendered by GPU; dependency diagnostic is the gate",
+      "diagnostics": {
+        "cpuRoute": "cpu.font.placeholder-diagnostic",
+        "gpuRoute": "webgpu.font.refuse",
+        "fallbackReason": "font.complex-shaping-dependency-gated",
+        "blockedDependency": "real font shaping/text layout delivery",
+        "diagnosticArtifact": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/font-diagnostics.json"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/cpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/cpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/stats.json",
+        "fontDiagnostics": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/font-diagnostics.json"
+      }
+    }
+  ],
+  "sourceEvidence": [
+    "reports/wgsl-pipeline/scenes/generated/results.json",
+    "reports/wgsl-pipeline/m89-feature-breadth/evidence.json",
+    "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json",
+    "reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json",
+    "reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json"
+  ],
+  "artifactPaths": [
+    "reports/wgsl-pipeline/m91-mep-rc-scene-pack/manifest.json",
+    "reports/wgsl-pipeline/m91-mep-rc-scene-pack/pm-report.md"
+  ],
+  "diagnostics": [
+    {
+      "id": "rc-pack-no-renderer-fixes",
+      "status": "pass",
+      "message": "M91 aggregates existing evidence only; no renderer runtime support is claimed."
+    },
+    {
+      "id": "wgsl-target",
+      "status": "pass",
+      "message": "Runtime effects remain registered Kotlin/WGSL descriptors; no SkSL compiler, IR, or VM is claimed."
+    },
+    {
+      "id": "kadre-native-opt-in",
+      "status": "pass",
+      "message": "Headless RC validation does not run native Kadre demos or require the Kadre native submodule."
+    }
+  ],
+  "nonClaims": [
+    "This RC scene pack aggregates existing evidence; it does not add renderer fixes.",
+    "WGSL remains the shader implementation target.",
+    "No SkSL compiler, SkSL IR, or SkSL VM is introduced or claimed.",
+    "No Ganesh or Graphite port is implied.",
+    "WebGPU remains the GPU backend.",
+    "Expected-unsupported and blocked-dependency rows remain explicit release-candidate outcomes.",
+    "Kadre native demos remain opt-in and are not required by the headless validator."
+  ]
+}

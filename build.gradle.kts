@@ -4363,6 +4363,33 @@ tasks.register<Exec>("validateMepNextRuntimeInteractive") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
 }
 
+tasks.register<Exec>("validateMepRcScenePack") {
+    group = "verification"
+    description = "Validates checked-in MEP RC FOR-215/FOR-216/FOR-218 scene-pack evidence without Kadre native dependencies."
+    commandLine("python3", "scripts/validate_mep_rc_scene_pack.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_mep_rc_scene_pack.py"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-mep-rc-scene-pack"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-feature-breadth/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json"))
+}
+
+tasks.register<Exec>("validateMepRcRuntime") {
+    group = "verification"
+    description = "Validates checked-in MEP RC Kadre runtime and telemetry evidence without opening a native window."
+    commandLine("python3", "scripts/validate_mep_rc_runtime.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_mep_rc_runtime.py"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m92-kadre-runtime-rc"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/scene-switching.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
+}
+
 tasks.register("pipelinePmBundle") {
     group = "verification"
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
@@ -4396,6 +4423,8 @@ tasks.register("pipelinePmBundle") {
         "pipelineM70KadreLiveRuntimeEvidence",
         "pipelineSkiaGmInventoryGate",
         "validateMepNextRuntimeInteractive",
+        "validateMepRcScenePack",
+        "validateMepRcRuntime",
     )
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
@@ -4427,6 +4456,8 @@ tasks.register("pipelinePmBundle") {
     val m88ReleaseCandidate2Dir = layout.projectDirectory.dir("reports/wgsl-pipeline/m88-realtime-rc2")
     val m89FeatureBreadthDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m89-feature-breadth")
     val m90RuntimeInteractiveDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m90-runtime-interactive")
+    val m91MepRcScenePackDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m91-mep-rc-scene-pack")
+    val m92KadreRuntimeRcDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m92-kadre-runtime-rc")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4460,6 +4491,8 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m88ReleaseCandidate2Dir)
     inputs.dir(m89FeatureBreadthDir)
     inputs.dir(m90RuntimeInteractiveDir)
+    inputs.dir(m91MepRcScenePackDir)
+    inputs.dir(m92KadreRuntimeRcDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4477,6 +4510,12 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-mep-next-feature-breadth-pm-report.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-mep-next-runtime-interactive.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-mep-next-closeout.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-mep-rc-scene-pack/manifest.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-mep-rc-scene-pack/pm-report.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m92-kadre-runtime-rc/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
@@ -4517,6 +4556,8 @@ tasks.register("pipelinePmBundle") {
         val m88ReleaseCandidate2Root = m88ReleaseCandidate2Dir.asFile
         val m89FeatureBreadthRoot = m89FeatureBreadthDir.asFile
         val m90RuntimeInteractiveRoot = m90RuntimeInteractiveDir.asFile
+        val m91MepRcScenePackRoot = m91MepRcScenePackDir.asFile
+        val m92KadreRuntimeRcRoot = m92KadreRuntimeRcDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4626,6 +4667,12 @@ tasks.register("pipelinePmBundle") {
         if (m90RuntimeInteractiveRoot.isDirectory) {
             m90RuntimeInteractiveRoot.copyRecursively(targetRoot.resolve("runtime/m90-runtime-interactive"), overwrite = true)
         }
+        if (m91MepRcScenePackRoot.isDirectory) {
+            m91MepRcScenePackRoot.copyRecursively(targetRoot.resolve("release/m91-mep-rc-scene-pack"), overwrite = true)
+        }
+        if (m92KadreRuntimeRcRoot.isDirectory) {
+            m92KadreRuntimeRcRoot.copyRecursively(targetRoot.resolve("runtime/m92-kadre-runtime-rc"), overwrite = true)
+        }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
         }
@@ -4688,6 +4735,8 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-06-02-m87-sprint-report-and-readiness-accounting.md",
             "reports/wgsl-pipeline/2026-06-02-m88-sprint-report-and-readiness-accounting.md",
             "reports/wgsl-pipeline/2026-06-02-mep-next-feature-breadth-pm-report.md",
+            "reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md",
+            "reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
@@ -6263,6 +6312,47 @@ tasks.register("pipelinePmBundle") {
                 ),
                 "notice" to "M90/FOR-193..196 packages bounded interactive Kadre runtime evidence. It is PM-visible runtime progress, not broad display-list replay, release-grade FPS, or broad observed cache telemetry.",
             ),
+            "m91MepRcScenePack" to linkedMapOf<String, Any>(
+                "manifestJson" to "release/m91-mep-rc-scene-pack/manifest.json",
+                "pmReport" to "release/m91-mep-rc-scene-pack/pm-report.md",
+                "claimLevel" to "release-candidate-evidence-selection",
+                "status" to "pass",
+                "linearIssues" to listOf("FOR-215", "FOR-216", "FOR-218"),
+                "sceneRows" to 10,
+                "statusTaxonomy" to listOf("supported", "partial", "expected-unsupported", "blocked-dependency"),
+                "supportedRows" to listOf(
+                    "solid-rect",
+                    "linear-gradient-rect",
+                    "runtime-effect-simple",
+                    "crop-image-filter-nonnull-prepass",
+                    "clip-rect-difference",
+                    "bitmap-subset-local-matrix-repeat",
+                ),
+                "partialRows" to listOf("image-filter-compose-cf-matrix-transform"),
+                "expectedUnsupportedRows" to listOf(
+                    "path-aa-dashing-edge-budget",
+                    "image-filter-crop-nonnull-prepass-required",
+                ),
+                "blockedDependencyRows" to listOf("font-complex-shaping-refusal"),
+                "notice" to "M91/FOR-215/FOR-216/FOR-218 packages a release-candidate MEP scene selection from existing evidence only. It does not claim renderer fixes, dynamic SkSL compilation, Ganesh/Graphite, or native Kadre requirements for headless validation; expected-unsupported and blocked-dependency rows remain explicit.",
+            ),
+            "m92KadreRuntimeRc" to linkedMapOf<String, Any>(
+                "evidenceJson" to "runtime/m92-kadre-runtime-rc/evidence.json",
+                "telemetryClassificationJson" to "runtime/m92-kadre-runtime-rc/telemetry-classification.json",
+                "closeoutReport" to "reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md",
+                "pmDemoScript" to "reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md",
+                "claimLevel" to "rc-kadre-runtime-product-like-evidence-with-observed-derived-not-observable-telemetry",
+                "status" to "pass",
+                "linearIssues" to listOf("FOR-204", "FOR-205", "FOR-206", "FOR-207", "FOR-208", "FOR-209", "FOR-210", "FOR-211", "FOR-212", "FOR-213", "FOR-217", "FOR-219", "FOR-220"),
+                "singleNativeRcDemoCommand" to "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive",
+                "headlessValidatorCommand" to "python3 scripts/validate_mep_rc_runtime.py .",
+                "readinessAfter" to 67.75,
+                "readinessDelta" to 0.0,
+                "telemetryClasses" to listOf("observed", "observed-partial", "derived", "expected-unsupported", "not-observable"),
+                "nativeDemoOptIn" to true,
+                "releaseBlockingPerformanceGate" to false,
+                "notice" to "M92/FOR-204..213/FOR-217/FOR-219/FOR-220 closes the Kadre runtime RC evidence slice. It documents one opt-in native command and separates observed, derived, expected-unsupported, and not-observable telemetry without claiming broad cache counters, real OS event injection in CI, release-grade window FPS, or new native execution in this closeout.",
+            ),
             "mepNextCloseout" to linkedMapOf<String, Any>(
                 "pmReport" to "reports/wgsl-pipeline/2026-06-02-mep-next-closeout.md",
                 "linearIssues" to listOf("FOR-188", "FOR-197"),
@@ -6885,6 +6975,10 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M89 feature breadth evidence lives in `manifest.json` under `m89FeatureBreadth`; this is FOR-189..192 PM aggregation for bounded rows and stable refusals, not a broad support or runtime-code claim.")
                 appendLine("- `runtime/m90-runtime-interactive/`: M90 bounded Kadre interactive runtime evidence for durable loop semantics, scene switching, input telemetry, and observed-partial/derived resource counters.")
                 appendLine("- M90 runtime counters live in `manifest.json` under `m90RuntimeInteractive`; native demo and benchmark commands remain opt-in because they open local Kadre windows.")
+                appendLine("- `release/m91-mep-rc-scene-pack/`: M91 FOR-215/FOR-216/FOR-218 release-candidate scene-pack manifest and PM report.")
+                appendLine("- M91 RC scene-pack counters live in `manifest.json` under `m91MepRcScenePack`; this is existing evidence aggregation with explicit unsupported/dependency rows, not a renderer-fix claim.")
+                appendLine("- `runtime/m92-kadre-runtime-rc/`: M92 RC Kadre runtime and telemetry classification evidence.")
+                appendLine("- M92 runtime evidence lives in `manifest.json` under `m92KadreRuntimeRc`; the native RC command is opt-in, and headless validation does not open a Kadre window.")
                 appendLine("- MEP-NEXT closeout lives in `manifest.json` under `mepNextCloseout` and records the unchanged 67.75% readiness boundary.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
