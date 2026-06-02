@@ -15,6 +15,11 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4f {
     return vec4f(x, y, 0.0, 1.0);
 }
 
+fn quantize_rgba8_channel(c: f32) -> f32 {
+    let clamped = clamp(c, 0.0, 1.0);
+    return floor(clamped * 255.0 + 0.5) / 255.0;
+}
+
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let pp = pos.xy - uniforms.in_center;
@@ -22,5 +27,11 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let angle = atan(pp.y / pp.x);
     var t = (angle + 3.1415926 / 2.0) / 3.1415926;
     t = fract(t + radius * uniforms.rad_scale);
-    return uniforms.in_colors0 * (1.0 - t) + uniforms.in_colors1 * t;
+    let color = uniforms.in_colors0 * (1.0 - t) + uniforms.in_colors1 * t;
+    return vec4f(
+        quantize_rgba8_channel(color.r),
+        quantize_rgba8_channel(color.g),
+        quantize_rgba8_channel(color.b),
+        quantize_rgba8_channel(color.a),
+    );
 }

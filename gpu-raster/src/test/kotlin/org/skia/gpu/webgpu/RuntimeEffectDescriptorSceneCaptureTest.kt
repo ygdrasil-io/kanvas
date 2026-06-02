@@ -26,7 +26,7 @@ import java.nio.ByteOrder
 
 class RuntimeEffectDescriptorSceneCaptureTest {
     @Test
-    fun `SpiralRT descriptor scene captures visual parity blocker evidence`() {
+    fun `SpiralRT descriptor scene captures supported evidence`() {
         capture(RuntimeScene.Spiral)
     }
 
@@ -325,11 +325,11 @@ class RuntimeEffectDescriptorSceneCaptureTest {
             gpuRoute = "webgpu.runtime-effect.descriptor.spiral_rt",
             gpuUnsupportedRoute = "webgpu.runtime-effect.descriptor.spiral_rt.expected-unsupported",
             fallbackReason = "runtime-effect.spiral-visual-parity-below-threshold",
-            pipelineKey = "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
+            pipelineKey = "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl parserReflected=true status=supported state=[blendMode=kSrcOver]",
             uniformFloats = floatArrayOf(0.01f, 0f, 32f, 32f, 1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f),
-            gpuSupported = false,
+            gpuSupported = true,
             gpuCandidateDiagnostics = false,
-            captureTestName = "SpiralRT descriptor scene captures visual parity blocker evidence",
+            captureTestName = "SpiralRT descriptor scene captures supported evidence",
         ),
         LinearGradient(
             sceneId = "runtime-effect-linear-gradient",
