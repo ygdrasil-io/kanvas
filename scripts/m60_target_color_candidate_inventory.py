@@ -41,6 +41,9 @@ def find_tolerance_profile(stats: dict[str, Any]) -> list[dict[str, Any]]:
     profile = stats.get("experimentalGpuToleranceProfile")
     if isinstance(profile, list):
         return profile
+    profile = stats.get("targetToleranceProfile")
+    if isinstance(profile, list):
+        return profile
     profile = stats.get("toleranceProfile")
     if isinstance(profile, list):
         return profile
@@ -62,6 +65,13 @@ def find_exact(stats: dict[str, Any]) -> float | None:
     if isinstance(gpu, dict):
         return number(gpu.get("similarity"))
     return None
+
+
+def find_target_blend_exact(stats: dict[str, Any]) -> float | None:
+    exact = number(stats.get("experimentalGpuSimilarity"))
+    if exact is not None:
+        return exact
+    return number(stats.get("targetExactSimilarity"))
 
 
 def route_for(scene_dir: Path) -> dict[str, Any]:
@@ -108,7 +118,7 @@ def out_of_scope_reason(scene_id: str, route: dict[str, Any]) -> str | None:
 
 def classify(scene_id: str, stats: dict[str, Any], route: dict[str, Any]) -> tuple[str, str, str]:
     exact = find_exact(stats)
-    experimental_exact = number(stats.get("experimentalGpuSimilarity"))
+    experimental_exact = find_target_blend_exact(stats)
     tolerance8 = find_tolerance8(stats)
     target_blend = stats.get("targetColorSpaceBlend") is True
     status = route.get("status") or stats.get("gpuStatus") or stats.get("status")
@@ -122,6 +132,12 @@ def classify(scene_id: str, stats: dict[str, Any], route: dict[str, Any]) -> tup
         )
 
     if target_blend and experimental_exact is not None:
+        if status != "expected-unsupported":
+            return (
+                "not-candidate-target-blend-negative",
+                "non-candidate",
+                "targetColorSpaceBlend evidence exists, but the normal route is not an expected-unsupported candidate and the target-blend render does not reach the exact support threshold",
+            )
         if experimental_exact >= THRESHOLD:
             return (
                 "candidate-promotable-only-with-exact-proof",
@@ -182,7 +198,7 @@ def build_inventory(project_root: Path) -> dict[str, Any]:
         route = route_for(scene_dir)
         scene_id = str(stats.get("sceneId") or scene_dir.name)
         exact = find_exact(stats)
-        experimental_exact = number(stats.get("experimentalGpuSimilarity"))
+        experimental_exact = find_target_blend_exact(stats)
         tolerance8 = find_tolerance8(stats)
         decision, bucket, reason = classify(scene_id, stats, route)
         row = {

@@ -432,6 +432,7 @@ class StrokeCapJoinSceneCaptureTest {
         var greaterThanEightPixels = 0
         var greaterThanThirtyTwoPixels = 0
         var maxDelta = 0
+        val highDeltaSamples = mutableListOf<ResidualSample>()
         for (y in 0 until reference.height) {
             for (x in 0 until reference.width) {
                 val gpuPixel = gpu.getPixel(x, y)
@@ -444,6 +445,15 @@ class StrokeCapJoinSceneCaptureTest {
                 if (delta == 1) oneUnitMismatchPixels++
                 if (delta > TestUtils.TEXTUAL_GM_TOLERANCE) greaterThanEightPixels++
                 if (delta > 32) greaterThanThirtyTwoPixels++
+                if (delta > TestUtils.TEXTUAL_GM_TOLERANCE) {
+                    highDeltaSamples += ResidualSample(
+                        x = x,
+                        y = y,
+                        maxChannelDelta = delta,
+                        reference = refPixel,
+                        gpu = gpuPixel,
+                    )
+                }
                 maxDelta = maxOf(maxDelta, delta)
             }
         }
@@ -455,6 +465,11 @@ class StrokeCapJoinSceneCaptureTest {
             greaterThanThirtyTwoPixels = greaterThanThirtyTwoPixels,
             maxChannelDelta = maxDelta,
             regions = byRegion.values.map { it.toStats() },
+            highDeltaSamples = highDeltaSamples.sortedWith(
+                compareByDescending<ResidualSample> { it.maxChannelDelta }
+                    .thenBy { it.y }
+                    .thenBy { it.x },
+            ),
         )
     }
 
@@ -637,6 +652,7 @@ class StrokeCapJoinSceneCaptureTest {
         val greaterThanThirtyTwoPixels: Int,
         val maxChannelDelta: Int,
         val regions: List<StrokeResidualRegionStats>,
+        val highDeltaSamples: List<ResidualSample>,
     ) {
         fun summaryJson(): String = """
             {
@@ -645,7 +661,7 @@ class StrokeCapJoinSceneCaptureTest {
               "greaterThanEightPixels": $greaterThanEightPixels,
               "greaterThanThirtyTwoPixels": $greaterThanThirtyTwoPixels,
               "maxChannelDelta": $maxChannelDelta,
-              "classification": "mostly byte-exact target-color quantization residual; remaining >8 tail is localized to cap/join AA boundary pixels"
+              "classification": "mostly byte-exact target-color transform residual after RGBA8 source quantization; remaining >8 tail is localized to cap/join AA boundary pixels"
             }
         """.trimIndent()
 
@@ -667,10 +683,39 @@ class StrokeCapJoinSceneCaptureTest {
               "regions": [
             ${regions.joinToString(",\n") { it.toJson().prependIndent("    ") }}
               ],
+              "highDeltaSamples": [
+            ${highDeltaSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
               "decision": "M60 remains expected-unsupported because exact similarity is below 99.95 even after the target-colorspace blend pilot.",
               "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
             }
         """.trimIndent() + "\n"
+    }
+
+    private data class ResidualSample(
+        val x: Int,
+        val y: Int,
+        val maxChannelDelta: Int,
+        val reference: Int,
+        val gpu: Int,
+    ) {
+        fun toJson(): String = """
+            {
+              "x": $x,
+              "y": $y,
+              "maxChannelDelta": $maxChannelDelta,
+              "referenceRgba": ${rgbaJson(reference)},
+              "gpuRgba": ${rgbaJson(gpu)}
+            }
+        """.trimIndent()
+
+        private fun rgbaJson(pixel: Int): String {
+            val r = (pixel ushr 16) and 0xFF
+            val g = (pixel ushr 8) and 0xFF
+            val b = pixel and 0xFF
+            val a = (pixel ushr 24) and 0xFF
+            return """[$r, $g, $b, $a]"""
+        }
     }
 
     private data class StrokeResidualRegionStats(

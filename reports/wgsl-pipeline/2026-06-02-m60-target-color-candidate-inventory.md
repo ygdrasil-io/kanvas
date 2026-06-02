@@ -21,7 +21,7 @@ promoted by this inventory, and no global rendering path is changed.
 
 | Scene | Decision | Exact | Target exact | Tol. 8 | Cause | WebGPU route | Reason |
 |---|---|---:|---:|---:|---|---|---|
-| `m60-bounded-stroke-cap-join` | `candidate-residual-aa` | 0.00 | 95.37 | 99.96 | `coverage.stroke-cap-join-aa-residual` | `webgpu.coverage.refuse` | targetColorSpaceBlend improves the scene into tolerance-8 parity, but exact parity remains below 99.95 due to the recorded AA residual |
+| `m60-bounded-stroke-cap-join` | `candidate-residual-aa` | 0.00 | 95.91 | 99.96 | `coverage.stroke-cap-join-aa-residual` | `webgpu.coverage.refuse` | targetColorSpaceBlend improves the scene into tolerance-8 parity, but exact parity remains below 99.95 due to the recorded AA residual |
 
 ## Diagnostic Fixtures
 
@@ -51,16 +51,16 @@ promoted by this inventory, and no global rendering path is changed.
 | `image-filter-compose-cf-matrix-transform` | `not-candidate-out-of-scope` | 100.00 | n/a | n/a | `none` | `webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite` | image-filter path is outside the FOR-234 solid-color AA scope |
 | `image-filter-crop-nonnull-prepass-required` | `not-candidate-out-of-scope` | n/a | n/a | n/a | `image-filter.crop-input-nonnull-prepass-required` | `webgpu.image-filter.refuse` | image-filter path is outside the FOR-234 solid-color AA scope |
 | `linear-gradient-rect` | `not-candidate-out-of-scope` | 100.00 | n/a | n/a | `none` | `webgpu.generated.linear-gradient.rect` | gradient path is outside the FOR-234 solid-color AA scope |
-| `m57-aaclip-bounded-grid` | `not-candidate-no-target-color-signal` | 98.83 | n/a | n/a | `none` | `webgpu.coverage.aaclip-bounded-grid` | exact score is below 99.95, but artifacts provide no tolerance-8/color-space signal for the target blend pilot |
+| `m57-aaclip-bounded-grid` | `not-candidate-target-blend-negative` | 98.83 | 94.71 | 94.73 | `none` | `webgpu.coverage.aaclip-bounded-grid` | targetColorSpaceBlend evidence exists, but the normal route is not an expected-unsupported candidate and the target-blend render does not reach the exact support threshold |
 | `m60-bounded-nested-rrect-clip` | `not-candidate-stable-refusal` | 71.22 | n/a | n/a | `coverage.nested-clip-visual-parity-below-threshold` | `webgpu.coverage.nested-rrect-clip.expected-unsupported` | current route is an expected-unsupported refusal with stable cause `coverage.nested-clip-visual-parity-below-threshold` and no targetColorSpaceBlend evidence |
 | `path-aa-convexpaths-edge-budget` | `not-candidate-stable-refusal` | n/a | n/a | n/a | `coverage.edge-count-exceeded` | `webgpu.coverage.refuse` | current route is an expected-unsupported refusal with stable cause `coverage.edge-count-exceeded` and no targetColorSpaceBlend evidence |
 | `path-aa-dashing-edge-budget` | `not-candidate-stable-refusal` | n/a | n/a | n/a | `coverage.edge-count-exceeded` | `webgpu.coverage.refuse` | current route is an expected-unsupported refusal with stable cause `coverage.edge-count-exceeded` and no targetColorSpaceBlend evidence |
 | `path-aa-edge-budget-boundary` | `not-candidate-insufficient-metrics` | n/a | n/a | n/a | `coverage.edge-count-exceeded` | `webgpu.coverage.refuse` | artifacts do not expose exact GPU similarity or targetColorSpaceBlend evidence |
 | `path-aa-stroke-outline-fallback` | `not-candidate-insufficient-metrics` | n/a | n/a | n/a | `coverage.stroke-outline-edge-count-exceeded` | `webgpu.coverage.refuse` | artifacts do not expose exact GPU similarity or targetColorSpaceBlend evidence |
 | `path-aa-stroke-primitive` | `not-candidate-no-target-color-signal` | 91.81 | n/a | n/a | `none` | `webgpu.coverage.path-aa-stroke-primitive` | exact score is below 99.95, but artifacts provide no tolerance-8/color-space signal for the target blend pilot |
-| `runtime-effect-linear-gradient` | `not-candidate-out-of-scope` | 0.00 | n/a | n/a | `runtime-effect.linear-gradient-visual-parity-below-threshold` | `webgpu.runtime-effect.descriptor.linear_gradient_rt.expected-unsupported` | gradient path is outside the FOR-234 solid-color AA scope |
+| `runtime-effect-linear-gradient` | `not-candidate-out-of-scope` | 100.00 | n/a | n/a | `none` | `webgpu.runtime-effect.descriptor.linear_gradient_rt` | gradient path is outside the FOR-234 solid-color AA scope |
 | `runtime-effect-simple` | `not-candidate-out-of-scope` | 100.00 | n/a | n/a | `none` | `webgpu.runtime-effect.descriptor.simple_rt` | runtime-effect descriptor path is outside the FOR-234 solid-color AA scope |
-| `runtime-effect-spiral` | `not-candidate-out-of-scope` | 0.00 | n/a | n/a | `runtime-effect.spiral-visual-parity-below-threshold` | `webgpu.runtime-effect.descriptor.spiral_rt.expected-unsupported` | runtime-effect descriptor path is outside the FOR-234 solid-color AA scope |
+| `runtime-effect-spiral` | `not-candidate-out-of-scope` | 100.00 | n/a | n/a | `none` | `webgpu.runtime-effect.descriptor.spiral_rt` | runtime-effect descriptor path is outside the FOR-234 solid-color AA scope |
 | `scaled-rects-transform-stack` | `not-candidate-already-exact` | 100.00 | n/a | n/a | `none` | `webgpu.transform.scaled-rects.convex-polygon` | current WebGPU evidence is already exact at or above 99.95, so targetColorSpaceBlend is not needed |
 | `solid-rect` | `not-candidate-already-exact` | 100.00 | n/a | n/a | `none` | `webgpu.coverage.analytic-rect` | current WebGPU evidence is already exact at or above 99.95, so targetColorSpaceBlend is not needed |
 | `src-over-stack` | `not-candidate-already-exact` | 100.00 | n/a | n/a | `none` | `webgpu.blend.src-over.fixed-function` | current WebGPU evidence is already exact at or above 99.95, so targetColorSpaceBlend is not needed |
