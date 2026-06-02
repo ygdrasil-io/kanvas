@@ -1,0 +1,44 @@
+        {
+          "sceneId": "m60-bounded-stroke-cap-join",
+          "backend": "WebGPU",
+          "adapter": "Apple M2 Max",
+          "status": "diagnostic-only",
+          "supportClaim": false,
+          "selectedRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
+          "normalRoute": "webgpu.coverage.refuse",
+          "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+          "experimentalGpuSimilarity": 89.49,
+          "experimentalGpuMatchingPixels": 21992,
+          "experimentalGpuMaxChannelDelta": 98,
+          "threshold": 99.95,
+          "dominantMismatchRegion": "round-round",
+          "dominantMismatchDescription": "middle band: round cap with round join",
+          "regions": [
+            {
+  "id": "butt-bevel",
+  "description": "left band: butt cap with bevel join",
+  "pixels": 6144,
+  "matchingPixels": 5410,
+  "similarity": 88.05,
+  "maxChannelDelta": 64
+},
+{
+  "id": "round-round",
+  "description": "middle band: round cap with round join",
+  "pixels": 6144,
+  "matchingPixels": 5265,
+  "similarity": 85.69,
+  "maxChannelDelta": 75
+},
+{
+  "id": "square-bevel",
+  "description": "right band: square cap with bevel join",
+  "pixels": 12288,
+  "matchingPixels": 11317,
+  "similarity": 92.10,
+  "maxChannelDelta": 98
+}
+          ],
+          "diagnosis": "Experimental render remains below threshold; the largest mismatch is isolated to the named stroke cap/join band. Normal route remains refused.",
+          "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+        }

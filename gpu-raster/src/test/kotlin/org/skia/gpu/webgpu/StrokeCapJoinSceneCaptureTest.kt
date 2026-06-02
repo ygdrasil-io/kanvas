@@ -33,20 +33,35 @@ class StrokeCapJoinSceneCaptureTest {
             val gpuError = assertThrows(IllegalStateException::class.java) {
                 WebGpuSink.draw(ctx, gm)
             }
+            val experimentalGpu = withExperimentalStrokeCapJoinRender {
+                WebGpuSink.draw(ctx, gm)
+            }
             val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = 0)
+            val experimentalGpuCmp = TestUtils.compareBitmapsDetailed(experimentalGpu, reference, tolerance = 0)
+            val regionStats = strokeRegionStats(experimentalGpu, reference)
             val adapter = ctx.adapterInfo ?: "unknown-adapter"
 
             println(
                 "[StrokeCapJoinSceneCapture] adapter=$adapter cpu=${"%.2f".format(cpuCmp.similarity)}%, " +
-                    "gpuRefusal=${gpuError.message}",
+                    "experimentalGpu=${"%.2f".format(experimentalGpuCmp.similarity)}%, " +
+                    "dominantGap=${regionStats.minBy { it.similarity }.id}, gpuRefusal=${gpuError.message}",
             )
 
             if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
-                writeEvidence(cpuBitmap, reference, cpuCmp, adapter)
+                writeEvidence(
+                    cpuBitmap = cpuBitmap,
+                    reference = reference,
+                    experimentalGpu = experimentalGpu,
+                    cpuCmp = cpuCmp,
+                    experimentalGpuCmp = experimentalGpuCmp,
+                    regionStats = regionStats,
+                    adapter = adapter,
+                )
             }
 
             assertEquals(100.0, cpuCmp.similarity, 0.0)
             assertTrue(cpuCmp.matchingPixels == cpuCmp.totalPixels)
+            assertTrue(experimentalGpuCmp.similarity < GPU_SUPPORT_THRESHOLD)
             assertTrue(
                 gpuError.message!!.contains("coverage.stroke-cap-join-visual-parity-below-threshold"),
                 "expected stable stroke cap/join blocker diagnostic, got ${gpuError.message}",
@@ -57,18 +72,26 @@ class StrokeCapJoinSceneCaptureTest {
     private fun writeEvidence(
         cpuBitmap: SkBitmap,
         reference: SkBitmap,
+        experimentalGpu: SkBitmap,
         cpuCmp: BitmapComparison,
+        experimentalGpuCmp: BitmapComparison,
+        regionStats: List<StrokeRegionStats>,
         adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join").apply { mkdirs() }
         writePng(File(dir, "skia.png"), reference)
         writePng(File(dir, "cpu.png"), cpuBitmap)
         writePng(File(dir, "cpu-diff.png"), CrossBackendHarness.pixelDiff(reference, cpuBitmap))
+        writePng(File(dir, "gpu-experimental.png"), experimentalGpu)
+        writePng(File(dir, "gpu-experimental-diff.png"), CrossBackendHarness.pixelDiff(reference, experimentalGpu))
         File(dir, "gpu.png").delete()
         File(dir, "gpu-diff.png").delete()
         File(dir, "route-cpu.json").writeText(cpuRouteJson())
         File(dir, "route-gpu.json").writeText(gpuRouteJson(adapter))
-        File(dir, "stats.json").writeText(statsJson(cpuCmp, adapter))
+        File(dir, "experimental-gpu-diagnostic.json").writeText(
+            experimentalGpuDiagnosticJson(experimentalGpuCmp, regionStats, adapter),
+        )
+        File(dir, "stats.json").writeText(statsJson(cpuCmp, experimentalGpuCmp, regionStats, adapter))
     }
 
     private fun writePng(file: File, bitmap: SkBitmap) {
@@ -150,7 +173,45 @@ class StrokeCapJoinSceneCaptureTest {
         }
     """.trimIndent() + "\n"
 
-    private fun statsJson(cpuCmp: BitmapComparison, adapter: String): String = """
+    private fun experimentalGpuDiagnosticJson(
+        experimentalGpuCmp: BitmapComparison,
+        regionStats: List<StrokeRegionStats>,
+        adapter: String,
+    ): String {
+        val dominant = regionStats.minBy { it.similarity }
+        return """
+            {
+              "sceneId": "m60-bounded-stroke-cap-join",
+              "backend": "WebGPU",
+              "adapter": ${adapter.jsonString()},
+              "status": "diagnostic-only",
+              "supportClaim": false,
+              "selectedRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
+              "normalRoute": "webgpu.coverage.refuse",
+              "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+              "experimentalGpuSimilarity": ${String.format(Locale.US, "%.2f", experimentalGpuCmp.similarity)},
+              "experimentalGpuMatchingPixels": ${experimentalGpuCmp.matchingPixels},
+              "experimentalGpuMaxChannelDelta": ${experimentalGpuCmp.maxChannelDiff.max()},
+              "threshold": $GPU_SUPPORT_THRESHOLD,
+              "dominantMismatchRegion": ${dominant.id.jsonString()},
+              "dominantMismatchDescription": ${dominant.description.jsonString()},
+              "regions": [
+            ${regionStats.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "diagnosis": "Experimental render remains below threshold; the largest mismatch is isolated to the named stroke cap/join band. Normal route remains refused.",
+              "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun statsJson(
+        cpuCmp: BitmapComparison,
+        experimentalGpuCmp: BitmapComparison,
+        regionStats: List<StrokeRegionStats>,
+        adapter: String,
+    ): String {
+        val dominant = regionStats.minBy { it.similarity }
+        return """
         {
           "sceneId": "m60-bounded-stroke-cap-join",
           "pixels": ${cpuCmp.totalPixels},
@@ -164,6 +225,12 @@ class StrokeCapJoinSceneCaptureTest {
           "gpuMatchingPixels": 0,
           "gpuMaxChannelDelta": 255,
           "gpuStatus": "expected-unsupported",
+          "experimentalGpuStatus": "diagnostic-only",
+          "experimentalGpuSimilarity": ${String.format(Locale.US, "%.2f", experimentalGpuCmp.similarity)},
+          "experimentalGpuMatchingPixels": ${experimentalGpuCmp.matchingPixels},
+          "experimentalGpuMaxChannelDelta": ${experimentalGpuCmp.maxChannelDiff.max()},
+          "dominantMismatchRegion": ${dominant.id.jsonString()},
+          "dominantMismatchDescription": ${dominant.description.jsonString()},
           "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
           "pathVerbCount": 9,
           "pathVerbBudget": 96,
@@ -182,7 +249,61 @@ class StrokeCapJoinSceneCaptureTest {
           "diagnosticsSource": "WebGpuCoveragePlanSelector stroke style facts plus stable adapter-backed refusal; parity promotion remains blocked.",
           "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
         }
-    """.trimIndent() + "\n"
+        """.trimIndent() + "\n"
+    }
+
+    private fun strokeRegionStats(gpu: SkBitmap, reference: SkBitmap): List<StrokeRegionStats> {
+        require(gpu.width == reference.width && gpu.height == reference.height)
+        val regions = listOf(
+            StrokeRegion("butt-bevel", "left band: butt cap with bevel join", 0, 48),
+            StrokeRegion("round-round", "middle band: round cap with round join", 48, 96),
+            StrokeRegion("square-bevel", "right band: square cap with bevel join", 96, reference.width),
+        )
+        return regions.map { region ->
+            var matching = 0
+            var pixels = 0
+            var maxDelta = 0
+            for (y in 0 until reference.height) {
+                for (x in region.xStart until region.xEnd) {
+                    val gpuPixel = gpu.getPixel(x, y)
+                    val refPixel = reference.getPixel(x, y)
+                    if (gpuPixel == refPixel) matching++
+                    maxDelta = maxOf(maxDelta, maxChannelDelta(gpuPixel, refPixel))
+                    pixels++
+                }
+            }
+            StrokeRegionStats(
+                id = region.id,
+                description = region.description,
+                pixels = pixels,
+                matchingPixels = matching,
+                maxChannelDelta = maxDelta,
+            )
+        }
+    }
+
+    private fun maxChannelDelta(a: Int, b: Int): Int {
+        var max = 0
+        for (shift in intArrayOf(24, 16, 8, 0)) {
+            val delta = kotlin.math.abs(((a ushr shift) and 0xFF) - ((b ushr shift) and 0xFF))
+            max = maxOf(max, delta)
+        }
+        return max
+    }
+
+    private fun <T> withExperimentalStrokeCapJoinRender(block: () -> T): T {
+        val previous = System.getProperty(EXPERIMENTAL_RENDER_PROPERTY)
+        System.setProperty(EXPERIMENTAL_RENDER_PROPERTY, "true")
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(EXPERIMENTAL_RENDER_PROPERTY)
+            } else {
+                System.setProperty(EXPERIMENTAL_RENDER_PROPERTY, previous)
+            }
+        }
+    }
 
     private fun String.jsonString(): String = buildString {
         append('"')
@@ -248,8 +369,53 @@ class StrokeCapJoinSceneCaptureTest {
         val color: Int,
     )
 
+    private data class StrokeRegion(
+        val id: String,
+        val description: String,
+        val xStart: Int,
+        val xEnd: Int,
+    )
+
+    private data class StrokeRegionStats(
+        val id: String,
+        val description: String,
+        val pixels: Int,
+        val matchingPixels: Int,
+        val maxChannelDelta: Int,
+    ) {
+        val similarity: Double
+            get() = if (pixels == 0) 100.0 else matchingPixels * 100.0 / pixels
+
+        fun toJson(): String = """
+            {
+              "id": ${jsonString(id)},
+              "description": ${jsonString(description)},
+              "pixels": $pixels,
+              "matchingPixels": $matchingPixels,
+              "similarity": ${String.format(Locale.US, "%.2f", similarity)},
+              "maxChannelDelta": $maxChannelDelta
+            }
+        """.trimIndent()
+    }
+
     private companion object {
         private const val GPU_SUPPORT_THRESHOLD = 99.95
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
+        private const val EXPERIMENTAL_RENDER_PROPERTY = "kanvas.webgpu.strokeCapJoin.experimentalRender"
+
+        private fun jsonString(value: String): String = buildString {
+            append('"')
+            for (ch in value) {
+                when (ch) {
+                    '\\' -> append("\\\\")
+                    '"' -> append("\\\"")
+                    '\n' -> append("\\n")
+                    '\r' -> append("\\r")
+                    '\t' -> append("\\t")
+                    else -> append(ch)
+                }
+            }
+            append('"')
+        }
     }
 }

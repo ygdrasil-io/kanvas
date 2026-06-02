@@ -115,6 +115,7 @@ import org.skia.pipeline.PathFillType as PipelinePathFillType
 import org.skia.pipeline.Point
 import org.skia.pipeline.ProductionRouteDiagnostics
 import org.skia.pipeline.RRectSpec
+import org.skia.pipeline.StandardCoverageReason
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.exp
@@ -176,6 +177,8 @@ private val layerShaderCompositeBlendModeNames: String =
 
 private const val WEBGPU_COVERAGE_SELECTOR_FLAG: String = "kanvas.webgpu.coverageSelector.enabled"
 private const val WEBGPU_COVERAGE_SELECTOR_DISABLED_REASON: String = "coverage.webgpu-selector-disabled"
+private const val WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG: String =
+    "kanvas.webgpu.strokeCapJoin.experimentalRender"
 
 public fun selectWebGpuBlendPlan(mode: SkBlendMode): BlendPlan = when (mode) {
     in FIXED_FUNCTION_BLEND_MODES -> BlendPlan(
@@ -8134,6 +8137,12 @@ public class SkWebGpuDevice(
         )
         lastCoverageSelectionForDiagnostics = selection
         if (selection.strategy == WebGpuCoverageStrategy.RefuseDiagnostic) {
+            if (
+                selection.diagnostic?.reason == StandardCoverageReason.StrokeCapJoinVisualParityBelowThreshold &&
+                System.getProperty(WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG, "false").toBoolean()
+            ) {
+                return selection
+            }
             error("SkWebGpuDevice.$drawKind refused coverage selection: ${selection.dump()}")
         }
         return selection
