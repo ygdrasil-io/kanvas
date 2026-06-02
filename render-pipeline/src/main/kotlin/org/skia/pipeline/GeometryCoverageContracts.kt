@@ -29,6 +29,7 @@ enum class StandardCoverageReason(override val code: String) : CoverageReason {
     ClipDepthExceeded("coverage.clip-depth-exceeded"),
     BoundsBudgetExceeded("coverage.bounds-budget-exceeded"),
     StrokeOutlineEdgeCountExceeded("coverage.stroke-outline-edge-count-exceeded"),
+    StrokeCapJoinVisualParityBelowThreshold("coverage.stroke-cap-join-visual-parity-below-threshold"),
     AtlasPolicyUnavailable("coverage.atlas-policy-unavailable"),
     ArbitraryAaClipUnsupported("coverage.arbitrary-aa-clip-unsupported"),
 }

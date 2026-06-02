@@ -6,7 +6,9 @@ import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorWHITE
 import org.graphiks.math.SkISize
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.encode.SkPngEncoder
@@ -20,37 +22,53 @@ import org.skia.tests.GM
 
 class StrokeCapJoinSceneCaptureTest {
     @Test
-    fun `bounded stroke cap join scene captures expected unsupported evidence`() {
-        val gm = BoundedStrokeCapJoinGM()
-        val reference = TestUtils.runGmTest(gm)
-        val cpuBitmap = TestUtils.runGmTest(gm)
-        val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = 0)
+    fun `bounded stroke cap join scene captures visual parity blocker evidence`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
-        println(
-            "[StrokeCapJoinSceneCapture] cpu=${"%.2f".format(cpuCmp.similarity)}%, " +
-                "matching=${cpuCmp.matchingPixels}/${cpuCmp.totalPixels}",
-        )
+        context!!.use { ctx ->
+            val gm = BoundedStrokeCapJoinGM()
+            val reference = TestUtils.runGmTest(gm)
+            val cpuBitmap = TestUtils.runGmTest(gm)
+            val gpuError = assertThrows(IllegalStateException::class.java) {
+                WebGpuSink.draw(ctx, gm)
+            }
+            val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = 0)
+            val adapter = ctx.adapterInfo ?: "unknown-adapter"
 
-        if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
-            writeEvidence(cpuBitmap, reference, cpuCmp)
+            println(
+                "[StrokeCapJoinSceneCapture] adapter=$adapter cpu=${"%.2f".format(cpuCmp.similarity)}%, " +
+                    "gpuRefusal=${gpuError.message}",
+            )
+
+            if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                writeEvidence(cpuBitmap, reference, cpuCmp, adapter)
+            }
+
+            assertEquals(100.0, cpuCmp.similarity, 0.0)
+            assertTrue(cpuCmp.matchingPixels == cpuCmp.totalPixels)
+            assertTrue(
+                gpuError.message!!.contains("coverage.stroke-cap-join-visual-parity-below-threshold"),
+                "expected stable stroke cap/join blocker diagnostic, got ${gpuError.message}",
+            )
         }
-
-        assertEquals(100.0, cpuCmp.similarity, 0.0)
-        assertTrue(cpuCmp.matchingPixels == cpuCmp.totalPixels)
     }
 
     private fun writeEvidence(
         cpuBitmap: SkBitmap,
         reference: SkBitmap,
         cpuCmp: BitmapComparison,
+        adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join").apply { mkdirs() }
         writePng(File(dir, "skia.png"), reference)
         writePng(File(dir, "cpu.png"), cpuBitmap)
         writePng(File(dir, "cpu-diff.png"), CrossBackendHarness.pixelDiff(reference, cpuBitmap))
+        File(dir, "gpu.png").delete()
+        File(dir, "gpu-diff.png").delete()
         File(dir, "route-cpu.json").writeText(cpuRouteJson())
-        File(dir, "route-gpu.json").writeText(gpuRouteJson())
-        File(dir, "stats.json").writeText(statsJson(cpuCmp))
+        File(dir, "route-gpu.json").writeText(gpuRouteJson(adapter))
+        File(dir, "stats.json").writeText(statsJson(cpuCmp, adapter))
     }
 
     private fun writePng(file: File, bitmap: SkBitmap) {
@@ -93,21 +111,22 @@ class StrokeCapJoinSceneCaptureTest {
           "deviceBounds": {"left": 0, "top": 0, "right": 192, "bottom": 128},
           "deviceBoundsBudget": 2048,
           "deviceBoundsReason": "not coverage.bounds-budget-exceeded",
-          "diagnosticsSource": "CPU scene fixture; stroke width/cap/join are not emitted by WebGpuCoveragePlanSelector path facts yet.",
+          "diagnosticsSource": "CPU scene fixture with bounded stroke width/cap/join facts.",
           "sourceReport": "reports/wgsl-pipeline/2026-06-01-m60-stroke-cap-join-path-aa-promotion.md"
         }
     """.trimIndent() + "\n"
 
-    private fun gpuRouteJson(): String = """
+    private fun gpuRouteJson(adapter: String): String = """
         {
           "sceneId": "m60-bounded-stroke-cap-join",
           "backend": "WebGPU",
+          "adapter": ${adapter.jsonString()},
           "drawKind": "BoundedStrokeCapJoinGM",
           "status": "expected-unsupported",
-          "coverageStrategy": "webgpu.coverage.stroke-cap-join.expected-unsupported",
-          "selectedRoute": "webgpu.coverage.stroke-cap-join.expected-unsupported",
-          "pipelineKey": "pathAA=strokeCapJoin strokeWidth=10 caps=butt+round+square joins=bevel+round budget=m60 source=LinePathGM-derived status=expected-unsupported",
-          "fallbackReason": "coverage.stroke-cap-join-selector-diagnostics-unavailable",
+          "coverageStrategy": "webgpu.coverage.refuse",
+          "selectedRoute": "webgpu.coverage.refuse",
+          "pipelineKey": "coverageKind=pathAaStrokeCapJoinBlocked pathFillRule=winding topology=triangleList budget=m60 source=LinePathGM-derived status=expected-unsupported",
+          "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
           "pathVerbCount": 9,
           "pathVerbBudget": 96,
           "pathVerbReason": "not coverage.verb-budget-exceeded",
@@ -125,24 +144,27 @@ class StrokeCapJoinSceneCaptureTest {
           "deviceBounds": {"left": 0, "top": 0, "right": 192, "bottom": 128},
           "deviceBoundsBudget": 2048,
           "deviceBoundsReason": "not coverage.bounds-budget-exceeded",
-          "diagnosticsSource": "scene contract plus CPU oracle; WebGpuCoveragePlanSelector has no strokeWidth/strokeCap/strokeJoin facts, so this row cannot be a GPU pass claim.",
-          "test": "org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest#bounded stroke cap join scene captures expected unsupported evidence",
+          "diagnosticsSource": "WebGpuCoveragePlanSelector stroke style facts plus stable adapter-backed refusal; parity promotion remains blocked.",
+          "test": "org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest#bounded stroke cap join scene captures visual parity blocker evidence",
           "sourceReport": "reports/wgsl-pipeline/2026-06-01-m60-stroke-cap-join-path-aa-promotion.md"
         }
     """.trimIndent() + "\n"
 
-    private fun statsJson(cpuCmp: BitmapComparison): String = """
+    private fun statsJson(cpuCmp: BitmapComparison, adapter: String): String = """
         {
           "sceneId": "m60-bounded-stroke-cap-join",
           "pixels": ${cpuCmp.totalPixels},
           "matchingPixels": 0,
           "maxChannelDelta": 255,
-          "threshold": 0,
+          "threshold": $GPU_SUPPORT_THRESHOLD,
           "cpuSimilarity": ${String.format(Locale.US, "%.2f", cpuCmp.similarity)},
           "cpuMatchingPixels": ${cpuCmp.matchingPixels},
           "cpuMaxChannelDelta": ${cpuCmp.maxChannelDiff.max()},
+          "gpuSimilarity": 0.00,
+          "gpuMatchingPixels": 0,
+          "gpuMaxChannelDelta": 255,
           "gpuStatus": "expected-unsupported",
-          "fallbackReason": "coverage.stroke-cap-join-selector-diagnostics-unavailable",
+          "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
           "pathVerbCount": 9,
           "pathVerbBudget": 96,
           "edgeCount": 18,
@@ -155,10 +177,27 @@ class StrokeCapJoinSceneCaptureTest {
           "dashIntervalBudget": 8,
           "deviceBounds": {"left": 0, "top": 0, "right": 192, "bottom": 128},
           "deviceBoundsBudget": 2048,
-          "diagnosticsSource": "CPU scene fixture; not a WebGPU selector route dump.",
+          "backend": "WebGPU",
+          "adapter": ${adapter.jsonString()},
+          "diagnosticsSource": "WebGpuCoveragePlanSelector stroke style facts plus stable adapter-backed refusal; parity promotion remains blocked.",
           "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
         }
     """.trimIndent() + "\n"
+
+    private fun String.jsonString(): String = buildString {
+        append('"')
+        for (ch in this@jsonString) {
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> append(ch)
+            }
+        }
+        append('"')
+    }
 
     private class BoundedStrokeCapJoinGM : GM() {
         override fun getName(): String = "m60_bounded_stroke_cap_join"
@@ -210,6 +249,7 @@ class StrokeCapJoinSceneCaptureTest {
     )
 
     private companion object {
+        private const val GPU_SUPPORT_THRESHOLD = 99.95
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
     }
 }

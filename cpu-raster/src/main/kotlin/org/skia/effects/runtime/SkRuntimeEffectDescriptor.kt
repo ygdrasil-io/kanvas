@@ -1,5 +1,13 @@
 package org.skia.effects.runtime
 
+private val acceptedWgslImplementationIds: Set<String> = setOf(
+    "wgsl/runtime_simple_rt",
+)
+private val knownWgslImplementationIds: Set<String> = acceptedWgslImplementationIds + setOf(
+    "wgsl/runtime_linear_gradient_rt",
+    "wgsl/runtime_spiral_rt",
+)
+
 public data class SkRuntimeEffectDescriptor(
     val stableId: String,
     val kind: SkRuntimeEffect.Kind,
@@ -32,7 +40,13 @@ public data class SkRuntimeEffectSupportMatrixEntry(
     public val gpuSupport: String =
         wgslImplementationId
             ?.takeIf { it.isNotBlank() }
-            ?.let { "supported:$it" }
+            ?.let {
+                if (it in acceptedWgslImplementationIds) {
+                    "supported:$it"
+                } else {
+                    "unsupported: WGSL implementation id not promoted: $it"
+                }
+            }
             ?: "unsupported: WGSL implementation id missing"
 
     public val missingReason: String =
@@ -54,7 +68,6 @@ public data class SkRuntimeEffectSupportMatrixStatusCounts(
 public object SkRuntimeEffectDescriptorRegistry {
     private val byHash: MutableMap<Long, SkRuntimeEffectDescriptor> = HashMap()
     private val byStableId: MutableMap<String, SkRuntimeEffectDescriptor> = HashMap()
-    private val acceptedWgslImplementationIds: Set<String> = setOf("wgsl/runtime_simple_rt")
 
     public fun register(source: String, descriptor: SkRuntimeEffectDescriptor) {
         val hash = SkRuntimeEffectDispatch.canonicalHash(source)
@@ -113,8 +126,8 @@ public object SkRuntimeEffectDescriptorRegistry {
             total = entries.size,
             descriptorBacked = entries.count { it.descriptorStatus == "descriptor-backed" },
             dispatchOnlyMissingDescriptor = entries.count { it.descriptorStatus == "dispatch-only; missing descriptor" },
-            cpuOnly = entries.count { it.cpuImplementationId.isNotBlank() && it.wgslImplementationId.isNullOrBlank() },
-            gpuBacked = entries.count { !it.wgslImplementationId.isNullOrBlank() },
+            cpuOnly = entries.count { it.cpuSupport.startsWith("supported:") && !it.gpuSupport.startsWith("supported:") },
+            gpuBacked = entries.count { it.gpuSupport.startsWith("supported:") },
         )
     }
 
@@ -208,7 +221,7 @@ public object SkRuntimeEffectDescriptorRegistry {
                 "Invalid runtime effect descriptor WGSL implementation id: " +
                     "canonicalHash=$hash stableId=${descriptor.stableId} wgslImplementationId=$wgslId"
             }
-            check(wgslId in acceptedWgslImplementationIds) {
+            check(wgslId in knownWgslImplementationIds) {
                 "Runtime effect descriptor WGSL evidence missing: " +
                     "canonicalHash=$hash stableId=${descriptor.stableId} wgslImplementationId=$wgslId"
             }

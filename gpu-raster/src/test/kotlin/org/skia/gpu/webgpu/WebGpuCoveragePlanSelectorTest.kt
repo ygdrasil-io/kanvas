@@ -505,6 +505,33 @@ class WebGpuCoveragePlanSelectorTest {
     }
 
     @Test
+    fun `bounded stroke cap join facts emit stable parity blocker`() {
+        val selection = WebGpuCoveragePlanSelector.select(
+            drawKind = "bounded-stroke-cap-join",
+            plan = CoveragePlan.PathCoverage(PathFillType.Winding, aa = true, inverse = false),
+            pathFacts = WebGpuPathCoverageFacts(
+                isConvex = false,
+                contourCount = 1,
+                edgeCount = 18,
+                pathVerbCount = 9,
+                dashIntervalCount = 0,
+                deviceBounds = FloatRect(0f, 0f, 192f, 128f),
+                strokeWidth = 10f,
+                strokeCaps = listOf("butt", "round", "square"),
+                strokeJoins = listOf("bevel", "round", "bevel"),
+            ),
+        )
+
+        assertEquals(WebGpuCoverageStrategy.RefuseDiagnostic, selection.strategy)
+        assertEquals("webgpu.coverage.refuse", selection.routeIdentifier)
+        assertEquals("coverage.stroke-cap-join-visual-parity-below-threshold", selection.diagnostic?.reason?.code)
+        assertTrue(selection.pipelineKeyDump().contains("code=[coverageKind=pathAaStrokeCapJoinBlocked]"))
+        assertTrue(selection.dump().contains("strokeWidth=10.0"))
+        assertTrue(selection.dump().contains("strokeCaps=butt+round+square"))
+        assertTrue(selection.dump().contains("strokeJoins=bevel+round+bevel"))
+    }
+
+    @Test
     fun `edge overflow can select explicit mask or atlas fallback when enabled`() {
         val selection = WebGpuCoveragePlanSelector.select(
             drawKind = "path-edge-overflow-mask",
