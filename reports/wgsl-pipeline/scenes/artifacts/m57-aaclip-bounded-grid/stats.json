@@ -1,21 +1,80 @@
+    {
+      "sceneId": "m57-aaclip-bounded-grid",
+      "pixels": 28800,
+      "matchingPixels": 28464,
+      "maxChannelDelta": 178,
+      "threshold": 98.78,
+      "cpuSimilarity": 97.00,
+      "cpuMatchingPixels": 27936,
+      "cpuMaxChannelDelta": 178,
+      "gpuSimilarity": 98.83,
+      "gpuMatchingPixels": 28464,
+      "gpuMaxChannelDelta": 178,
+      "gpuStatus": "pass",
+      "targetColorSpaceBlendEnabledGlobally": false,
+      "targetColorSpaceBlendDiagnosticStatus": "diagnostic-only",
+      "targetColorSpaceBlendSupportClaim": false,
+      "normalExactSimilarity": 95.88,
+      "normalExactMatchingPixels": 27612,
+      "normalToleranceProfile": [
+        {
+  "tolerance": 0,
+  "similarity": 95.88,
+  "matchingPixels": 27612
+},
 {
-  "sceneId": "m57-aaclip-bounded-grid",
-  "pixels": 28800,
-  "matchingPixels": 28464,
-  "maxChannelDelta": 178,
-  "threshold": 98.78,
-  "cpuSimilarity": 97.00,
-  "cpuMatchingPixels": 27936,
-  "cpuMaxChannelDelta": 178,
-  "gpuSimilarity": 98.83,
-  "gpuMatchingPixels": 28464,
-  "gpuMaxChannelDelta": 178,
-  "gpuStatus": "pass",
-  "edgeBudget": 256,
-  "edgeBudgetReason": "not coverage.edge-count-exceeded",
-  "clipOp": "intersect",
-  "clipShape": "aa-rect-grid",
-  "backend": "WebGPU",
-  "adapter": "Apple M2 Max",
-  "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.AaclipSceneCaptureTest"
+  "tolerance": 8,
+  "similarity": 98.83,
+  "matchingPixels": 28464
+},
+{
+  "tolerance": 16,
+  "similarity": 98.83,
+  "matchingPixels": 28464
+},
+{
+  "tolerance": 32,
+  "similarity": 98.83,
+  "matchingPixels": 28464
 }
+      ],
+      "targetColorSpaceBlend": true,
+      "targetGpuSimilarity": 94.73,
+      "targetGpuMatchingPixels": 27282,
+      "targetGpuMaxChannelDelta": 187,
+      "targetExactSimilarity": 94.71,
+      "targetExactMatchingPixels": 27276,
+      "targetToleranceProfile": [
+        {
+  "tolerance": 0,
+  "similarity": 94.71,
+  "matchingPixels": 27276
+},
+{
+  "tolerance": 8,
+  "similarity": 94.73,
+  "matchingPixels": 27282
+},
+{
+  "tolerance": 16,
+  "similarity": 95.25,
+  "matchingPixels": 27432
+},
+{
+  "tolerance": 32,
+  "similarity": 96.54,
+  "matchingPixels": 27804
+}
+      ],
+      "exactSimilarityDelta": -1.17,
+      "exactDecision": "targetColorSpaceBlend degrades the exact score",
+      "promotionThreshold": 99.95,
+      "promotionClaim": false,
+      "edgeBudget": 256,
+      "edgeBudgetReason": "not coverage.edge-count-exceeded",
+      "clipOp": "intersect",
+      "clipShape": "aa-rect-grid",
+      "backend": "WebGPU",
+      "adapter": "Apple M2 Max",
+      "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.AaclipSceneCaptureTest"
+    }
