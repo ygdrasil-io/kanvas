@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "packId": "m92-kadre-runtime-telemetry-classification-v1",
+  "status": "pass",
+  "linearIssues": [
+    "FOR-209",
+    "FOR-210",
+    "FOR-211",
+    "FOR-212",
+    "FOR-213"
+  ],
+  "classificationPolicy": {
+    "observed": "Measured or emitted by existing native/evidence artifacts without deriving from a model.",
+    "observed-partial": "Observed for the selected route, but not a full cache or resource-lifetime signal.",
+    "derived": "Computed from deterministic selected-scene ledgers or fixtures.",
+    "expected-unsupported": "Unsupported by design with a stable diagnostic or fallback reason.",
+    "not-observable": "Not exposed by Kadre/wgpu4k/Kanvas evidence APIs in this slice; must remain a blocker, not a synthetic counter."
+  },
+  "rows": [
+    {
+      "id": "native-frame-timing",
+      "classification": "observed",
+      "source": "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json",
+      "pmMeaning": "Candidate/reporting-only windowed timing samples exist for the selected native route.",
+      "releaseGate": false
+    },
+    {
+      "id": "surface-status-summary",
+      "classification": "observed",
+      "source": "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json",
+      "pmMeaning": "Surface status counts are serialized for the selected native run.",
+      "releaseGate": false
+    },
+    {
+      "id": "scene-switch-events",
+      "classification": "observed",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/scene-switching.json",
+      "pmMeaning": "Bounded scene selection semantics are captured as evidence events.",
+      "releaseGate": false
+    },
+    {
+      "id": "pointer-keyboard-state",
+      "classification": "observed",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json",
+      "pmMeaning": "Input fixtures update visible runtime parameters and telemetry.",
+      "releaseGate": false
+    },
+    {
+      "id": "native-readback-produced",
+      "classification": "observed",
+      "source": "reports/wgsl-pipeline/m83-display-list-replay/native-demo.json",
+      "pmMeaning": "Existing native/offscreen WGPU readback evidence exists for the promoted PM scene.",
+      "releaseGate": false
+    },
+    {
+      "id": "shader-module-creates-selected-route",
+      "classification": "observed-partial",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+      "pmMeaning": "The current selected native route records per-frame shader module creation/churn, not cache hits.",
+      "releaseGate": false,
+      "limitation": "Not a broad backend cache counter."
+    },
+    {
+      "id": "pipeline-creates-selected-route",
+      "classification": "observed-partial",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+      "pmMeaning": "The current selected native route records per-frame pipeline creation/churn, not cache hits.",
+      "releaseGate": false,
+      "limitation": "Not a broad backend cache counter."
+    },
+    {
+      "id": "pipeline-cache-hits-misses-selected-ledger",
+      "classification": "derived",
+      "source": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+      "pmMeaning": "Selected-scene cache hit/miss counts come from a deterministic ledger.",
+      "releaseGate": false
+    },
+    {
+      "id": "resource-generation-count",
+      "classification": "derived",
+      "source": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+      "pmMeaning": "Resize/resource generation health is derived for a bounded selected scene.",
+      "releaseGate": false
+    },
+    {
+      "id": "invalid-resource-reuse-count",
+      "classification": "derived",
+      "source": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+      "pmMeaning": "The selected scenario has no invalid reuse in the deterministic ledger.",
+      "releaseGate": false
+    },
+    {
+      "id": "telemetry-file-growth",
+      "classification": "derived",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+      "pmMeaning": "Evidence files are bounded snapshots by path, not unbounded append logs.",
+      "releaseGate": false
+    },
+    {
+      "id": "broad-webgpu-cache-hit-callbacks",
+      "classification": "not-observable",
+      "blocker": "kadre-runtime.native-cache-counter-unavailable",
+      "pmMeaning": "Kadre/wgpu4k does not expose broad cache callbacks for this evidence slice.",
+      "releaseGate": false
+    },
+    {
+      "id": "bind-group-cache-callbacks",
+      "classification": "not-observable",
+      "blocker": "kadre-runtime.native-cache-counter-unavailable",
+      "pmMeaning": "Bind-group cache hit/miss callbacks are not exposed in the selected native route.",
+      "releaseGate": false
+    },
+    {
+      "id": "native-resource-free-callbacks",
+      "classification": "not-observable",
+      "blocker": "kadre-runtime.resource-lifetime-observation-partial",
+      "pmMeaning": "Native object disposal/free telemetry is not observable end-to-end from current APIs.",
+      "releaseGate": false
+    },
+    {
+      "id": "adapter-owned-memory-snapshots",
+      "classification": "not-observable",
+      "blocker": "kadre-runtime.resource-lifetime-observation-partial",
+      "pmMeaning": "Adapter memory snapshots are not available, so memory claims remain bounded to selected ledgers.",
+      "releaseGate": false
+    },
+    {
+      "id": "nested-rrect-clip-scene",
+      "classification": "expected-unsupported",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/scene-switching.json",
+      "pmMeaning": "Unsupported scene selection is explicit and uses the stable nested-rrect fallback reason.",
+      "releaseGate": false
+    },
+    {
+      "id": "real-os-event-injection",
+      "classification": "expected-unsupported",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json",
+      "pmMeaning": "CI evidence does not synthesize real window-manager pointer, keyboard, resize, or close events.",
+      "releaseGate": false
+    }
+  ],
+  "blockers": [
+    {
+      "id": "kadre-runtime.native-cache-counter-unavailable",
+      "owner": "external Kadre/wgpu4k integration",
+      "neededFor": [
+        "FOR-209",
+        "FOR-210"
+      ],
+      "unblockCondition": "Expose observed shader, pipeline, bind-group, and cache hit/miss callbacks from the native route."
+    },
+    {
+      "id": "kadre-runtime.resource-lifetime-observation-partial",
+      "owner": "external Kadre/wgpu4k integration",
+      "neededFor": [
+        "FOR-211"
+      ],
+      "unblockCondition": "Expose allocation/free/resource lifetime snapshots for surface resize and scene switch transitions."
+    }
+  ],
+  "boundedGrowthPolicy": {
+    "issue": "FOR-212",
+    "status": "pass-for-evidence-snapshots",
+    "nativeLogPolicy": "No append-only native telemetry log is introduced in this slice.",
+    "headlessArtifactPolicy": "JSON evidence is rewritten at stable paths and validator checks referenced files exist.",
+    "productionMonitoringClaimed": false
+  }
+}
