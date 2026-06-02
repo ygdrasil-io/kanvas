@@ -54,8 +54,8 @@ class SkRuntimeEffectDescriptorRegistryTest {
                 total = 3,
                 descriptorBacked = 3,
                 dispatchOnlyMissingDescriptor = 0,
-                cpuOnly = 1,
-                gpuBacked = 2,
+                cpuOnly = 0,
+                gpuBacked = 3,
             ),
             counts,
         )
@@ -68,10 +68,7 @@ class SkRuntimeEffectDescriptorRegistryTest {
         val spiral = entries.single { it.stableId == "runtime.spiral_rt" }
         assertEquals("descriptor-backed", spiral.descriptorStatus)
         assertEquals("supported:kotlin/spiral_rt", spiral.cpuSupport)
-        assertEquals(
-            "unsupported: WGSL implementation id not promoted: wgsl/runtime_spiral_rt",
-            spiral.gpuSupport,
-        )
+        assertEquals("supported:wgsl/runtime_spiral_rt", spiral.gpuSupport)
         assertEquals("none", spiral.missingReason)
         assertTrue(spiral.uniforms.map { it.name }.containsAll(listOf("rad_scale", "in_center", "in_colors0", "in_colors1")))
     }
@@ -100,7 +97,7 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(
             markdown.contains(
             "Status counts: total=3; descriptor-backed=3; " +
-                    "dispatch-only/missing-descriptor=0; CPU-only=1; GPU-backed=2.",
+                    "dispatch-only/missing-descriptor=0; CPU-only=0; GPU-backed=3.",
             ),
         )
         markdown.lines()
@@ -135,7 +132,7 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(first.contains("supported:kotlin/simple_rt"))
         assertTrue(first.contains("supported:wgsl/runtime_simple_rt"))
         assertTrue(first.contains("supported:wgsl/runtime_linear_gradient_rt"))
-        assertTrue(first.contains("unsupported: WGSL implementation id not promoted: wgsl/runtime_spiral_rt"))
+        assertTrue(first.contains("supported:wgsl/runtime_spiral_rt"))
         assertTrue(first.contains("descriptor-backed"))
     }
 

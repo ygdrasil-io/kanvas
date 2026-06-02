@@ -3,10 +3,9 @@ package org.skia.effects.runtime
 private val acceptedWgslImplementationIds: Set<String> = setOf(
     "wgsl/runtime_linear_gradient_rt",
     "wgsl/runtime_simple_rt",
-)
-private val knownWgslImplementationIds: Set<String> = acceptedWgslImplementationIds + setOf(
     "wgsl/runtime_spiral_rt",
 )
+private val knownWgslImplementationIds: Set<String> = acceptedWgslImplementationIds
 
 public data class SkRuntimeEffectDescriptor(
     val stableId: String,

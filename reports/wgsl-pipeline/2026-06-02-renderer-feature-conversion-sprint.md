@@ -14,6 +14,11 @@ can move a half-byte decision. The adapter-backed render reaches 100.00% strict
 parity (4096/4096 exact pixels, max delta 0), so
 `m64-linear-gradient-rt-descriptor-backed` is promoted to supported.
 
+FOR-239 follow-up: `runtime.spiral_rt` now applies the same general RGBA8
+store-boundary stabilization to its registered WGSL output. The adapter-backed
+render reaches 100.00% strict parity (4096/4096 exact pixels, max delta 0), so
+`m64-spiral-rt-descriptor-backed` is promoted to supported.
+
 Readiness remains 67.75%. No PM readiness percentage is moved by this sprint.
 
 ## Attempted Rows
@@ -21,7 +26,7 @@ Readiness remains 67.75%. No PM readiness percentage is moved by this sprint.
 | Row | Family | Result | Evidence |
 |---|---|---|---|
 | `m60-bounded-stroke-cap-join` | Clip/RRect/Path AA | `expected-unsupported` | Stroke width/cap/join facts are captured, but WebGPU refuses before rendering with `coverage.stroke-cap-join-visual-parity-below-threshold`. |
-| `m64-spiral-rt-descriptor-backed` | Registered runtime effects | `expected-unsupported` | Descriptor registry and WGSL parser evidence exist, but WebGPU execution remains unpromoted with `runtime-effect.spiral-visual-parity-below-threshold`. |
+| `m64-spiral-rt-descriptor-backed` | Registered runtime effects | `pass` | Descriptor registry and WGSL parser evidence exist, and FOR-239 WebGPU rendering reaches 100.00% strict parity (4096/4096 exact pixels, max delta 0). |
 | `m64-linear-gradient-rt-descriptor-backed` | Registered runtime effects | `pass` | Descriptor registry and WGSL parser evidence exist, and FOR-238 WebGPU rendering reaches 100.00% strict parity (4096/4096 exact pixels, max delta 0). |
 
 ## Evidence
@@ -36,6 +41,10 @@ FOR-238 also refreshes
 `reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/` with
 pass routes, stats, CPU/GPU/reference PNGs, and diff artifacts.
 
+FOR-239 also refreshes
+`reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/` with pass
+routes, stats, CPU/GPU/reference PNGs, and diff artifacts.
+
 ## Validation
 
 - `rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest --tests org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest`
@@ -47,7 +56,7 @@ pass routes, stats, CPU/GPU/reference PNGs, and diff artifacts.
 - No dynamic SkSL compilation, SkSL IR, SkSL VM, Ganesh, or Graphite support is
   claimed.
 - Runtime effects remain limited to registered Kotlin/WGSL descriptors.
-- M60 stroke cap/join and the new runtime-effect WGSL rows remain explicit
-  blockers until adapter-backed scene parity reaches the support threshold,
-  except `runtime.linear_gradient_rt`, which FOR-238 promotes after strict
-  parity reaches 100.00%.
+- M60 stroke cap/join remains an explicit blocker until adapter-backed scene
+  parity reaches the support threshold; `runtime.linear_gradient_rt` and
+  `runtime.spiral_rt` are promoted only for their registered descriptor-backed
+  WGSL implementations.

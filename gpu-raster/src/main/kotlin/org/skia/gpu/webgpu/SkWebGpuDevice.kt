@@ -2385,6 +2385,7 @@ public class SkWebGpuDevice(
 
     private val runtimeLinearGradientShader: GPUShaderModule = loadShader("shaders/runtime_linear_gradient_rt.wgsl")
     private val runtimeSimpleShader: GPUShaderModule = loadShader("shaders/runtime_simple_rt.wgsl")
+    private val runtimeSpiralShader: GPUShaderModule = loadShader("shaders/runtime_spiral_rt.wgsl")
     private val runtimeEffectPipelineCache: MutableMap<Pair<String, SkBlendMode>, GPURenderPipeline> = mutableMapOf()
     private var lastRuntimeEffectFallbackReason: String? = null
 
@@ -2413,6 +2414,7 @@ public class SkWebGpuDevice(
         when (wgslImplementationId) {
             "wgsl/runtime_linear_gradient_rt" -> runtimeLinearGradientShader
             "wgsl/runtime_simple_rt" -> runtimeSimpleShader
+            "wgsl/runtime_spiral_rt" -> runtimeSpiralShader
             else -> error("Unsupported runtime-effect WGSL implementation: $wgslImplementationId")
         }
 
@@ -9295,6 +9297,7 @@ public class SkWebGpuDevice(
         when (wgslImplementationId) {
             "wgsl/runtime_linear_gradient_rt" -> 32
             "wgsl/runtime_simple_rt" -> 16
+            "wgsl/runtime_spiral_rt" -> 48
             else -> error("Unsupported runtime-effect WGSL implementation: $wgslImplementationId")
         }
 
@@ -15785,6 +15788,7 @@ public class SkWebGpuDevice(
         bitmapShader.close()
         runtimeLinearGradientShader.close()
         runtimeSimpleShader.close()
+        runtimeSpiralShader.close()
         layerCompositeShader.close()
         blurGaussianShader.close()
         presentShader.close()
@@ -15799,6 +15803,7 @@ public class SkWebGpuDevice(
         private val SUPPORTED_RUNTIME_EFFECT_WGSL_IDS = setOf(
             "wgsl/runtime_linear_gradient_rt",
             "wgsl/runtime_simple_rt",
+            "wgsl/runtime_spiral_rt",
         )
         private val DIAGNOSTIC_RUNTIME_EFFECT_WGSL_IDS = emptySet<String>()
 
