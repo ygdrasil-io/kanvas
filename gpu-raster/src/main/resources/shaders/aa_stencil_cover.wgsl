@@ -1,8 +1,8 @@
 // G3.3b.3a AA multi-contour shader -- stencil-and-cover with per-fragment
 // edge-segment coverage. Vertex layout : bbox triangle list (same as the
-// non-AA cover pass). Fragment iterates the path's edge segments across
-// all contours, computes the unsigned distance to the nearest segment,
-// and produces a premul colour with smooth boundary falloff.
+// non-AA cover pass). Fragment iterates the path's directed edge segments
+// across all contours, evaluates a 4x4 subpixel winding coverage mask, and
+// produces a premul colour matching the CPU scanline rasterizer's AA grid.
 //
 // Companion to aa_polygon.wgsl. Why a separate shader : the convex
 // single-contour shader uses min-of-signed-perp-distance, which assumes
@@ -14,22 +14,13 @@
 // and we rely on the stencil winding count -- not edge orientation --
 // to decide inside vs outside.
 //
-// Coverage : the stencil-test gates inside-vs-outside via the winding
-// count (set by the prior stencil pass). G3.3b.3d splits the cover
-// into TWO sub-draws sharing the same edge data :
-//   * fs_inside  runs on fragments the stencil counts as INSIDE the
-//                fill region. coverage = clamp(minDist + 0.5, 0, 1).
-//                Range [0.5, 1.0] : 0.5 right at the edge, 1.0 once
-//                we're more than half a pixel inside.
-//   * fs_outside runs on fragments the stencil counts as OUTSIDE the
-//                fill region (with the compare op flipped at the
-//                pipeline level). coverage = clamp(0.5 - minDist, 0, 1).
-//                Range [0.0, 0.5] : 0.5 right at the edge, 0.0 once
-//                we're more than half a pixel outside.
-// The two sub-draws are mutually exclusive at fragment level (stencil
-// makes each fragment go to exactly one), so they never double-cover.
-// Sum across the half-pixel boundary integrates to the correct AA
-// profile -- closes the outside-half AA loss of G3.3b.3a.
+// Coverage : the stencil-test still partitions pixels into inside and
+// outside cover sub-draws, but both fragment entry points now compute the
+// same 4x4 path coverage locally from the directed edge list. This mirrors
+// SkBitmapDevice.scanFillPath's AA grid (`supers = 4`) and avoids the
+// earlier continuous distance ramp that could not match the CPU's discrete
+// coverage bytes at stroke caps and joins. `edgeCount == 0` retains the
+// existing non-AA sentinel behaviour: inside cover = 1, outside cover = 0.
 //
 // G6.2 -- intermediate target is `RGBA16Float` ; output convention is
 // unchanged (premul sRGB-coded). F16 gives sub-byte precision in the
@@ -60,13 +51,13 @@ struct Uniforms {
     color:               vec4f,                       // offset 0
     viewport:            vec4f,                       // offset 16 : (w, h, 0, 0)
     edgeCount:           u32,                         // offset 32
-    _pad0: u32,
+    fillType:            u32,                         // offset 36 : SkPathFillType ordinal
     _pad1: u32,
     _pad2: u32,
     edges:               array<vec4f, 256>,           // offset 48 : (Ax, Ay, Bx, By)
     clipShapeBounds:     vec4f,                       // offset 4144 : (l, t, r, b) ; ignored when clipKind = 0
     clipShapeRadiiKind:  vec4f,                       // offset 4160 : (rx, ry, clipKind, _) ; clipKind in {0, 1}
-    colorFilterKindMode: vec4f,                       // offset 4176 : (kind, blendMode, _, _) ; kind 0 = none
+    colorFilterKindMode: vec4f,                       // offset 4176 : (kind, blendMode, targetColorSpaceBlend, _) ; kind 0 = none
     colorFilterParam0:   vec4f,                       // offset 4192 : kind 1 -> premul colour ; kind 2 -> matrix row 0
     colorFilterParam1:   vec4f,                       // offset 4208 : matrix row 1 (G coefs)
     colorFilterParam2:   vec4f,                       // offset 4224 : matrix row 2 (B coefs)
@@ -83,21 +74,52 @@ fn vs_main(@location(0) pos: vec2f) -> @builtin(position) vec4f {
     return vec4f(ndc_x, ndc_y, 0.0, 1.0);
 }
 
-fn minSegmentDistance(p: vec2f) -> f32 {
-    var minDist: f32 = 1.0e9;
+fn winding_at(p: vec2f) -> i32 {
+    var winding: i32 = 0;
     for (var i: u32 = 0u; i < uniforms.edgeCount; i = i + 1u) {
         let e = uniforms.edges[i];
         let ea = e.xy;
         let eb = e.zw;
-        let ab = eb - ea;
-        let ap = p - ea;
-        let len2 = max(dot(ab, ab), 1.0e-9);
-        let t = clamp(dot(ap, ab) / len2, 0.0, 1.0);
-        let closest = ea + t * ab;
-        let d = length(p - closest);
-        minDist = min(minDist, d);
+        if (ea.y <= p.y && eb.y > p.y) {
+            let t = (p.y - ea.y) / max(eb.y - ea.y, 1.0e-9);
+            let x = ea.x + t * (eb.x - ea.x);
+            if (x > p.x) {
+                winding = winding + 1;
+            }
+        } else if (ea.y > p.y && eb.y <= p.y) {
+            let t = (p.y - ea.y) / min(eb.y - ea.y, -1.0e-9);
+            let x = ea.x + t * (eb.x - ea.x);
+            if (x > p.x) {
+                winding = winding - 1;
+            }
+        }
     }
-    return minDist;
+    return winding;
+}
+
+fn sample_covered(p: vec2f) -> f32 {
+    let winding = winding_at(p);
+    let fill_type = uniforms.fillType;
+    if (fill_type == 1u) {
+        return select(0.0, 1.0, (winding & 1) != 0);
+    } else if (fill_type == 2u) {
+        return select(0.0, 1.0, winding == 0);
+    } else if (fill_type == 3u) {
+        return select(0.0, 1.0, (winding & 1) == 0);
+    }
+    return select(0.0, 1.0, winding != 0);
+}
+
+fn supersampled_path_cov(pixel: vec2f) -> f32 {
+    var covered: f32 = 0.0;
+    for (var sy: u32 = 0u; sy < 4u; sy = sy + 1u) {
+        let y = floor(pixel.y) + (f32(sy) + 0.5) * 0.25;
+        for (var sx: u32 = 0u; sx < 4u; sx = sx + 1u) {
+            let x = floor(pixel.x) + (f32(sx) + 0.5) * 0.25;
+            covered = covered + sample_covered(vec2f(x, y));
+        }
+    }
+    return covered * 0.0625;
 }
 
 fn rrect_cov(p: vec2f, bounds: vec4f, rx_in: f32, ry_in: f32) -> f32 {
@@ -211,22 +233,61 @@ fn apply_color_filter(c_un: vec4f) -> vec4f {
     return c_un;
 }
 
+fn srgb_to_linear(v: f32) -> f32 {
+    if (v <= 0.04045) {
+        return v / 12.92;
+    }
+    return pow((v + 0.055) / 1.055, 2.4);
+}
+
+fn rec2020_encode(v: f32) -> f32 {
+    let c = max(v, 0.0);
+    if (c < 0.0181) {
+        return 4.5 * c;
+    }
+    return 1.0993 * pow(c, 0.45) - 0.0993;
+}
+
+fn srgb_to_rec2020_encoded(rgb: vec3f) -> vec3f {
+    let lin_srgb = vec3f(
+        srgb_to_linear(rgb.r),
+        srgb_to_linear(rgb.g),
+        srgb_to_linear(rgb.b),
+    );
+    let m = mat3x3<f32>(
+        vec3f(0.62740, 0.06909, 0.01639),
+        vec3f(0.32928, 0.91954, 0.08801),
+        vec3f(0.04338, 0.01136, 0.89559),
+    );
+    let lin_rec = m * lin_srgb;
+    return vec3f(
+        clamp(rec2020_encode(lin_rec.r), 0.0, 1.0),
+        clamp(rec2020_encode(lin_rec.g), 0.0, 1.0),
+        clamp(rec2020_encode(lin_rec.b), 0.0, 1.0),
+    );
+}
+
+fn apply_target_colorspace_if_needed(c: vec4f) -> vec4f {
+    if (uniforms.colorFilterKindMode.z > 0.5) {
+        return vec4f(srgb_to_rec2020_encoded(c.rgb), c.a);
+    }
+    return c;
+}
+
 @fragment
 fn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {
-    let minDist = minSegmentDistance(frag.xy);
-    var coverage = clamp(minDist + 0.5, 0.0, 1.0);
+    var coverage = select(supersampled_path_cov(frag.xy), 1.0, uniforms.edgeCount == 0u);
     coverage = coverage * clip_cov(frag.xy);
-    let c = apply_color_filter(uniforms.color);
+    let c = apply_target_colorspace_if_needed(apply_color_filter(uniforms.color));
     let alpha = c.a * coverage;
     return vec4f(c.rgb * alpha, alpha);
 }
 
 @fragment
 fn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {
-    let minDist = minSegmentDistance(frag.xy);
-    var coverage = clamp(0.5 - minDist, 0.0, 1.0);
+    var coverage = select(supersampled_path_cov(frag.xy), 0.0, uniforms.edgeCount == 0u);
     coverage = coverage * clip_cov(frag.xy);
-    let c = apply_color_filter(uniforms.color);
+    let c = apply_target_colorspace_if_needed(apply_color_filter(uniforms.color));
     let alpha = c.a * coverage;
     return vec4f(c.rgb * alpha, alpha);
 }

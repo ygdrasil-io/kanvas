@@ -1,0 +1,49 @@
+        {
+          "sceneId": "m60-bounded-stroke-cap-join",
+          "backend": "WebGPU",
+          "adapter": "Apple M2 Max",
+          "status": "diagnostic-only",
+          "supportClaim": false,
+          "targetColorSpaceBlend": true,
+          "resolvedRootCause": "color-space.target-blend-required",
+          "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
+          "mismatchPixels": 1139,
+          "oneUnitMismatchPixels": 1129,
+          "greaterThanEightPixels": 10,
+          "greaterThanThirtyTwoPixels": 6,
+          "maxChannelDelta": 49,
+          "regions": [
+            {
+  "id": "butt-bevel",
+  "description": "left band: butt cap with bevel join",
+  "mismatchPixels": 455,
+  "oneUnitMismatchPixels": 453,
+  "greaterThanEightPixels": 2,
+  "greaterThanThirtyTwoPixels": 0,
+  "maxChannelDelta": 24,
+  "bounds": {"left": 9, "top": 27, "right": 47, "bottom": 92}
+},
+{
+  "id": "round-round",
+  "description": "middle band: round cap with round join",
+  "mismatchPixels": 512,
+  "oneUnitMismatchPixels": 504,
+  "greaterThanEightPixels": 8,
+  "greaterThanThirtyTwoPixels": 6,
+  "maxChannelDelta": 49,
+  "bounds": {"left": 48, "top": 38, "right": 93, "bottom": 81}
+},
+{
+  "id": "square-bevel",
+  "description": "right band: square cap with bevel join",
+  "mismatchPixels": 172,
+  "oneUnitMismatchPixels": 172,
+  "greaterThanEightPixels": 0,
+  "greaterThanThirtyTwoPixels": 0,
+  "maxChannelDelta": 1,
+  "bounds": {"left": 99, "top": 37, "right": 191, "bottom": 84}
+}
+          ],
+          "decision": "M60 remains expected-unsupported because exact similarity is below 99.95 even after the target-colorspace blend pilot.",
+          "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+        }

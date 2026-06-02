@@ -36,11 +36,21 @@ public object WebGpuSink {
      * so the bytes are directly comparable to the reference PNGs in
      * `DM_REFERENCE_COLOR_SPACE`.
      */
-    public fun draw(context: WebGpuContext, gm: GM): SkBitmap {
+    public fun draw(
+        context: WebGpuContext,
+        gm: GM,
+        targetColorSpaceBlend: Boolean = false,
+    ): SkBitmap {
         val size = gm.size()
         val w = size.width
         val h = size.height
-        SkWebGpuDevice(context, w, h, applyColorspaceTransform = true).use { device ->
+        SkWebGpuDevice(
+            context,
+            w,
+            h,
+            applyColorspaceTransform = true,
+            targetColorSpaceBlend = targetColorSpaceBlend,
+        ).use { device ->
             device.setBackground(gm.bgColor())
             val canvas = SkCanvas(device)
             gm.draw(canvas)

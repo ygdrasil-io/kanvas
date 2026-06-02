@@ -1,0 +1,14 @@
+{
+  "sceneId": "m60-target-colorspace-neutral-aa",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "status": "diagnostic-pass",
+  "referenceRed": 128,
+  "postPresentRed": 115,
+  "targetBlendRed": 128,
+  "expectedMismatch": "post-present path keeps the neutral AA sample at 115 instead of CPU 128",
+  "result": "target-colorspace blend path matches CPU 128 on the isolated neutral AA sample",
+  "sourceRoute": "webgpu.present-pass.srgb-to-rec2020-after-blend",
+  "targetRoute": "webgpu.target-colorspace-blend.solid-coverage",
+  "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+}
