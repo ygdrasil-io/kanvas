@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "packId": "m92-kadre-runtime-rc-closeout-v1",
+  "status": "pass",
+  "generatedBy": "reports-only-closeout",
+  "claimLevel": "rc-kadre-runtime-product-like-evidence-with-observed-derived-not-observable-telemetry",
+  "linearIssues": [
+    "FOR-204",
+    "FOR-205",
+    "FOR-206",
+    "FOR-207",
+    "FOR-208",
+    "FOR-209",
+    "FOR-210",
+    "FOR-211",
+    "FOR-212",
+    "FOR-213",
+    "FOR-217",
+    "FOR-219",
+    "FOR-220"
+  ],
+  "sourceEvidence": [
+    "reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md",
+    "reports/wgsl-pipeline/m70-kadre-live-runtime/route-status.json",
+    "reports/wgsl-pipeline/m83-display-list-replay/evidence.json",
+    "reports/wgsl-pipeline/m83-display-list-replay/native-demo.json",
+    "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json",
+    "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+    "reports/wgsl-pipeline/m90-runtime-interactive/scene-switching.json",
+    "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"
+  ],
+  "artifacts": [
+    "reports/wgsl-pipeline/m92-kadre-runtime-rc/evidence.json",
+    "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+    "reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md",
+    "reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md"
+  ],
+  "commands": {
+    "singleNativeRcDemo": {
+      "command": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive",
+      "nativeWindow": true,
+      "optIn": true,
+      "ciGate": false,
+      "submodulePrecondition": "git submodule update --init --recursive external/poc-koreos",
+      "kadreSource": "external/poc-koreos source build; settings.gradle.kts substitutes org.graphiks.kadre coordinates when the submodule is provisioned",
+      "reason": "Uses the existing interactive Kadre task as the single RC native demo command rather than adding a second native-window task."
+    },
+    "headlessEvidence": {
+      "command": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+      "nativeWindow": false,
+      "ciGate": true,
+      "usesKadreNativeSubmodule": false
+    },
+    "validator": {
+      "command": "python3 scripts/validate_mep_rc_runtime.py .",
+      "nativeWindow": false,
+      "ciGate": true
+    },
+    "pmBundle": {
+      "command": "rtk ./gradlew --no-daemon pipelinePmBundle",
+      "nativeWindow": false,
+      "ciGate": true
+    }
+  },
+  "productRuntimeEvidence": {
+    "sceneSwitching": {
+      "issue": "FOR-204",
+      "status": "documented-from-m90",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/scene-switching.json",
+      "renderableSceneCount": 4,
+      "unsupportedSceneCount": 1,
+      "semantics": [
+        "ArrowRight selects the next renderable bounded replay scene.",
+        "ArrowLeft returns to the previous renderable bounded replay scene.",
+        "Config selection of the nested rrect clip scene remains expected-unsupported with a stable fallback reason."
+      ]
+    },
+    "inputControls": {
+      "issue": "FOR-205",
+      "status": "documented-from-m90",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json",
+      "visibleStateParameters": [
+        "playing",
+        "pointerControl",
+        "selectedSceneId"
+      ],
+      "realOsEventInjectionClaimed": false,
+      "reason": "Headless evidence uses deterministic input fixtures and does not claim real window-manager event injection."
+    },
+    "modeSplit": {
+      "issue": "FOR-206",
+      "status": "pass",
+      "nativeDemoOptIn": true,
+      "headlessCiSeparate": true,
+      "benchmarkReleaseBlocking": false
+    },
+    "telemetryExport": {
+      "issue": "FOR-207",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+      "boundedExportPolicy": "checked-in JSON snapshots overwrite by artifact path; no append-only native log is wired into CI"
+    },
+    "pmCloseout": {
+      "issue": "FOR-208",
+      "status": "pass",
+      "report": "reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md",
+      "script": "reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md"
+    }
+  },
+  "telemetrySummary": {
+    "classificationArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+    "observedCount": 5,
+    "derivedCount": 4,
+    "notObservableCount": 4,
+    "expectedUnsupportedCount": 2,
+    "releaseBlockingPerformanceGate": false,
+    "readinessDelta": "0.00%",
+    "readinessReason": "This closeout improves PM evidence classification and demo procedure, but does not add a new counted release-gated rendering capability."
+  },
+  "blockers": [
+    {
+      "id": "kadre-runtime.native-cache-counter-unavailable",
+      "status": "blocked-external-api",
+      "appliesTo": [
+        "FOR-209",
+        "FOR-210"
+      ],
+      "summary": "Kadre/wgpu4k does not expose broad shader/pipeline/bind-group cache hit/miss callbacks to Kanvas evidence code.",
+      "unblockCondition": "Expose explicit runtime cache counters or callbacks in the Kadre/wgpu4k route used by the native demo."
+    },
+    {
+      "id": "kadre-runtime.resource-lifetime-observation-partial",
+      "status": "blocked-external-api",
+      "appliesTo": [
+        "FOR-211"
+      ],
+      "summary": "Selected-scene resource growth is bounded by the M85 deterministic ledger, but native WebGPU object lifetime/free callbacks are not observable end-to-end.",
+      "unblockCondition": "Add observable resource allocation/free snapshots or adapter-owned memory telemetry."
+    }
+  ],
+  "validationRows": [
+    {
+      "id": "for-204.scene-switching",
+      "status": "pass",
+      "assertion": "At least three renderable scenes and one expected-unsupported scene are documented from M90."
+    },
+    {
+      "id": "for-205.input-controls",
+      "status": "pass",
+      "assertion": "Pointer and keyboard state changes are present in M90 evidence without claiming real OS injection."
+    },
+    {
+      "id": "for-206.mode-split",
+      "status": "pass",
+      "assertion": "Native demo is opt-in; headless evidence and validator do not open a window."
+    },
+    {
+      "id": "for-207.telemetry-export",
+      "status": "pass",
+      "assertion": "Telemetry export path and bounded snapshot policy are documented."
+    },
+    {
+      "id": "for-209-to-213.telemetry-taxonomy",
+      "status": "pass",
+      "assertion": "Observed, derived, expected-unsupported, and not-observable rows are separated."
+    },
+    {
+      "id": "for-217.single-native-command",
+      "status": "pass",
+      "assertion": "One opt-in native RC command is documented with external/poc-koreos precondition and no CI dependency."
+    },
+    {
+      "id": "for-219.readiness",
+      "status": "pass",
+      "assertion": "Readiness does not increase because no new release-blocking runtime gate is claimed."
+    },
+    {
+      "id": "for-220.pm-script",
+      "status": "pass",
+      "assertion": "PM dashboard, Kadre native command, and native-unavailable fallback are scripted."
+    }
+  ],
+  "nonClaims": [
+    "No new native window execution was performed for this closeout artifact.",
+    "No native-window task is wired into CI or pipelinePmBundle.",
+    "No broad SkCanvas/display-list replay claim is added.",
+    "No release-grade frame.kadre-windowed FPS gate is claimed.",
+    "No broad observed WebGPU cache hit/miss telemetry is claimed.",
+    "WGSL remains the shader implementation target; SkSL is only compatibility/refusal wording."
+  ]
+}
