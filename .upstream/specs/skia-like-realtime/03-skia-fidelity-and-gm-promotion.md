@@ -45,6 +45,30 @@ Rows with `reference.cpu-oracle` are valuable but must not be described as
 "closer to Skia" unless a Skia reference exists. They can move rendering
 breadth, runtime, and PM operability scores, but not Skia-like fidelity.
 
+## MEP-NEXT Breadth Promotion Evidence
+
+`FOR-189` through `FOR-192` may be reported as post-RC-MEP breadth progress
+when they link already promoted generated rows and stable refusals through
+`reports/wgsl-pipeline/m89-feature-breadth/evidence.json`.
+
+This evidence can count as PM-visible feature breadth only if each family keeps
+row-level provenance:
+
+- image filters: at least two bounded rows, or one bounded pass row plus
+  explicit complex-DAG/picture-prepass refusals;
+- clips/Path AA: at least two bounded rows or bounded evidence rows, with
+  remaining refusal root causes grouped by edge budget, dash, boolean clip, and
+  stroke outline;
+- bitmap/texture sampling: at least two selected rows with route and stats
+  artifacts, plus visible unsupported sampler/codec/mipmap boundaries;
+- runtime effects: at least one registered descriptor with Kotlin CPU behavior,
+  WGSL GPU source, reflection/live-edit metadata, and arbitrary Skia/SkSL input
+  refusal.
+
+Aggregation alone does not count as a visual fix. A future row may claim a
+before/after renderer improvement only with the full before/after artifact set,
+old and new similarity payloads, and unchanged dashboard gate expectations.
+
 ### Family Buckets
 
 | Family | Examples | First target |

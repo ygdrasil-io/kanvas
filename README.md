@@ -21,11 +21,14 @@ product target is broader: make Kanvas render more of the practical Skia CPU
 surface while building a measured real-time WebGPU lane with live telemetry,
 feature diagnostics, and PM-visible demos.
 
-New target readiness is 67.75%, rounded for PM to approximately 70%, after the M88 realtime renderer RC2 package freeze. This is intentionally lower
+New target readiness is 67.75%, rounded for PM to approximately 70%, after the MEP-NEXT M89/M90 evidence package. This is intentionally lower
 than the completed MEP score because the scope has expanded from evidence
 infrastructure to feature breadth, fidelity, runtime behavior, and release
 operability. The score is based on counted denominators in the target doc, not
-manual sprint estimates.
+manual sprint estimates. M89 and M90 improve post-RC-MEP PM evidence and
+runtime operability, but they do not move readiness because they do not add a
+new counted renderer denominator, release-blocking timing gate, or broad Skia
+parity claim.
 
 | Area | Weight | Current progress | PM interpretation |
 |---|---:|---:|---|
@@ -77,6 +80,8 @@ Active planning entry points:
 | M86 | Fidelity Burn-Down Wave 2 | Selected GM/reference rows now have a ranked burn-down queue under `reports/wgsl-pipeline/m86-fidelity-burndown/`, including family/reference counters, root-cause classifications, and high-value remediation targets. Readiness stays at 67.75% because M86 does not add new support rows, Skia-comparable denominators, measured gates, or renderer before/after fixes. |
 | M87 | Registered Runtime Effect Live Editing V2 | Selected `runtime.simple_rt` live editing evidence now lives under `reports/wgsl-pipeline/m87-runtime-effect-live-editing/`, including `gColor.b` metadata, reflected WGSL layout evidence, two edited-state CPU/GPU/diff PNG sets, telemetry states, and stable refusals for arbitrary Skia/SkSL runtime shader input and missing WGSL descriptors. Readiness stays at 67.75% because this is a selected runtime-effect operability slice, not broad runtime-effect support or dynamic SkSL compilation. |
 | M88 | Realtime Renderer Release Candidate 2 | RC2 freeze evidence now lives under `reports/wgsl-pipeline/m88-realtime-rc2/`, including API surface, correctness/performance gate freeze, support/refusal matrix, PM demo script, and release notes. Readiness stays at 67.75% because M88 packages and freezes evidence rather than adding a new counted rendering/runtime/performance denominator. |
+| M89 | MEP-NEXT Feature Breadth Evidence | Post-RC-MEP feature breadth evidence now lives under `reports/wgsl-pipeline/m89-feature-breadth/`, aggregating bounded image-filter, clip/Path AA, bitmap sampling, and registered WGSL runtime-effect rows with stable refusals. Readiness stays at 67.75% because this is PM evidence aggregation over existing bounded rows, not new renderer breadth implementation or broad parity. |
+| M90 | MEP-NEXT Runtime Interactive Evidence | Bounded Kadre runtime evidence now lives under `reports/wgsl-pipeline/m90-runtime-interactive/`, including autonomous loop semantics, scene switching, input telemetry, and observed-partial/derived resource counters. Readiness stays at 67.75% because native demo/benchmark tasks remain opt-in, timing remains reporting-only, and broad cache/runtime/display-list claims remain out of scope. |
 | M70 | Release Candidate Renderer | Renderer API, runtime, demos, CI gates, and known limitations are frozen for RC. |
 
 ## Completed MEP Evidence Target (Historical)

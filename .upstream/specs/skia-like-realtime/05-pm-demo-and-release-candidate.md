@@ -244,6 +244,72 @@ screenshot/readback. If a fallback reason contains `sksl`, PM copy must explain
 that SkSL names the Skia compatibility surface being refused; the shader target
 remains WGSL.
 
+## M89 MEP-NEXT Feature Breadth PM Evidence
+
+M89 packages the `FOR-189` through `FOR-192` feature breadth slice after RC-MEP.
+It is a PM evidence aggregation and validation milestone, not a renderer
+runtime-code milestone.
+
+Minimum PM artifacts:
+
+- `reports/wgsl-pipeline/m89-feature-breadth/evidence.json`;
+- `reports/wgsl-pipeline/m89-feature-breadth/evidence.md`;
+- `reports/wgsl-pipeline/2026-06-02-mep-next-feature-breadth-pm-report.md`;
+- PM bundle manifest entry `m89FeatureBreadth`.
+
+The evidence JSON must report:
+
+- pack id `m89-mep-next-feature-breadth-v1`;
+- status `pass`;
+- Linear scope `FOR-189`, `FOR-190`, `FOR-191`, and `FOR-192`;
+- RC-MEP source commit `fbadbd3d4bd7ab8b86ffc2eabf01a02707b9068e`;
+- dashboard expectation `failRows=0` and `trackedGapRows=0`;
+- at least two bounded evidence rows for image filters, clips/Path AA, and
+  bitmap/texture sampling;
+- selected registered runtime-effect evidence for `runtime.simple_rt`;
+- stable refusal reasons for arbitrary DAG/picture-prepass, Path AA budget,
+  bitmap mipmap sampler, arbitrary Skia/SkSL input, and missing WGSL descriptor
+  boundaries.
+
+PM wording must say that M89 proves bounded breadth and preserves refusals. It
+must not claim arbitrary image-filter DAG support, broad Path AA, broad texture
+or image support, dynamic SkSL compilation, new Kadre native runtime behavior,
+or weakened thresholds.
+
+## MEP-NEXT Runtime Interactive PM Evidence
+
+FOR-193 through FOR-196 package the next interactive Kadre runtime slice. The
+PM package must show the runtime as useful and bounded, not as a broad renderer
+or release-grade performance gate.
+
+Minimum artifacts:
+
+- `reports/wgsl-pipeline/m90-runtime-interactive/evidence.json`;
+- `reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json`;
+- `reports/wgsl-pipeline/m90-runtime-interactive/scene-switching.json`;
+- `reports/wgsl-pipeline/m90-runtime-interactive/pm-report.md`;
+- `reports/wgsl-pipeline/2026-06-02-mep-next-runtime-interactive.md`.
+
+The evidence JSON must report:
+
+- distinct demo, benchmark, and CI evidence modes;
+- native demo and benchmark commands as opt-in because they open a Kadre
+  window;
+- an autonomous frame-clock source, frame count, dropped-frame count, p50/p95,
+  and surface status summary;
+- at least three selected renderable scene ids and stable fallback reasons for
+  unsupported selections;
+- pointer and keyboard input telemetry with final bounded runtime state;
+- resource/cache counters classified as `observed`, `observed-partial`,
+  `derived`, or `unavailable`;
+- explicit non-claims for real OS event injection, broad display-list replay,
+  release-grade windowed FPS, and broad observed runtime cache telemetry.
+
+PM wording may say that the selected native route now has interactive runtime
+operability evidence. It must not say that arbitrary scenes can be switched,
+that CI injects real window-system input, or that cache hits/misses are fully
+observed WebGPU telemetry until the runtime exposes those counters directly.
+
 ## RC/MEP CI And Package Dependency Policy
 
 Mandatory RC/MEP gates must be runnable in headless CI without resolving Kadre

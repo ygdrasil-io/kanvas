@@ -188,6 +188,24 @@ M85 does not make arbitrary scene caches release-ready. It proves the selected
 route's cache/resource ledger and the failure taxonomy required before broader
 cache gates can become release-blocking.
 
+## MEP-NEXT Runtime Telemetry Classification
+
+FOR-196 may add live resource/cache telemetry only when each counter declares
+its source class:
+
+| Source class | Meaning | Gate treatment |
+|---|---|---|
+| `observed` | Collected from a native or headless runtime route during execution, such as frame samples or surface statuses. | Eligible for reporting and later candidate gates when variance and host eligibility are documented. |
+| `observed-partial` | Collected from the selected route, but not a complete cache API signal, such as per-frame shader/pipeline creation counts. | Reporting-only; must name missing counter families. |
+| `derived` | Computed from deterministic selected-scene ledgers or fixture contracts. | PM-readable diagnostics only; cannot count as observed cache readiness. |
+| `unavailable` | Runtime does not expose the counter yet. | Must include a stable missing-counter reason and a non-claim. |
+
+MEP-NEXT native windowed demo and benchmark tasks remain opt-in local evidence.
+The headless CI evidence task may validate schema, bounded scene switching,
+input-state telemetry, and observed-vs-derived classification, but it must not
+promote `frame.kadre-windowed` to release-blocking and must not count derived
+cache hits/misses as observed WebGPU cache telemetry.
+
 ## Acceptance
 
 - P0 frame demo has measured telemetry.

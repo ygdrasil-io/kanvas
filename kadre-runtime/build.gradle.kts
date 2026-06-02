@@ -320,6 +320,95 @@ tasks.register<JavaExec>("pipelineM88ReleaseCandidate2") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<JavaExec>("pipelineMepNextRuntimeInteractive") {
+    group = "verification"
+    description = "Generates headless MEP-NEXT Kadre runtime interactive evidence for FOR-193..FOR-196."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.MepNextRuntimeInteractiveKt")
+    args(
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+        rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m90-runtime-interactive").asFile.absolutePath,
+    )
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m90-runtime-interactive"))
+    outputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-mep-next-runtime-interactive.md"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<JavaExec>("runMepNextKadreNativeInteractive") {
+    group = "verification"
+    description = "Opt-in native Kadre MEP-NEXT PM demo. Opens a window; do not wire into headless CI."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M69KadreNativeSmokeKt")
+    fun projectRootPath(value: String): String {
+        val file = File(value)
+        return if (file.isAbsolute) file.absolutePath else rootProject.layout.projectDirectory.file(value).asFile.absolutePath
+    }
+    args(
+        "--output",
+        providers.gradleProperty("kadreMepNextDemoOutput")
+            .map(::projectRootPath)
+            .orElse(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/native-demo.json").asFile.absolutePath)
+            .get(),
+        "--frames",
+        providers.gradleProperty("kadreMepNextFrames").orElse("3600").get(),
+        "--mode",
+        "demo",
+        "--warmup-frames",
+        providers.gradleProperty("kadreMepNextWarmupFrames").orElse("120").get(),
+        "--scene-contract-id",
+        providers.gradleProperty("kadreMepNextSceneId").orElse("m83-display-list-pm-scene-v1").get(),
+        "--capture-output",
+        providers.gradleProperty("kadreMepNextCaptureOutput")
+            .map(::projectRootPath)
+            .orElse(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/native-demo-readback.png").asFile.absolutePath)
+            .get(),
+    )
+    jvmArgs(buildList {
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+        add("--enable-native-access=ALL-UNNAMED")
+    })
+    outputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/native-demo.json"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<JavaExec>("runMepNextKadreNativeBenchmark") {
+    group = "verification"
+    description = "Opt-in native Kadre MEP-NEXT benchmark sample. Opens a window and remains reporting-only."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M69KadreNativeSmokeKt")
+    fun projectRootPath(value: String): String {
+        val file = File(value)
+        return if (file.isAbsolute) file.absolutePath else rootProject.layout.projectDirectory.file(value).asFile.absolutePath
+    }
+    args(
+        "--output",
+        providers.gradleProperty("kadreMepNextBenchmarkOutput")
+            .map(::projectRootPath)
+            .orElse(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/native-benchmark.json").asFile.absolutePath)
+            .get(),
+        "--frames",
+        providers.gradleProperty("kadreMepNextFrames").orElse("300").get(),
+        "--mode",
+        "demo",
+        "--warmup-frames",
+        providers.gradleProperty("kadreMepNextWarmupFrames").orElse("120").get(),
+        "--scene-contract-id",
+        providers.gradleProperty("kadreMepNextSceneId").orElse("m83-display-list-pm-scene-v1").get(),
+    )
+    jvmArgs(buildList {
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+        add("--enable-native-access=ALL-UNNAMED")
+    })
+    outputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/native-benchmark.json"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<JavaExec>("validateM88ReleaseCandidate2") {
     group = "verification"
     description = "Validates M88 realtime renderer RC2 evidence fields and artifact paths."
