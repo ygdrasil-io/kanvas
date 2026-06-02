@@ -1,0 +1,398 @@
+{
+    "schemaVersion": 1,
+    "generatedBy": "kadre-runtime:MepNextRuntimeInteractive",
+    "packId": "mep-next-runtime-interactive-kadre-v1",
+    "status": "pass",
+    "claimLevel": "bounded-kadre-runtime-interactive-evidence",
+    "linearIssues": [
+        "FOR-193",
+        "FOR-194",
+        "FOR-195",
+        "FOR-196"
+    ],
+    "modes": {
+        "demo": {
+            "nativeWindow": true,
+            "optIn": true,
+            "command": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive",
+            "defaultClosePolicy": "manual close or configured frame/duration cap",
+            "opensLongWindowInCi": false
+        },
+        "benchmark": {
+            "nativeWindow": true,
+            "optIn": true,
+            "command": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeBenchmark -PkadreMepNextFrames=300 -PkadreMepNextWarmupFrames=120",
+            "gatePhase": "candidate-reporting-only",
+            "releaseBlocking": false
+        },
+        "ciEvidence": {
+            "nativeWindow": false,
+            "optIn": false,
+            "command": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+            "usesKadreNativeSubmodule": false
+        }
+    },
+    "durableLoop": {
+        "autonomousFrameClock": true,
+        "frameClockSource": "kadre.appkit.control-flow-poll",
+        "doesNotRequirePointerWakeups": true,
+        "closePolicy": "WindowEvent.CloseRequested releases device/surface/instance and exits the event loop; CI evidence uses a bounded deterministic close event.",
+        "durationPolicy": "Native demo stays open until manual close or the configured frame cap; benchmark mode uses warmup/measured caps.",
+        "requestedFrameCount": 3,
+        "frameCount": 3,
+        "droppedFrameCount": 1,
+        "p50Ms": 17.1,
+        "p95Ms": 34.4,
+        "surfaceStatusSummary": {
+            "success": 180,
+            "timeout": 0,
+            "lost": 0,
+            "outdated": 0,
+            "outOfMemory": 0,
+            "deviceLost": 0
+        }
+    },
+    "sceneSwitching": {
+        "schemaVersion": 1,
+        "packId": "mep-next-scene-switching-v1",
+        "status": "pass",
+        "sceneCount": 5,
+        "renderableSceneCount": 4,
+        "unsupportedSceneCount": 1,
+        "selectionModel": "bounded-keyboard-config-scene-id",
+        "keyboardControls": [
+            "ArrowRight: next renderable scene",
+            "ArrowLeft: previous renderable scene",
+            "Scene id config: --scene-contract-id for native opt-in runs"
+        ],
+        "candidateScenes": [
+            {
+                "id": "m73-bitmap-rect-nearest-replay-v1",
+                "title": "M73 bitmap-rect nearest replay",
+                "status": "renderable",
+                "renderedByKadre": true,
+                "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#bitmap-rect-nearest",
+                "gpuRoute": "webgpu.image-rect.strict-nearest",
+                "fallbackReasons": []
+            },
+            {
+                "id": "m73-gradient-color-filter-kplus-replay-v1",
+                "title": "M73 gradient color-filter kPlus replay",
+                "status": "renderable",
+                "renderedByKadre": true,
+                "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#gradient-color-filter-linear-kplus",
+                "gpuRoute": "webgpu.generated.linear-gradient.color-filter.blend-kplus",
+                "fallbackReasons": []
+            },
+            {
+                "id": "m73-linear-gradient-rect-replay-v1",
+                "title": "M73 linear-gradient rect replay",
+                "status": "renderable",
+                "renderedByKadre": true,
+                "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#linear-gradient-rect",
+                "gpuRoute": "webgpu.generated.linear-gradient.rect",
+                "fallbackReasons": []
+            },
+            {
+                "id": "m73-nested-rrect-clip-refusal-v1",
+                "title": "M73 nested rrect clip refusal",
+                "status": "expected-unsupported",
+                "renderedByKadre": false,
+                "dashboardRow": "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json#m60-bounded-nested-rrect-clip",
+                "gpuRoute": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+                "fallbackReasons": [
+                    "nested-rrect-difference-clip"
+                ]
+            },
+            {
+                "id": "m83-display-list-pm-scene-v1",
+                "title": "M83 Kanvas display-list PM scene replay",
+                "status": "renderable",
+                "renderedByKadre": true,
+                "dashboardRow": "reports/wgsl-pipeline/scenes/generated/results.json#m83-display-list-pm-scene",
+                "gpuRoute": "webgpu.kadre.native.display-list-replay.bounded",
+                "fallbackReasons": []
+            }
+        ],
+        "switchEvents": [
+            {
+                "sequence": 1,
+                "trigger": "keyboard.ArrowRight",
+                "fromSceneId": "m73-bitmap-rect-nearest-replay-v1",
+                "toSceneId": "m73-gradient-color-filter-kplus-replay-v1",
+                "status": "selected",
+                "fallbackReason": ""
+            },
+            {
+                "sequence": 2,
+                "trigger": "keyboard.ArrowRight",
+                "fromSceneId": "m73-gradient-color-filter-kplus-replay-v1",
+                "toSceneId": "m73-linear-gradient-rect-replay-v1",
+                "status": "selected",
+                "fallbackReason": ""
+            },
+            {
+                "sequence": 3,
+                "trigger": "keyboard.ArrowLeft",
+                "fromSceneId": "m73-linear-gradient-rect-replay-v1",
+                "toSceneId": "m73-gradient-color-filter-kplus-replay-v1",
+                "status": "selected",
+                "fallbackReason": ""
+            },
+            {
+                "sequence": 4,
+                "trigger": "config.sceneId",
+                "fromSceneId": "m83-display-list-pm-scene-v1",
+                "toSceneId": "m73-nested-rrect-clip-refusal-v1",
+                "status": "expected-unsupported",
+                "fallbackReason": "nested-rrect-difference-clip"
+            }
+        ],
+        "unsupportedFallbackReason": "mep-next.scene-switch.expected-unsupported"
+    },
+    "inputControls": {
+        "model": "bounded-kadre-runtime-pm-controls",
+        "visibleStateChange": true,
+        "controls": [
+            {
+                "input": "ArrowRight",
+                "effect": "switch-next-supported-scene"
+            },
+            {
+                "input": "ArrowLeft",
+                "effect": "switch-previous-supported-scene"
+            },
+            {
+                "input": "Space",
+                "effect": "toggle-play-pause"
+            },
+            {
+                "input": "PointerMoved",
+                "effect": "update-pointer-highlight-parameter"
+            }
+        ],
+        "telemetry": {
+            "eventCount": 12,
+            "frameTickCount": 3,
+            "pointerEventCount": 2,
+            "keyboardEventCount": 4,
+            "resizeEventCount": 1,
+            "scaleFactorEventCount": 1,
+            "closeEventCount": 1,
+            "droppedFrameCount": 1,
+            "reconfigureCount": 2
+        },
+        "finalSceneState": {
+            "playing": false,
+            "overlayVisible": true,
+            "pointerX": 512.0,
+            "pointerY": 260.0,
+            "pointerControl": 0.7095238095238096,
+            "animationPhase": 0.033299999999999996,
+            "closeRequested": true
+        },
+        "events": [
+            "frameTick",
+            "pointer",
+            "keyboard",
+            "frameTick",
+            "keyboard",
+            "pointer",
+            "keyboard",
+            "keyboard",
+            "frameTick",
+            "resize",
+            "scaleFactor",
+            "close"
+        ],
+        "realOsEventInjectionClaimed": false,
+        "realOsEventInjectionReason": "mep-next.real-os-event-injection-not-claimed"
+    },
+    "resourceCacheTelemetry": {
+        "schemaVersion": 1,
+        "status": "reporting-only",
+        "observedRuntimeTelemetry": {
+            "nativeFrameTimingSamples": 120,
+            "surfaceStatusSummary": {
+                "success": 180,
+                "timeout": 0,
+                "lost": 0,
+                "outdated": 0,
+                "outOfMemory": 0,
+                "deviceLost": 0
+            },
+            "shaderModuleCreates": 180,
+            "pipelineCreates": 180,
+            "textureReadbackProduced": true,
+            "source": "mep-next.cache-observed-partial-native-route",
+            "limitations": [
+                "M69 creates shader modules and render pipelines per frame in the selected native route; this is observed allocation/churn telemetry, not a cache-hit implementation.",
+                "The current native route does not expose WebGPU cache hit/miss callbacks for shader/pipeline/bind-group caches."
+            ]
+        },
+        "derivedLedger": {
+            "source": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+            "pipelineCacheHits": 179,
+            "pipelineCacheMisses": 1,
+            "textureUploadBytes": 1075200,
+            "intermediateTextureBytes": 0,
+            "bindGroupChurn": 0,
+            "resourceGenerationCount": 3,
+            "invalidResourceReuseCount": 0
+        },
+        "liveRouteCounters": {
+            "pipelineCacheHits": 0,
+            "pipelineCacheMisses": 180,
+            "shaderModuleCreates": 180,
+            "pipelineCreates": 180,
+            "bindGroupCreates": 0,
+            "textureUploads": 0,
+            "intermediateTextureBytes": 0,
+            "classification": "observed-partial",
+            "missingCounterReason": "mep-next.native-cache-counter-unavailable"
+        },
+        "resizeSwitchHealth": {
+            "switchCount": 4,
+            "resizeReconfigureCount": 2,
+            "invalidResourceReuseCount": 0,
+            "boundedGrowth": true
+        }
+    },
+    "telemetryLive": {
+        "schemaVersion": 1,
+        "packId": "mep-next-runtime-live-telemetry-v1",
+        "status": "pass",
+        "lane": "frame.kadre-windowed",
+        "frameClockSource": "kadre.appkit.control-flow-poll",
+        "autonomousFrameClock": true,
+        "frameCount": 3,
+        "droppedFrameCount": 1,
+        "durationMs": 67.69999999999999,
+        "p50Ms": 17.1,
+        "p95Ms": 34.4,
+        "surfaceStatuses": [
+            "success"
+        ],
+        "sourceClassification": {
+            "nativeFrameTiming": "observed",
+            "nativeRouteAllocations": "observed-partial",
+            "cacheHitsMisses": "derived",
+            "resizeInvalidation": "deterministic-derived"
+        },
+        "scene": {
+            "currentSceneId": "m73-gradient-color-filter-kplus-replay-v1",
+            "switchCount": 4,
+            "fallbackReason": "nested-rrect-difference-clip"
+        },
+        "input": {
+            "pointerEventCount": 2,
+            "keyboardEventCount": 4,
+            "lastEvent": "WindowEvent.CloseRequested",
+            "stateUpdate": {
+                "playing": false,
+                "overlayVisible": true,
+                "pointerX": 512.0,
+                "pointerY": 260.0,
+                "pointerControl": 0.7095238095238096,
+                "animationPhase": 0.033299999999999996,
+                "closeRequested": true
+            },
+            "realOsEventInjectionClaimed": false,
+            "realOsEventInjectionReason": "mep-next.real-os-event-injection-not-claimed"
+        },
+        "resources": {
+            "schemaVersion": 1,
+            "status": "reporting-only",
+            "observedRuntimeTelemetry": {
+                "nativeFrameTimingSamples": 120,
+                "surfaceStatusSummary": {
+                    "success": 180,
+                    "timeout": 0,
+                    "lost": 0,
+                    "outdated": 0,
+                    "outOfMemory": 0,
+                    "deviceLost": 0
+                },
+                "shaderModuleCreates": 180,
+                "pipelineCreates": 180,
+                "textureReadbackProduced": true,
+                "source": "mep-next.cache-observed-partial-native-route",
+                "limitations": [
+                    "M69 creates shader modules and render pipelines per frame in the selected native route; this is observed allocation/churn telemetry, not a cache-hit implementation.",
+                    "The current native route does not expose WebGPU cache hit/miss callbacks for shader/pipeline/bind-group caches."
+                ]
+            },
+            "derivedLedger": {
+                "source": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+                "pipelineCacheHits": 179,
+                "pipelineCacheMisses": 1,
+                "textureUploadBytes": 1075200,
+                "intermediateTextureBytes": 0,
+                "bindGroupChurn": 0,
+                "resourceGenerationCount": 3,
+                "invalidResourceReuseCount": 0
+            },
+            "liveRouteCounters": {
+                "pipelineCacheHits": 0,
+                "pipelineCacheMisses": 180,
+                "shaderModuleCreates": 180,
+                "pipelineCreates": 180,
+                "bindGroupCreates": 0,
+                "textureUploads": 0,
+                "intermediateTextureBytes": 0,
+                "classification": "observed-partial",
+                "missingCounterReason": "mep-next.native-cache-counter-unavailable"
+            },
+            "resizeSwitchHealth": {
+                "switchCount": 4,
+                "resizeReconfigureCount": 2,
+                "invalidResourceReuseCount": 0,
+                "boundedGrowth": true
+            }
+        }
+    },
+    "sourceEvidence": [
+        "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json",
+        "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/evidence.json",
+        "kadre-runtime/src/main/kotlin/org/skia/kadre/runtime/M69KadreNativeSmoke.kt",
+        "kadre-runtime/src/main/kotlin/org/skia/kadre/runtime/ReplaySceneRegistry.kt"
+    ],
+    "artifactPaths": [
+        "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json",
+        "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+        "reports/wgsl-pipeline/m90-runtime-interactive/scene-switching.json",
+        "reports/wgsl-pipeline/m90-runtime-interactive/pm-report.md",
+        "reports/wgsl-pipeline/2026-06-02-mep-next-runtime-interactive.md"
+    ],
+    "validationRows": [
+        {
+            "id": "for-193.loop-modes-telemetry",
+            "status": "pass",
+            "assertion": "Demo, benchmark, and CI evidence modes are distinct; CI evidence is headless and native windows remain opt-in."
+        },
+        {
+            "id": "for-194.scene-switching",
+            "status": "pass",
+            "assertion": "At least three bounded renderable replay scenes are selectable, with stable refusals for unsupported rows."
+        },
+        {
+            "id": "for-195.input-controls",
+            "status": "pass",
+            "assertion": "Pointer and keyboard events update bounded runtime state and emit telemetry."
+        },
+        {
+            "id": "for-196.cache-source-taxonomy",
+            "status": "pass",
+            "assertion": "Resource/cache counters are split between observed native frame timing, observed partial native route allocations, and derived M85 ledger counters."
+        }
+    ],
+    "nonClaims": [
+        "MEP-NEXT runtime evidence is bounded to selected replay scenes; it does not claim broad SkCanvas/display-list replay.",
+        "Native demo and benchmark tasks are opt-in because they open Kadre/AppKit windows and may require local native setup.",
+        "CI evidence does not synthesize real OS/window-manager pointer, keyboard, resize, or close injection.",
+        "Observed resource telemetry is partial for the current native route; broad WebGPU cache hits/misses remain unavailable and are reported with `mep-next.native-cache-counter-unavailable`.",
+        "M85 counters remain a derived selected-scene ledger until observed runtime cache telemetry is implemented.",
+        "Frame timing remains reporting-only/candidate and is not release-grade FPS evidence."
+    ]
+}

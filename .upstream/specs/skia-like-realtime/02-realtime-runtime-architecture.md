@@ -251,6 +251,37 @@ unregistered runtime effects. Dynamic SkSL compilation is outside the runtime
 architecture; registered runtime effects use Kanvas descriptors plus
 parser-validated WGSL.
 
+## MEP-NEXT Runtime Interactive Slice
+
+The post-RC-MEP runtime slice advances the Kadre route from bounded native
+samples toward product-style interactive evidence. It remains scoped to the
+selected typed replay registry and one bounded display-list scene; it does not
+claim broad SkCanvas/display-list replay or full OS event injection.
+
+Required runtime evidence for FOR-193 through FOR-196:
+
+- demo, benchmark, and CI evidence modes are distinct;
+- native demo and benchmark tasks are opt-in because they open a Kadre window;
+- CI evidence is headless and serializes the same bounded runtime contracts
+  without requiring a long native window;
+- the autonomous frame clock is identified as Kadre/AppKit poll-driven and
+  does not depend on pointer movement to request frames;
+- close behavior is explicit: native runs stop on `WindowEvent.CloseRequested`
+  or a configured frame/duration cap;
+- scene switching is bounded to an allowlisted registry with at least three
+  renderable scenes and stable expected-unsupported reasons for unsupported
+  selections;
+- pointer and keyboard controls update bounded runtime state and telemetry, but
+  CI does not claim real desktop OS/window-manager event injection;
+- live/resource telemetry classifies counters as `observed`, `observed-partial`,
+  `derived`, or `unavailable` so PM can distinguish native route facts from
+  deterministic ledger facts.
+
+The selected native route currently observes frame timing, surface statuses,
+and per-frame shader/pipeline creation behavior. Broad WebGPU cache hit/miss
+callbacks are not available yet; missing native counters must use a stable
+reason instead of being silently estimated.
+
 ## PM Demo Requirements
 
 The first real-time demo should include:

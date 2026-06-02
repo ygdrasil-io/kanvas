@@ -1,0 +1,93 @@
+{
+    "schemaVersion": 1,
+    "packId": "mep-next-runtime-live-telemetry-v1",
+    "status": "pass",
+    "lane": "frame.kadre-windowed",
+    "frameClockSource": "kadre.appkit.control-flow-poll",
+    "autonomousFrameClock": true,
+    "frameCount": 3,
+    "droppedFrameCount": 1,
+    "durationMs": 67.69999999999999,
+    "p50Ms": 17.1,
+    "p95Ms": 34.4,
+    "surfaceStatuses": [
+        "success"
+    ],
+    "sourceClassification": {
+        "nativeFrameTiming": "observed",
+        "nativeRouteAllocations": "observed-partial",
+        "cacheHitsMisses": "derived",
+        "resizeInvalidation": "deterministic-derived"
+    },
+    "scene": {
+        "currentSceneId": "m73-gradient-color-filter-kplus-replay-v1",
+        "switchCount": 4,
+        "fallbackReason": "nested-rrect-difference-clip"
+    },
+    "input": {
+        "pointerEventCount": 2,
+        "keyboardEventCount": 4,
+        "lastEvent": "WindowEvent.CloseRequested",
+        "stateUpdate": {
+            "playing": false,
+            "overlayVisible": true,
+            "pointerX": 512.0,
+            "pointerY": 260.0,
+            "pointerControl": 0.7095238095238096,
+            "animationPhase": 0.033299999999999996,
+            "closeRequested": true
+        },
+        "realOsEventInjectionClaimed": false,
+        "realOsEventInjectionReason": "mep-next.real-os-event-injection-not-claimed"
+    },
+    "resources": {
+        "schemaVersion": 1,
+        "status": "reporting-only",
+        "observedRuntimeTelemetry": {
+            "nativeFrameTimingSamples": 120,
+            "surfaceStatusSummary": {
+                "success": 180,
+                "timeout": 0,
+                "lost": 0,
+                "outdated": 0,
+                "outOfMemory": 0,
+                "deviceLost": 0
+            },
+            "shaderModuleCreates": 180,
+            "pipelineCreates": 180,
+            "textureReadbackProduced": true,
+            "source": "mep-next.cache-observed-partial-native-route",
+            "limitations": [
+                "M69 creates shader modules and render pipelines per frame in the selected native route; this is observed allocation/churn telemetry, not a cache-hit implementation.",
+                "The current native route does not expose WebGPU cache hit/miss callbacks for shader/pipeline/bind-group caches."
+            ]
+        },
+        "derivedLedger": {
+            "source": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+            "pipelineCacheHits": 179,
+            "pipelineCacheMisses": 1,
+            "textureUploadBytes": 1075200,
+            "intermediateTextureBytes": 0,
+            "bindGroupChurn": 0,
+            "resourceGenerationCount": 3,
+            "invalidResourceReuseCount": 0
+        },
+        "liveRouteCounters": {
+            "pipelineCacheHits": 0,
+            "pipelineCacheMisses": 180,
+            "shaderModuleCreates": 180,
+            "pipelineCreates": 180,
+            "bindGroupCreates": 0,
+            "textureUploads": 0,
+            "intermediateTextureBytes": 0,
+            "classification": "observed-partial",
+            "missingCounterReason": "mep-next.native-cache-counter-unavailable"
+        },
+        "resizeSwitchHealth": {
+            "switchCount": 4,
+            "resizeReconfigureCount": 2,
+            "invalidResourceReuseCount": 0,
+            "boundedGrowth": true
+        }
+    }
+}
