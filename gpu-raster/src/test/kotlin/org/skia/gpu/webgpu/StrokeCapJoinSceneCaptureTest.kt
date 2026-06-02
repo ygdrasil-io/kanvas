@@ -3,8 +3,12 @@ package org.skia.gpu.webgpu
 import java.io.File
 import java.util.Locale
 import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorBLUE
+import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
 import org.graphiks.math.SkISize
+import org.graphiks.math.SkPoint
+import org.graphiks.math.SkRect
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -13,14 +17,72 @@ import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.encode.SkPngEncoder
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
+import org.skia.foundation.SkTileMode
 import org.skia.gpu.webgpu.testing.CrossBackendHarness
 import org.skia.testing.BitmapComparison
 import org.skia.testing.TestUtils
 import org.skia.tests.GM
 
 class StrokeCapJoinSceneCaptureTest {
+    @Test
+    fun `target colorspace blend aligns neutral AA coverage sample`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        context!!.use { ctx ->
+            val gm = NeutralAaCoverageGM()
+            val reference = TestUtils.runGmTest(gm)
+            val postPresentGpu = WebGpuSink.draw(ctx, gm)
+            val targetBlendGpu = WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
+
+            val referenceRed = redAt(reference, 0, 0)
+            val postPresentRed = redAt(postPresentGpu, 0, 0)
+            val targetBlendRed = redAt(targetBlendGpu, 0, 0)
+
+            println(
+                "[TargetColorSpaceBlend] neutralAA reference=$referenceRed, " +
+                    "postPresent=$postPresentRed, targetBlend=$targetBlendRed",
+            )
+
+            if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                writeNeutralAaEvidence(
+                    reference = reference,
+                    postPresentGpu = postPresentGpu,
+                    targetBlendGpu = targetBlendGpu,
+                    referenceRed = referenceRed,
+                    postPresentRed = postPresentRed,
+                    targetBlendRed = targetBlendRed,
+                    adapter = ctx.adapterInfo ?: "unknown-adapter",
+                )
+            }
+
+            assertTrue(
+                postPresentRed < referenceRed - 8,
+                "expected post-present transform to preserve the known dark neutral AA mismatch",
+            )
+            assertEquals(referenceRed, targetBlendRed)
+        }
+    }
+
+    @Test
+    fun `target colorspace blend refuses unsupported gradient draw family`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        context!!.use { ctx ->
+            val error = assertThrows(IllegalStateException::class.java) {
+                WebGpuSink.draw(ctx, UnsupportedGradientGM(), targetColorSpaceBlend = true)
+            }
+            assertTrue(
+                error.message!!.contains("color-space.target-blend-unsupported-draw-kind:LinearGradientRectDraw"),
+                "expected target-colorspace blend draw-kind refusal, got ${error.message}",
+            )
+        }
+    }
+
     @Test
     fun `bounded stroke cap join scene captures visual parity blocker evidence`() {
         val context = WebGpuContext.createOrNull()
@@ -34,7 +96,7 @@ class StrokeCapJoinSceneCaptureTest {
                 WebGpuSink.draw(ctx, gm)
             }
             val experimentalGpu = withExperimentalStrokeCapJoinRender {
-                WebGpuSink.draw(ctx, gm)
+                WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
             }
             val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = 0)
             val experimentalGpuCmp = TestUtils.compareBitmapsDetailed(experimentalGpu, reference, tolerance = 0)
@@ -95,6 +157,41 @@ class StrokeCapJoinSceneCaptureTest {
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, adapter),
         )
         File(dir, "stats.json").writeText(statsJson(cpuCmp, experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, adapter))
+    }
+
+    private fun writeNeutralAaEvidence(
+        reference: SkBitmap,
+        postPresentGpu: SkBitmap,
+        targetBlendGpu: SkBitmap,
+        referenceRed: Int,
+        postPresentRed: Int,
+        targetBlendRed: Int,
+        adapter: String,
+    ) {
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-target-colorspace-neutral-aa").apply { mkdirs() }
+        writePng(File(dir, "skia.png"), reference)
+        writePng(File(dir, "gpu-post-present.png"), postPresentGpu)
+        writePng(File(dir, "gpu-target-blend.png"), targetBlendGpu)
+        writePng(File(dir, "gpu-post-present-diff.png"), CrossBackendHarness.pixelDiff(reference, postPresentGpu))
+        writePng(File(dir, "gpu-target-blend-diff.png"), CrossBackendHarness.pixelDiff(reference, targetBlendGpu))
+        File(dir, "stats.json").writeText(
+            """
+            {
+              "sceneId": "m60-target-colorspace-neutral-aa",
+              "backend": "WebGPU",
+              "adapter": ${adapter.jsonString()},
+              "status": "diagnostic-pass",
+              "referenceRed": $referenceRed,
+              "postPresentRed": $postPresentRed,
+              "targetBlendRed": $targetBlendRed,
+              "expectedMismatch": "post-present path keeps the neutral AA sample at 115 instead of CPU 128",
+              "result": "target-colorspace blend path matches CPU 128 on the isolated neutral AA sample",
+              "sourceRoute": "webgpu.present-pass.srgb-to-rec2020-after-blend",
+              "targetRoute": "webgpu.target-colorspace-blend.solid-coverage",
+              "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+            """.trimIndent() + "\n",
+        )
     }
 
     private fun writePng(file: File, bitmap: SkBitmap) {
@@ -195,6 +292,7 @@ class StrokeCapJoinSceneCaptureTest {
               "normalRoute": "webgpu.coverage.refuse",
               "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
               "rootCause": "color-space.target-blend-required",
+              "targetColorSpaceBlend": true,
               "experimentalGpuSimilarity": ${String.format(Locale.US, "%.2f", experimentalGpuCmp.similarity)},
               "experimentalGpuMatchingPixels": ${experimentalGpuCmp.matchingPixels},
               "experimentalGpuMaxChannelDelta": ${experimentalGpuCmp.maxChannelDiff.max()},
@@ -207,7 +305,7 @@ class StrokeCapJoinSceneCaptureTest {
               "regions": [
             ${regionStats.joinToString(",\n") { it.toJson().prependIndent("    ") }}
               ],
-              "diagnosis": "Experimental render remains below the exact threshold. The 32-channel tolerance score reaches the threshold, which points to target-colorspace blending as the remaining blocker rather than missing stroke geometry. Normal route remains refused.",
+              "diagnosis": "Target-colorspace blending raises the exact diagnostic score but it remains below the support threshold. The isolated neutral AA fixture now matches CPU 128, while this full stroke scene still has residual cap/join AA differences. Normal route remains refused.",
               "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
             }
         """.trimIndent() + "\n"
@@ -246,6 +344,7 @@ class StrokeCapJoinSceneCaptureTest {
           "dominantMismatchDescription": ${dominant.description.jsonString()},
           "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
           "rootCause": "color-space.target-blend-required",
+          "targetColorSpaceBlend": true,
           "pathVerbCount": 9,
           "pathVerbBudget": 96,
           "edgeCount": 18,
@@ -310,6 +409,9 @@ class StrokeCapJoinSceneCaptureTest {
         }
         return max
     }
+
+    private fun redAt(bitmap: SkBitmap, x: Int, y: Int): Int =
+        (bitmap.getPixel(x, y) ushr 16) and 0xFF
 
     private fun <T> withExperimentalStrokeCapJoinRender(block: () -> T): T {
         val previous = System.getProperty(EXPERIMENTAL_RENDER_PROPERTY)
@@ -379,6 +481,44 @@ class StrokeCapJoinSceneCaptureTest {
                 c.drawRect(org.graphiks.math.SkRect.MakeXYWH(10f, 28f, 88f, 64f), outlinePaint)
                 c.restore()
             }
+        }
+    }
+
+    private class NeutralAaCoverageGM : GM() {
+        override fun getName(): String = "m60_neutral_aa_coverage"
+        override fun getISize(): SkISize = SkISize.Make(4, 1)
+
+        override fun onDraw(canvas: SkCanvas?) {
+            val c = canvas ?: return
+            c.drawColor(SK_ColorWHITE)
+            val paint = SkPaint().apply {
+                color = SK_ColorBLACK
+                isAntiAlias = true
+                style = SkPaint.Style.kFill_Style
+            }
+            c.drawRect(SkRect.MakeLTRB(0.5f, 0f, 1.5f, 1f), paint)
+        }
+    }
+
+    private class UnsupportedGradientGM : GM() {
+        override fun getName(): String = "m60_target_blend_unsupported_gradient"
+        override fun getISize(): SkISize = SkISize.Make(8, 8)
+
+        override fun onDraw(canvas: SkCanvas?) {
+            val c = canvas ?: return
+            c.drawColor(SK_ColorWHITE)
+            val gradient = SkLinearGradient.Make(
+                p0 = SkPoint(0f, 0f),
+                p1 = SkPoint(8f, 0f),
+                colors = intArrayOf(SK_ColorRED, SK_ColorBLUE),
+                positions = null,
+                tileMode = SkTileMode.kClamp,
+            )
+            val paint = SkPaint().apply {
+                shader = gradient
+                isAntiAlias = false
+            }
+            c.drawRect(SkRect.MakeLTRB(0f, 0f, 8f, 8f), paint)
         }
     }
 

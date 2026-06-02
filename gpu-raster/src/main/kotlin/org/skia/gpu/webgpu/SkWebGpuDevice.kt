@@ -121,6 +121,7 @@ import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.ln
+import kotlin.math.pow
 
 public data class BlendPlan(
     val mode: SkBlendMode,
@@ -278,6 +279,19 @@ public class SkWebGpuDevice(
      * else stays on the raw sRGB default.
      */
     private val applyColorspaceTransform: Boolean = false,
+    /**
+     * FOR-232 bounded target-colorspace blend pilot. When enabled, the
+     * supported solid-colour coverage shaders convert unpremul sRGB source
+     * colours to the DM Rec.2020 encoded target before premultiplication and
+     * fixed-function blending. The final present pass is then an identity
+     * copy because the intermediate is already in the comparison colour
+     * space.
+     *
+     * This is intentionally narrow. Until every draw family used by a scene
+     * has an audited target-space path, unsupported draw kinds refuse with a
+     * stable diagnostic instead of silently mixing colour conventions.
+     */
+    private val targetColorSpaceBlend: Boolean = false,
     /**
      * G6.2 — backing format of the intermediate render target. All draw
      * pipelines target this format. Default `RGBA16Float` (F16) buys
@@ -532,12 +546,44 @@ public class SkWebGpuDevice(
 
     /** Update the clear value used by the next [flush]. */
     public fun setBackground(srgbArgb: Int) {
+        val sr = SkColorGetR(srgbArgb) / 255.0
+        val sg = SkColorGetG(srgbArgb) / 255.0
+        val sb = SkColorGetB(srgbArgb) / 255.0
+        val (r, g, b) = if (targetColorSpaceBlend) {
+            srgbToRec2020Encoded(sr, sg, sb)
+        } else {
+            Triple(sr, sg, sb)
+        }
         background = Color(
-            r = SkColorGetR(srgbArgb) / 255.0,
-            g = SkColorGetG(srgbArgb) / 255.0,
-            b = SkColorGetB(srgbArgb) / 255.0,
+            r = r,
+            g = g,
+            b = b,
             a = SkColorGetA(srgbArgb) / 255.0,
         )
+    }
+
+    private fun targetColorSpaceBlendFlag(): Float = if (targetColorSpaceBlend) 1f else 0f
+
+    private fun srgbToRec2020Encoded(r: Double, g: Double, b: Double): Triple<Double, Double, Double> {
+        val lr = srgbToLinear(r)
+        val lg = srgbToLinear(g)
+        val lb = srgbToLinear(b)
+        val rr = 0.62740 * lr + 0.32928 * lg + 0.04338 * lb
+        val rg = 0.06909 * lr + 0.91954 * lg + 0.01136 * lb
+        val rb = 0.01639 * lr + 0.08801 * lg + 0.89559 * lb
+        return Triple(
+            rec2020Encode(rr).coerceIn(0.0, 1.0),
+            rec2020Encode(rg).coerceIn(0.0, 1.0),
+            rec2020Encode(rb).coerceIn(0.0, 1.0),
+        )
+    }
+
+    private fun srgbToLinear(v: Double): Double =
+        if (v <= 0.04045) v / 12.92 else ((v + 0.055) / 1.055).pow(2.4)
+
+    private fun rec2020Encode(v: Double): Double {
+        val c = maxOf(v, 0.0)
+        return if (c < 0.0181) 4.5 * c else 1.0993 * c.pow(0.45) - 0.0993
     }
 
     /**
@@ -2696,7 +2742,7 @@ public class SkWebGpuDevice(
     // ─── Present pass (G6.1) — sRGB→Rec.2020 transform on readback ─────────
 
     private val presentShader: GPUShaderModule = loadShader(
-        if (applyColorspaceTransform) "shaders/present_pass.wgsl"
+        if (applyColorspaceTransform && !targetColorSpaceBlend) "shaders/present_pass.wgsl"
         else "shaders/present_identity.wgsl",
     )
 
@@ -11830,6 +11876,18 @@ public class SkWebGpuDevice(
             }
         }
 
+        if (targetColorSpaceBlend) {
+            val unsupported = pending.firstOrNull {
+                it !is RectDraw && it !is StencilCoverAaPolygonDraw
+            }
+            if (unsupported != null) {
+                error(
+                    "color-space.target-blend-unsupported-draw-kind:" +
+                        (unsupported::class.simpleName ?: "unknown"),
+                )
+            }
+        }
+
         // Per-draw GPU resources (uniform buffer + bind group + optional
         // vertex buffer for polygons). WebGPU forbids `queue.writeBuffer`
         // between draws inside a render pass — per-draw resources are
@@ -13503,6 +13561,7 @@ public class SkWebGpuDevice(
         // [ZERO_COLOR_FILTER_24] sentinel, so the trailing 24 floats
         // are zero and the shader's fast path stays warm.
         System.arraycopy(d.colorFilterPacked, 0, packed, 20, 24)
+        packed[22] = targetColorSpaceBlendFlag()
         context.queue.writeBuffer(buf, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -15091,7 +15150,9 @@ public class SkWebGpuDevice(
         writeClipShape(packed, 12 + MAX_AA_EDGES * 4, d.clipShape)
         // Phase G-direct-colorFilter -- colour-filter payload at offset
         // 4176 (= float index 12 + MAX_AA_EDGES * 4 + 8).
-        System.arraycopy(d.colorFilterPacked, 0, packed, 12 + MAX_AA_EDGES * 4 + 8, 24)
+        val colorFilterBase = 12 + MAX_AA_EDGES * 4 + 8
+        System.arraycopy(d.colorFilterPacked, 0, packed, colorFilterBase, 24)
+        packed[colorFilterBase + 2] = targetColorSpaceBlendFlag()
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(

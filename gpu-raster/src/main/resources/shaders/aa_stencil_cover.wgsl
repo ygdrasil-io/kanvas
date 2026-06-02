@@ -57,7 +57,7 @@ struct Uniforms {
     edges:               array<vec4f, 256>,           // offset 48 : (Ax, Ay, Bx, By)
     clipShapeBounds:     vec4f,                       // offset 4144 : (l, t, r, b) ; ignored when clipKind = 0
     clipShapeRadiiKind:  vec4f,                       // offset 4160 : (rx, ry, clipKind, _) ; clipKind in {0, 1}
-    colorFilterKindMode: vec4f,                       // offset 4176 : (kind, blendMode, _, _) ; kind 0 = none
+    colorFilterKindMode: vec4f,                       // offset 4176 : (kind, blendMode, targetColorSpaceBlend, _) ; kind 0 = none
     colorFilterParam0:   vec4f,                       // offset 4192 : kind 1 -> premul colour ; kind 2 -> matrix row 0
     colorFilterParam1:   vec4f,                       // offset 4208 : matrix row 1 (G coefs)
     colorFilterParam2:   vec4f,                       // offset 4224 : matrix row 2 (B coefs)
@@ -233,11 +233,52 @@ fn apply_color_filter(c_un: vec4f) -> vec4f {
     return c_un;
 }
 
+fn srgb_to_linear(v: f32) -> f32 {
+    if (v <= 0.04045) {
+        return v / 12.92;
+    }
+    return pow((v + 0.055) / 1.055, 2.4);
+}
+
+fn rec2020_encode(v: f32) -> f32 {
+    let c = max(v, 0.0);
+    if (c < 0.0181) {
+        return 4.5 * c;
+    }
+    return 1.0993 * pow(c, 0.45) - 0.0993;
+}
+
+fn srgb_to_rec2020_encoded(rgb: vec3f) -> vec3f {
+    let lin_srgb = vec3f(
+        srgb_to_linear(rgb.r),
+        srgb_to_linear(rgb.g),
+        srgb_to_linear(rgb.b),
+    );
+    let m = mat3x3<f32>(
+        vec3f(0.62740, 0.06909, 0.01639),
+        vec3f(0.32928, 0.91954, 0.08801),
+        vec3f(0.04338, 0.01136, 0.89559),
+    );
+    let lin_rec = m * lin_srgb;
+    return vec3f(
+        clamp(rec2020_encode(lin_rec.r), 0.0, 1.0),
+        clamp(rec2020_encode(lin_rec.g), 0.0, 1.0),
+        clamp(rec2020_encode(lin_rec.b), 0.0, 1.0),
+    );
+}
+
+fn apply_target_colorspace_if_needed(c: vec4f) -> vec4f {
+    if (uniforms.colorFilterKindMode.z > 0.5) {
+        return vec4f(srgb_to_rec2020_encoded(c.rgb), c.a);
+    }
+    return c;
+}
+
 @fragment
 fn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     var coverage = select(supersampled_path_cov(frag.xy), 1.0, uniforms.edgeCount == 0u);
     coverage = coverage * clip_cov(frag.xy);
-    let c = apply_color_filter(uniforms.color);
+    let c = apply_target_colorspace_if_needed(apply_color_filter(uniforms.color));
     let alpha = c.a * coverage;
     return vec4f(c.rgb * alpha, alpha);
 }
@@ -246,7 +287,7 @@ fn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {
 fn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     var coverage = select(supersampled_path_cov(frag.xy), 0.0, uniforms.edgeCount == 0u);
     coverage = coverage * clip_cov(frag.xy);
-    let c = apply_color_filter(uniforms.color);
+    let c = apply_target_colorspace_if_needed(apply_color_filter(uniforms.color));
     let alpha = c.a * coverage;
     return vec4f(c.rgb * alpha, alpha);
 }

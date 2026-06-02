@@ -12,35 +12,36 @@
       "gpuMaxChannelDelta": 255,
       "gpuStatus": "expected-unsupported",
       "experimentalGpuStatus": "diagnostic-only",
-      "experimentalGpuSimilarity": 89.60,
-      "experimentalGpuMatchingPixels": 22019,
-      "experimentalGpuMaxChannelDelta": 39,
+      "experimentalGpuSimilarity": 95.37,
+      "experimentalGpuMatchingPixels": 23437,
+      "experimentalGpuMaxChannelDelta": 49,
       "experimentalGpuToleranceProfile": [
         {
   "tolerance": 0,
-  "similarity": 89.60,
-  "matchingPixels": 22019
+  "similarity": 95.37,
+  "matchingPixels": 23437
 },
 {
   "tolerance": 8,
-  "similarity": 92.93,
-  "matchingPixels": 22838
+  "similarity": 99.96,
+  "matchingPixels": 24566
 },
 {
   "tolerance": 16,
-  "similarity": 99.37,
-  "matchingPixels": 24421
+  "similarity": 99.96,
+  "matchingPixels": 24566
 },
 {
   "tolerance": 32,
-  "similarity": 99.97,
-  "matchingPixels": 24568
+  "similarity": 99.98,
+  "matchingPixels": 24570
 }
       ],
       "dominantMismatchRegion": "round-round",
       "dominantMismatchDescription": "middle band: round cap with round join",
       "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
       "rootCause": "color-space.target-blend-required",
+      "targetColorSpaceBlend": true,
       "pathVerbCount": 9,
       "pathVerbBudget": 96,
       "edgeCount": 18,

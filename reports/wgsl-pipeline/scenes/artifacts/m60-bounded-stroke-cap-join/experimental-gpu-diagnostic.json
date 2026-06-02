@@ -8,30 +8,31 @@
           "normalRoute": "webgpu.coverage.refuse",
           "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
           "rootCause": "color-space.target-blend-required",
-          "experimentalGpuSimilarity": 89.60,
-          "experimentalGpuMatchingPixels": 22019,
-          "experimentalGpuMaxChannelDelta": 39,
+          "targetColorSpaceBlend": true,
+          "experimentalGpuSimilarity": 95.37,
+          "experimentalGpuMatchingPixels": 23437,
+          "experimentalGpuMaxChannelDelta": 49,
           "threshold": 99.95,
           "toleranceProfile": [
             {
   "tolerance": 0,
-  "similarity": 89.60,
-  "matchingPixels": 22019
+  "similarity": 95.37,
+  "matchingPixels": 23437
 },
 {
   "tolerance": 8,
-  "similarity": 92.93,
-  "matchingPixels": 22838
+  "similarity": 99.96,
+  "matchingPixels": 24566
 },
 {
   "tolerance": 16,
-  "similarity": 99.37,
-  "matchingPixels": 24421
+  "similarity": 99.96,
+  "matchingPixels": 24566
 },
 {
   "tolerance": 32,
-  "similarity": 99.97,
-  "matchingPixels": 24568
+  "similarity": 99.98,
+  "matchingPixels": 24570
 }
           ],
           "dominantMismatchRegion": "round-round",
@@ -41,27 +42,27 @@
   "id": "butt-bevel",
   "description": "left band: butt cap with bevel join",
   "pixels": 6144,
-  "matchingPixels": 5410,
-  "similarity": 88.05,
-  "maxChannelDelta": 38
+  "matchingPixels": 5689,
+  "similarity": 92.59,
+  "maxChannelDelta": 24
 },
 {
   "id": "round-round",
   "description": "middle band: round cap with round join",
   "pixels": 6144,
-  "matchingPixels": 5265,
-  "similarity": 85.69,
-  "maxChannelDelta": 39
+  "matchingPixels": 5632,
+  "similarity": 91.67,
+  "maxChannelDelta": 49
 },
 {
   "id": "square-bevel",
   "description": "right band: square cap with bevel join",
   "pixels": 12288,
-  "matchingPixels": 11344,
-  "similarity": 92.32,
-  "maxChannelDelta": 22
+  "matchingPixels": 12116,
+  "similarity": 98.60,
+  "maxChannelDelta": 1
 }
           ],
-          "diagnosis": "Experimental render remains below the exact threshold. The 32-channel tolerance score reaches the threshold, which points to target-colorspace blending as the remaining blocker rather than missing stroke geometry. Normal route remains refused.",
+          "diagnosis": "Target-colorspace blending raises the exact diagnostic score but it remains below the support threshold. The isolated neutral AA fixture now matches CPU 128, while this full stroke scene still has residual cap/join AA differences. Normal route remains refused.",
           "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
         }
