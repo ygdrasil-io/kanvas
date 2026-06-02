@@ -15797,11 +15797,10 @@ public class SkWebGpuDevice(
 
     private companion object {
         private val SUPPORTED_RUNTIME_EFFECT_WGSL_IDS = setOf(
+            "wgsl/runtime_linear_gradient_rt",
             "wgsl/runtime_simple_rt",
         )
-        private val DIAGNOSTIC_RUNTIME_EFFECT_WGSL_IDS = setOf(
-            "wgsl/runtime_linear_gradient_rt",
-        )
+        private val DIAGNOSTIC_RUNTIME_EFFECT_WGSL_IDS = emptySet<String>()
 
         /**
          * Size of the rect per-draw uniform :
