@@ -1,0 +1,14 @@
+{
+  "sceneId": "runtime-effect-linear-gradient",
+  "backend": "CPU",
+  "drawKind": "LinearGradientRTDescriptorGM",
+  "status": "pass",
+  "selectedRoute": "cpu.runtime-effect.descriptor.linear_gradient_rt",
+  "pipelineKey": "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
+  "fallbackReason": "none",
+  "runtimeEffectStableId": "runtime.linear_gradient_rt",
+  "wgslImplementationId": "wgsl/runtime_linear_gradient_rt",
+  "uniformBytes": 32,
+  "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest#LinearGradientRT descriptor scene captures visual parity blocker evidence",
+  "sourceReport": "reports/wgsl-pipeline/2026-06-02-renderer-feature-conversion-sprint.md"
+}

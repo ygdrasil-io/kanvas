@@ -157,14 +157,24 @@ class SkRuntimeEffectMakeTest {
     }
 
     @Test
-    fun `dispatch-only builtins resolve without descriptor metadata`() {
+    fun `SpiralRT and LinearGradient expose descriptors`() {
         val spiral = SkRuntimeEffect.MakeForShader(SkBuiltinShaderEffectsSimple.SPIRAL_RT_SKSL).effect
         val linearGradient = SkRuntimeEffect.MakeForShader(SkBuiltinShaderEffectsSimple.LINEAR_GRADIENT_RT_SKSL).effect
 
         assertNotNull(spiral)
         assertNotNull(linearGradient)
-        assertNull(spiral!!.descriptor())
-        assertNull(linearGradient!!.descriptor())
+        val spiralDescriptor = spiral!!.descriptor()
+        assertNotNull(spiralDescriptor)
+        assertEquals("runtime.spiral_rt", spiralDescriptor!!.stableId)
+        assertEquals("kotlin/spiral_rt", spiralDescriptor.cpuImplementationId)
+        assertEquals("wgsl/runtime_spiral_rt", spiralDescriptor.wgslImplementationId)
+        assertEquals(listOf("rad_scale", "in_center", "in_colors0", "in_colors1"), spiralDescriptor.uniforms.map { it.name })
+        val linearGradientDescriptor = linearGradient!!.descriptor()
+        assertNotNull(linearGradientDescriptor)
+        assertEquals("runtime.linear_gradient_rt", linearGradientDescriptor!!.stableId)
+        assertEquals("kotlin/linear_gradient_rt", linearGradientDescriptor.cpuImplementationId)
+        assertEquals("wgsl/runtime_linear_gradient_rt", linearGradientDescriptor.wgslImplementationId)
+        assertEquals(listOf("in_colors0", "in_colors1"), linearGradientDescriptor.uniforms.map { it.name })
     }
 
     // ─── Failure paths ───────────────────────────────────────────────

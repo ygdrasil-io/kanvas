@@ -11,12 +11,14 @@ class WgslStrictValidationReportTest {
         val summary = WgslStrictValidationReport.run(Path.of("src/main/resources/shaders"))
 
         assertTrue(summary.success, "strict WGSL validation failures: ${summary.failedModules}")
-        assertEquals(3, summary.moduleCount)
+        assertEquals(5, summary.moduleCount)
 
         val byLabel = summary.modules.associateBy { it.spec.label }
         assertTrue(byLabel.keys.contains("generated/solid_rect_generated.wgsl"))
         assertTrue(byLabel.keys.contains("generated/linear_gradient_generated.wgsl"))
+        assertTrue(byLabel.keys.contains("registered/runtime_linear_gradient_rt.wgsl"))
         assertTrue(byLabel.keys.contains("registered/runtime_simple_rt.wgsl"))
+        assertTrue(byLabel.keys.contains("registered/runtime_spiral_rt.wgsl"))
 
         byLabel.values.forEach { report ->
             assertTrue(report.validation.bindings.contains("uniforms@group=0,binding=0"))

@@ -1,0 +1,15 @@
+{
+  "sceneId": "runtime-effect-linear-gradient",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "drawKind": "LinearGradientRTDescriptorGM",
+  "status": "expected-unsupported",
+  "selectedRoute": "webgpu.runtime-effect.descriptor.linear_gradient_rt.expected-unsupported",
+  "pipelineKey": "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
+  "fallbackReason": "runtime-effect.linear-gradient-visual-parity-below-threshold",
+  "runtimeEffectStableId": "runtime.linear_gradient_rt",
+  "wgslImplementationId": "wgsl/runtime_linear_gradient_rt",
+  "uniformBytes": 32,
+  "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest#LinearGradientRT descriptor scene captures visual parity blocker evidence",
+  "sourceReport": "reports/wgsl-pipeline/2026-06-02-renderer-feature-conversion-sprint.md"
+}

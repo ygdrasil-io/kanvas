@@ -1,0 +1,21 @@
+{
+  "sceneId": "runtime-effect-linear-gradient",
+  "pixels": 4096,
+  "matchingPixels": 0,
+  "maxChannelDelta": 255,
+  "threshold": 99.95,
+  "cpuSimilarity": 100.00,
+  "cpuMatchingPixels": 4096,
+  "cpuMaxChannelDelta": 0,
+  "gpuSimilarity": 0.00,
+  "gpuMatchingPixels": 0,
+  "gpuMaxChannelDelta": 255,
+  "gpuStatus": "expected-unsupported",
+  "fallbackReason": "runtime-effect.linear-gradient-visual-parity-below-threshold",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "runtimeEffectStableId": "runtime.linear_gradient_rt",
+  "wgslImplementationId": "wgsl/runtime_linear_gradient_rt",
+  "uniformBytes": 32,
+  "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest"
+}
