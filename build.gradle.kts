@@ -4323,6 +4323,19 @@ tasks.register("pipelineSkiaGmInventoryGate") {
     }
 }
 
+tasks.register<Exec>("validateM88ReleaseCandidate2") {
+    group = "verification"
+    description = "Validates checked-in M88 RC2 evidence without resolving Kadre runtime dependencies."
+    dependsOn("pipelineM86FidelityBurndown")
+    commandLine("python3", "scripts/validate_m88_rc2.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_m88_rc2.py"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m88-realtime-rc2"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json"))
+}
+
 tasks.register("pipelinePmBundle") {
     group = "verification"
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
@@ -4343,7 +4356,7 @@ tasks.register("pipelinePmBundle") {
     dependsOn(
         "pipelineM65RuntimeSmoke",
         "pipelineM86FidelityBurndown",
-        ":kadre-runtime:validateM88ReleaseCandidate2",
+        "validateM88ReleaseCandidate2",
         "pipelineSceneDashboardGate",
         "pipelineDashboardFrontQa",
         "pipelinePerformanceTrendWarnings",
