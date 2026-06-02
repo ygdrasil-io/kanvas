@@ -14,6 +14,7 @@ import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple
 import org.skia.encode.SkPngEncoder
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorType
 import org.skia.foundation.SkData
 import org.skia.foundation.SkPaint
 import org.skia.gpu.webgpu.testing.CrossBackendHarness
@@ -42,27 +43,90 @@ class RuntimeEffectDescriptorSceneCaptureTest {
             val gm = RuntimeEffectGM(scene)
             val reference = TestUtils.runGmTest(gm)
             val cpuBitmap = TestUtils.runGmTest(gm)
-            val gpuError = assertThrows(IllegalStateException::class.java) {
-                WebGpuSink.draw(ctx, gm)
+            val gpuResult = if (scene.gpuSupported || scene.gpuCandidateDiagnostics) {
+                val gpuBitmap = renderGpu(ctx, gm)
+                GpuCaptureResult.Supported(
+                    bitmap = gpuBitmap,
+                    comparison = TestUtils.compareBitmapsDetailed(gpuBitmap, reference, tolerance = 0),
+                    toleranceOneComparison = TestUtils.compareBitmapsDetailed(gpuBitmap, reference, tolerance = 1),
+                )
+            } else {
+                val gpuError = assertThrows(IllegalStateException::class.java) {
+                    WebGpuSink.draw(ctx, gm)
+                }
+                GpuCaptureResult.Unsupported(gpuError.message ?: "")
             }
             val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = 0)
             val adapter = ctx.adapterInfo ?: "unknown-adapter"
 
             println(
                 "[RuntimeEffectDescriptorSceneCapture/${scene.sceneId}] adapter=$adapter " +
-                    "cpu=${"%.2f".format(cpuCmp.similarity)}%, gpuRefusal=${gpuError.message}",
+                    "cpu=${"%.2f".format(cpuCmp.similarity)}%, ${gpuResult.summary}",
             )
 
             if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
-                writeEvidence(scene, cpuBitmap, reference, cpuCmp, adapter)
+                writeEvidence(scene, cpuBitmap, reference, cpuCmp, gpuResult, adapter)
             }
 
             assertTrue(cpuCmp.similarity >= SUPPORT_THRESHOLD)
-            assertTrue(
-                gpuError.message!!.contains("has no supported WGSL implementation"),
-                "expected stable unsupported-WGSL diagnostic, got ${gpuError.message}",
-            )
+            when (gpuResult) {
+                is GpuCaptureResult.Supported -> {
+                    if (scene.gpuSupported) {
+                        assertTrue(
+                            gpuResult.comparison.similarity >= SUPPORT_THRESHOLD,
+                            "expected ${scene.sceneId} GPU parity >= $SUPPORT_THRESHOLD, got " +
+                                "${gpuResult.comparison.similarity}",
+                        )
+                    } else {
+                        assertTrue(
+                            gpuResult.comparison.similarity < SUPPORT_THRESHOLD,
+                            "candidate ${scene.sceneId} reached $SUPPORT_THRESHOLD; promote instead of keeping unsupported",
+                        )
+                        assertTrue(
+                            gpuResult.toleranceOneComparison.similarity >= SUPPORT_THRESHOLD,
+                            "expected ${scene.sceneId} tolerance=1 diagnostic parity >= $SUPPORT_THRESHOLD, got " +
+                                "${gpuResult.toleranceOneComparison.similarity}",
+                        )
+                    }
+                }
+                is GpuCaptureResult.Unsupported ->
+                    assertTrue(
+                        gpuResult.message.contains("has no supported WGSL implementation"),
+                        "expected stable unsupported-WGSL diagnostic, got ${gpuResult.message}",
+                    )
+            }
         }
+    }
+
+    private fun renderGpu(context: WebGpuContext, gm: GM): SkBitmap {
+        val size = gm.size()
+        SkWebGpuDevice(
+            context,
+            size.width,
+            size.height,
+            applyColorspaceTransform = false,
+            allowUnpromotedRuntimeEffectsForDiagnostics = true,
+        ).use { device ->
+            device.setBackground(gm.bgColor())
+            gm.draw(SkCanvas(device))
+            return rgbaBytesToBitmap(device.flush(), size.width, size.height)
+        }
+    }
+
+    private fun rgbaBytesToBitmap(rgba: ByteArray, width: Int, height: Int): SkBitmap {
+        require(rgba.size == width * height * 4) {
+            "RGBA buffer size mismatch: expected ${width * height * 4} bytes, got ${rgba.size}"
+        }
+        val bitmap = SkBitmap(width, height, colorType = SkColorType.kRGBA_8888)
+        for (i in 0 until width * height) {
+            val base = i * 4
+            val r = rgba[base].toInt() and 0xFF
+            val g = rgba[base + 1].toInt() and 0xFF
+            val b = rgba[base + 2].toInt() and 0xFF
+            val a = rgba[base + 3].toInt() and 0xFF
+            bitmap.pixels8888[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        return bitmap
     }
 
     private fun writeEvidence(
@@ -70,28 +134,42 @@ class RuntimeEffectDescriptorSceneCaptureTest {
         cpuBitmap: SkBitmap,
         reference: SkBitmap,
         cpuCmp: BitmapComparison,
+        gpuResult: GpuCaptureResult,
         adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/${scene.sceneId}").apply { mkdirs() }
         writePng(File(dir, "skia.png"), reference)
         writePng(File(dir, "cpu.png"), cpuBitmap)
         writePng(File(dir, "cpu-diff.png"), CrossBackendHarness.pixelDiff(reference, cpuBitmap))
-        File(dir, "gpu.png").delete()
-        File(dir, "gpu-diff.png").delete()
+        when (gpuResult) {
+            is GpuCaptureResult.Supported -> {
+                writePng(File(dir, "gpu.png"), gpuResult.bitmap)
+                writePng(File(dir, "gpu-diff.png"), CrossBackendHarness.pixelDiff(reference, gpuResult.bitmap))
+            }
+            is GpuCaptureResult.Unsupported -> {
+                File(dir, "gpu.png").delete()
+                File(dir, "gpu-diff.png").delete()
+            }
+        }
         File(dir, "route-cpu.json").writeText(routeJson(scene, backend = "CPU", adapter = null))
-        File(dir, "route-gpu.json").writeText(routeJson(scene, backend = "WebGPU", adapter = adapter))
-        File(dir, "stats.json").writeText(statsJson(scene, cpuCmp, adapter))
+        File(dir, "route-gpu.json").writeText(routeJson(scene, backend = "WebGPU", adapter = adapter, gpuResult = gpuResult))
+        File(dir, "stats.json").writeText(statsJson(scene, cpuCmp, gpuResult, adapter))
     }
 
-    private fun routeJson(scene: RuntimeScene, backend: String, adapter: String?): String = """
+    private fun routeJson(
+        scene: RuntimeScene,
+        backend: String,
+        adapter: String?,
+        gpuResult: GpuCaptureResult? = null,
+    ): String = """
         {
           "sceneId": "${scene.sceneId}",
           "backend": "$backend"${adapter?.let { ",\n          \"adapter\": ${it.jsonString()}" } ?: ""},
           "drawKind": "${scene.drawKind}",
-          "status": "${if (backend == "CPU") "pass" else "expected-unsupported"}",
-          "selectedRoute": "${if (backend == "CPU") scene.cpuRoute else scene.gpuUnsupportedRoute}",
-          "pipelineKey": "${scene.pipelineKey}",
-          "fallbackReason": "${if (backend == "CPU") "none" else scene.fallbackReason}",
+          "status": "${routeStatus(scene, backend, gpuResult)}",
+          "selectedRoute": "${selectedRoute(scene, backend, gpuResult)}",
+          "pipelineKey": "${pipelineKey(scene, gpuResult)}",
+          "fallbackReason": "${fallbackReason(scene, backend, gpuResult)}",
           "runtimeEffectStableId": "${scene.stableId}",
           "wgslImplementationId": "${scene.wgslImplementationId}",
           "uniformBytes": ${scene.uniformBytes},
@@ -103,22 +181,29 @@ class RuntimeEffectDescriptorSceneCaptureTest {
     private fun statsJson(
         scene: RuntimeScene,
         cpuCmp: BitmapComparison,
+        gpuResult: GpuCaptureResult,
         adapter: String,
-    ): String = """
+    ): String {
+        val gpuCmp = (gpuResult as? GpuCaptureResult.Supported)?.comparison
+        val gpuToleranceOneCmp = (gpuResult as? GpuCaptureResult.Supported)?.toleranceOneComparison
+        return """
         {
           "sceneId": "${scene.sceneId}",
           "pixels": ${cpuCmp.totalPixels},
-          "matchingPixels": 0,
-          "maxChannelDelta": 255,
+          "matchingPixels": ${gpuCmp?.matchingPixels ?: 0},
+          "maxChannelDelta": ${gpuCmp?.maxChannelDiff?.max() ?: 255},
           "threshold": $SUPPORT_THRESHOLD,
           "cpuSimilarity": ${String.format(Locale.US, "%.2f", cpuCmp.similarity)},
           "cpuMatchingPixels": ${cpuCmp.matchingPixels},
           "cpuMaxChannelDelta": ${cpuCmp.maxChannelDiff.max()},
-          "gpuSimilarity": 0.00,
-          "gpuMatchingPixels": 0,
-          "gpuMaxChannelDelta": 255,
-          "gpuStatus": "expected-unsupported",
-          "fallbackReason": "${scene.fallbackReason}",
+          "gpuSimilarity": ${String.format(Locale.US, "%.2f", gpuCmp?.similarity ?: 0.0)},
+          "gpuMatchingPixels": ${gpuCmp?.matchingPixels ?: 0},
+          "gpuMaxChannelDelta": ${gpuCmp?.maxChannelDiff?.max() ?: 255},
+          "gpuSimilarityTolerance1": ${String.format(Locale.US, "%.2f", gpuToleranceOneCmp?.similarity ?: 0.0)},
+          "gpuMatchingPixelsTolerance1": ${gpuToleranceOneCmp?.matchingPixels ?: 0},
+          "mismatchPattern": "${if (gpuResult is GpuCaptureResult.Supported && !scene.gpuSupported) "x=43 y=32..63 green channel -1 vs CPU" else "none"}",
+          "gpuStatus": "${routeStatus(scene, "WebGPU", gpuResult)}",
+          "fallbackReason": "${fallbackReason(scene, "WebGPU", gpuResult)}",
           "backend": "WebGPU",
           "adapter": ${adapter.jsonString()},
           "runtimeEffectStableId": "${scene.stableId}",
@@ -127,6 +212,39 @@ class RuntimeEffectDescriptorSceneCaptureTest {
           "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest"
         }
     """.trimIndent() + "\n"
+    }
+
+    private fun routeStatus(scene: RuntimeScene, backend: String, gpuResult: GpuCaptureResult?): String =
+        if (backend == "CPU" || (scene.gpuSupported && gpuResult is GpuCaptureResult.Supported)) {
+            "pass"
+        } else {
+            "expected-unsupported"
+        }
+
+    private fun selectedRoute(scene: RuntimeScene, backend: String, gpuResult: GpuCaptureResult?): String =
+        if (backend == "CPU") {
+            scene.cpuRoute
+        } else if (scene.gpuSupported && gpuResult is GpuCaptureResult.Supported) {
+            scene.gpuRoute
+        } else {
+            scene.gpuUnsupportedRoute
+        }
+
+    private fun pipelineKey(scene: RuntimeScene, gpuResult: GpuCaptureResult?): String =
+        if (scene.gpuSupported && gpuResult is GpuCaptureResult.Supported) {
+            scene.pipelineKey.replace("status=expected-unsupported", "status=supported")
+        } else {
+            scene.pipelineKey
+        }
+
+    private fun fallbackReason(scene: RuntimeScene, backend: String, gpuResult: GpuCaptureResult?): String =
+        if (backend == "CPU" || (scene.gpuSupported && gpuResult is GpuCaptureResult.Supported)) {
+            "none"
+        } else if (gpuResult is GpuCaptureResult.Supported) {
+            scene.preciseFallbackReason(gpuResult)
+        } else {
+            scene.fallbackReason
+        }
 
     private fun writePng(file: File, bitmap: SkBitmap) {
         val bytes = SkPngEncoder.Encode(bitmap)
@@ -192,6 +310,8 @@ class RuntimeEffectDescriptorSceneCaptureTest {
         val fallbackReason: String,
         val pipelineKey: String,
         val uniformFloats: FloatArray,
+        val gpuSupported: Boolean,
+        val gpuCandidateDiagnostics: Boolean,
     ) {
         Spiral(
             sceneId = "runtime-effect-spiral",
@@ -206,6 +326,8 @@ class RuntimeEffectDescriptorSceneCaptureTest {
             fallbackReason = "runtime-effect.spiral-visual-parity-below-threshold",
             pipelineKey = "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
             uniformFloats = floatArrayOf(0.01f, 0f, 32f, 32f, 1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f),
+            gpuSupported = false,
+            gpuCandidateDiagnostics = false,
         ),
         LinearGradient(
             sceneId = "runtime-effect-linear-gradient",
@@ -220,9 +342,36 @@ class RuntimeEffectDescriptorSceneCaptureTest {
             fallbackReason = "runtime-effect.linear-gradient-visual-parity-below-threshold",
             pipelineKey = "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
             uniformFloats = floatArrayOf(1f, 0f, 0f, 1f, 0f, 1f, 0f, 1f),
+            gpuSupported = false,
+            gpuCandidateDiagnostics = true,
         );
 
         val uniformBytes: Int get() = uniformFloats.size * Float.SIZE_BYTES
+
+        fun preciseFallbackReason(gpuResult: GpuCaptureResult.Supported): String =
+            "$fallbackReason; strictSimilarity=${String.format(Locale.US, "%.2f", gpuResult.comparison.similarity)}; " +
+                "threshold=${String.format(Locale.US, "%.2f", SUPPORT_THRESHOLD)}; " +
+                "matchingPixels=${gpuResult.comparison.matchingPixels}/${gpuResult.comparison.totalPixels}; " +
+                "maxChannelDelta=${gpuResult.comparison.maxChannelDiff.max()}; " +
+                "tolerance1Similarity=${String.format(Locale.US, "%.2f", gpuResult.toleranceOneComparison.similarity)}; " +
+                "mismatchPattern=x=43 y=32..63 green channel -1 vs CPU"
+    }
+
+    private sealed interface GpuCaptureResult {
+        val summary: String
+
+        data class Supported(
+            val bitmap: SkBitmap,
+            val comparison: BitmapComparison,
+            val toleranceOneComparison: BitmapComparison,
+        ) : GpuCaptureResult {
+            override val summary: String =
+                "gpu=${String.format(Locale.US, "%.2f", comparison.similarity)}%"
+        }
+
+        data class Unsupported(val message: String) : GpuCaptureResult {
+            override val summary: String = "gpuRefusal=$message"
+        }
     }
 
     private companion object {
