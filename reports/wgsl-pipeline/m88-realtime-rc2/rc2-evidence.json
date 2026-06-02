@@ -1,0 +1,252 @@
+{
+    "schemaVersion": 1,
+    "generatedBy": "kadre-runtime:M88ReleaseCandidate2",
+    "linearIssues": [
+        "FOR-104",
+        "FOR-174",
+        "FOR-175",
+        "FOR-176",
+        "FOR-177",
+        "FOR-178"
+    ],
+    "packId": "m88-realtime-renderer-rc2-v1",
+    "status": "pass",
+    "claimLevel": "realtime-renderer-rc2-freeze-package",
+    "readinessBefore": 67.75,
+    "readinessAfter": 67.75,
+    "readinessDelta": 0.0,
+    "apiSurface": {
+        "schemaVersion": 1,
+        "packId": "m88-api-surface-freeze-v1",
+        "status": "frozen-for-rc2",
+        "entryPoints": [
+            {
+                "name": ":kadre-runtime:pipelineM88ReleaseCandidate2",
+                "purpose": "Generates the RC2 evidence package."
+            },
+            {
+                "name": "pipelinePmBundle",
+                "purpose": "Builds the portable PM dashboard/report bundle including M88."
+            },
+            {
+                "name": "pipelineSceneDashboardGate",
+                "purpose": "Validates the generated scene dashboard support/refusal contract."
+            },
+            {
+                "name": "Kadre live demo tasks",
+                "purpose": "Remain the native/runtime demo shell for PM-facing live evidence."
+            }
+        ],
+        "nonGoals": [
+            "No Ganesh or Graphite port.",
+            "No SkSL compiler, SkSL IR, or SkSL VM.",
+            "No arbitrary SkSL runtime-effect support.",
+            "No full Skia parity claim.",
+            "No release-grade windowed FPS gate in RC2.",
+            "No window-surface screenshot/readback claim."
+        ]
+    },
+    "gateFreeze": {
+        "schemaVersion": 1,
+        "packId": "m88-gate-freeze-v1",
+        "status": "pass",
+        "requiredCorrectnessGates": [
+            {
+                "name": "pipelineSceneDashboardGate",
+                "phase": "blocking",
+                "status": "pass",
+                "rationale": "Dashboard must have zero fail/tracked-gap rows and stable expected-unsupported reasons."
+            },
+            {
+                "name": "pipelinePmBundle",
+                "phase": "blocking",
+                "status": "pass",
+                "rationale": "Portable PM bundle must copy and validate M65-M88 evidence."
+            },
+            {
+                "name": ":kadre-runtime:pipelineM88ReleaseCandidate2",
+                "phase": "blocking",
+                "status": "pass",
+                "rationale": "RC2 evidence, matrix, gates, and PM script must regenerate."
+            }
+        ],
+        "performanceGates": [
+            {
+                "name": "pipelinePerformanceReleaseGate",
+                "phase": "blocking-selected-m59-rows",
+                "status": "pass",
+                "rationale": "Existing selected measured rows remain release-blocking."
+            },
+            {
+                "name": "m67 frame.headless-webgpu",
+                "phase": "candidate",
+                "status": "pass",
+                "rationale": "Candidate frame gate remains non-release-blocking."
+            },
+            {
+                "name": "m84 frame.kadre-windowed",
+                "phase": "reporting-only",
+                "status": "pass",
+                "rationale": "Native timing is serialized but not counted as a release gate."
+            },
+            {
+                "name": "m85 resource/cache ledger",
+                "phase": "reporting-only",
+                "status": "pass",
+                "rationale": "Deterministic resource ledger is not observed runtime cache telemetry."
+            }
+        ],
+        "quarantinePolicy": [
+            "Adapter/host mismatch quarantines frame results instead of silently failing RC2.",
+            "Estimated or missing metrics never count as measured evidence.",
+            "Correctness regressions remain rollback/blocking events."
+        ]
+    },
+    "supportRefusalMatrix": {
+        "schemaVersion": 1,
+        "packId": "m88-support-refusal-matrix-v1",
+        "status": "pass",
+        "dashboardCounters": {
+            "totalRows": 26,
+            "passRows": 21,
+            "expectedUnsupportedRows": 5,
+            "failRows": 0,
+            "trackedGapRows": 0,
+            "generatedRows": 26,
+            "adapterBackedRows": 17
+        },
+        "categories": [
+            {
+                "category": "supported",
+                "reason": "selected-generated-and-runtime-evidence",
+                "count": 21,
+                "summary": "Rows with CPU/GPU/reference or descriptor parity artifacts."
+            },
+            {
+                "category": "expected-unsupported",
+                "reason": "stable-fallback-diagnostics",
+                "count": 5,
+                "summary": "Rows intentionally refused with stable fallback reasons."
+            },
+            {
+                "category": "dependency-gated",
+                "reason": "external-delivery-required",
+                "count": 3,
+                "summary": "Font shaping/color emoji/codec breadth depends on real dependencies, not substitutes."
+            },
+            {
+                "category": "implementation-gap",
+                "reason": "broad-rendering-family-incomplete",
+                "count": 6,
+                "summary": "Broad Path AA, image-filter DAG, layers, display-list replay, runtime effects, and texture/image support remain incomplete."
+            },
+            {
+                "category": "reporting-only",
+                "reason": "candidate-not-release-blocking",
+                "count": 3,
+                "summary": "M84 native timing, M85 deterministic cache ledger, and selected live-edit telemetry are evidence but not release-grade broad gates."
+            }
+        ],
+        "stableRefusals": [
+            {
+                "status": "expected-unsupported",
+                "fallbackReason": "runtime-effect.arbitrary-sksl-unsupported",
+                "summary": "M87/M88 keep arbitrary SkSL outside RC2 scope."
+            },
+            {
+                "status": "expected-unsupported",
+                "fallbackReason": "runtime-effect.wgsl-descriptor-missing",
+                "summary": "Runtime effects need registered WGSL descriptors for GPU support."
+            },
+            {
+                "status": "expected-unsupported",
+                "fallbackReason": "m85.device-loss-recreate-observation-unsupported",
+                "summary": "Real device-loss recovery is not claimed in RC2."
+            },
+            {
+                "status": "expected-unsupported",
+                "fallbackReason": "m83.text.placeholder-glyph-run-not-routed",
+                "summary": "Broad display-list text replay is not claimed in RC2."
+            },
+            {
+                "status": "expected-unsupported",
+                "fallbackReason": "m83.filter.placeholder-dag-not-routed",
+                "summary": "Broad display-list image-filter replay is not claimed in RC2."
+            }
+        ]
+    },
+    "pmPackage": {
+        "generationCommand": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineM88ReleaseCandidate2 pipelinePmBundle",
+        "serveCommand": "python3 -m http.server 8765 --bind 127.0.0.1 --directory build/reports/wgsl-pipeline-pm-bundle/dashboard",
+        "dashboardEntry": "build/reports/wgsl-pipeline-pm-bundle/dashboard/index.html",
+        "rc2Evidence": "reports/wgsl-pipeline/m88-realtime-rc2/rc2-evidence.json",
+        "pmDemoScript": "reports/wgsl-pipeline/m88-realtime-rc2/pm-demo-script.md",
+        "releaseNotes": "reports/wgsl-pipeline/m88-realtime-rc2/release-notes.md",
+        "reproducibleWithoutCodeEdits": true
+    },
+    "sourceEvidence": [
+        "reports/wgsl-pipeline/scenes/generated/results.json",
+        "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json",
+        "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json",
+        "reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json"
+    ],
+    "artifactPaths": [
+        "reports/wgsl-pipeline/m88-realtime-rc2/rc2-evidence.json",
+        "reports/wgsl-pipeline/m88-realtime-rc2/rc2-evidence.md",
+        "reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json",
+        "reports/wgsl-pipeline/m88-realtime-rc2/gate-freeze.json",
+        "reports/wgsl-pipeline/m88-realtime-rc2/api-surface.json",
+        "reports/wgsl-pipeline/m88-realtime-rc2/pm-demo-script.md",
+        "reports/wgsl-pipeline/m88-realtime-rc2/release-notes.md"
+    ],
+    "validationRows": [
+        {
+            "id": "m88.api-freeze",
+            "status": "pass",
+            "assertion": "RC2 entry points and non-goals are documented."
+        },
+        {
+            "id": "m88.correctness-gates",
+            "status": "pass",
+            "assertion": "Dashboard has rows and no fail/tracked-gap rows in the bundled support evidence."
+        },
+        {
+            "id": "m88.performance-gates",
+            "status": "pass",
+            "assertion": "Native frame timing evidence exists, remains candidate/reporting-only, and does not silently become release-blocking."
+        },
+        {
+            "id": "m88.resource-cache-nonclaim",
+            "status": "pass",
+            "assertion": "M85 resource/cache evidence exists, remains reporting-only, and does not claim observed runtime cache telemetry."
+        },
+        {
+            "id": "m88.fidelity-counters",
+            "status": "pass",
+            "assertion": "M86 fidelity counters are present for RC2 scorecard."
+        },
+        {
+            "id": "m88.runtime-effect-nonclaim",
+            "status": "pass",
+            "assertion": "M87 remains a selected live-editing evidence slice and does not claim a new native window run."
+        },
+        {
+            "id": "m88.limitation-matrix",
+            "status": "pass",
+            "assertion": "Support, expected-unsupported, dependency-gated, implementation-gap, and reporting-only rows are classified."
+        },
+        {
+            "id": "m88.pm-package",
+            "status": "pass",
+            "assertion": "PM package command, demo script, and release notes are generated."
+        }
+    ],
+    "nonClaims": [
+        "M88 freezes RC2 packaging and gates; it does not add broad Skia parity.",
+        "M88 does not promote frame.kadre-windowed to a release-blocking FPS gate.",
+        "M88 does not claim observed WebGPU runtime cache telemetry beyond M85's deterministic ledger.",
+        "M88 does not claim broad runtime-effect live controls or arbitrary SkSL support.",
+        "M88 does not claim window-surface screenshot/readback support."
+    ]
+}

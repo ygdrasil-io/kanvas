@@ -4323,6 +4323,19 @@ tasks.register("pipelineSkiaGmInventoryGate") {
     }
 }
 
+tasks.register<Exec>("validateM88ReleaseCandidate2") {
+    group = "verification"
+    description = "Validates checked-in M88 RC2 evidence without resolving Kadre runtime dependencies."
+    dependsOn("pipelineM86FidelityBurndown")
+    commandLine("python3", "scripts/validate_m88_rc2.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_m88_rc2.py"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m88-realtime-rc2"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json"))
+}
+
 tasks.register("pipelinePmBundle") {
     group = "verification"
     description = "Builds a portable PM review bundle for the WGSL scene dashboard."
@@ -4338,10 +4351,12 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM84NativeFrameTimingCandidate")
     mustRunAfter(":kadre-runtime:pipelineM85ResourceLifetimeCacheHardening")
     mustRunAfter(":kadre-runtime:pipelineM87RuntimeEffectLiveEditing")
+    mustRunAfter(":kadre-runtime:pipelineM88ReleaseCandidate2")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
         "pipelineM86FidelityBurndown",
+        "validateM88ReleaseCandidate2",
         "pipelineSceneDashboardGate",
         "pipelineDashboardFrontQa",
         "pipelinePerformanceTrendWarnings",
@@ -4380,6 +4395,7 @@ tasks.register("pipelinePmBundle") {
     val m85ResourceLifetimeCacheDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m85-resource-lifetime-cache")
     val m86FidelityBurndownDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m86-fidelity-burndown")
     val m87RuntimeEffectLiveEditingDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m87-runtime-effect-live-editing")
+    val m88ReleaseCandidate2Dir = layout.projectDirectory.dir("reports/wgsl-pipeline/m88-realtime-rc2")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4410,6 +4426,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m85ResourceLifetimeCacheDir)
     inputs.dir(m86FidelityBurndownDir)
     inputs.dir(m87RuntimeEffectLiveEditingDir)
+    inputs.dir(m88ReleaseCandidate2Dir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4423,6 +4440,7 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-m87-sprint-report-and-readiness-accounting.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-m88-sprint-report-and-readiness-accounting.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
@@ -4460,6 +4478,7 @@ tasks.register("pipelinePmBundle") {
         val m85ResourceLifetimeCacheRoot = m85ResourceLifetimeCacheDir.asFile
         val m86FidelityBurndownRoot = m86FidelityBurndownDir.asFile
         val m87RuntimeEffectLiveEditingRoot = m87RuntimeEffectLiveEditingDir.asFile
+        val m88ReleaseCandidate2Root = m88ReleaseCandidate2Dir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4560,6 +4579,9 @@ tasks.register("pipelinePmBundle") {
         if (m87RuntimeEffectLiveEditingRoot.isDirectory) {
             m87RuntimeEffectLiveEditingRoot.copyRecursively(targetRoot.resolve("runtime/m87-runtime-effect-live-editing"), overwrite = true)
         }
+        if (m88ReleaseCandidate2Root.isDirectory) {
+            m88ReleaseCandidate2Root.copyRecursively(targetRoot.resolve("release/m88-realtime-rc2"), overwrite = true)
+        }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
         }
@@ -4620,6 +4642,7 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md",
             "reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md",
             "reports/wgsl-pipeline/2026-06-02-m87-sprint-report-and-readiness-accounting.md",
+            "reports/wgsl-pipeline/2026-06-02-m88-sprint-report-and-readiness-accounting.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
@@ -6120,6 +6143,26 @@ tasks.register("pipelinePmBundle") {
                 "pipelineKeyStableAcrossUniformEdits" to (m87Telemetry["pipelineKeyStableAcrossUniformEdits"] == true),
                 "claimLevel" to "selected-registered-runtime-effect-live-edit-evidence",
                 "notice" to "M87 proves selected SimpleRT live parameter editing with reflected layout and CPU/GPU parity artifacts; arbitrary SkSL and missing WGSL descriptors remain expected-unsupported.",
+            ),
+            "m88ReleaseCandidate2" to linkedMapOf<String, Any>(
+                "evidenceMarkdown" to "release/m88-realtime-rc2/rc2-evidence.md",
+                "evidenceJson" to "release/m88-realtime-rc2/rc2-evidence.json",
+                "supportRefusalMatrixJson" to "release/m88-realtime-rc2/support-refusal-matrix.json",
+                "gateFreezeJson" to "release/m88-realtime-rc2/gate-freeze.json",
+                "apiSurfaceJson" to "release/m88-realtime-rc2/api-surface.json",
+                "pmDemoScript" to "release/m88-realtime-rc2/pm-demo-script.md",
+                "releaseNotes" to "release/m88-realtime-rc2/release-notes.md",
+                "sprintReport" to "reports/wgsl-pipeline/2026-06-02-m88-sprint-report-and-readiness-accounting.md",
+                "claimLevel" to "realtime-renderer-rc2-freeze-package",
+                "status" to "pass",
+                "readinessBefore" to 67.75,
+                "readinessAfter" to 67.75,
+                "readinessDelta" to 0.0,
+                "nativeTimingPhase" to "reporting-only",
+                "resourceCachePhase" to "reporting-only",
+                "pmPackageCommand" to "rtk ./gradlew --no-daemon :kadre-runtime:pipelineM88ReleaseCandidate2 pipelinePmBundle",
+                "releaseBlocking" to false,
+                "notice" to "M88 freezes the RC2 PM package, API surface, gate set, and support/refusal matrix. It keeps readiness at 67.75% and does not claim broad Skia parity, arbitrary SkSL, release-grade windowed FPS, or observed broad runtime cache telemetry.",
             ),
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",

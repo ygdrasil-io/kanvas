@@ -244,3 +244,35 @@ tasks.register<JavaExec>("pipelineM87RuntimeEffectLiveEditing") {
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m87-runtime-effect-live-editing"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM88ReleaseCandidate2") {
+    group = "verification"
+    description = "Generates M88 realtime renderer RC2 evidence and PM handoff artifacts."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M88ReleaseCandidate2Kt")
+    args(
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+        rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m88-realtime-rc2").asFile.absolutePath,
+    )
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json"))
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m88-realtime-rc2"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<JavaExec>("validateM88ReleaseCandidate2") {
+    group = "verification"
+    description = "Validates M88 realtime renderer RC2 evidence fields and artifact paths."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M88ReleaseCandidate2Kt")
+    args(
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+        rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m88-realtime-rc2").asFile.absolutePath,
+        "--validate",
+    )
+    inputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m88-realtime-rc2"))
+    dependsOn("pipelineM88ReleaseCandidate2")
+}
