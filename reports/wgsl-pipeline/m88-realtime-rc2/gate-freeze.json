@@ -13,13 +13,13 @@
             "name": "pipelinePmBundle",
             "phase": "blocking",
             "status": "pass",
-            "rationale": "Portable PM bundle must copy and validate M65-M88 evidence."
+            "rationale": "Portable PM bundle must copy and validate M65-M88 evidence without resolving unpublished Kadre runtime dependencies."
         },
         {
             "name": ":kadre-runtime:pipelineM88ReleaseCandidate2",
-            "phase": "blocking",
+            "phase": "source-generation-local",
             "status": "pass",
-            "rationale": "RC2 evidence, matrix, gates, and PM script must regenerate."
+            "rationale": "RC2 source generation remains useful locally, but headless CI package validation must use checked-in artifacts when Kadre is not provisioned."
         }
     ],
     "performanceGates": [
@@ -51,6 +51,7 @@
     "quarantinePolicy": [
         "Adapter/host mismatch quarantines frame results instead of silently failing RC2.",
         "Estimated or missing metrics never count as measured evidence.",
-        "Correctness regressions remain rollback/blocking events."
+        "Correctness regressions remain rollback/blocking events.",
+        "Missing native Kadre setup is dependency-gated for local demos, not an opaque pipelinePmBundle failure."
     ]
 }

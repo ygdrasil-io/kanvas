@@ -38,6 +38,18 @@ and `scripts/linear_archive.py`. Committed Linear archive snapshots are
 historical evidence only; active backlog remains in Linear and the current
 target/spec documents.
 
+For RC/MEP wording, PM demos, and runtime-effect explanations, use WGSL as the
+implementation target. Mentions of SkSL must be framed only as Skia API
+compatibility surface that Kanvas does not dynamically compile. Supported
+runtime effects require registered Kanvas descriptors with Kotlin/CPU behavior
+and parser-validated WGSL GPU implementations.
+
+For RC/MEP CI and PM packages, keep headless validation separate from native
+Kadre demo execution. `pipelinePmBundle` and checked-in RC validators must not
+accidentally resolve unpublished Kadre artifacts or require an initialized
+`external/poc-koreos` submodule. Native Kadre demos are opt-in local evidence
+and must document when the submodule is required.
+
 Hard architecture decisions:
 
 - Do not port Ganesh or Graphite.

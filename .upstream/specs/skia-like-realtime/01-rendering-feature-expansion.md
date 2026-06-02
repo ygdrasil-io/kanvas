@@ -25,6 +25,12 @@ Every feature family must define:
 - GM/source scene selection;
 - PM demo scene.
 
+WGSL is the shader implementation target for GPU work. SkSL may appear in this
+spec only when describing Skia API compatibility or explicit non-goals. A
+runtime effect is supportable only through a registered Kanvas descriptor with
+Kotlin CPU behavior and generated or registered WGSL that passes parser
+validation.
+
 ## M60 Coverage & Path AA Expansion
 
 ### Initial Numeric Budgets
@@ -258,8 +264,10 @@ the key unless measurement proves specialization is worth it.
 
 ### Non-Goals
 
-- arbitrary SkSL parsing;
-- SkSL compiler, IR, or VM;
+- dynamic SkSL compilation;
+- SkSL IR or VM implementation;
+- arbitrary Skia/SkSL runtime shader input as a supported MEP feature;
+- treating missing WGSL descriptors as implicit CPU/GPU compatibility.
 - unregistered effects silently mapped to approximations;
 - GPU-only effect without CPU/reference behavior.
 
@@ -299,12 +307,12 @@ with WGSL implementation `wgsl/runtime_simple_rt`.
 - bounded float range `[0.0, 1.0]` with clamp diagnostics;
 - reflected `gColor` uniform layout from the registered WGSL module;
 - at least two edited parameter states with CPU/GPU/diff artifacts;
-- stable refusals for arbitrary SkSL and registered effects without WGSL
-  descriptors.
+- stable refusals for arbitrary Skia/SkSL runtime shader input and registered
+  effects without WGSL descriptors.
 
 ### Non-Goals
 
-- arbitrary SkSL parsing, compilation, IR, or VM;
+- dynamic SkSL parsing, compilation, IR, or VM;
 - promoting SpiralRT or LinearGradientRT to WGSL-backed GPU support;
 - GPU-only runtime-effect support without CPU/reference behavior;
 - adding uniform values to `PipelineKey`;

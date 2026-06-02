@@ -93,6 +93,45 @@ tasks.register<JavaExec>("runM70KadreNativeDemo") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<JavaExec>("runRcMepKadreNativePmDemo") {
+    group = "verification"
+    description = "Runs the long PM-visible RC-MEP Kadre native demo for the M83 complex display-list scene."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M69KadreNativeSmokeKt")
+    fun projectRootPath(value: String): String {
+        val file = File(value)
+        return if (file.isAbsolute) file.absolutePath else rootProject.layout.projectDirectory.file(value).asFile.absolutePath
+    }
+    args(
+        "--output",
+        providers.gradleProperty("kadreRcMepDemoOutput")
+            .map(::projectRootPath)
+            .orElse(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo.json").asFile.absolutePath)
+            .get(),
+        "--frames",
+        providers.gradleProperty("kadreRcMepDemoFrames").orElse("3600").get(),
+        "--mode",
+        "demo",
+        "--warmup-frames",
+        providers.gradleProperty("kadreRcMepDemoWarmupFrames").orElse("120").get(),
+        "--scene-contract-id",
+        providers.gradleProperty("kadreRcMepSceneId").orElse("m83-display-list-pm-scene-v1").get(),
+        "--capture-output",
+        providers.gradleProperty("kadreRcMepCaptureOutput")
+            .map(::projectRootPath)
+            .orElse(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo-readback.png").asFile.absolutePath)
+            .get(),
+    )
+    jvmArgs(buildList {
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
+            add("-XstartOnFirstThread")
+        }
+        add("--enable-native-access=ALL-UNNAMED")
+    })
+    outputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo.json"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<JavaExec>("pipelineM75ReplayPackEvidence") {
     group = "verification"
     description = "Generates M75 multi-scene Kadre replay-pack evidence."
@@ -195,7 +234,8 @@ tasks.register<JavaExec>("pipelineM83DisplayListReplay") {
     )
     inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo.json"))
     inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo-readback.png"))
-    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m83-display-list-replay"))
+    outputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/evidence.json"))
+    outputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/evidence.md"))
     outputs.upToDateWhen { false }
 }
 
@@ -210,6 +250,23 @@ tasks.register<JavaExec>("pipelineM84NativeFrameTimingCandidate") {
     )
     inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo.json"))
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m84-native-frame-timing"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<JavaExec>("pipelineRcMepKadreRuntimeSlice") {
+    group = "verification"
+    description = "Generates the RC-MEP FOR-180/FOR-181/FOR-182 Kadre runtime PM evidence report."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.RcMepKadreRuntimeSliceKt")
+    args(
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+        rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-mep-kadre-runtime-slice.md").asFile.absolutePath,
+    )
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/evidence.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m83-display-list-replay/native-demo.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"))
+    outputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-mep-kadre-runtime-slice.md"))
+    dependsOn("pipelineM83DisplayListReplay", "pipelineM84NativeFrameTimingCandidate")
     outputs.upToDateWhen { false }
 }
 

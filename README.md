@@ -6,6 +6,12 @@ pipeline target is based on a typed Kanvas IR, WGSL parser/generator support,
 CPU scalar/vector execution plans, and parser-validated generated WGSL for the
 GPU backend.
 
+Shader target wording for PM and agents: Kanvas targets WGSL on WebGPU. SkSL
+appears only as Skia API compatibility context for `SkRuntimeEffect`; Kanvas is
+not building a SkSL compiler, SkSL IR, or SkSL VM. Runtime effects that are
+actually supported must be registered Kanvas descriptors with Kotlin CPU
+behavior and parser-validated WGSL GPU implementations.
+
 ## Active Target: Skia-Like Breadth And Real-Time Renderer
 
 Last updated: 2026-06-02
@@ -44,7 +50,7 @@ Active planning entry points:
 | M61 | Image Filter DAG V2 | Bounded multi-node filter graphs render with graph diagnostics and intermediate texture ownership. |
 | M62 | Text & Glyph Rendering V1 | Simple text renders through real font loading with outline/path glyph routes; glyph atlas, fallback-family selection, emoji, and complex shaping remain explicit non-claims. |
 | M63 | Color, Blend & ColorFilter Parity | Bounded SrcOver, linear-gradient color-filter kPlus, and sweep-gradient clamp rows render; wide-gamut color-space and advanced blend chains refuse with stable reasons. |
-| M64 | Registered Runtime Effects | SimpleRT renders through a registered Kotlin/WGSL descriptor with parser-reflected uniforms; SpiralRT and arbitrary SkSL refuse with stable reasons. |
+| M64 | Registered Runtime Effects | SimpleRT renders through a registered Kotlin/WGSL descriptor with parser-reflected uniforms; SpiralRT without a WGSL descriptor and arbitrary Skia/SkSL runtime shader input refuse with stable reasons because SkSL is compatibility context, not the implementation target. |
 | M65 | Real-Time Scene Runtime | Headless/offscreen runtime smoke exposes 120-frame telemetry, nonblank frame artifacts, invalidation diagnostics, and explicit Kadre-host blocker. |
 | M66 | Skia GM Promotion Wave | 19 cumulative GM/reference rows become generated support/refusal evidence, bringing selected fidelity evidence to 50/100 rows. |
 | M67 | Performance Tiering | `frame.headless-webgpu` candidate gate, family budgets, and deterministic quarantine fixture are generated and bundled. |
@@ -69,7 +75,7 @@ Active planning entry points:
 | M84 | Native Frame Timing Candidate Gate | Native Kadre timing now has a candidate/reporting-only payload under `reports/wgsl-pipeline/m84-native-frame-timing/` with warmup/measured samples, p50/p95/worst, host/adapter/JDK metadata, cache-counter schema placeholders, quarantine reasons, and a negative threshold fixture. Readiness stays at 67.75% because `frame.kadre-windowed` is not release-blocking and is not counted as a measured release gate. |
 | M85 | Runtime Resource Lifetime And Cache Hardening | Selected realtime resource/cache ledger evidence now lives under `reports/wgsl-pipeline/m85-resource-lifetime-cache/` with deterministic per-frame counters, bounded cache key spaces, resize resource-generation invalidation, cache pressure before/after, and stable device-loss unsupported diagnostics. Readiness stays at 67.75% because the counters are not observed WebGPU runtime cache telemetry and are not counted as a cache readiness gate. |
 | M86 | Fidelity Burn-Down Wave 2 | Selected GM/reference rows now have a ranked burn-down queue under `reports/wgsl-pipeline/m86-fidelity-burndown/`, including family/reference counters, root-cause classifications, and high-value remediation targets. Readiness stays at 67.75% because M86 does not add new support rows, Skia-comparable denominators, measured gates, or renderer before/after fixes. |
-| M87 | Registered Runtime Effect Live Editing V2 | Selected `runtime.simple_rt` live editing evidence now lives under `reports/wgsl-pipeline/m87-runtime-effect-live-editing/`, including `gColor.b` metadata, reflected WGSL layout evidence, two edited-state CPU/GPU/diff PNG sets, telemetry states, and stable refusals for arbitrary SkSL and missing WGSL descriptors. Readiness stays at 67.75% because this is a selected runtime-effect operability slice, not broad runtime-effect or arbitrary SkSL support. |
+| M87 | Registered Runtime Effect Live Editing V2 | Selected `runtime.simple_rt` live editing evidence now lives under `reports/wgsl-pipeline/m87-runtime-effect-live-editing/`, including `gColor.b` metadata, reflected WGSL layout evidence, two edited-state CPU/GPU/diff PNG sets, telemetry states, and stable refusals for arbitrary Skia/SkSL runtime shader input and missing WGSL descriptors. Readiness stays at 67.75% because this is a selected runtime-effect operability slice, not broad runtime-effect support or dynamic SkSL compilation. |
 | M88 | Realtime Renderer Release Candidate 2 | RC2 freeze evidence now lives under `reports/wgsl-pipeline/m88-realtime-rc2/`, including API surface, correctness/performance gate freeze, support/refusal matrix, PM demo script, and release notes. Readiness stays at 67.75% because M88 packages and freezes evidence rather than adding a new counted rendering/runtime/performance denominator. |
 | M70 | Release Candidate Renderer | Renderer API, runtime, demos, CI gates, and known limitations are frozen for RC. |
 

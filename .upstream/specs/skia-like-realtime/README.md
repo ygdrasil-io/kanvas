@@ -33,6 +33,8 @@ sprints:
 - Keep CPU as the Skia-like reference path.
 - Keep `SkRuntimeEffect` as a compatibility facade backed by registered
   Kotlin/WGSL implementations.
+- Treat WGSL as the shader implementation target. SkSL wording may appear only
+  for Skia API compatibility context; dynamic SkSL compilation is not in scope.
 - Use Kadre from `ygdrasil-io/poc-koreos` for live/native windowing. It is
   incubating and unpublished, so M65/M68 work may include it as a git
   submodule rather than waiting for publication.
@@ -62,7 +64,7 @@ sprints:
 | M84 Native Frame Timing Candidate Gate | `04`, `05` | `frame.kadre-windowed` timing is serialized as candidate/reporting-only evidence with quarantine and a negative fixture, not a release-blocking FPS gate. |
 | M85 Runtime Resource Lifetime And Cache Hardening | `02`, `04`, `05` | Selected realtime route resource/cache ledger, bounded key spaces, resize invalidation, and device-loss unsupported diagnostics become PM evidence without claiming observed runtime cache telemetry. |
 | M86 Fidelity Burn-Down Wave 2 | `03`, `05` | Selected GM/reference rows are ranked and classified by root cause with PM-visible remediation targets, without claiming visual fixes or readiness movement unless before/after artifacts exist. |
-| M87 Registered Runtime Effect Live Editing V2 | `01`, `02`, `05` | Selected SimpleRT live parameter editing, reflected WGSL layout, edited-state CPU/GPU/diff artifacts, and stable arbitrary-SkSL/missing-descriptor refusals become PM evidence without claiming broad runtime-effect compatibility. |
+| M87 Registered Runtime Effect Live Editing V2 | `01`, `02`, `05` | Selected SimpleRT live parameter editing, reflected WGSL layout, edited-state CPU/GPU/diff artifacts, and stable arbitrary Skia/SkSL runtime-input or missing-descriptor refusals become PM evidence without claiming broad runtime-effect compatibility or dynamic SkSL compilation. |
 | M88 Realtime Renderer Release Candidate 2 | `04`, `05`, `06` | API/demo surface, gate set, support/refusal matrix, PM script, and release notes are frozen into a reproducible RC2 package without claiming new broad support or readiness movement. |
 
 ## Definition Of Done For Any Future Milestone

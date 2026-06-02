@@ -240,11 +240,16 @@ Required runtime evidence:
   edits;
 - reflected uniform layout evidence for `runtime_simple_rt.wgsl`;
 - CPU/GPU/diff artifacts for at least two edited states;
-- stable refusals for arbitrary SkSL and missing WGSL descriptors.
+- stable refusals for arbitrary Skia/SkSL runtime shader input and missing
+  WGSL descriptors. The stable fallback key may include `sksl` because it names
+  the Skia compatibility surface being refused; PM wording must still say that
+  WGSL is the implementation target.
 
 Uniform-only edits must update the uniform payload/bind group data. They must
 not create a new `PipelineKey`, a new WGSL module, or a new support claim for
-unregistered runtime effects.
+unregistered runtime effects. Dynamic SkSL compilation is outside the runtime
+architecture; registered runtime effects use Kanvas descriptors plus
+parser-validated WGSL.
 
 ## PM Demo Requirements
 
