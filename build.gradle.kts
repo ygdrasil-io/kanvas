@@ -4337,6 +4337,7 @@ tasks.register("pipelinePmBundle") {
     mustRunAfter(":kadre-runtime:pipelineM83DisplayListReplay")
     mustRunAfter(":kadre-runtime:pipelineM84NativeFrameTimingCandidate")
     mustRunAfter(":kadre-runtime:pipelineM85ResourceLifetimeCacheHardening")
+    mustRunAfter(":kadre-runtime:pipelineM87RuntimeEffectLiveEditing")
 
     dependsOn(
         "pipelineM65RuntimeSmoke",
@@ -4378,6 +4379,7 @@ tasks.register("pipelinePmBundle") {
     val m84NativeFrameTimingDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m84-native-frame-timing")
     val m85ResourceLifetimeCacheDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m85-resource-lifetime-cache")
     val m86FidelityBurndownDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m86-fidelity-burndown")
+    val m87RuntimeEffectLiveEditingDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m87-runtime-effect-live-editing")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -4407,6 +4409,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m84NativeFrameTimingDir)
     inputs.dir(m85ResourceLifetimeCacheDir)
     inputs.dir(m86FidelityBurndownDir)
+    inputs.dir(m87RuntimeEffectLiveEditingDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -4419,6 +4422,7 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m69-sprint-report-and-readiness-accounting.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-m87-sprint-report-and-readiness-accounting.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
@@ -4455,6 +4459,7 @@ tasks.register("pipelinePmBundle") {
         val m84NativeFrameTimingRoot = m84NativeFrameTimingDir.asFile
         val m85ResourceLifetimeCacheRoot = m85ResourceLifetimeCacheDir.asFile
         val m86FidelityBurndownRoot = m86FidelityBurndownDir.asFile
+        val m87RuntimeEffectLiveEditingRoot = m87RuntimeEffectLiveEditingDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -4552,6 +4557,9 @@ tasks.register("pipelinePmBundle") {
         if (m86FidelityBurndownRoot.isDirectory) {
             m86FidelityBurndownRoot.copyRecursively(targetRoot.resolve("fidelity/m86-fidelity-burndown"), overwrite = true)
         }
+        if (m87RuntimeEffectLiveEditingRoot.isDirectory) {
+            m87RuntimeEffectLiveEditingRoot.copyRecursively(targetRoot.resolve("runtime/m87-runtime-effect-live-editing"), overwrite = true)
+        }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)
         }
@@ -4611,6 +4619,7 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-06-01-m69-sprint-report-and-readiness-accounting.md",
             "reports/wgsl-pipeline/2026-06-01-m70-a-kadre-live-runtime.md",
             "reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md",
+            "reports/wgsl-pipeline/2026-06-02-m87-sprint-report-and-readiness-accounting.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
@@ -5874,6 +5883,91 @@ tasks.register("pipelinePmBundle") {
                 }
             }
         }
+        val m87RuntimeEffectLiveEditingFile = m87RuntimeEffectLiveEditingRoot.resolve("evidence.json")
+        val m87RuntimeEffectLiveEditing = if (m87RuntimeEffectLiveEditingFile.isFile) {
+            JsonSlurper().parse(m87RuntimeEffectLiveEditingFile) as? Map<*, *>
+                ?: throw GradleException("M87 runtime-effect live-editing evidence must be a JSON object: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+        } else {
+            throw GradleException("Missing M87 runtime-effect live-editing evidence: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+        }
+        val m87Effect = (m87RuntimeEffectLiveEditing["effect"] as? Map<*, *>).orEmpty()
+        val m87Parameters = (m87RuntimeEffectLiveEditing["liveParameterMetadata"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m87Reflection = (m87RuntimeEffectLiveEditing["reflectionValidation"] as? Map<*, *>).orEmpty()
+        val m87Telemetry = (m87RuntimeEffectLiveEditing["liveRuntimeTelemetry"] as? Map<*, *>).orEmpty()
+        val m87ParityRows = (m87RuntimeEffectLiveEditing["parityEvidence"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m87Refusals = (m87RuntimeEffectLiveEditing["stableRefusals"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m87ValidationRows = (m87RuntimeEffectLiveEditing["validationRows"] as? List<*>)
+            ?.filterIsInstance<Map<*, *>>()
+            .orEmpty()
+        val m87ArtifactPaths = (m87RuntimeEffectLiveEditing["artifactPaths"] as? List<*>)
+            ?.map { it.toString() }
+            .orEmpty()
+        if (
+            m87RuntimeEffectLiveEditing["packId"] != "m87-runtime-effect-live-editing-v1" ||
+            m87RuntimeEffectLiveEditing["status"] != "pass" ||
+            m87Effect["stableId"] != "runtime.simple_rt" ||
+            m87Effect["wgslImplementationId"] != "wgsl/runtime_simple_rt" ||
+            m87Effect["arbitrarySkSLFallbackReason"] != "runtime-effect.arbitrary-sksl-unsupported"
+        ) {
+            throw GradleException("M87 runtime-effect live-editing evidence has unexpected pack/status/effect fields: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+        }
+        val m87EditableBlue = m87Parameters.singleOrNull { it["name"] == "gColor.b" }
+        if (
+            m87EditableBlue == null ||
+            m87EditableBlue["pipelineKeyAxis"] != false ||
+            m87EditableBlue["affectsOutput"] != true ||
+            m87EditableBlue["invalidValueDiagnostic"] != "m87.runtime-effect.parameter-out-of-range"
+        ) {
+            throw GradleException("M87 live parameter metadata is missing gColor.b edit constraints: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+        }
+        if (
+            m87Reflection["source"] != "wgsl4k-validation-report" ||
+            m87Reflection["layoutVerified"] != true ||
+            ((m87Reflection["reflectedOffset"] as? Number)?.toInt() ?: -1) != 0 ||
+            m87Reflection["mismatchDiagnostic"] != "m87.runtime-effect.uniform-layout-mismatch" ||
+            m87Reflection["upstreamWgsl4kTicketRequired"] != false
+        ) {
+            throw GradleException("M87 reflection evidence does not verify runtime_simple_rt.wgsl gColor layout: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+        }
+        if (
+            ((m87Telemetry["frameUpdateCount"] as? Number)?.toInt() ?: 0) < 2 ||
+            ((m87Telemetry["parameterUpdateCount"] as? Number)?.toInt() ?: 0) < 2 ||
+            m87Telemetry["pipelineKeyStableAcrossUniformEdits"] != true ||
+            m87Telemetry["uniformValuesInPipelineKey"] != false ||
+            m87Telemetry["selectedRuntimeOutputAffected"] != true ||
+            m87Telemetry["nativeDemoParameterContractReady"] != true ||
+            m87Telemetry["actualNativeWindowRun"] != false ||
+            m87Telemetry["nativeWindowReadbackProducedByM87"] != false
+        ) {
+            throw GradleException("M87 live runtime telemetry is missing edited frame/update evidence: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+        }
+        if (m87ParityRows.size < 2 || m87ParityRows.any { it["status"] != "pass" || ((it["similarity"] as? Number)?.toDouble() ?: 0.0) < 99.95 }) {
+            throw GradleException("M87 edited-state parity evidence is missing or below threshold: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+        }
+        listOf("runtime-effect.arbitrary-sksl-unsupported", "runtime-effect.wgsl-descriptor-missing").forEach { reason ->
+            if (m87Refusals.none { it["fallbackReason"] == reason && it["status"] == "expected-unsupported" }) {
+                throw GradleException("M87 stable refusal `$reason` is missing: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+            }
+        }
+        if (m87ValidationRows.size < 5 || m87ValidationRows.any { it["status"] != "pass" }) {
+            throw GradleException("M87 runtime-effect live-editing evidence has missing or non-pass validation rows: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+        }
+        if (m87ArtifactPaths.size < 10) {
+            throw GradleException("M87 runtime-effect live-editing evidence missing artifact paths: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+        }
+        m87ArtifactPaths.forEach { artifactPath ->
+            val sourceArtifact = rootDir.resolve(artifactPath)
+            val bundledArtifact = targetRoot.resolve(artifactPath.removePrefix("reports/wgsl-pipeline/"))
+            if (!sourceArtifact.isFile && !bundledArtifact.isFile && !targetRoot.resolve(artifactPath).isFile) {
+                throw GradleException("M87 runtime-effect live-editing evidence references missing artifact `$artifactPath`: ${m87RuntimeEffectLiveEditingFile.relativeTo(rootDir)}")
+            }
+        }
         val m69Capabilities = (m69ContractReport["capabilities"] as? Map<*, *>).orEmpty()
         val m69Routes = (m69RouteStatusReport["routes"] as? Map<*, *>).orEmpty()
         val m69SourceFeatures = (m69SceneRouteReport["sourceFeatures"] as? List<*>)
@@ -6014,6 +6108,19 @@ tasks.register("pipelinePmBundle") {
             "m86FidelityBurndownMarkdown" to "fidelity/m86-fidelity-burndown/evidence.md",
             "m86FidelityBurndownJson" to "fidelity/m86-fidelity-burndown/evidence.json",
             "m86FidelityBurndownSprintReport" to "reports/wgsl-pipeline/2026-06-02-m86-sprint-report-and-readiness-accounting.md",
+            "m87RuntimeEffectLiveEditing" to linkedMapOf<String, Any>(
+                "evidenceMarkdown" to "runtime/m87-runtime-effect-live-editing/evidence.md",
+                "evidenceJson" to "runtime/m87-runtime-effect-live-editing/evidence.json",
+                "editedStatesJson" to "runtime/m87-runtime-effect-live-editing/edited-states.json",
+                "sprintReport" to "reports/wgsl-pipeline/2026-06-02-m87-sprint-report-and-readiness-accounting.md",
+                "effectStableId" to "runtime.simple_rt",
+                "editableParameter" to "gColor.b",
+                "editedStateCount" to m87ParityRows.size,
+                "reflectionVerified" to (m87Reflection["layoutVerified"] == true),
+                "pipelineKeyStableAcrossUniformEdits" to (m87Telemetry["pipelineKeyStableAcrossUniformEdits"] == true),
+                "claimLevel" to "selected-registered-runtime-effect-live-edit-evidence",
+                "notice" to "M87 proves selected SimpleRT live parameter editing with reflected layout and CPU/GPU parity artifacts; arbitrary SkSL and missing WGSL descriptors remain expected-unsupported.",
+            ),
             "skiaGmInventoryJson" to "inventory/inventory.json",
             "skiaGmInventoryMarkdown" to "inventory/inventory.md",
             "skiaGmInventoryGateReport" to "inventory-gate/inventory-gate.md",
@@ -6624,6 +6731,8 @@ tasks.register("pipelinePmBundle") {
                 appendLine("- M85 resource/cache counters live in `manifest.json` under `m85ResourceLifetimeCache`; they are a deterministic selected-scene ledger, not observed runtime cache telemetry, and device-loss recovery remains expected-unsupported.")
                 appendLine("- `fidelity/m86-fidelity-burndown/`: M86 fidelity burn-down ranking, root-cause classification, and remediation target evidence.")
                 appendLine("- M86 fidelity counters live in `manifest.json` under `m86FidelityBurndown`; this is classification and planning evidence, not a renderer visual-fix claim.")
+                appendLine("- `runtime/m87-runtime-effect-live-editing/`: M87 selected registered runtime-effect live-editing evidence, edited-state PNGs, route JSON, and reflection metadata.")
+                appendLine("- M87 live-editing counters live in `manifest.json` under `m87RuntimeEffectLiveEditing`; this proves selected `runtime.simple_rt` parameter editing and keeps arbitrary SkSL and missing WGSL descriptors expected-unsupported.")
                 appendLine("- M66 GM/reference promotion counters live in `manifest.json` under `m66GmPromotionWave`.")
                 appendLine("- `reports/`: checked-in report references used by dashboard evidence rows.")
             }
