@@ -12,7 +12,7 @@ a packaged Kadre demo.
 
 ## Scope
 
-The pack covers M60-M85 and continues to be extended by later runtime/display-list
+The pack covers M60-M87 and continues to be extended by later runtime/display-list
 sprints:
 
 | Spec | Scope |
@@ -62,6 +62,7 @@ sprints:
 | M84 Native Frame Timing Candidate Gate | `04`, `05` | `frame.kadre-windowed` timing is serialized as candidate/reporting-only evidence with quarantine and a negative fixture, not a release-blocking FPS gate. |
 | M85 Runtime Resource Lifetime And Cache Hardening | `02`, `04`, `05` | Selected realtime route resource/cache ledger, bounded key spaces, resize invalidation, and device-loss unsupported diagnostics become PM evidence without claiming observed runtime cache telemetry. |
 | M86 Fidelity Burn-Down Wave 2 | `03`, `05` | Selected GM/reference rows are ranked and classified by root cause with PM-visible remediation targets, without claiming visual fixes or readiness movement unless before/after artifacts exist. |
+| M87 Registered Runtime Effect Live Editing V2 | `01`, `02`, `05` | Selected SimpleRT live parameter editing, reflected WGSL layout, edited-state CPU/GPU/diff artifacts, and stable arbitrary-SkSL/missing-descriptor refusals become PM evidence without claiming broad runtime-effect compatibility. |
 
 ## Definition Of Done For Any Future Milestone
 

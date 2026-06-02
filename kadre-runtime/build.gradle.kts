@@ -228,3 +228,19 @@ tasks.register<JavaExec>("pipelineM85ResourceLifetimeCacheHardening") {
     outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m85-resource-lifetime-cache"))
     outputs.upToDateWhen { false }
 }
+
+tasks.register<JavaExec>("pipelineM87RuntimeEffectLiveEditing") {
+    group = "verification"
+    description = "Generates M87 registered runtime-effect live editing evidence."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.kadre.runtime.M87RuntimeEffectLiveEditingKt")
+    args(
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+        rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m87-runtime-effect-live-editing").asFile.absolutePath,
+    )
+    inputs.file(rootProject.layout.projectDirectory.file("gpu-raster/src/main/resources/shaders/runtime_simple_rt.wgsl"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json"))
+    inputs.file(rootProject.layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json"))
+    outputs.dir(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/m87-runtime-effect-live-editing"))
+    outputs.upToDateWhen { false }
+}

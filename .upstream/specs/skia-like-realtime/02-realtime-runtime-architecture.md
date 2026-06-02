@@ -225,6 +225,27 @@ Required runtime evidence:
 Pipeline cache keys must stay based on layout, code, resource, and pipeline
 state. Uniform values must not become `PipelineKey` axes.
 
+## M87 Runtime-Effect Live Editing
+
+M87 adds a selected registered runtime-effect edit lane to the realtime model.
+The accepted first effect is `runtime.simple_rt`; live editing changes uniform
+bytes, not shader code or pipeline identity.
+
+Required runtime evidence:
+
+- live parameter metadata for `gColor.b`, including range, default, clamp
+  policy, and invalid-value diagnostic;
+- telemetry rows for at least two parameter updates;
+- proof that the selected pipeline key is unchanged before and after uniform
+  edits;
+- reflected uniform layout evidence for `runtime_simple_rt.wgsl`;
+- CPU/GPU/diff artifacts for at least two edited states;
+- stable refusals for arbitrary SkSL and missing WGSL descriptors.
+
+Uniform-only edits must update the uniform payload/bind group data. They must
+not create a new `PipelineKey`, a new WGSL module, or a new support claim for
+unregistered runtime effects.
+
 ## PM Demo Requirements
 
 The first real-time demo should include:

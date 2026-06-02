@@ -179,6 +179,34 @@ PM wording must distinguish:
 - stable expected unsupported rows;
 - actual renderer fixes with before/after proof.
 
+## M87 Runtime-Effect Live-Editing PM Evidence
+
+M87 packages one selected registered runtime effect as PM-visible live-editing
+evidence. It should answer "can a registered effect parameter be edited safely?"
+without implying arbitrary SkSL compatibility.
+
+Minimum PM artifacts:
+
+- `reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json`;
+- `reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.md`;
+- `reports/wgsl-pipeline/m87-runtime-effect-live-editing/edited-states.json`;
+- CPU/GPU/diff PNGs and route JSON for at least two edited states;
+- PM bundle manifest entry `m87RuntimeEffectLiveEditing`.
+
+The evidence JSON must report:
+
+- effect stable id `runtime.simple_rt`;
+- editable parameter `gColor.b`;
+- reflected `gColor` uniform layout;
+- at least two parameter updates;
+- `uniformValuesInPipelineKey=false`;
+- stable refusal reasons `runtime-effect.arbitrary-sksl-unsupported` and
+  `runtime-effect.wgsl-descriptor-missing`.
+
+PM wording must say that M87 proves selected SimpleRT live editing. It must not
+claim broad runtime-effect live controls, arbitrary SkSL compilation, or new
+WGSL support for dispatch-only runtime effects.
+
 ## PM Language
 
 Use this framing:
