@@ -27,11 +27,22 @@ fn linear_to_srgb(c: f32) -> f32 {
     return pow(1.1371188163757324 * c, 0.4166666567325592) - 0.054999999701976776;
 }
 
+fn quantize_rgba8_channel(c: f32) -> f32 {
+    let clamped = clamp(c, 0.0, 1.0);
+    return floor(clamped * 255.0 + 0.5) * (1.0 / 255.0);
+}
+
 @fragment
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let t = pos.x / 256.0;
     if (pos.y < 32.0) {
-        return mix(uniforms.in_colors0, uniforms.in_colors1, vec4f(t));
+        let encoded = mix(uniforms.in_colors0, uniforms.in_colors1, vec4f(t));
+        return vec4f(
+            quantize_rgba8_channel(encoded.r),
+            quantize_rgba8_channel(encoded.g),
+            quantize_rgba8_channel(encoded.b),
+            quantize_rgba8_channel(encoded.a),
+        );
     }
     let lin0 = vec3f(
         srgb_to_linear(uniforms.in_colors0.r),
@@ -45,9 +56,9 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     );
     let lin = mix(lin0, lin1, vec3f(t));
     return vec4f(
-        linear_to_srgb(lin.r),
-        linear_to_srgb(lin.g),
-        linear_to_srgb(lin.b),
+        quantize_rgba8_channel(linear_to_srgb(lin.r)),
+        quantize_rgba8_channel(linear_to_srgb(lin.g)),
+        quantize_rgba8_channel(linear_to_srgb(lin.b)),
         1.0,
     );
 }

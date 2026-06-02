@@ -54,18 +54,15 @@ class SkRuntimeEffectDescriptorRegistryTest {
                 total = 3,
                 descriptorBacked = 3,
                 dispatchOnlyMissingDescriptor = 0,
-                cpuOnly = 2,
-                gpuBacked = 1,
+                cpuOnly = 1,
+                gpuBacked = 2,
             ),
             counts,
         )
         val linearGradient = entries.single { it.stableId == "runtime.linear_gradient_rt" }
         assertEquals("descriptor-backed", linearGradient.descriptorStatus)
         assertEquals("supported:kotlin/linear_gradient_rt", linearGradient.cpuSupport)
-        assertEquals(
-            "unsupported: WGSL implementation id not promoted: wgsl/runtime_linear_gradient_rt",
-            linearGradient.gpuSupport,
-        )
+        assertEquals("supported:wgsl/runtime_linear_gradient_rt", linearGradient.gpuSupport)
         assertEquals("none", linearGradient.missingReason)
 
         val spiral = entries.single { it.stableId == "runtime.spiral_rt" }
@@ -102,8 +99,8 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(markdown.contains("| Descriptor status | Missing reason |"))
         assertTrue(
             markdown.contains(
-                "Status counts: total=3; descriptor-backed=3; " +
-                    "dispatch-only/missing-descriptor=0; CPU-only=2; GPU-backed=1.",
+            "Status counts: total=3; descriptor-backed=3; " +
+                    "dispatch-only/missing-descriptor=0; CPU-only=1; GPU-backed=2.",
             ),
         )
         markdown.lines()
@@ -137,7 +134,7 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(first.contains("gColor:kFloat4"))
         assertTrue(first.contains("supported:kotlin/simple_rt"))
         assertTrue(first.contains("supported:wgsl/runtime_simple_rt"))
-        assertTrue(first.contains("unsupported: WGSL implementation id not promoted: wgsl/runtime_linear_gradient_rt"))
+        assertTrue(first.contains("supported:wgsl/runtime_linear_gradient_rt"))
         assertTrue(first.contains("unsupported: WGSL implementation id not promoted: wgsl/runtime_spiral_rt"))
         assertTrue(first.contains("descriptor-backed"))
     }

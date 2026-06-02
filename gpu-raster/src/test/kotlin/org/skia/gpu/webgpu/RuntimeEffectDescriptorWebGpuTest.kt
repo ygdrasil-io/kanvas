@@ -146,7 +146,7 @@ class RuntimeEffectDescriptorWebGpuTest {
     }
 
     @Test
-    fun `LinearGradientRT runtime shader refuses WebGPU route until scene parity passes`() {
+    fun `LinearGradientRT runtime shader renders through descriptor-backed WGSL path`() {
         val context = WebGpuContext.createOrNull()
         Assumptions.assumeTrue(context != null, "No WebGPU adapter")
 
@@ -156,25 +156,24 @@ class RuntimeEffectDescriptorWebGpuTest {
             children = emptyArray(),
         )!!
 
-        context!!.use { ctx ->
+        val pixels = context!!.use { ctx ->
             SkWebGpuDevice(ctx, W, H).use { device ->
                 device.setBackground(SK_ColorBLACK)
-                val error = assertThrows(IllegalStateException::class.java) {
-                    SkCanvas(device).drawRect(
-                        SkRect.MakeLTRB(0f, 0f, 48f, 48f),
-                        SkPaint().apply {
-                            this.shader = shader
-                            isAntiAlias = false
-                        },
-                    )
-                    device.flush()
-                }
-                assertTrue(
-                    error.message!!.contains("has no supported WGSL implementation"),
-                    "expected stable unsupported-WGSL diagnostic, got ${error.message}",
+                SkCanvas(device).drawRect(
+                    SkRect.MakeLTRB(0f, 0f, 48f, 48f),
+                    SkPaint().apply {
+                        this.shader = shader
+                        isAntiAlias = false
+                    },
                 )
+                val out = device.flush()
+                assertEquals(null, device.runtimeEffectFallbackReasonForDiagnostics())
+                out
             }
         }
+
+        assertEquals(listOf(212, 43, 0, 255), pixels.rgbaAt(43, 31))
+        assertEquals(listOf(235, 115, 0, 255), pixels.rgbaAt(43, 32))
     }
 
     @Test
