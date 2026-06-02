@@ -86,10 +86,34 @@ public object SkBuiltinShaderEffectsSimple {
             SPIRAL_RT_SKSL,
             SpiralRTImpl.dispatchMetadata("runtime.spiral_rt", "kotlin/spiral_rt"),
         ) { SpiralRTImpl }
+        SkRuntimeEffectDescriptorRegistry.registerBuiltinIfAbsent(
+            SPIRAL_RT_SKSL,
+            SkRuntimeEffectDescriptor(
+                stableId = "runtime.spiral_rt",
+                kind = SkRuntimeEffect.Kind.kShader,
+                uniforms = SpiralRTImpl.uniforms,
+                children = SpiralRTImpl.children,
+                flags = SpiralRTImpl.flags,
+                cpuImplementationId = "kotlin/spiral_rt",
+                wgslImplementationId = "wgsl/runtime_spiral_rt",
+            ),
+        )
         SkRuntimeEffectDispatch.registerBuiltinIfAbsent(
             LINEAR_GRADIENT_RT_SKSL,
             LinearGradientRTImpl.dispatchMetadata("runtime.linear_gradient_rt", "kotlin/linear_gradient_rt"),
         ) { LinearGradientRTImpl }
+        SkRuntimeEffectDescriptorRegistry.registerBuiltinIfAbsent(
+            LINEAR_GRADIENT_RT_SKSL,
+            SkRuntimeEffectDescriptor(
+                stableId = "runtime.linear_gradient_rt",
+                kind = SkRuntimeEffect.Kind.kShader,
+                uniforms = LinearGradientRTImpl.uniforms,
+                children = LinearGradientRTImpl.children,
+                flags = LinearGradientRTImpl.flags,
+                cpuImplementationId = "kotlin/linear_gradient_rt",
+                wgslImplementationId = "wgsl/runtime_linear_gradient_rt",
+            ),
+        )
     }
 
     // ─── SkSL sources (verbatim copies of upstream) ──────────────────

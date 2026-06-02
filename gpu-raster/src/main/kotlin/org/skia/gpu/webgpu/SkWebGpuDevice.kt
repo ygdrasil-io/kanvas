@@ -342,6 +342,12 @@ public class SkWebGpuDevice(
         val fallbackReason: String?,
     )
 
+    private data class StrokeStyleDiagnostics(
+        val strokeWidth: Float,
+        val cap: String,
+        val join: String,
+    )
+
     private data class CacheCounters(
         var shaderModuleHits: Int = 0,
         var shaderModuleMisses: Int = 0,
@@ -363,6 +369,18 @@ public class SkWebGpuDevice(
         "tileModeX", "tileModeY", "samplerFilter" -> PipelineKeyAxisClass.Layout
         "uniformSchemaVersion" -> PipelineKeyAxisClass.UniformOnly
         else -> throw IllegalArgumentException("Unknown PipelineKey axis: $axis")
+    }
+
+    private fun SkPaint.Cap.coverageDiagnosticName(): String = when (this) {
+        SkPaint.Cap.kButt_Cap -> "butt"
+        SkPaint.Cap.kRound_Cap -> "round"
+        SkPaint.Cap.kSquare_Cap -> "square"
+    }
+
+    private fun SkPaint.Join.coverageDiagnosticName(): String = when (this) {
+        SkPaint.Join.kMiter_Join -> "miter"
+        SkPaint.Join.kRound_Join -> "round"
+        SkPaint.Join.kBevel_Join -> "bevel"
     }
 
     private fun pipelineKeyIdentity(parts: List<PipelineKeyClassification>): PipelineKey =
@@ -816,9 +834,10 @@ public class SkWebGpuDevice(
         val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
-    private data class SimpleRuntimeEffectRectDraw(
+    private data class RuntimeEffectRectDraw(
         val scissor: IntArray,
-        val gColor: FloatArray,
+        val wgslImplementationId: String,
+        val uniformFloats: FloatArray,
         override val r: Float,
         override val g: Float,
         override val b: Float,
@@ -2008,7 +2027,7 @@ public class SkWebGpuDevice(
         // a full-screen-triangle in the vertex shader (no vertex buffer
         // bound), so they never hit the panic path.
         is RectDraw,
-        is SimpleRuntimeEffectRectDraw,
+        is RuntimeEffectRectDraw,
         is LinearGradientRectDraw,
         is RadialGradientRectDraw,
         is SweepGradientRectDraw,
@@ -2310,17 +2329,18 @@ public class SkWebGpuDevice(
         )
 
     private val runtimeSimpleShader: GPUShaderModule = loadShader("shaders/runtime_simple_rt.wgsl")
-    private val runtimeSimplePipelineCache: MutableMap<SkBlendMode, GPURenderPipeline> = mutableMapOf()
+    private val runtimeEffectPipelineCache: MutableMap<Pair<String, SkBlendMode>, GPURenderPipeline> = mutableMapOf()
     private var lastRuntimeEffectFallbackReason: String? = null
 
-    private fun runtimeSimplePipelineFor(mode: SkBlendMode): GPURenderPipeline =
-        runtimeSimplePipelineCache.getOrPut(mode) {
+    private fun runtimeEffectPipelineFor(wgslImplementationId: String, mode: SkBlendMode): GPURenderPipeline =
+        runtimeEffectPipelineCache.getOrPut(wgslImplementationId to mode) {
+            val shader = runtimeEffectShaderFor(wgslImplementationId)
             context.device.createRenderPipeline(
                 RenderPipelineDescriptor(
                     layout = rectPipelineLayout,
-                    vertex = VertexState(module = runtimeSimpleShader, entryPoint = "vs_main"),
+                    vertex = VertexState(module = shader, entryPoint = "vs_main"),
                     fragment = FragmentState(
-                        module = runtimeSimpleShader,
+                        module = shader,
                         entryPoint = "fs_main",
                         targets = listOf(
                             ColorTargetState(
@@ -2331,6 +2351,12 @@ public class SkWebGpuDevice(
                     ),
                 ),
             )
+        }
+
+    private fun runtimeEffectShaderFor(wgslImplementationId: String): GPUShaderModule =
+        when (wgslImplementationId) {
+            "wgsl/runtime_simple_rt" -> runtimeSimpleShader
+            else -> error("Unsupported runtime-effect WGSL implementation: $wgslImplementationId")
         }
 
     internal fun runtimeEffectFallbackReasonForDiagnostics(): String? = lastRuntimeEffectFallbackReason
@@ -8074,6 +8100,7 @@ public class SkWebGpuDevice(
     private var activeClipShape: SkClipShape? = null
     private var strokeOutlineOverflowFallbackDepth: Int = 0
     private var activeDashIntervalCountForPathAaDiagnostics: Int? = null
+    private var activeStrokeStyleForPathAaDiagnostics: StrokeStyleDiagnostics? = null
 
     override fun setActiveClipShape(shape: SkClipShape?) {
         activeClipShape = shape
@@ -9129,17 +9156,24 @@ public class SkWebGpuDevice(
         return true
     }
 
-    private fun drawSimpleRuntimeEffectFillRect(
+    private fun drawRuntimeEffectFillRect(
         devRect: SkRect,
         clip: SkIRect,
         paint: SkPaint,
         shader: SkRuntimeShader,
     ): Boolean {
-        val descriptor = shader.runtimeEffectDescriptor
-        if (descriptor?.wgslImplementationId != "wgsl/runtime_simple_rt") {
+        val descriptor = shader.runtimeEffectDescriptor ?: run {
+            lastRuntimeEffectFallbackReason = "runtime effect descriptor missing"
+            return false
+        }
+        val wgslImplementationId = descriptor.wgslImplementationId ?: run {
             lastRuntimeEffectFallbackReason =
-                descriptor?.let { "runtime effect ${it.stableId} has no supported WGSL implementation" }
-                    ?: "runtime effect descriptor missing"
+                "runtime effect ${descriptor.stableId} has no supported WGSL implementation"
+            return false
+        }
+        if (wgslImplementationId !in SUPPORTED_RUNTIME_EFFECT_WGSL_IDS) {
+            lastRuntimeEffectFallbackReason =
+                "runtime effect ${descriptor.stableId} has no supported WGSL implementation"
             return false
         }
         if (paint.blendMode != SkBlendMode.kSrcOver || !blendPlanFor(paint.blendMode).isFixedFunction) {
@@ -9156,9 +9190,10 @@ public class SkWebGpuDevice(
             return false
         }
         val uniformBytes = shader.runtimeEffectUniformBytes()
-        if (uniformBytes.size != 16) {
+        val expectedUniformBytes = runtimeEffectUniformBytesFor(wgslImplementationId)
+        if (uniformBytes.size != expectedUniformBytes) {
             lastRuntimeEffectFallbackReason =
-                "runtime effect ${descriptor.stableId} expected 16 uniform bytes, got ${uniformBytes.size}"
+                "runtime effect ${descriptor.stableId} expected $expectedUniformBytes uniform bytes, got ${uniformBytes.size}"
             return false
         }
 
@@ -9171,12 +9206,13 @@ public class SkWebGpuDevice(
         val uniformFloats = java.nio.ByteBuffer.wrap(uniformBytes)
             .order(java.nio.ByteOrder.nativeOrder())
             .asFloatBuffer()
-        val gColor = FloatArray(4)
-        uniformFloats.get(gColor)
+        val packedUniforms = FloatArray(expectedUniformBytes / Float.SIZE_BYTES)
+        uniformFloats.get(packedUniforms)
         pending.add(
-            SimpleRuntimeEffectRectDraw(
+            RuntimeEffectRectDraw(
                 scissor = intArrayOf(l, t, r - l, b - t),
-                gColor = gColor,
+                wgslImplementationId = wgslImplementationId,
+                uniformFloats = packedUniforms,
                 r = 1f,
                 g = 1f,
                 b = 1f,
@@ -9187,6 +9223,12 @@ public class SkWebGpuDevice(
         lastRuntimeEffectFallbackReason = null
         return true
     }
+
+    private fun runtimeEffectUniformBytesFor(wgslImplementationId: String): Int =
+        when (wgslImplementationId) {
+            "wgsl/runtime_simple_rt" -> 16
+            else -> error("Unsupported runtime-effect WGSL implementation: $wgslImplementationId")
+        }
 
     /**
      * G4.2 -- emit a [RadialGradientRectDraw] for a kClamp `SkRadialGradient`
@@ -9997,7 +10039,7 @@ public class SkWebGpuDevice(
             if (srcRect != null &&
                 paint.style == SkPaint.Style.kFill_Style &&
                 ctm.isIdentity &&
-                drawSimpleRuntimeEffectFillRect(srcRect, clip, paint, shader)
+                drawRuntimeEffectFillRect(srcRect, clip, paint, shader)
             ) {
                 return
             }
@@ -10227,9 +10269,16 @@ public class SkWebGpuDevice(
                             (paint.strokeWidth <= 0f && path.isRectStrokeOutlineForFallback())
                     )
             if (strokeOutlineOverflowFallback) strokeOutlineOverflowFallbackDepth++
+            val previousStrokeStyle = activeStrokeStyleForPathAaDiagnostics
+            activeStrokeStyleForPathAaDiagnostics = StrokeStyleDiagnostics(
+                strokeWidth = deviceStrokeWidth,
+                cap = paint.strokeCap.coverageDiagnosticName(),
+                join = paint.strokeJoin.coverageDiagnosticName(),
+            )
             try {
                 drawPath(outline, ctm, clip, fillPaint)
             } finally {
+                activeStrokeStyleForPathAaDiagnostics = previousStrokeStyle
                 if (strokeOutlineOverflowFallback) strokeOutlineOverflowFallbackDepth--
             }
             return
@@ -10588,6 +10637,9 @@ public class SkWebGpuDevice(
                     dashIntervalCount = activeDashIntervalCountForPathAaDiagnostics,
                     clipStackDepth = null,
                     deviceBounds = pathDeviceBounds,
+                    strokeWidth = activeStrokeStyleForPathAaDiagnostics?.strokeWidth,
+                    strokeCaps = activeStrokeStyleForPathAaDiagnostics?.cap?.let(::listOf).orEmpty(),
+                    strokeJoins = activeStrokeStyleForPathAaDiagnostics?.join?.let(::listOf).orEmpty(),
                     strokeOutlineFallbackEnabled = strokeOutlineOverflowFallbackDepth > 0,
                 ),
             )
@@ -11792,7 +11844,7 @@ public class SkWebGpuDevice(
                     buildStencilCoverAaConicalFocalGradientDrawResources(d)
                 is StencilCoverAaBitmapShaderDraw ->
                     buildStencilCoverAaBitmapShaderDrawResources(d)
-                is SimpleRuntimeEffectRectDraw -> buildSimpleRuntimeEffectRectDrawResources(d)
+                is RuntimeEffectRectDraw -> buildRuntimeEffectRectDrawResources(d)
                 is LinearGradientRectDraw -> buildLinearGradientRectDrawResources(d)
                 is RadialGradientRectDraw -> buildRadialGradientRectDrawResources(d)
                 is SweepGradientRectDraw -> buildSweepGradientRectDrawResources(d)
@@ -13011,8 +13063,8 @@ public class SkWebGpuDevice(
                         )
                         draw(FULL_SCREEN_TRIANGLE_VERTEX_COUNT)
                     }
-                    is SimpleRuntimeEffectRectDraw -> {
-                        setPipeline(runtimeSimplePipelineFor(d.mode))
+                    is RuntimeEffectRectDraw -> {
+                        setPipeline(runtimeEffectPipelineFor(d.wgslImplementationId, d.mode))
                         setBindGroup(0u, res.bindGroup)
                         setScissorRect(
                             x = d.scissor[0].toUInt(),
@@ -13500,15 +13552,16 @@ public class SkWebGpuDevice(
         return DrawResources(uniform = uniform, bindGroup = bindGroup, vertexBuffer = vertexBuffer)
     }
 
-    private fun buildSimpleRuntimeEffectRectDrawResources(d: SimpleRuntimeEffectRectDraw): DrawResources {
+    private fun buildRuntimeEffectRectDrawResources(d: RuntimeEffectRectDraw): DrawResources {
+        val uniformByteSize = (d.uniformFloats.size * Float.SIZE_BYTES).toULong()
         val uniform = context.device.createBuffer(
             BufferDescriptor(
-                size = 16uL,
+                size = uniformByteSize,
                 usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                label = "SkWebGpuDevice.simpleRuntimeEffectRectDraw",
+                label = "SkWebGpuDevice.runtimeEffectRectDraw",
             ),
         )
-        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(d.gColor))
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(d.uniformFloats))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
                 layout = rectBindGroupLayout,
@@ -15620,6 +15673,8 @@ public class SkWebGpuDevice(
         bitmapPipelineCache.clear()
         bitmapSamplerCache.values.forEach { it.close() }
         bitmapSamplerCache.clear()
+        runtimeEffectPipelineCache.values.forEach { it.close() }
+        runtimeEffectPipelineCache.clear()
         layerCompositePipelineCache.values.forEach { it.close() }
         layerCompositePipelineCache.clear()
         blurVerticalPipelineCache.values.forEach { it.close() }
@@ -15644,6 +15699,7 @@ public class SkWebGpuDevice(
         radialGradientShader.close()
         sweepGradientShader.close()
         bitmapShader.close()
+        runtimeSimpleShader.close()
         layerCompositeShader.close()
         blurGaussianShader.close()
         presentShader.close()
@@ -15655,6 +15711,10 @@ public class SkWebGpuDevice(
     }
 
     private companion object {
+        private val SUPPORTED_RUNTIME_EFFECT_WGSL_IDS = setOf(
+            "wgsl/runtime_simple_rt",
+        )
+
         /**
          * Size of the rect per-draw uniform :
          *   color (16) + outerBounds (16) + innerBounds (16) +

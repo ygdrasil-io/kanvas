@@ -23,6 +23,6 @@
   "deviceBounds": {"left": 0, "top": 0, "right": 192, "bottom": 128},
   "deviceBoundsBudget": 2048,
   "deviceBoundsReason": "not coverage.bounds-budget-exceeded",
-  "diagnosticsSource": "CPU scene fixture; stroke width/cap/join are not emitted by WebGpuCoveragePlanSelector path facts yet.",
+  "diagnosticsSource": "CPU scene fixture with bounded stroke width/cap/join facts.",
   "sourceReport": "reports/wgsl-pipeline/2026-06-01-m60-stroke-cap-join-path-aa-promotion.md"
 }

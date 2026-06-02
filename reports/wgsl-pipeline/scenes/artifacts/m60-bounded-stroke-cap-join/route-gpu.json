@@ -1,12 +1,13 @@
 {
   "sceneId": "m60-bounded-stroke-cap-join",
   "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
   "drawKind": "BoundedStrokeCapJoinGM",
   "status": "expected-unsupported",
-  "coverageStrategy": "webgpu.coverage.stroke-cap-join.expected-unsupported",
-  "selectedRoute": "webgpu.coverage.stroke-cap-join.expected-unsupported",
-  "pipelineKey": "pathAA=strokeCapJoin strokeWidth=10 caps=butt+round+square joins=bevel+round budget=m60 source=LinePathGM-derived status=expected-unsupported",
-  "fallbackReason": "coverage.stroke-cap-join-selector-diagnostics-unavailable",
+  "coverageStrategy": "webgpu.coverage.refuse",
+  "selectedRoute": "webgpu.coverage.refuse",
+  "pipelineKey": "coverageKind=pathAaStrokeCapJoinBlocked pathFillRule=winding topology=triangleList budget=m60 source=LinePathGM-derived status=expected-unsupported",
+  "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
   "pathVerbCount": 9,
   "pathVerbBudget": 96,
   "pathVerbReason": "not coverage.verb-budget-exceeded",
@@ -24,7 +25,7 @@
   "deviceBounds": {"left": 0, "top": 0, "right": 192, "bottom": 128},
   "deviceBoundsBudget": 2048,
   "deviceBoundsReason": "not coverage.bounds-budget-exceeded",
-  "diagnosticsSource": "scene contract plus CPU oracle; WebGpuCoveragePlanSelector has no strokeWidth/strokeCap/strokeJoin facts, so this row cannot be a GPU pass claim.",
-  "test": "org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest#bounded stroke cap join scene captures expected unsupported evidence",
+  "diagnosticsSource": "WebGpuCoveragePlanSelector stroke style facts plus stable adapter-backed refusal; parity promotion remains blocked.",
+  "test": "org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest#bounded stroke cap join scene captures visual parity blocker evidence",
   "sourceReport": "reports/wgsl-pipeline/2026-06-01-m60-stroke-cap-join-path-aa-promotion.md"
 }

@@ -247,6 +247,9 @@ public data class WebGpuPathCoverageFacts(
     val dashIntervalCount: Int? = null,
     val clipStackDepth: Int? = null,
     val deviceBounds: FloatRect? = null,
+    val strokeWidth: Float? = null,
+    val strokeCaps: List<String> = emptyList(),
+    val strokeJoins: List<String> = emptyList(),
     val maskOrAtlasFallbackEnabled: Boolean = false,
     val strokeOutlineFallbackEnabled: Boolean = false,
 ) {
@@ -258,7 +261,13 @@ public data class WebGpuPathCoverageFacts(
             dashIntervalCount = dashIntervalCount,
             clipStackDepth = clipStackDepth,
             deviceBounds = deviceBounds,
+            strokeWidth = strokeWidth,
+            strokeCaps = strokeCaps,
+            strokeJoins = strokeJoins,
         )
+
+    public val hasStrokeStyleFacts: Boolean
+        get() = strokeWidth != null || strokeCaps.isNotEmpty() || strokeJoins.isNotEmpty()
 }
 
 public data class WebGpuPathAaBudgetDiagnostics(
@@ -274,6 +283,9 @@ public data class WebGpuPathAaBudgetDiagnostics(
     val clipStackDepthBudget: Int = WEBGPU_PATH_AA_CLIP_STACK_DEPTH_BUDGET,
     val deviceBounds: FloatRect?,
     val deviceBoundsBudget: Float = WEBGPU_PATH_AA_DEVICE_BOUNDS_BUDGET,
+    val strokeWidth: Float? = null,
+    val strokeCaps: List<String> = emptyList(),
+    val strokeJoins: List<String> = emptyList(),
 ) {
     public fun dump(): String =
         "pathVerbCount=${pathVerbCount ?: "n/a"}/$pathVerbBudget;" +
@@ -282,7 +294,10 @@ public data class WebGpuPathAaBudgetDiagnostics(
             "dashIntervalCount=${dashIntervalCount ?: "n/a"}/$dashIntervalBudget;" +
             "clipStackDepth=${clipStackDepth ?: "n/a"}/$clipStackDepthBudget;" +
             "deviceBounds=${deviceBounds?.let { "${it.left},${it.top},${it.right},${it.bottom}" } ?: "n/a"};" +
-            "deviceBoundsMaxSize=${deviceBounds?.let { maxOf(it.right - it.left, it.bottom - it.top) } ?: "n/a"}/$deviceBoundsBudget"
+            "deviceBoundsMaxSize=${deviceBounds?.let { maxOf(it.right - it.left, it.bottom - it.top) } ?: "n/a"}/$deviceBoundsBudget;" +
+            "strokeWidth=${strokeWidth ?: "n/a"};" +
+            "strokeCaps=${if (strokeCaps.isEmpty()) "n/a" else strokeCaps.joinToString("+")};" +
+            "strokeJoins=${if (strokeJoins.isEmpty()) "n/a" else strokeJoins.joinToString("+")}"
 }
 
 public data class WebGpuCoverageDiagnostic(
@@ -492,6 +507,17 @@ public object WebGpuCoveragePlanSelector {
                     budgetDiagnostics = budgetDiagnostics,
                 )
             }
+        }
+        if (plan.aa && facts.hasStrokeStyleFacts) {
+            return unsupported(
+                drawKind = drawKind,
+                plan = plan,
+                clipInteraction = clipInteraction,
+                lowering = lowering,
+                reason = StandardCoverageReason.StrokeCapJoinVisualParityBelowThreshold,
+                pipelineAxes = pathPipelineAxes("pathAaStrokeCapJoinBlocked", plan),
+                budgetDiagnostics = budgetDiagnostics,
+            )
         }
         val useConvexFan = facts.isConvex && facts.contourCount == 1 && !plan.inverse
         return if (useConvexFan) {

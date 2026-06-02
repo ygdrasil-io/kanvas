@@ -37,6 +37,10 @@ class GeometryCoverageContractsTest {
             "coverage.stroke-outline-edge-count-exceeded",
             StandardCoverageReason.StrokeOutlineEdgeCountExceeded.code,
         )
+        assertEquals(
+            "coverage.stroke-cap-join-visual-parity-below-threshold",
+            StandardCoverageReason.StrokeCapJoinVisualParityBelowThreshold.code,
+        )
         assertEquals("coverage.atlas-policy-unavailable", StandardCoverageReason.AtlasPolicyUnavailable.code)
         assertEquals(
             "coverage.arbitrary-aa-clip-unsupported",

@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "generatedBy": "pipelineM64RegisteredRuntimeEffectsPack",
-  "description": "M64 registered runtime-effect contract. Rows are materialized from existing runtime-effect evidence and do not claim arbitrary SkSL compilation or unregistered effect approximation.",
+  "description": "M64 registered runtime-effect contract. Rows are materialized from registered runtime-effect evidence and do not claim arbitrary SkSL compilation or unregistered effect approximation.",
   "artifactSourceRoot": "reports/wgsl-pipeline/scenes/artifacts",
   "sourceReport": "reports/wgsl-pipeline/2026-06-01-m64-runtime-effect-audit.md",
   "selectedReport": "reports/wgsl-pipeline/2026-06-01-m64-runtime-effect-audit.md",
-  "selectedCandidateCount": 3,
+  "selectedCandidateCount": 4,
   "outputEvidenceDir": "wgsl-pipeline-m64-generated",
-  "outputDescription": "M64 registered runtime-effect generated dashboard rows materialized from descriptor-backed and dispatch-only runtime-effect support matrix evidence.",
+  "outputDescription": "M64 registered runtime-effect generated dashboard rows materialized from descriptor-backed runtime-effect support matrix evidence and explicit arbitrary-SkSL refusal policy.",
   "outputManifest": "data/m64-generated-scenes.json",
   "scenes": [
     {
@@ -45,30 +45,34 @@
       "tags": ["source.generated", "feature.runtime-effect", "feature.coverage.analytic-rect", "route.cpu.descriptor", "route.gpu.webgpu", "reference.test-oracle", "maturity.generated-evidence", "maturity.adapter-backed", "risk.none"]
     },
     {
-      "id": "m64-spiral-rt-wgsl-descriptor-refusal",
-      "title": "M64 SpiralRT WGSL descriptor refusal",
+      "id": "m64-spiral-rt-descriptor-backed",
+      "title": "M64 SpiralRT descriptor-backed shader parity blocker",
       "family": "registered runtime effects",
       "status": "expected-unsupported",
-      "linearIssue": "FOR-29",
-      "baseArtifactScene": "runtime-effect-support-matrix",
+      "linearIssue": "FOR-223",
+      "baseArtifactScene": "runtime-effect-spiral",
       "allowArtifactOnlyBase": true,
-      "policyOnlyArtifacts": true,
-      "sourceTask": "runtime-effect-support-matrix",
-      "sourceTest": "RuntimeEffectDescriptorWebGpuTest#registered runtime shader without WGSL descriptor fails with stable diagnostic",
-      "sourceReport": "reports/wgsl-pipeline/2026-06-01-m64-runtime-effect-audit.md",
+      "sourceTest": "RuntimeEffectDescriptorSceneCaptureTest#SpiralRT descriptor scene captures visual parity blocker evidence",
+      "sourceReport": "reports/wgsl-pipeline/2026-06-02-renderer-feature-conversion-sprint.md",
       "referenceKind": "test-oracle",
-      "cpuRoute": "cpu.runtime-effect.dispatch.spiral_rt",
-      "gpuRoute": "webgpu.runtime-effect.refuse.missing-wgsl-descriptor",
-      "pipelineKey": "runtimeEffect=SpiralRT descriptor=missing wgslImplementationId=missing milestone=M64",
-      "fallbackReason": "runtime-effect.wgsl-descriptor-missing",
+      "cpuRoute": "cpu.runtime-effect.descriptor.spiral_rt",
+      "gpuRoute": "webgpu.runtime-effect.descriptor.spiral_rt.expected-unsupported",
+      "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl parserReflected=true uniforms=rad_scale@0,in_center@8,in_colors0@16,in_colors1@32 status=expected-unsupported state=[blendMode=kSrcOver] milestone=M64",
+      "fallbackReason": "runtime-effect.spiral-visual-parity-below-threshold",
       "pixels": 4096,
       "matchingPixels": 0,
-      "threshold": 0,
-      "policyArtifactDescription": "Policy-only refusal artifact for registered SpiralRT without a WGSL descriptor. It intentionally is not a SimpleRT render.",
+      "threshold": 99.95,
       "gpuRouteDetails": {
         "runtimeEffectStableId": "runtime.spiral_rt",
-        "wgslImplementationId": "missing",
-        "parserEvidence": "not available; support matrix classifies SpiralRT as dispatch-only/missing-descriptor",
+        "wgslImplementationId": "wgsl/runtime_spiral_rt",
+        "parserEvidence": "RuntimeEffectDescriptorWebGpuTest#runtime SpiralRT descriptor WGSL parses and reflects uniforms",
+        "uniformLayout": {
+          "rad_scale": 0,
+          "in_center": 8,
+          "in_colors0": 16,
+          "in_colors1": 32
+        },
+        "uniformBytes": 48,
         "supportMatrix": "reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md"
       },
       "cpuRouteDetails": {
@@ -77,8 +81,46 @@
         "uniforms": ["rad_scale:kFloat", "in_center:kFloat2", "in_colors0:kFloat4", "in_colors1:kFloat4"],
         "children": []
       },
-      "nonClaim": "Documents that SpiralRT remains dispatch-only without a registered WGSL descriptor; it does not claim GPU support or arbitrary runtime-effect lowering.",
-      "tags": ["source.generated", "feature.runtime-effect", "route.cpu.descriptor", "route.gpu.expected-unsupported", "reference.test-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "nonClaim": "Registers and parser-validates SpiralRT but does not promote the scene to supported until adapter-backed color parity reaches 99.95%; arbitrary SkSL, unregistered effects, runtime-effect color filters, blenders, and image filters remain out of scope.",
+      "tags": ["source.generated", "feature.runtime-effect", "feature.coverage.analytic-rect", "route.cpu.descriptor", "route.gpu.expected-unsupported", "reference.test-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]
+    },
+    {
+      "id": "m64-linear-gradient-rt-descriptor-backed",
+      "title": "M64 LinearGradientRT descriptor-backed shader parity blocker",
+      "family": "registered runtime effects",
+      "status": "expected-unsupported",
+      "linearIssue": "FOR-221",
+      "baseArtifactScene": "runtime-effect-linear-gradient",
+      "allowArtifactOnlyBase": true,
+      "sourceTest": "RuntimeEffectDescriptorSceneCaptureTest#LinearGradientRT descriptor scene captures visual parity blocker evidence",
+      "sourceReport": "reports/wgsl-pipeline/2026-06-02-renderer-feature-conversion-sprint.md",
+      "referenceKind": "test-oracle",
+      "cpuRoute": "cpu.runtime-effect.descriptor.linear_gradient_rt",
+      "gpuRoute": "webgpu.runtime-effect.descriptor.linear_gradient_rt.expected-unsupported",
+      "pipelineKey": "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true uniforms=in_colors0@0,in_colors1@16 status=expected-unsupported state=[blendMode=kSrcOver] milestone=renderer-feature-conversion",
+      "fallbackReason": "runtime-effect.linear-gradient-visual-parity-below-threshold",
+      "pixels": 4096,
+      "matchingPixels": 0,
+      "threshold": 99.95,
+      "gpuRouteDetails": {
+        "runtimeEffectStableId": "runtime.linear_gradient_rt",
+        "wgslImplementationId": "wgsl/runtime_linear_gradient_rt",
+        "parserEvidence": "RuntimeEffectDescriptorWebGpuTest#runtime LinearGradientRT descriptor WGSL parses and reflects uniforms",
+        "uniformLayout": {
+          "in_colors0": 0,
+          "in_colors1": 16
+        },
+        "uniformBytes": 32,
+        "supportMatrix": "reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md"
+      },
+      "cpuRouteDetails": {
+        "runtimeEffectStableId": "runtime.linear_gradient_rt",
+        "cpuImplementationId": "kotlin/linear_gradient_rt",
+        "uniforms": ["in_colors0:kFloat4", "in_colors1:kFloat4"],
+        "children": []
+      },
+      "nonClaim": "Registers and parser-validates LinearGradientRT but does not promote the scene to supported until adapter-backed color parity reaches 99.95%; arbitrary SkSL, unregistered effects, runtime-effect color filters, blenders, and image filters remain out of scope.",
+      "tags": ["source.generated", "feature.runtime-effect", "feature.coverage.analytic-rect", "route.cpu.descriptor", "route.gpu.expected-unsupported", "reference.test-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]
     },
     {
       "id": "m64-arbitrary-sksl-runtime-effect-refusal",

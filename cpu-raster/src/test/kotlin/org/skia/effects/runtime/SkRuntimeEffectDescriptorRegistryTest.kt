@@ -39,7 +39,7 @@ class SkRuntimeEffectDescriptorRegistryTest {
     }
 
     @Test
-    fun `support matrix reports dispatch-only builtins as missing descriptors`() {
+    fun `support matrix reports descriptor-backed builtin runtime effects`() {
         SkBuiltinShaderEffectsSimple.registerAll()
 
         val entries = SkRuntimeEffectDescriptorRegistry.supportMatrixEntries()
@@ -52,25 +52,30 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertEquals(
             SkRuntimeEffectSupportMatrixStatusCounts(
                 total = 3,
-                descriptorBacked = 1,
-                dispatchOnlyMissingDescriptor = 2,
+                descriptorBacked = 3,
+                dispatchOnlyMissingDescriptor = 0,
                 cpuOnly = 2,
                 gpuBacked = 1,
             ),
             counts,
         )
         val linearGradient = entries.single { it.stableId == "runtime.linear_gradient_rt" }
-        assertEquals("dispatch-only; missing descriptor", linearGradient.descriptorStatus)
+        assertEquals("descriptor-backed", linearGradient.descriptorStatus)
         assertEquals("supported:kotlin/linear_gradient_rt", linearGradient.cpuSupport)
-        assertEquals("unsupported: WGSL implementation id missing", linearGradient.gpuSupport)
         assertEquals(
-            "Runtime effect descriptor missing for dispatch-only effect: ${linearGradient.canonicalHash}",
-            linearGradient.missingReason,
+            "unsupported: WGSL implementation id not promoted: wgsl/runtime_linear_gradient_rt",
+            linearGradient.gpuSupport,
         )
+        assertEquals("none", linearGradient.missingReason)
 
         val spiral = entries.single { it.stableId == "runtime.spiral_rt" }
-        assertEquals("dispatch-only; missing descriptor", spiral.descriptorStatus)
+        assertEquals("descriptor-backed", spiral.descriptorStatus)
         assertEquals("supported:kotlin/spiral_rt", spiral.cpuSupport)
+        assertEquals(
+            "unsupported: WGSL implementation id not promoted: wgsl/runtime_spiral_rt",
+            spiral.gpuSupport,
+        )
+        assertEquals("none", spiral.missingReason)
         assertTrue(spiral.uniforms.map { it.name }.containsAll(listOf("rad_scale", "in_center", "in_colors0", "in_colors1")))
     }
 
@@ -97,8 +102,8 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(markdown.contains("| Descriptor status | Missing reason |"))
         assertTrue(
             markdown.contains(
-                "Status counts: total=3; descriptor-backed=1; " +
-                    "dispatch-only/missing-descriptor=2; CPU-only=2; GPU-backed=1.",
+                "Status counts: total=3; descriptor-backed=3; " +
+                    "dispatch-only/missing-descriptor=0; CPU-only=2; GPU-backed=1.",
             ),
         )
         markdown.lines()
@@ -132,9 +137,9 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(first.contains("gColor:kFloat4"))
         assertTrue(first.contains("supported:kotlin/simple_rt"))
         assertTrue(first.contains("supported:wgsl/runtime_simple_rt"))
+        assertTrue(first.contains("unsupported: WGSL implementation id not promoted: wgsl/runtime_linear_gradient_rt"))
+        assertTrue(first.contains("unsupported: WGSL implementation id not promoted: wgsl/runtime_spiral_rt"))
         assertTrue(first.contains("descriptor-backed"))
-        assertTrue(first.contains("dispatch-only; missing descriptor"))
-        assertTrue(first.contains("Runtime effect descriptor missing for dispatch-only effect:"))
     }
 
     @Test

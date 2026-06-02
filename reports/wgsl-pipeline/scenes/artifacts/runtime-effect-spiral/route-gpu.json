@@ -1,0 +1,15 @@
+{
+  "sceneId": "runtime-effect-spiral",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "drawKind": "SpiralRTDescriptorGM",
+  "status": "expected-unsupported",
+  "selectedRoute": "webgpu.runtime-effect.descriptor.spiral_rt.expected-unsupported",
+  "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl parserReflected=true status=expected-unsupported state=[blendMode=kSrcOver]",
+  "fallbackReason": "runtime-effect.spiral-visual-parity-below-threshold",
+  "runtimeEffectStableId": "runtime.spiral_rt",
+  "wgslImplementationId": "wgsl/runtime_spiral_rt",
+  "uniformBytes": 48,
+  "test": "org.skia.gpu.webgpu.RuntimeEffectDescriptorSceneCaptureTest#SpiralRT descriptor scene captures visual parity blocker evidence",
+  "sourceReport": "reports/wgsl-pipeline/2026-06-02-renderer-feature-conversion-sprint.md"
+}

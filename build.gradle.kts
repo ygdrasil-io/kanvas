@@ -390,7 +390,7 @@ fun renderPipelineConformanceReport(
         |- Pipeline cache telemetry: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/PipelineKeyTelemetryTest.kt`
         |  verifies cold frame misses are at least one and warm frame cache hits increase.
         |- Runtime-effect support matrix: `reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md`
-        |  lists `runtime.simple_rt` as descriptor-backed and dispatch-only builtins as missing descriptor/WGSL evidence;
+        |  lists descriptor-backed runtime effects separately from adapter-backed scene parity and keeps below-threshold WGSL rows explicit;
         |  current counts are $runtimeEffectSupportMatrixCounts.
         |- GPU similarity investigation: `reports/wgsl-pipeline/2026-05-27-m31-gpu-similarity-investigation.md`
         |  classifies `DrawBitmapRect3*` and `DrawBitmapRectSkbug4734*` below-floor failures as implementation-regression candidates
@@ -2865,8 +2865,9 @@ tasks.register("pipelineSceneDashboardGate") {
             "m62-missing-glyph-fallback-refusal" to "font.missing-glyph-fallback-unsupported",
             "m63-wide-gamut-color-space-refusal" to "color.color-space-wide-gamut-unsupported",
             "m63-advanced-blend-chain-refusal" to "blend.advanced-chain-unsupported",
-            "m64-spiral-rt-wgsl-descriptor-refusal" to "runtime-effect.wgsl-descriptor-missing",
             "m64-arbitrary-sksl-runtime-effect-refusal" to "runtime-effect.arbitrary-sksl-unsupported",
+            "m64-spiral-rt-descriptor-backed" to "runtime-effect.spiral-visual-parity-below-threshold",
+            "m64-linear-gradient-rt-descriptor-backed" to "runtime-effect.linear-gradient-visual-parity-below-threshold",
             "m52-closed-capped-hairlines-edge-budget" to "coverage.edge-count-exceeded",
             "m52-big-tile-image-filter-dag-refusal" to "image-filter.dag-or-picture-prepass-required",
             "m52-color-emoji-blendmodes-refusal" to "font.color-glyph-emoji-unsupported",
@@ -2874,7 +2875,7 @@ tasks.register("pipelineSceneDashboardGate") {
             "m53-imagefilters-cropped-boundary" to "image-filter.crop-input-nonnull-prepass-required",
             "m54-imagefilters-graph-boundary" to "image-filter.dag-or-picture-prepass-required",
             "m54-dash-circle-boundary" to "coverage.edge-count-exceeded",
-            "m60-bounded-stroke-cap-join" to "coverage.stroke-cap-join-selector-diagnostics-unavailable",
+            "m60-bounded-stroke-cap-join" to "coverage.stroke-cap-join-visual-parity-below-threshold",
             "m60-bounded-nested-rrect-clip" to "coverage.nested-clip-visual-parity-below-threshold",
             "m66-path-aa-dashing-edge-budget-refusal" to "coverage.edge-count-exceeded",
             "m66-image-filter-crop-prepass-refusal" to "image-filter.crop-input-nonnull-prepass-required",

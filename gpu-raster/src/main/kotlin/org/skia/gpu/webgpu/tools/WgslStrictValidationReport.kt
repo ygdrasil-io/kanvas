@@ -73,13 +73,29 @@ object WgslStrictValidationReport {
         expectedBindings = setOf("uniforms@group=0,binding=0"),
         expectedUniformVariables = setOf("uniforms"),
     )
+    private val runtimeSpiralRtSpec = WgslStrictModuleSpec(
+        label = "registered/runtime_spiral_rt.wgsl",
+        expectedEntryPoints = setOf("vertex:vs_main", "fragment:fs_main"),
+        expectedBindings = setOf("uniforms@group=0,binding=0"),
+        expectedUniformVariables = setOf("uniforms"),
+    )
+    private val runtimeLinearGradientRtSpec = WgslStrictModuleSpec(
+        label = "registered/runtime_linear_gradient_rt.wgsl",
+        expectedEntryPoints = setOf("vertex:vs_main", "fragment:fs_main"),
+        expectedBindings = setOf("uniforms@group=0,binding=0"),
+        expectedUniformVariables = setOf("uniforms"),
+    )
 
     fun run(shaderRoot: Path = Path.of("src/main/resources/shaders")): WgslStrictValidationSummary {
+        val runtimeLinearGradientRt = shaderRoot.resolve("runtime_linear_gradient_rt.wgsl")
         val runtimeSimpleRt = shaderRoot.resolve("runtime_simple_rt.wgsl")
+        val runtimeSpiralRt = shaderRoot.resolve("runtime_spiral_rt.wgsl")
         val modules = listOf(
             validate(generatedSolidSpec, GeneratedSolidRectWgsl.generateDeterministic()),
             validate(generatedLinearGradientSpec, GeneratedLinearGradientWgsl.generateDeterministic()),
+            validate(runtimeLinearGradientRtSpec, Files.readString(runtimeLinearGradientRt)),
             validate(runtimeSimpleRtSpec, Files.readString(runtimeSimpleRt)),
+            validate(runtimeSpiralRtSpec, Files.readString(runtimeSpiralRt)),
         )
         return WgslStrictValidationSummary(modules)
     }
