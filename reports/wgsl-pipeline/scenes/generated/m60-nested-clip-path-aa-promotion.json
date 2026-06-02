@@ -186,15 +186,15 @@
         "resolvedRootCause": "color-space.target-blend-required",
         "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
         "targetColorSpaceBlend": true,
-        "targetColorSpaceBlendSimilarity": 95.37,
-        "targetColorSpaceBlendMatchingPixels": 23437,
-        "targetColorSpaceBlendMaxChannelDelta": 49,
+        "targetColorSpaceBlendSimilarity": 95.91,
+        "targetColorSpaceBlendMatchingPixels": 23572,
+        "targetColorSpaceBlendMaxChannelDelta": 48,
         "residualSummary": {
-          "mismatchPixels": 1139,
-          "oneUnitMismatchPixels": 1129,
+          "mismatchPixels": 1004,
+          "oneUnitMismatchPixels": 994,
           "greaterThanEightPixels": 10,
           "greaterThanThirtyTwoPixels": 6,
-          "maxChannelDelta": 49,
+          "maxChannelDelta": 48,
           "dominantMismatchRegion": "round-round"
         },
         "sourceArtifactScene": "m60-bounded-stroke-cap-join"

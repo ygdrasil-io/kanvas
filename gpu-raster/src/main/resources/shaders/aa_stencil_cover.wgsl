@@ -274,13 +274,20 @@ fn apply_target_colorspace_if_needed(c: vec4f) -> vec4f {
     return c;
 }
 
+fn quantize_rgba8_if_target_blend(c: vec4f) -> vec4f {
+    if (uniforms.colorFilterKindMode.z > 0.5) {
+        return floor(clamp(c, vec4f(0.0), vec4f(1.0)) * 255.0 + vec4f(0.5)) / 255.0;
+    }
+    return c;
+}
+
 @fragment
 fn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     var coverage = select(supersampled_path_cov(frag.xy), 1.0, uniforms.edgeCount == 0u);
     coverage = coverage * clip_cov(frag.xy);
     let c = apply_target_colorspace_if_needed(apply_color_filter(uniforms.color));
     let alpha = c.a * coverage;
-    return vec4f(c.rgb * alpha, alpha);
+    return quantize_rgba8_if_target_blend(vec4f(c.rgb * alpha, alpha));
 }
 
 @fragment
@@ -289,5 +296,5 @@ fn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     coverage = coverage * clip_cov(frag.xy);
     let c = apply_target_colorspace_if_needed(apply_color_filter(uniforms.color));
     let alpha = c.a * coverage;
-    return vec4f(c.rgb * alpha, alpha);
+    return quantize_rgba8_if_target_blend(vec4f(c.rgb * alpha, alpha));
 }

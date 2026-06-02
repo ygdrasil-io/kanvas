@@ -12,14 +12,14 @@
         "gpuMaxChannelDelta": 255,
         "gpuStatus": "expected-unsupported",
         "experimentalGpuStatus": "diagnostic-only",
-        "experimentalGpuSimilarity": 95.37,
-        "experimentalGpuMatchingPixels": 23437,
-        "experimentalGpuMaxChannelDelta": 49,
+        "experimentalGpuSimilarity": 95.91,
+        "experimentalGpuMatchingPixels": 23572,
+        "experimentalGpuMaxChannelDelta": 48,
         "experimentalGpuToleranceProfile": [
           {
     "tolerance": 0,
-    "similarity": 95.37,
-    "matchingPixels": 23437
+    "similarity": 95.91,
+    "matchingPixels": 23572
   },
   {
     "tolerance": 8,
@@ -45,12 +45,12 @@
         "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
         "targetColorSpaceBlend": true,
         "residualSummary": {
-  "mismatchPixels": 1139,
-  "oneUnitMismatchPixels": 1129,
+  "mismatchPixels": 1004,
+  "oneUnitMismatchPixels": 994,
   "greaterThanEightPixels": 10,
   "greaterThanThirtyTwoPixels": 6,
-  "maxChannelDelta": 49,
-  "classification": "mostly byte-exact target-color quantization residual; remaining >8 tail is localized to cap/join AA boundary pixels"
+  "maxChannelDelta": 48,
+  "classification": "mostly byte-exact target-color transform residual after RGBA8 source quantization; remaining >8 tail is localized to cap/join AA boundary pixels"
 },
         "pathVerbCount": 9,
         "pathVerbBudget": 96,
