@@ -153,6 +153,7 @@ class StrokeCapJoinSceneCaptureTest {
           "selectedRoute": "webgpu.coverage.refuse",
           "pipelineKey": "coverageKind=pathAaStrokeCapJoinBlocked pathFillRule=winding topology=triangleList budget=m60 source=LinePathGM-derived status=expected-unsupported",
           "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+          "rootCause": "color-space.target-blend-required",
           "pathVerbCount": 9,
           "pathVerbBudget": 96,
           "pathVerbReason": "not coverage.verb-budget-exceeded",
@@ -193,6 +194,7 @@ class StrokeCapJoinSceneCaptureTest {
               "selectedRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
               "normalRoute": "webgpu.coverage.refuse",
               "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+              "rootCause": "color-space.target-blend-required",
               "experimentalGpuSimilarity": ${String.format(Locale.US, "%.2f", experimentalGpuCmp.similarity)},
               "experimentalGpuMatchingPixels": ${experimentalGpuCmp.matchingPixels},
               "experimentalGpuMaxChannelDelta": ${experimentalGpuCmp.maxChannelDiff.max()},
@@ -205,7 +207,7 @@ class StrokeCapJoinSceneCaptureTest {
               "regions": [
             ${regionStats.joinToString(",\n") { it.toJson().prependIndent("    ") }}
               ],
-              "diagnosis": "Experimental render remains below the exact threshold. The 32-channel tolerance score reaches the threshold, which points to target-colorspace blending and AA quantization as the remaining blocker rather than missing stroke geometry. Normal route remains refused.",
+              "diagnosis": "Experimental render remains below the exact threshold. The 32-channel tolerance score reaches the threshold, which points to target-colorspace blending as the remaining blocker rather than missing stroke geometry. Normal route remains refused.",
               "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
             }
         """.trimIndent() + "\n"
@@ -243,6 +245,7 @@ class StrokeCapJoinSceneCaptureTest {
           "dominantMismatchRegion": ${dominant.id.jsonString()},
           "dominantMismatchDescription": ${dominant.description.jsonString()},
           "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+          "rootCause": "color-space.target-blend-required",
           "pathVerbCount": 9,
           "pathVerbBudget": 96,
           "edgeCount": 18,

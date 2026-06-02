@@ -103,6 +103,7 @@
       "gpuRoute": "webgpu.coverage.refuse",
       "pipelineKey": "coverageKind=pathAaStrokeCapJoinBlocked pathFillRule=winding topology=triangleList budget=m60 source=LinePathGM-derived status=expected-unsupported",
       "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "rootCause": "color-space.target-blend-required",
       "pixels": 24576,
       "matchingPixels": 0,
       "maxChannelDelta": 255,
@@ -150,6 +151,7 @@
         "deviceBoundsBudget": 2048,
         "deviceBoundsReason": "not coverage.bounds-budget-exceeded",
         "diagnosticsSource": "WebGpuCoveragePlanSelector stroke style facts plus stable adapter-backed refusal; parity promotion remains blocked.",
+        "rootCause": "color-space.target-blend-required",
         "test": "org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest#bounded stroke cap join scene captures visual parity blocker evidence"
       },
       "statsDetails": {
@@ -171,10 +173,11 @@
         "gpuSimilarity": 0.0,
         "gpuMatchingPixels": 0,
         "gpuMaxChannelDelta": 255,
+        "rootCause": "color-space.target-blend-required",
         "sourceArtifactScene": "m60-bounded-stroke-cap-join"
       },
-      "nonClaim": "Does not claim stroke cap/join WebGPU support, broad stroke support, hairline support, dash support, cubic stroke parity, or that WebGpuCoveragePlanSelector carries stroke style facts.",
-      "tags": ["source.generated", "source.cpu-oracle", "source.gm-derived", "feature.path-aa", "feature.stroke", "feature.stroke.cap", "feature.stroke.join", "feature.coverage.aa", "route.cpu.oracle", "route.gpu.expected-unsupported", "reference.cpu-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "nonClaim": "Does not claim stroke cap/join WebGPU support, broad stroke support, hairline support, dash support, cubic stroke parity, target-colorspace blending parity, or that WebGpuCoveragePlanSelector carries stroke style facts.",
+      "tags": ["source.generated", "source.cpu-oracle", "source.gm-derived", "feature.path-aa", "feature.stroke", "feature.stroke.cap", "feature.stroke.join", "feature.coverage.aa", "feature.color-space", "route.cpu.oracle", "route.gpu.expected-unsupported", "reference.cpu-oracle", "maturity.generated-evidence", "risk.expected-unsupported"]
     }
   ],
   "preservedUnsupportedRows": [

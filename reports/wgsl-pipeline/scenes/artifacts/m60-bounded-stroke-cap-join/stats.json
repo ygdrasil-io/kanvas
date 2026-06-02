@@ -40,6 +40,7 @@
       "dominantMismatchRegion": "round-round",
       "dominantMismatchDescription": "middle band: round cap with round join",
       "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "rootCause": "color-space.target-blend-required",
       "pathVerbCount": 9,
       "pathVerbBudget": 96,
       "edgeCount": 18,

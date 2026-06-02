@@ -7,6 +7,7 @@
           "selectedRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
           "normalRoute": "webgpu.coverage.refuse",
           "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+          "rootCause": "color-space.target-blend-required",
           "experimentalGpuSimilarity": 89.60,
           "experimentalGpuMatchingPixels": 22019,
           "experimentalGpuMaxChannelDelta": 39,
@@ -61,6 +62,6 @@
   "maxChannelDelta": 22
 }
           ],
-          "diagnosis": "Experimental render remains below the exact threshold. The 32-channel tolerance score reaches the threshold, which points to target-colorspace blending and AA quantization as the remaining blocker rather than missing stroke geometry. Normal route remains refused.",
+          "diagnosis": "Experimental render remains below the exact threshold. The 32-channel tolerance score reaches the threshold, which points to target-colorspace blending as the remaining blocker rather than missing stroke geometry. Normal route remains refused.",
           "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
         }
