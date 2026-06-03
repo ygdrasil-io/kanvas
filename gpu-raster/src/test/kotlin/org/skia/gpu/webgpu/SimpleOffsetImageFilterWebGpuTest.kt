@@ -1,6 +1,7 @@
 package org.skia.gpu.webgpu
 
 import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
@@ -10,6 +11,8 @@ import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.testing.TestUtils
 import org.skia.tests.SimpleOffsetImageFilterGM
 import java.io.File
+import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
 
 /**
  * O6 cross-test : `SimpleOffsetImageFilterGM`
@@ -209,6 +212,48 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-252 color reference bias audit compares non image filter samples`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val gm = SimpleOffsetImageFilterGM()
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "original-888/${gm.name()}.png missing")
+
+        context!!.use { ctx ->
+            val gpu = WebGpuSink.draw(ctx, gm)
+            val probe = buildFor252ColorReferenceBiasAuditProbe(reference!!, gpu)
+            assertEquals(
+                3,
+                probe.sampleCount,
+                "FOR-252: audit must cover SimpleOffset no-filter plus two non image-filter scenes",
+            )
+            assertTrue(
+                probe.samples.all { !it.imageFilterInPath },
+                "FOR-252: every audited sample must stay outside image-filter routing",
+            )
+            assertEquals(
+                1600,
+                probe.samples.single { it.id == "simple-offsetimagefilter.row1-col0-no-filter" }.residualPixels,
+                "FOR-252: SimpleOffset no-filter cell must keep reproducing the FOR-251 RGB byte tail",
+            )
+            assertEquals(
+                1,
+                probe.maxChannelDelta,
+                "FOR-252: non image-filter audit should not find a larger bounded renderer bug",
+            )
+            assertEquals(
+                0,
+                probe.alphaDeltaNonZeroPixels,
+                "FOR-252: alpha deltas would change the premultiplication diagnosis",
+            )
+            if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                writeFor252ColorReferenceBiasAuditJson(probe)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -335,6 +380,146 @@ class SimpleOffsetImageFilterWebGpuTest {
         )
     }
 
+    private fun buildFor252ColorReferenceBiasAuditProbe(
+        simpleOffsetReference: SkBitmap,
+        simpleOffsetGpu: SkBitmap,
+    ): For252ColorReferenceBiasAuditProbe {
+        val simpleOffsetCell = SIMPLE_OFFSET_CELLS.first { it.id == "row1-col0-no-filter" }
+        val sampleResults = listOf(
+            buildFor252SimpleOffsetCellSample(
+                id = "simple-offsetimagefilter.row1-col0-no-filter",
+                sceneId = "simple-offsetimagefilter",
+                label = "SimpleOffset row1 col0 source-only cell",
+                route = "webgpu.canvas.draw-rect.src-over",
+                cell = simpleOffsetCell,
+                reference = simpleOffsetReference,
+                gpu = simpleOffsetGpu,
+            ),
+            buildFor252ArtifactSceneSample(
+                id = "bitmap-rect-nearest.whole-scene",
+                sceneId = "bitmap-rect-nearest",
+                label = "bitmap-rect-nearest generated whole scene",
+                route = "webgpu.image-rect.strict-nearest",
+                referencePath = "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/skia.png",
+                gpuPath = "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/gpu.png",
+            ),
+            buildFor252ArtifactSceneSample(
+                id = "linear-gradient-rect.whole-scene",
+                sceneId = "linear-gradient-rect",
+                label = "linear-gradient-rect generated whole scene",
+                route = "webgpu.generated.linear-gradient.rect",
+                referencePath = "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/skia.png",
+                gpuPath = "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/gpu.png",
+            ),
+        )
+        val samples = sampleResults.map { it.sample }
+        val residualPixels = sampleResults.flatMap { it.residualPixels }
+        return For252ColorReferenceBiasAuditProbe(
+            sampleCount = samples.size,
+            samples = samples,
+            totalPixels = samples.sumOf { it.totalPixels },
+            totalResidualPixels = samples.sumOf { it.residualPixels },
+            maxChannelDelta = samples.maxOf { it.maxChannelDelta },
+            alphaDeltaNonZeroPixels = samples.sumOf { it.alphaDeltaNonZeroPixels },
+            rgbOnlyResidualPixels = samples.sumOf { it.rgbOnlyResidualPixels },
+            signedDeltaHistogram = signedDeltaHistograms(residualPixels),
+            samplesWithRgbByteResidual = samples
+                .filter { it.residualPixels > 0 && it.maxChannelDelta == 1 && it.alphaDeltaNonZeroPixels == 0 }
+                .map { it.id },
+            samplesWithoutResidual = samples.filter { it.residualPixels == 0 }.map { it.id },
+        )
+    }
+
+    private fun buildFor252SimpleOffsetCellSample(
+        id: String,
+        sceneId: String,
+        label: String,
+        route: String,
+        cell: SimpleOffsetCell,
+        reference: SkBitmap,
+        gpu: SkBitmap,
+    ): For252SampleBuildResult {
+        val pixels = mutableListOf<PixelDelta>()
+        for (y in cell.originY until cell.originY + CELL_EXTENT) {
+            for (x in cell.originX until cell.originX + CELL_EXTENT) {
+                pixels += pixelDelta(reference, gpu, x, y)
+            }
+        }
+        return buildFor252Sample(
+            id = id,
+            sceneId = sceneId,
+            label = label,
+            sourceKind = "skia-upstream-reference-vs-live-webgpu",
+            route = route,
+            bounds = intArrayOf(cell.originX, cell.originY, cell.originX + CELL_EXTENT, cell.originY + CELL_EXTENT),
+            totalPixels = CELL_EXTENT * CELL_EXTENT,
+            pixels = pixels,
+        )
+    }
+
+    private fun buildFor252ArtifactSceneSample(
+        id: String,
+        sceneId: String,
+        label: String,
+        route: String,
+        referencePath: String,
+        gpuPath: String,
+    ): For252SampleBuildResult {
+        val reference = readEvidencePng(referencePath)
+        val gpu = readEvidencePng(gpuPath)
+        require(reference.width == gpu.width && reference.height == gpu.height) {
+            "FOR-252 requires same-size generated artifact bitmaps for $sceneId"
+        }
+        val pixels = mutableListOf<PixelDelta>()
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                pixels += pixelDelta(reference, gpu, x, y)
+            }
+        }
+        return buildFor252Sample(
+            id = id,
+            sceneId = sceneId,
+            label = label,
+            sourceKind = "generated-scene-artifact-reference-vs-gpu",
+            route = route,
+            bounds = intArrayOf(0, 0, reference.width, reference.height),
+            totalPixels = reference.width * reference.height,
+            pixels = pixels,
+        )
+    }
+
+    private fun buildFor252Sample(
+        id: String,
+        sceneId: String,
+        label: String,
+        sourceKind: String,
+        route: String,
+        bounds: IntArray,
+        totalPixels: Int,
+        pixels: List<PixelDelta>,
+    ): For252SampleBuildResult {
+        val residualPixels = pixels.filter { it.maxChannelDelta > 0 }
+        return For252SampleBuildResult(
+            sample = For252NonImageFilterSample(
+                id = id,
+                sceneId = sceneId,
+                label = label,
+                sourceKind = sourceKind,
+                route = route,
+                bounds = bounds,
+                imageFilterInPath = false,
+                totalPixels = totalPixels,
+                residualPixels = residualPixels.size,
+                maxChannelDelta = pixels.maxOfOrNull { it.maxChannelDelta } ?: 0,
+                alphaDeltaNonZeroPixels = residualPixels.count { it.signedDelta[3] != 0 },
+                rgbOnlyResidualPixels = residualPixels.count { it.signedDelta[3] == 0 },
+                signedDeltaHistogram = signedDeltaHistograms(residualPixels),
+                topColorPairs = topColorPairs(residualPixels, COLOR_PAIR_TOP_N),
+            ),
+            residualPixels = residualPixels,
+        )
+    }
+
     private fun buildCellAggregate(
         cell: SimpleOffsetCell,
         pixels: List<ClassifiedPixelDelta>,
@@ -398,6 +583,35 @@ class SimpleOffsetImageFilterWebGpuTest {
             gpu = gpuRgba,
             delta = delta,
         )
+    }
+
+    private fun pixelDelta(reference: BufferedImage, gpu: BufferedImage, x: Int, y: Int): PixelDelta {
+        val referenceRgba = rgbaAt(reference, x, y)
+        val gpuRgba = rgbaAt(gpu, x, y)
+        val delta = IntArray(4) { i -> kotlin.math.abs(referenceRgba[i] - gpuRgba[i]) }
+        return PixelDelta(
+            x = x,
+            y = y,
+            reference = referenceRgba,
+            gpu = gpuRgba,
+            delta = delta,
+        )
+    }
+
+    private fun rgbaAt(image: BufferedImage, x: Int, y: Int): IntArray {
+        val pixel = image.getRGB(x, y)
+        return intArrayOf(
+            (pixel ushr 16) and 0xFF,
+            (pixel ushr 8) and 0xFF,
+            pixel and 0xFF,
+            (pixel ushr 24) and 0xFF,
+        )
+    }
+
+    private fun readEvidencePng(path: String): BufferedImage {
+        val file = repoFile(path)
+        require(file.isFile) { "FOR-252 missing evidence PNG: $path" }
+        return ImageIO.read(file) ?: error("FOR-252 failed to read evidence PNG: $path")
     }
 
     private fun signedDeltaHistograms(pixels: List<PixelDelta>): List<Map<Int, Int>> =
@@ -662,6 +876,44 @@ class SimpleOffsetImageFilterWebGpuTest {
         )
     }
 
+    private fun writeFor252ColorReferenceBiasAuditJson(probe: For252ColorReferenceBiasAuditProbe) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/color-reference-bias-audit-for252",
+        ).apply { mkdirs() }
+        File(dir, "color-reference-bias-audit-for252.json").writeText(
+            """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "mixed skia-upstream and generated-scene oracle",
+              "linear": "FOR-252",
+              "probe": "non-image-filter-color-reference-bias-audit",
+              "deltaDefinition": "signed channel delta is GPU minus reference",
+              "sampleCount": ${probe.sampleCount},
+              "totalPixels": ${probe.totalPixels},
+              "totalResidualPixels": ${probe.totalResidualPixels},
+              "maxChannelDelta": ${probe.maxChannelDelta},
+              "alphaDeltaNonZeroPixels": ${probe.alphaDeltaNonZeroPixels},
+              "rgbOnlyResidualPixels": ${probe.rgbOnlyResidualPixels},
+              "signedDeltaHistogram": ${signedDeltaHistogramToJson(probe.signedDeltaHistogram, indent = "              ")},
+              "samplesWithRgbByteResidual": [
+            ${probe.samplesWithRgbByteResidual.joinToString(",\n") { "                \"$it\"" }}
+              ],
+              "samplesWithoutResidual": [
+            ${probe.samplesWithoutResidual.joinToString(",\n") { "                \"$it\"" }}
+              ],
+              "samples": [
+            ${probe.samples.joinToString(",\n") { it.toJson(indent = "                ") }}
+              ],
+              "interpretation": "The RGB-only one-byte tail reproduces outside image-filter routing in SimpleOffset row1-col0-no-filter and bitmap-rect-nearest, while linear-gradient-rect remains byte-exact. This distinguishes the remaining SimpleOffset score loss from a bounded Crop renderer defect; no threshold, fallback, or Crop correction is justified.",
+              "observationMethod": "test-side Skia reference PNG plus live WebGPU readback for the SimpleOffset source-only cell, and generated scene artifact skia.png/gpu.png comparisons for non image-filter baseline scenes; no renderer diagnostic property, no CPU/readback fallback in the render path",
+              "supportDecision": "KEEP_DIAGNOSTIC",
+              "correctionApplied": false,
+              "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+            }
+            """.trimIndent() + "\n",
+        )
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -692,6 +944,28 @@ class SimpleOffsetImageFilterWebGpuTest {
           "origin": ${jsonArray(origin)},
           "bounds": ${jsonArray(bounds)},
           "case": "$case",
+          "residualPixels": $residualPixels,
+          "maxChannelDelta": $maxChannelDelta,
+          "alphaDeltaNonZeroPixels": $alphaDeltaNonZeroPixels,
+          "rgbOnlyResidualPixels": $rgbOnlyResidualPixels,
+          "signedDeltaHistogram": ${signedDeltaHistogramToJson(signedDeltaHistogram, indent = "$indent  ")},
+          "topColorPairs": [
+        ${topColorPairs.joinToString(",\n") { it.toJson(indent = "$indent    ") }}
+          ]
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For252NonImageFilterSample.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "sceneId": "$sceneId",
+          "label": "$label",
+          "sourceKind": "$sourceKind",
+          "route": "$route",
+          "bounds": ${jsonArray(bounds)},
+          "imageFilterInPath": $imageFilterInPath,
+          "totalPixels": $totalPixels,
           "residualPixels": $residualPixels,
           "maxChannelDelta": $maxChannelDelta,
           "alphaDeltaNonZeroPixels": $alphaDeltaNonZeroPixels,
@@ -955,5 +1229,40 @@ class SimpleOffsetImageFilterWebGpuTest {
         val signedDeltaHistogram: List<Map<Int, Int>>,
         val topColorPairs: List<ColorPairGroup>,
         val dominantCellAggregates: List<ColorPremulCellAggregate>,
+    )
+
+    private data class For252SampleBuildResult(
+        val sample: For252NonImageFilterSample,
+        val residualPixels: List<PixelDelta>,
+    )
+
+    private data class For252NonImageFilterSample(
+        val id: String,
+        val sceneId: String,
+        val label: String,
+        val sourceKind: String,
+        val route: String,
+        val bounds: IntArray,
+        val imageFilterInPath: Boolean,
+        val totalPixels: Int,
+        val residualPixels: Int,
+        val maxChannelDelta: Int,
+        val alphaDeltaNonZeroPixels: Int,
+        val rgbOnlyResidualPixels: Int,
+        val signedDeltaHistogram: List<Map<Int, Int>>,
+        val topColorPairs: List<ColorPairGroup>,
+    )
+
+    private data class For252ColorReferenceBiasAuditProbe(
+        val sampleCount: Int,
+        val samples: List<For252NonImageFilterSample>,
+        val totalPixels: Int,
+        val totalResidualPixels: Int,
+        val maxChannelDelta: Int,
+        val alphaDeltaNonZeroPixels: Int,
+        val rgbOnlyResidualPixels: Int,
+        val signedDeltaHistogram: List<Map<Int, Int>>,
+        val samplesWithRgbByteResidual: List<String>,
+        val samplesWithoutResidual: List<String>,
     )
 }
