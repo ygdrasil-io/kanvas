@@ -1,0 +1,449 @@
+{
+  "linear": "FOR-288",
+  "parent": "FOR-241",
+  "probe": "m60-outer-boundary-store-order-audit",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/Reference/WebGPU",
+  "sourceAudits": {
+    "for281": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-mask-filter-clip-coverage-trace-for281.json",
+    "for286": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-active-aa-difference-store-trace-for286.json"
+  },
+  "sourceImages": {
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png",
+    "cpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png",
+    "gpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png"
+  },
+  "for287CanceledAttempt": {
+    "status": "canceled_not_merged",
+    "source": "Linear FOR-287 and orchestrator memory",
+    "attemptedChange": "Pre-clip the A8 source mask by activeAaClip difference before blur, then avoid the second AA modulation at store for A8 SrcIn + SrcOver.",
+    "globalBefore": {
+      "readbackRedDominantPixels": 9,
+      "readbackWhiteLayerPixels": 78,
+      "cpuSimilarity": 97.31,
+      "cpuReferenceGreaterThanThirtyTwoPixels": 15726
+    },
+    "globalAfter": {
+      "readbackRedDominantPixels": 50,
+      "readbackWhiteLayerPixels": 59,
+      "cpuSimilarity": 97.13,
+      "cpuReferenceGreaterThanThirtyTwoPixels": 16785
+    },
+    "zoneAfter": {
+      "draw_oval_outer_boundary": {
+        "readbackWhiteLayerPixels": 59,
+        "improved": false
+      },
+      "difference_oval_inner_boundary": {
+        "readbackWhiteLayerPixels": 0,
+        "improved": true
+      },
+      "halo_interior": {
+        "readbackWhiteLayerPixels": 0,
+        "improved": true
+      }
+    },
+    "mergeDecision": "not_mergeable_score_regression"
+  },
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "NEXT_FIX_INSTRUMENT_CPU_ACTIVE_AA_DIFFERENCE_STORE_CHRONOLOGY_FOR_OUTER_BOUNDARY",
+  "primaryClassification": "OTHER_LATER_WRITE_AFTER_RECONSTRUCTED_RED_STORE",
+  "nextAction": "TRACE_ACTUAL_RUNTIME_WRITES_FOR_DRAW_OVAL_OUTER_BOUNDARY",
+  "route": {
+    "cpu": "cpu.coverage.nested-rrect-clip-oracle",
+    "gpu": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "coverageStrategy": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold",
+    "sourceNeedles": {
+      "gmDrawsWhiteBeforeDifferenceClipRedOval": true,
+      "gmHasNoAuthoredDrawAfterRedOval": true,
+      "gmUsesDifferenceClipBeforeRedOval": true
+    }
+  },
+  "zoneComparisons": [
+    {
+      "subzone": "draw_oval_outer_boundary",
+      "for287ImprovedWhiteLayerReadback": false,
+      "for287AfterWhiteLayerPixels": 59,
+      "targetPixels": 59,
+      "maskSupport": {
+        "maskPixels": 59,
+        "zeroMaskPixelsOnTarget": 0,
+        "status": "present_nonzero"
+      },
+      "blurSource": {
+        "maskAAfterBlurBuckets": {
+          "buckets": {
+            "zero": 0,
+            "partial": 59,
+            "full": 0
+          },
+          "min": 6,
+          "max": 251,
+          "mean": 158.694915
+        },
+        "allTargetPixelsHavePartialBlurAlpha": true,
+        "hasFullBlurAlphaPixels": false
+      },
+      "clipCoverage": {
+        "clipCoverageBuckets": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 59
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "allTargetPixelsFullClipCoverage": true,
+        "hasPartialClipCoveragePixels": false
+      },
+      "alphaAfterBlurAndClip": {
+        "srcAlphaAfterClipBuckets": {
+          "buckets": {
+            "zero": 0,
+            "partial": 59,
+            "full": 0
+          },
+          "min": 6,
+          "max": 251,
+          "mean": 158.694915
+        },
+        "zeroSrcAlphaAfterClipPixels": 0
+      },
+      "dispatchSource": {
+        "dispatchWouldRunPixels": 59,
+        "dispatchInputRedPayloadPixels": 59,
+        "anchorDispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          250
+        ]
+      },
+      "reconstructedStore": {
+        "writeRedTintPixels": 59,
+        "writeOpaqueSrcFastPathPixels": 0,
+        "writePartialSrcFastPathPixels": 59,
+        "anchorWriteBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "anchorValueWrittenRgba": [
+          255,
+          5,
+          5,
+          255
+        ],
+        "writtenVsReadBackGreaterThanThirtyTwoPixels": 52
+      },
+      "finalReadback": {
+        "readBackRedDominantPixels": 0,
+        "readBackWhiteLayerPixels": 59,
+        "anchorReadBackAfterDrawRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      "anchor": {
+        "x": 99,
+        "y": 89,
+        "maskAAfterBlur": 250,
+        "coverageAppliedInBlend": 255,
+        "srcAlphaAfterClipModulation": 250,
+        "referenceRgba": [
+          203,
+          65,
+          31,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ]
+      }
+    },
+    {
+      "subzone": "difference_oval_inner_boundary",
+      "for287ImprovedWhiteLayerReadback": true,
+      "for287AfterWhiteLayerPixels": 0,
+      "targetPixels": 18,
+      "maskSupport": {
+        "maskPixels": 67,
+        "zeroMaskPixelsOnTarget": 0,
+        "status": "present_nonzero"
+      },
+      "blurSource": {
+        "maskAAfterBlurBuckets": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 18
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "allTargetPixelsHavePartialBlurAlpha": false,
+        "hasFullBlurAlphaPixels": true
+      },
+      "clipCoverage": {
+        "clipCoverageBuckets": {
+          "buckets": {
+            "zero": 0,
+            "partial": 10,
+            "full": 8
+          },
+          "min": 32,
+          "max": 255,
+          "mean": 189.777778
+        },
+        "allTargetPixelsFullClipCoverage": false,
+        "hasPartialClipCoveragePixels": true
+      },
+      "alphaAfterBlurAndClip": {
+        "srcAlphaAfterClipBuckets": {
+          "buckets": {
+            "zero": 0,
+            "partial": 10,
+            "full": 8
+          },
+          "min": 32,
+          "max": 255,
+          "mean": 189.777778
+        },
+        "zeroSrcAlphaAfterClipPixels": 0
+      },
+      "dispatchSource": {
+        "dispatchWouldRunPixels": 18,
+        "dispatchInputRedPayloadPixels": 18,
+        "anchorDispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          255
+        ]
+      },
+      "reconstructedStore": {
+        "writeRedTintPixels": 18,
+        "writeOpaqueSrcFastPathPixels": 8,
+        "writePartialSrcFastPathPixels": 10,
+        "anchorWriteBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+        "anchorValueWrittenRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "writtenVsReadBackGreaterThanThirtyTwoPixels": 17
+      },
+      "finalReadback": {
+        "readBackRedDominantPixels": 3,
+        "readBackWhiteLayerPixels": 14,
+        "anchorReadBackAfterDrawRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      "anchor": {
+        "x": 262,
+        "y": 17,
+        "maskAAfterBlur": 255,
+        "coverageAppliedInBlend": 255,
+        "srcAlphaAfterClipModulation": 255,
+        "referenceRgba": [
+          202,
+          59,
+          18,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          59,
+          19,
+          255
+        ]
+      }
+    },
+    {
+      "subzone": "halo_interior",
+      "for287ImprovedWhiteLayerReadback": true,
+      "for287AfterWhiteLayerPixels": 0,
+      "targetPixels": 12,
+      "maskSupport": {
+        "maskPixels": 22,
+        "zeroMaskPixelsOnTarget": 0,
+        "status": "present_nonzero"
+      },
+      "blurSource": {
+        "maskAAfterBlurBuckets": {
+          "buckets": {
+            "zero": 0,
+            "partial": 2,
+            "full": 10
+          },
+          "min": 254,
+          "max": 255,
+          "mean": 254.833333
+        },
+        "allTargetPixelsHavePartialBlurAlpha": false,
+        "hasFullBlurAlphaPixels": true
+      },
+      "clipCoverage": {
+        "clipCoverageBuckets": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 12
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "allTargetPixelsFullClipCoverage": true,
+        "hasPartialClipCoveragePixels": false
+      },
+      "alphaAfterBlurAndClip": {
+        "srcAlphaAfterClipBuckets": {
+          "buckets": {
+            "zero": 0,
+            "partial": 2,
+            "full": 10
+          },
+          "min": 254,
+          "max": 255,
+          "mean": 254.833333
+        },
+        "zeroSrcAlphaAfterClipPixels": 0
+      },
+      "dispatchSource": {
+        "dispatchWouldRunPixels": 12,
+        "dispatchInputRedPayloadPixels": 12,
+        "anchorDispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          255
+        ]
+      },
+      "reconstructedStore": {
+        "writeRedTintPixels": 12,
+        "writeOpaqueSrcFastPathPixels": 10,
+        "writePartialSrcFastPathPixels": 2,
+        "anchorWriteBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+        "anchorValueWrittenRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "writtenVsReadBackGreaterThanThirtyTwoPixels": 12
+      },
+      "finalReadback": {
+        "readBackRedDominantPixels": 6,
+        "readBackWhiteLayerPixels": 5,
+        "anchorReadBackAfterDrawRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      "anchor": {
+        "x": 226,
+        "y": 21,
+        "maskAAfterBlur": 255,
+        "coverageAppliedInBlend": 255,
+        "srcAlphaAfterClipModulation": 255,
+        "referenceRgba": [
+          202,
+          60,
+          20,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          59,
+          19,
+          255
+        ]
+      }
+    }
+  ],
+  "for287ImprovementContrast": {
+    "evidence": "FOR-287 moved global readback red-dominant pixels 9 -> 50 and white/layer 78 -> 59; inner and halo reached 0 white/layer, while outer stayed exactly 59 white/layer. The surviving 59 pixels match the FOR-286 outer window cardinality.",
+    "comparison": {
+      "outerStayedWhite": 59,
+      "innerAfterWhite": 0,
+      "haloAfterWhite": 0
+    }
+  },
+  "causeMatrix": {
+    "sourceMaskOrBlurSupport": {
+      "selected": false,
+      "confidence": "high",
+      "evidence": "All three zones have non-zero mask support on CPU/reference >32 targets. The outer boundary has 59/59 partial blur-alpha pixels, so the source is present; it is not a zero-source miss."
+    },
+    "preClipTooEarlyOrTooLate": {
+      "selected": false,
+      "confidence": "medium",
+      "evidence": "The canceled FOR-287 pre-clip attempt fixed the zones with inner/halo white readback, but outer remained 59 white/layer pixels. Outer has full active-AA clip coverage on 59/59 targets, so changing the difference pre-clip timing is effectively not the discriminating variable there."
+    },
+    "aaCoverageDifference": {
+      "selected": false,
+      "confidence": "high",
+      "evidence": "Outer has full clip coverage on 59/59 targets, while inner has partial clip coverage on 10/18 targets. The failure persists where clip AA is not partial."
+    },
+    "whiteDrawRedDrawOrder": {
+      "selected": false,
+      "confidence": "medium",
+      "evidence": "The GM source draws the white kSrc background before the difference-clipped red oval, and the source has no authored white draw after c.drawRRect(rr, paint). The symptom is therefore not a simple GM command order inversion."
+    },
+    "otherLaterWrite": {
+      "selected": true,
+      "confidence": "high",
+      "evidence": "FOR-286 reconstructs red-tinted written values for 89/89 targets, including 59/59 outer pixels. The committed outer readback is still 59/59 white/layer after FOR-286 and remains 59 after the canceled FOR-287 attempt, which points to a later overwrite or commit/order path after the reconstructed red store rather than payload, clip coverage, or SrcOver math."
+    },
+    "proofInsufficient": {
+      "selected": false,
+      "confidence": "medium",
+      "evidence": "The existing artifacts are sufficient to choose the next audit target. They are not a production fix: the next correction should first instrument actual runtime write chronology for the outer boundary pixels."
+    }
+  },
+  "decisionRationale": "draw_oval_outer_boundary is the only FOR-287 survivor because it sits in the full-clip outer blur band: its mask/blur source is non-zero and its clip coverage is full, so the canceled pre-clip change does not address the discriminating condition. FOR-286 still reconstructs a red-tinted store for every outer target, but final readback is white/layer for every one. The most likely next target is a later CPU store/commit/order write after the reconstructed red store, not source mask support, AA coverage, authored GM draw order, global blend, setPixel, GPU/WebGPU, or thresholds.",
+  "fullSceneM60": {
+    "cpuSimilarity": 97.31,
+    "cpuMatchingPixels": 908439,
+    "cpuMaxChannelDelta": 237,
+    "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
+    "gpuSimilarity": 98.48,
+    "gpuMatchingPixels": 919363,
+    "gpuMaxChannelDelta": 57,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 2869
+  },
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuRendererChanged": false,
+    "gpuRendererChanged": false,
+    "globalBlendChanged": false,
+    "setPixelChanged": false,
+    "m60Promoted": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
