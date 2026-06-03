@@ -1,0 +1,90 @@
+{
+  "linear": "FOR-284",
+  "parent": "FOR-241",
+  "probe": "cpu-mask-filter-a8-srcin-payload-patch",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/Reference/WebGPU",
+  "patchDecision": "CPU_MASK_FILTER_A8_SOLID_COLOR_FILTER_PAYLOAD_PATCH_APPLIED",
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED_AFTER_TARGETED_CPU_PAYLOAD_PATCH",
+  "sourceAudits": {
+    "for283": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-dispatch-blend-store-trace-for283.json"
+  },
+  "sourceImages": {
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png",
+    "cpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png",
+    "gpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png"
+  },
+  "patchScope": {
+    "productionFiles": [
+      "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt"
+    ],
+    "testFiles": [
+      "kanvas-skia/src/test/kotlin/org/skia/core/For275CpuSrcInBlurLayerFixtureTest.kt"
+    ],
+    "globalBlendChanged": false,
+    "setPixelChanged": false,
+    "gpuChanged": false,
+    "coordinatePatch": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false
+  },
+  "payloadContract": {
+    "beforeFor283TargetPixels": 89,
+    "beforeDispatchRedPayloadPixels": 89,
+    "beforeBlendRedTintPixels": 89,
+    "beforeCpuReadbackRedDominantPixels": 9,
+    "beforeCpuWhiteLayerPixels": 78,
+    "patch": "A8 solid color-filter branch now builds the masked source alpha, applies the paint Blend(...,kSrcIn) colorFilter to that per-mask source, then dispatches the filtered payload.",
+    "unitTest": "For275CpuSrcInBlurLayerFixtureTest.FOR-284 compares every non-zero A8 mask pixel against Blend(RED,kSrcIn)+SrcOver over white with max delta <= 1."
+  },
+  "m60Before": {
+    "cpuSimilarity": 97.31,
+    "cpuMatchingPixels": 908439,
+    "cpuMaxChannelDelta": 237,
+    "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
+    "gpuSimilarity": 98.48,
+    "gpuMatchingPixels": 919363,
+    "gpuMaxChannelDelta": 57,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 2869
+  },
+  "m60After": {
+    "cpuSimilarity": 97.31,
+    "cpuMatchingPixels": 908439,
+    "cpuMaxChannelDelta": 237,
+    "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
+    "integrationTestSimilarity": 97.31,
+    "integrationTestMatchingPixels": 908439,
+    "integrationTestMaxChannelDeltaRgba": [
+      0,
+      53,
+      196,
+      237
+    ],
+    "gpuSimilarity": 98.48,
+    "gpuMatchingPixels": 919363,
+    "gpuMaxChannelDelta": 57,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 2869
+  },
+  "route": {
+    "cpu": "cpu.coverage.nested-rrect-clip-oracle",
+    "gpu": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "coverageStrategy": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  },
+  "decisionRationale": "The targeted CPU callsite patch codifies the A8 solid color-filter payload contract and the Kotlin fixture proves Blend(RED,kSrcIn) over the generated mask. M60 full-scene CPU/reference metrics remain at the FOR-283 level, so this is not sufficient evidence to promote the scene or change GPU/coverage diagnostics.",
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "gpuRendererChanged": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
