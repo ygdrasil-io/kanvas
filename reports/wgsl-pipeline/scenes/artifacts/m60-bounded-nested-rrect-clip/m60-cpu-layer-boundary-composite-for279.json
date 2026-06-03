@@ -1,0 +1,132 @@
+{
+  "linear": "FOR-279",
+  "parent": "FOR-241",
+  "probe": "cpu-layer-boundary-composite-refusal",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/Reference/WebGPU",
+  "sourceAudits": {
+    "for277": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-post-for276-cpu-residual-audit-for277.json",
+    "for278": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-boundary-layer-composite-fixture-for278.json"
+  },
+  "sourceImages": {
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png",
+    "cpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png",
+    "gpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png"
+  },
+  "sourceTest": "org.skia.gpu.webgpu.NestedClipSceneCaptureTest",
+  "artifactRoot": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip",
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "REFUSE_CORRECTION_PENDING_DEEPER_LAYER_COMPOSITE_MODEL",
+  "decisionRationale": "FOR-279 refuses a production CPU correction in this ticket. The isolated FOR-278 pixels are real, but the GM does not exercise saveLayer composite. FOR-275 already showed that a minimized saveLayer-vs-direct fixture is identical, and FOR-276 moved the bounded mask-source ordering fixture without moving full-scene M60 counters. The next safe implementation needs a deeper AA difference-clip coverage model, not a special background/layer patch.",
+  "route": {
+    "cpu": "cpu.coverage.nested-rrect-clip-oracle",
+    "gpu": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "coverageStrategy": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required"
+  },
+  "responsibleCpuPath": [
+    {
+      "file": "skia-integration-tests/src/main/kotlin/org/skia/tests/BlurredClippedCircleGM.kt",
+      "function": "BlurredClippedCircleGM.onDraw",
+      "role": "scene issues save/clipRRect(kDifference)/drawRRect; no saveLayer composite is in the draw stack"
+    },
+    {
+      "file": "kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt",
+      "function": "SkCanvas.clipPathDifference",
+      "role": "builds the SkAAClip difference mask used by the following draw"
+    },
+    {
+      "file": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+      "function": "SkBitmapDevice.drawPathWithMaskFilter",
+      "role": "generates blur source, then composites through final clipCoverage and blend dispatch"
+    }
+  ],
+  "excludedPath": {
+    "file": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+    "function": "SkBitmapDevice.compositeFrom",
+    "reason": "not exercised by BlurredClippedCircleGM because the GM uses save/restore, not saveLayer/restore"
+  },
+  "for278RegeneratedMatchesSource": true,
+  "metrics": {
+    "rendererPatchApplied": false,
+    "reason": "The named layer-composite correction is refused because the source GM uses save/restore, not saveLayer. The observed white/background pixels therefore flow through the CPU AA difference-clip mask-filter draw path, and a targeted layer composite patch would not be causal.",
+    "for278BoundaryWindows": {
+      "before": {
+        "maskPixels": 148,
+        "cpuReferenceGreaterThanThirtyTwoPixels": 89,
+        "cpuWhiteLayerPixels": 78,
+        "cpuWhiteLayerShare": 87.640449,
+        "cpuAlphaGreaterThanThirtyTwoPixels": 0,
+        "gpuReferenceGreaterThanThirtyTwoPixels": 11,
+        "maxChannelDelta": 237
+      },
+      "afterNoRendererPatch": {
+        "maskPixels": 148,
+        "cpuReferenceGreaterThanThirtyTwoPixels": 89,
+        "cpuWhiteLayerPixels": 78,
+        "cpuWhiteLayerShare": 87.640449,
+        "cpuAlphaGreaterThanThirtyTwoPixels": 0,
+        "gpuReferenceGreaterThanThirtyTwoPixels": 11,
+        "maxChannelDelta": 237
+      },
+      "delta": {
+        "cpuReferenceGreaterThanThirtyTwoPixels": 0,
+        "cpuWhiteLayerPixels": 0,
+        "maxChannelDelta": 0
+      }
+    },
+    "fullSceneM60": {
+      "before": {
+        "cpuSimilarity": 97.31,
+        "cpuMatchingPixels": 908439,
+        "cpuMaxChannelDelta": 237,
+        "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
+        "gpuSimilarity": 98.48,
+        "gpuMatchingPixels": 919363,
+        "gpuMaxChannelDelta": 57,
+        "gpuReferenceGreaterThanThirtyTwoPixels": 2869
+      },
+      "afterNoRendererPatch": {
+        "cpuSimilarity": 97.31,
+        "cpuMatchingPixels": 908439,
+        "cpuMaxChannelDelta": 237,
+        "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
+        "gpuSimilarity": 98.48,
+        "gpuMatchingPixels": 919363,
+        "gpuMaxChannelDelta": 57,
+        "gpuReferenceGreaterThanThirtyTwoPixels": 2869
+      },
+      "delta": {
+        "cpuReferenceGreaterThanThirtyTwoPixels": 0,
+        "cpuMatchingPixels": 0,
+        "cpuMaxChannelDelta": 0
+      }
+    }
+  },
+  "refusalEvidence": {
+    "for275SaveLayerVsDirectGreaterThanZeroPixels": 0,
+    "for276FullSceneCpuReferenceGt32Delta": 0,
+    "for278BoundaryCpuReferenceGt32AfterNoPatch": 89,
+    "for278BoundaryCpuWhiteLayerAfterNoPatch": 78,
+    "fullSceneCpuReferenceGt32AfterNoPatch": 15726,
+    "stableDiagnostic": "REFUSE_CORRECTION_PENDING_DEEPER_LAYER_COMPOSITE_MODEL"
+  },
+  "nextAction": "TARGET_CPU_AA_DIFFERENCE_CLIP_COVERAGE_EDGE_MODEL",
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuRendererChanged": false,
+    "gpuRendererChanged": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
