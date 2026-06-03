@@ -1211,7 +1211,22 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                 blendMode = SkBlendMode.kSrc
                 alpha = 0xFF
             }
-            saveLayer(rect, layerPaint)
+            val sourceBounds = innerPaint.computeFastBounds(
+                rect,
+                SkRect.MakeLTRB(rect.left, rect.top, rect.right, rect.bottom),
+            )
+            val filteredBounds = paint.computeFastBounds(
+                rect,
+                SkRect.MakeLTRB(rect.left, rect.top, rect.right, rect.bottom),
+            )
+            val layerBounds = SkRect.MakeLTRB(
+                sourceBounds.left,
+                sourceBounds.top,
+                sourceBounds.right,
+                sourceBounds.bottom,
+            )
+            layerBounds.join(filteredBounds)
+            saveLayer(layerBounds, layerPaint)
             drawRect(rect, innerPaint)
             restoreToCount(restoreCount)
             return

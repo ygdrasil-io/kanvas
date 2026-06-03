@@ -1572,6 +1572,8 @@ internal class SkCropImageFilter(
         return FilterResult(SkImage(outW, outH, outBuf), outOffX, outOffY)
     }
 
+    override fun computeFastBounds(src: SkRect): SkRect = rect
+
     private fun sampleWithTileMode(img: SkImage, sx: Int, sy: Int): Int =
         sampleImageWithTileMode(img, sx, sy, tileMode)
 }

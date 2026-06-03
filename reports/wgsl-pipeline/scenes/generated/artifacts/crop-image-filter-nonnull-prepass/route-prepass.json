@@ -5,8 +5,10 @@
   "materializeRoute": "LayerCompositeDraw.materializeToIntermediate",
   "source": "gpuSrc.intermediateView",
   "destination": "SkWebGpuDevice.cropNonNullOffsetChildPrePassScratch",
+  "scratchExtentPolicy": "existing bounded child pre-pass; FOR-243 source-output layer-bounds cleanup did not move strict fidelity",
   "sampleRemap": "scratchPixel(p) samples childSource(p - offset)",
   "finalComposite": "Crop(kDecal) UV remap against scratch texture",
+  "supportDecision": "risk.fidelity-gap; no strict promotion",
   "unsupportedReasonRemoved": "image-filter.crop-input-nonnull-prepass-required",
   "fallbackReason": "none"
 }
