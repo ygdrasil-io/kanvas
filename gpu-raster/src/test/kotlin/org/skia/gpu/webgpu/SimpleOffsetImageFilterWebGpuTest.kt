@@ -14,6 +14,7 @@ import org.skia.foundation.SkImage
 import org.skia.foundation.SkSamplingOptions
 import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.testing.TestUtils
+import org.skia.tests.DrawBitmapRectSkbug4734GM
 import org.skia.tests.SimpleOffsetImageFilterGM
 import java.io.File
 import java.awt.image.BufferedImage
@@ -412,6 +413,106 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-256 output readback boundary isolates remaining rgb residual`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val simpleOffsetGm = SimpleOffsetImageFilterGM()
+        val simpleOffsetReference = TestUtils.loadReferenceBitmap(simpleOffsetGm.name())
+        assertNotNull(simpleOffsetReference, "original-888/${simpleOffsetGm.name()}.png missing")
+        val bitmapGm = DrawBitmapRectSkbug4734GM()
+        val bitmapReference = TestUtils.loadReferenceBitmap(bitmapGm.name())
+        assertNotNull(bitmapReference, "original-888/${bitmapGm.name()}.png missing")
+
+        val oldRawSentinels = System.getProperty(FOR255_RAW_SENTINELS_PROPERTY)
+        val oldOutputBoundary = System.getProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY)
+        try {
+            System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, "true")
+            System.setProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY, "true")
+            context!!.use { ctx ->
+                val simpleOffset = renderSimpleOffsetWithRawColorSentinels(ctx, simpleOffsetGm)
+                val bitmapUpload = renderBitmapUploadRawColorSentinel(ctx)
+                val bitmapScene = renderDrawBitmapRectSkbug4734WithOutputBoundary(ctx, bitmapGm)
+                val for254 = buildFor254SourceTexelRoundingAuditProbe(
+                    simpleOffsetReference!!,
+                    simpleOffset.bitmap,
+                )
+                val for255 = buildFor255RawColorSentinelProbe(
+                    sourceUniformSnapshot = simpleOffset.sentinels,
+                    bitmapUploadSnapshot = bitmapUpload.sentinels,
+                    for254 = for254,
+                )
+                val probe = buildFor256ShaderStoreReferenceBoundaryProbe(
+                    for255 = for255,
+                    simpleOffsetOutput = simpleOffset.outputReadbackBoundary,
+                    bitmapOutput = bitmapScene.outputReadbackBoundary,
+                )
+
+                assertEquals(
+                    FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY,
+                    probe.propertyName,
+                    "FOR-256: opt-in property name changed",
+                )
+                assertEquals(
+                    false,
+                    probe.defaultEnabled,
+                    "FOR-256: output/readback boundary must stay disabled by default",
+                )
+                assertEquals(
+                    true,
+                    probe.runtimeSnapshotsEnabled,
+                    "FOR-256: output/readback boundary snapshots were not enabled",
+                )
+                assertEquals(
+                    false,
+                    probe.shaderLayoutChanged,
+                    "FOR-256: output/readback probe must not alter shader or pipeline layout",
+                )
+                assertArrayEquals(
+                    intArrayOf(157, 90, 138, 255),
+                    probe.legacySourceUniform.outputReadbackRgba,
+                    "FOR-256: SimpleOffset readback bytes changed",
+                )
+                assertArrayEquals(
+                    for255.legacySourceUniform.output.gpu,
+                    probe.legacySourceUniform.outputReadbackRgba,
+                    "FOR-256: SimpleOffset readback must match the GPU comparison input",
+                )
+                assertArrayEquals(
+                    intArrayOf(148, 193, 207, 255),
+                    probe.bitmapTexel.outputReadbackRgba,
+                    "FOR-256: bitmap readback bytes changed",
+                )
+                assertArrayEquals(
+                    for255.bitmapTexel.output.gpu,
+                    probe.bitmapTexel.outputReadbackRgba,
+                    "FOR-256: bitmap readback must match the GPU comparison input",
+                )
+                assertEquals(
+                    "KEEP_DIAGNOSTIC",
+                    probe.supportDecision,
+                    "FOR-256: no bounded correction is proven by output/readback evidence",
+                )
+
+                if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                    writeFor256ShaderStoreReferenceBoundaryJson(probe)
+                }
+            }
+        } finally {
+            if (oldRawSentinels == null) {
+                System.clearProperty(FOR255_RAW_SENTINELS_PROPERTY)
+            } else {
+                System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, oldRawSentinels)
+            }
+            if (oldOutputBoundary == null) {
+                System.clearProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY)
+            } else {
+                System.setProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY, oldOutputBoundary)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -439,6 +540,27 @@ class SimpleOffsetImageFilterWebGpuTest {
             return RawSentinelRenderResult(
                 bitmap = rgbaBytesToBitmap(rgba, size.width, size.height),
                 sentinels = device.rawColorSentinelSnapshot(),
+                outputReadbackBoundary = device.outputReadbackBoundarySnapshot(),
+            )
+        }
+    }
+
+    private fun renderDrawBitmapRectSkbug4734WithOutputBoundary(
+        context: WebGpuContext,
+        gm: DrawBitmapRectSkbug4734GM,
+    ): OutputBoundaryRenderResult {
+        val size = gm.size()
+        SkWebGpuDevice(
+            context,
+            size.width,
+            size.height,
+            applyColorspaceTransform = true,
+        ).use { device ->
+            device.setBackground(gm.bgColor())
+            gm.draw(SkCanvas(device))
+            device.flush()
+            return OutputBoundaryRenderResult(
+                outputReadbackBoundary = device.outputReadbackBoundarySnapshot(),
             )
         }
     }
@@ -533,6 +655,61 @@ class SimpleOffsetImageFilterWebGpuTest {
             ),
         )
     }
+
+    private fun buildFor256ShaderStoreReferenceBoundaryProbe(
+        for255: For255RawColorSentinelProbe,
+        simpleOffsetOutput: SkWebGpuDevice.OutputReadbackBoundarySnapshot,
+        bitmapOutput: SkWebGpuDevice.OutputReadbackBoundarySnapshot,
+    ): For256ShaderStoreReferenceBoundaryProbe {
+        val simpleOffsetReadback = requireOutputReadbackSample(simpleOffsetOutput, x = 40, y = 40)
+        val bitmapReadback = requireOutputReadbackSample(bitmapOutput, x = 8, y = 24)
+        return For256ShaderStoreReferenceBoundaryProbe(
+            propertyName = FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY,
+            defaultEnabled = false,
+            runtimeSnapshotsEnabled = simpleOffsetOutput.enabled && bitmapOutput.enabled,
+            shaderLayoutChanged = false,
+            shaderSideProbe = For256ShaderSideProbe(
+                status = "notUsed",
+                reason = "FOR-256 uses an output/readback boundary probe, not a storage-buffer shader probe; WGSL modules, bind groups, render pipeline layout, blend state, thresholds, and normal rendering are unchanged.",
+            ),
+            legacySourceUniform = For256OutputBoundaryCase(
+                id = for255.legacySourceUniform.id,
+                previousHostBoundaryRgba8 = for255.legacySourceUniform.hostObservedRgba8,
+                previousWriteOrUploadBoundaryRgba8 = for255.legacySourceUniform.rawWriteObservedRgba8,
+                outputReferenceRgba = for255.legacySourceUniform.output.reference,
+                outputComparisonGpuRgba = for255.legacySourceUniform.output.gpu,
+                outputReadbackXy = intArrayOf(simpleOffsetReadback.x, simpleOffsetReadback.y),
+                outputReadbackRgba = simpleOffsetReadback.rgba,
+                outputSignedDeltaRgba = for255.legacySourceUniform.output.signedDelta,
+                outputMaxChannelDelta = for255.legacySourceUniform.output.maxChannelDelta,
+                readbackMatchesComparisonGpu = simpleOffsetReadback.rgba.contentEquals(
+                    for255.legacySourceUniform.output.gpu,
+                ),
+                verdict = "final readback bytes match the GPU bytes used by the reference comparison; the 1-byte RGB residual is already present by the output/readback boundary",
+            ),
+            bitmapTexel = For256OutputBoundaryCase(
+                id = for255.bitmapTexel.id,
+                previousHostBoundaryRgba8 = for255.bitmapTexel.hostObservedRgba8,
+                previousWriteOrUploadBoundaryRgba8 = for255.bitmapTexel.rawUploadObservedRgba8,
+                outputReferenceRgba = for255.bitmapTexel.output.reference,
+                outputComparisonGpuRgba = for255.bitmapTexel.output.gpu,
+                outputReadbackXy = intArrayOf(bitmapReadback.x, bitmapReadback.y),
+                outputReadbackRgba = bitmapReadback.rgba,
+                outputSignedDeltaRgba = for255.bitmapTexel.output.signedDelta,
+                outputMaxChannelDelta = for255.bitmapTexel.output.maxChannelDelta,
+                readbackMatchesComparisonGpu = bitmapReadback.rgba.contentEquals(for255.bitmapTexel.output.gpu),
+                verdict = "final readback bytes match the GPU bytes used by the reference comparison; the 1-byte RGB residual is already present by the output/readback boundary",
+            ),
+        )
+    }
+
+    private fun requireOutputReadbackSample(
+        snapshot: SkWebGpuDevice.OutputReadbackBoundarySnapshot,
+        x: Int,
+        y: Int,
+    ): SkWebGpuDevice.OutputReadbackSample =
+        snapshot.samples.firstOrNull { sample -> sample.x == x && sample.y == y }
+            ?: error("FOR-256 missing output/readback boundary sample at [$x, $y]")
 
     private fun buildFor250HighDeltaScanProbe(reference: SkBitmap, gpu: SkBitmap): For250HighDeltaScanProbe {
         require(reference.width == gpu.width && reference.height == gpu.height) {
@@ -1738,6 +1915,46 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    private fun writeFor256ShaderStoreReferenceBoundaryJson(probe: For256ShaderStoreReferenceBoundaryProbe) {
+        val contents = """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "mixed skia-upstream and artifact oracle PNGs",
+              "linear": "FOR-256",
+              "probe": "shader-store-reference-boundary-audit",
+              "deltaDefinition": "signed channel delta is GPU/readback minus reference",
+              "propertyName": "${probe.propertyName}",
+              "defaultEnabled": ${probe.defaultEnabled},
+              "runtimeSnapshotsEnabled": ${probe.runtimeSnapshotsEnabled},
+              "observedBoundaries": {
+                "for255HostObserved": true,
+                "for255WriteUploadObserved": true,
+                "shaderObserved": "${probe.shaderSideProbe.status}",
+                "outputReadbackObserved": true,
+                "referenceComparisonObserved": true
+              },
+              "shaderLayoutChanged": ${probe.shaderLayoutChanged},
+              "shaderSideProbe": ${probe.shaderSideProbe.toJson(indent = "              ").trimStart()},
+              "pipelineLayoutDifference": "none; this diagnostic records selected bytes from the existing flush() readback ByteArray after the normal present pass and does not add WGSL storage, bind groups, render targets, blend changes, or CPU/readback fallback",
+              "legacySourceUniform": ${probe.legacySourceUniform.toJson(indent = "              ").trimStart()},
+              "bitmapTexelUpload": ${probe.bitmapTexel.toJson(indent = "              ").trimStart()},
+              "interpretation": "FOR-255 proved host packing and RGBA8 upload bytes are correct. FOR-256 proves the final readback bytes match the GPU bytes used by the reference comparison for both residual cases, so the remaining boundary is before or at shader consumption/blend/store/present quantization, or in the upstream reference-byte expectation. No bounded correction is isolated.",
+              "observationMethod": "opt-in SkWebGpuDevice output/readback boundary enabled only by kanvas.webgpu.for256.outputReadbackBoundary; records selected bytes already returned by flush() after the normal present/readback path; shaders, pipeline layout, thresholds, Crop routing, fallback policy, and normal CPU/readback behavior are unchanged",
+              "remainingBoundary": "${probe.remainingBoundary}",
+              "supportDecision": "${probe.supportDecision}",
+              "correctionApplied": false,
+              "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+            }
+            """.trimIndent() + "\n"
+        listOf(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/shader-store-reference-boundary-for256",
+            "reports/wgsl-pipeline/scenes/artifacts/shader-store-reference-boundary-for256",
+        ).forEach { path ->
+            val dir = repoFile(path).apply { mkdirs() }
+            File(dir, "shader-store-reference-boundary-for256.json").writeText(contents)
+        }
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -1903,6 +2120,31 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
         """.trimIndent().prependIndent(indent)
 
+    private fun For256ShaderSideProbe.toJson(indent: String): String =
+        """
+        {
+          "status": "$status",
+          "reason": "$reason"
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For256OutputBoundaryCase.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "previousHostBoundaryRgba8": ${jsonArray(previousHostBoundaryRgba8)},
+          "previousWriteOrUploadBoundaryRgba8": ${jsonArray(previousWriteOrUploadBoundaryRgba8)},
+          "outputReferenceRgba": ${jsonArray(outputReferenceRgba)},
+          "outputComparisonGpuRgba": ${jsonArray(outputComparisonGpuRgba)},
+          "outputReadbackXy": ${jsonArray(outputReadbackXy)},
+          "outputReadbackRgba": ${jsonArray(outputReadbackRgba)},
+          "outputSignedDeltaRgba": ${jsonArray(outputSignedDeltaRgba)},
+          "outputMaxChannelDelta": $outputMaxChannelDelta,
+          "readbackMatchesComparisonGpu": $readbackMatchesComparisonGpu,
+          "verdict": "$verdict"
+        }
+        """.trimIndent().prependIndent(indent)
+
     private fun signedDeltaHistogramToJson(histogram: List<Map<Int, Int>>, indent: String): String {
         val channels = listOf("r", "g", "b", "a")
         return channels.indices.joinToString(
@@ -1982,6 +2224,8 @@ class SimpleOffsetImageFilterWebGpuTest {
         const val FOR247_PROBE_PROPERTY: String = "kanvas.webgpu.for247.cropOffsetScratchProbe"
         const val FOR248_PROBE_PROPERTY: String = "kanvas.webgpu.for248.finalCropCompositeProbe"
         const val FOR255_RAW_SENTINELS_PROPERTY: String = "kanvas.webgpu.rawColorSentinels"
+        const val FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY: String =
+            "kanvas.webgpu.for256.outputReadbackBoundary"
         const val WRITE_EVIDENCE_PROPERTY: String = "kanvas.sceneEvidence.write"
         val DOMINANT_FOR251_CELL_IDS: List<String> = listOf(
             "row1-col0-no-filter",
@@ -2304,6 +2548,11 @@ class SimpleOffsetImageFilterWebGpuTest {
     private data class RawSentinelRenderResult(
         val bitmap: SkBitmap,
         val sentinels: SkWebGpuDevice.RawColorSentinelSnapshot,
+        val outputReadbackBoundary: SkWebGpuDevice.OutputReadbackBoundarySnapshot,
+    )
+
+    private data class OutputBoundaryRenderResult(
+        val outputReadbackBoundary: SkWebGpuDevice.OutputReadbackBoundarySnapshot,
     )
 
     private data class RawUploadSentinelRenderResult(
@@ -2347,5 +2596,38 @@ class SimpleOffsetImageFilterWebGpuTest {
         val shaderObserved: For255ShaderObservedBoundary,
     ) {
         val supportDecision: String = "KEEP_DIAGNOSTIC"
+    }
+
+    private data class For256ShaderSideProbe(
+        val status: String,
+        val reason: String,
+    )
+
+    private data class For256OutputBoundaryCase(
+        val id: String,
+        val previousHostBoundaryRgba8: IntArray,
+        val previousWriteOrUploadBoundaryRgba8: IntArray,
+        val outputReferenceRgba: IntArray,
+        val outputComparisonGpuRgba: IntArray,
+        val outputReadbackXy: IntArray,
+        val outputReadbackRgba: IntArray,
+        val outputSignedDeltaRgba: IntArray,
+        val outputMaxChannelDelta: Int,
+        val readbackMatchesComparisonGpu: Boolean,
+        val verdict: String,
+    )
+
+    private data class For256ShaderStoreReferenceBoundaryProbe(
+        val propertyName: String,
+        val defaultEnabled: Boolean,
+        val runtimeSnapshotsEnabled: Boolean,
+        val shaderLayoutChanged: Boolean,
+        val shaderSideProbe: For256ShaderSideProbe,
+        val legacySourceUniform: For256OutputBoundaryCase,
+        val bitmapTexel: For256OutputBoundaryCase,
+    ) {
+        val supportDecision: String = "KEEP_DIAGNOSTIC"
+        val remainingBoundary: String =
+            "shader-consumption/blend-store/present-quantization-or-reference-byte-expectation"
     }
 }
