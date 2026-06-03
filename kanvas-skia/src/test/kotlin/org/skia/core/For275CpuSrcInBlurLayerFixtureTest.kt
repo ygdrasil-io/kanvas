@@ -92,6 +92,37 @@ class For275CpuSrcInBlurLayerFixtureTest {
         )
     }
 
+    @Test
+    fun `FOR-284 A8 solid SrcIn color filter composites the mask payload`() {
+        val mask = renderA8MaskControl()
+        val actual = renderUnclippedBlur()
+        var covered = 0
+        var matchingPayload = 0
+        var maxDelta = 0
+
+        for (y in 0 until HEIGHT) {
+            for (x in 0 until WIDTH) {
+                val maskA = SkColorGetA(mask.getPixel(x, y))
+                val expected = srcOverRedOnWhite(maskA)
+                val got = actual.getPixel(x, y)
+                val delta = maxChannelDelta(expected, got)
+                maxDelta = maxOf(maxDelta, delta)
+                if (maskA > 0) {
+                    covered++
+                    if (delta <= 1) matchingPayload++
+                }
+            }
+        }
+
+        assertTrue(covered > 0, "A8 mask control must produce non-zero blur coverage")
+        assertEquals(
+            covered,
+            matchingPayload,
+            "every covered A8 mask pixel must dispatch the red SrcIn payload before SrcOver",
+        )
+        assertTrue(maxDelta <= 1, "A8 SrcIn payload render drifted by max channel delta $maxDelta")
+    }
+
     private fun renderDifferenceClip(useLayer: Boolean): SkBitmap {
         val bitmap = SkBitmap(WIDTH, HEIGHT).also { it.eraseColor(SK_ColorWHITE) }
         val canvas = SkCanvas(bitmap)
@@ -107,6 +138,19 @@ class For275CpuSrcInBlurLayerFixtureTest {
     private fun renderUnclippedBlur(): SkBitmap {
         val bitmap = SkBitmap(WIDTH, HEIGHT).also { it.eraseColor(SK_ColorWHITE) }
         SkCanvas(bitmap).drawRRect(OUTER_OVAL, blurSrcInPaint())
+        return bitmap
+    }
+
+    private fun renderA8MaskControl(): SkBitmap {
+        val bitmap = SkBitmap(WIDTH, HEIGHT).also { it.eraseColor(0) }
+        SkCanvas(bitmap).drawRRect(
+            OUTER_OVAL,
+            SkPaint(SK_ColorWHITE).apply {
+                isAntiAlias = true
+                blendMode = SkBlendMode.kSrc
+                maskFilter = SkBlurMaskFilter.Make(SkBlurStyle.kNormal, SIGMA)
+            },
+        )
         return bitmap
     }
 
@@ -469,6 +513,13 @@ ${samples.joinToString(",\n") { it.toJson().prependIndent("      ") }}
                 SkColorGetR(c) >= 120 &&
                 SkColorGetR(c) > SkColorGetG(c) + 40 &&
                 SkColorGetR(c) > SkColorGetB(c) + 40
+
+        fun srcOverRedOnWhite(srcA: Int): SkColor {
+            if (srcA <= 0) return SK_ColorWHITE
+            if (srcA >= 255) return SK_ColorRED
+            val invA = 255 - srcA
+            return (0xFF shl 24) or (0xFF shl 16) or (invA shl 8) or invA
+        }
 
         fun maxChannelDelta(a: SkColor, b: SkColor): Int =
             maxOf(
