@@ -1,0 +1,1831 @@
+{
+  "linear": "FOR-296",
+  "parent": "FOR-241",
+  "probe": "m60-red-runtime-spatial-separation",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/RGBA_8888/for294-for295-derived-spatial-audit",
+  "sourceAudits": {
+    "for288": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-store-order-audit-for288.json",
+    "for289": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-runtime-write-chronology-for289.json",
+    "for290": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-expanded-runtime-write-trace-for290.json",
+    "for291": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-reconstructed-store-model-audit-for291.json",
+    "for292": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-source-payload-derivation-audit-for292.json",
+    "for293": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-drawrrect-runtime-visibility-audit-for293.json",
+    "for294": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-expanded-red-drawrrect-runtime-trace-for294.json",
+    "for295": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-domain-vs-white-targets-for295.json",
+    "for294RawFinalReadback": "build/reports/for294/m60-expanded-red-drawrrect-runtime-trace-for294.raw.json"
+  },
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "RED_RUNTIME_DISPATCH_DOMAIN_SPATIALLY_SEPARATE_FROM_ORIGINAL_TARGET_CLUSTER",
+  "exactGap": null,
+  "decisionRationale": "The original 59 M60 targets form one white final-readback cluster inside the single reconstructed red candidate component, but they sit in a candidate-minus-runtime hole component and are at least 70.936591 px away from the nearest observed red runtime dispatch coordinate. The FOR-294 final-composite mismatch remains real inside the red runtime domain, but it does not dominate this target-cluster membership question.",
+  "route": {
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold",
+    "for288PrimaryClassification": "OTHER_LATER_WRITE_AFTER_RECONSTRUCTED_RED_STORE",
+    "for289Decision": "PROOF_INSUFFICIENT_RUNTIME_WRITE_CHRONOLOGY_GAP",
+    "for290Decision": "NO_RUNTIME_RED_ROOT_STORE_FOUND",
+    "for291Decision": "RECONSTRUCTION_SOURCE_PAYLOAD_MISMATCH",
+    "for292Decision": "RECONSTRUCTED_PAYLOAD_DRAW_MAPPING_MISMATCH",
+    "for293Decision": "RED_DRAWRRECT_RUNTIME_VISIBILITY_STILL_AMBIGUOUS",
+    "for294Decision": "RED_DRAWRRECT_RUNTIME_ROOT_DISPATCH_FOUND_OUTSIDE_TARGETS",
+    "for295Decision": "ORIGINAL_TARGETS_OUTSIDE_RED_RUNTIME_DISPATCH_DOMAIN"
+  },
+  "domainSpatialComparison": {
+    "originalTargetPixels": 59,
+    "redCandidateDomainPixels": 22424,
+    "redRuntimeDispatchPixels": 9088,
+    "candidateMinusRuntimePixels": 13336,
+    "runtimeOutsideCandidatePixels": 0,
+    "finalWhiteLayerPixels": 15304,
+    "finalRedTintPixels": 6108,
+    "finalOtherPixels": 1012,
+    "originalTargetsInsideRedCandidateDomain": 59,
+    "originalTargetsInsideRedRuntimeDispatchDomain": 0,
+    "originalTargetsInsideCandidateMinusRuntimeHole": 59,
+    "originalTargetsWithFinalWhiteLayerReadback": 59,
+    "originalTargetsWithFinalRedTintReadback": 0,
+    "redRuntimeDispatchWithFinalRedTint": 6108,
+    "redRuntimeDispatchWithFinalWhiteLayer": 1968,
+    "redRuntimeDispatchWithFinalOther": 1012,
+    "finalRedTintOutsideRedRuntimeDispatch": 0,
+    "finalWhiteLayerInsideRedRuntimeDispatch": 1968,
+    "candidateBounds": {
+      "left": 4,
+      "top": 4,
+      "right": 588,
+      "bottom": 588,
+      "rightInclusive": 587,
+      "bottomInclusive": 587
+    },
+    "redRuntimeDispatchBounds": {
+      "left": 4,
+      "top": 4,
+      "right": 588,
+      "bottom": 588,
+      "rightInclusive": 587,
+      "bottomInclusive": 587
+    },
+    "originalTargetBounds": {
+      "left": 94,
+      "top": 84,
+      "right": 105,
+      "bottom": 94,
+      "rightInclusive": 104,
+      "bottomInclusive": 93
+    },
+    "candidateMinusRuntimeBounds": {
+      "left": 4,
+      "top": 4,
+      "right": 588,
+      "bottom": 588,
+      "rightInclusive": 587,
+      "bottomInclusive": 587
+    },
+    "finalWhiteLayerBounds": {
+      "left": 4,
+      "top": 4,
+      "right": 588,
+      "bottom": 588,
+      "rightInclusive": 587,
+      "bottomInclusive": 587
+    },
+    "finalRedTintBounds": {
+      "left": 7,
+      "top": 7,
+      "right": 585,
+      "bottom": 585,
+      "rightInclusive": 584,
+      "bottomInclusive": 584
+    },
+    "originalTargetDistanceToRedRuntimeDispatch": {
+      "pixels": 59,
+      "minEuclidean": 70.936591,
+      "maxEuclidean": 84.386018,
+      "averageEuclidean": 77.870976,
+      "minManhattan": 100,
+      "maxManhattan": 119,
+      "minChebyshev": 54,
+      "maxChebyshev": 64,
+      "nearestPixel": {
+        "x": 104,
+        "y": 84,
+        "nearest": {
+          "x": 158,
+          "y": 38,
+          "dx": 54,
+          "dy": -46,
+          "euclidean": 70.936591,
+          "manhattan": 100,
+          "chebyshev": 54
+        }
+      }
+    }
+  },
+  "connectedComponents": {
+    "redCandidate": {
+      "componentCount": 1,
+      "largestComponents": [
+        {
+          "id": "red-candidate-000",
+          "pixels": 22424,
+          "bounds": {
+            "left": 4,
+            "top": 4,
+            "right": 588,
+            "bottom": 588,
+            "rightInclusive": 587,
+            "bottomInclusive": 587
+          },
+          "sampleCoordinates": [
+            {
+              "x": 277,
+              "y": 4
+            },
+            {
+              "x": 278,
+              "y": 4
+            },
+            {
+              "x": 279,
+              "y": 4
+            },
+            {
+              "x": 280,
+              "y": 4
+            },
+            {
+              "x": 281,
+              "y": 4
+            },
+            {
+              "x": 282,
+              "y": 4
+            },
+            {
+              "x": 283,
+              "y": 4
+            },
+            {
+              "x": 284,
+              "y": 4
+            }
+          ],
+          "originalTargetPixels": 59,
+          "finalWhiteLayerPixels": 15304,
+          "finalRedTintPixels": 6108,
+          "finalOtherPixels": 1012
+        }
+      ]
+    },
+    "redRuntimeDispatch": {
+      "componentCount": 4,
+      "largestComponents": [
+        {
+          "id": "red-runtime-000",
+          "pixels": 2275,
+          "bounds": {
+            "left": 158,
+            "top": 4,
+            "right": 434,
+            "bottom": 39,
+            "rightInclusive": 433,
+            "bottomInclusive": 38
+          },
+          "sampleCoordinates": [
+            {
+              "x": 279,
+              "y": 4
+            },
+            {
+              "x": 280,
+              "y": 4
+            },
+            {
+              "x": 281,
+              "y": 4
+            },
+            {
+              "x": 282,
+              "y": 4
+            },
+            {
+              "x": 283,
+              "y": 4
+            },
+            {
+              "x": 284,
+              "y": 4
+            },
+            {
+              "x": 285,
+              "y": 4
+            },
+            {
+              "x": 286,
+              "y": 4
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 496,
+          "finalRedTintPixels": 1526,
+          "finalOtherPixels": 253
+        },
+        {
+          "id": "red-runtime-001",
+          "pixels": 2275,
+          "bounds": {
+            "left": 158,
+            "top": 553,
+            "right": 434,
+            "bottom": 588,
+            "rightInclusive": 433,
+            "bottomInclusive": 587
+          },
+          "sampleCoordinates": [
+            {
+              "x": 158,
+              "y": 553
+            },
+            {
+              "x": 159,
+              "y": 553
+            },
+            {
+              "x": 160,
+              "y": 553
+            },
+            {
+              "x": 431,
+              "y": 553
+            },
+            {
+              "x": 432,
+              "y": 553
+            },
+            {
+              "x": 433,
+              "y": 553
+            },
+            {
+              "x": 160,
+              "y": 554
+            },
+            {
+              "x": 161,
+              "y": 554
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 496,
+          "finalRedTintPixels": 1526,
+          "finalOtherPixels": 253
+        },
+        {
+          "id": "red-runtime-002",
+          "pixels": 2270,
+          "bounds": {
+            "left": 4,
+            "top": 158,
+            "right": 39,
+            "bottom": 434,
+            "rightInclusive": 38,
+            "bottomInclusive": 433
+          },
+          "sampleCoordinates": [
+            {
+              "x": 38,
+              "y": 158
+            },
+            {
+              "x": 38,
+              "y": 159
+            },
+            {
+              "x": 37,
+              "y": 160
+            },
+            {
+              "x": 38,
+              "y": 160
+            },
+            {
+              "x": 37,
+              "y": 161
+            },
+            {
+              "x": 36,
+              "y": 162
+            },
+            {
+              "x": 37,
+              "y": 162
+            },
+            {
+              "x": 36,
+              "y": 163
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 488,
+          "finalRedTintPixels": 1528,
+          "finalOtherPixels": 254
+        },
+        {
+          "id": "red-runtime-003",
+          "pixels": 2268,
+          "bounds": {
+            "left": 553,
+            "top": 158,
+            "right": 588,
+            "bottom": 434,
+            "rightInclusive": 587,
+            "bottomInclusive": 433
+          },
+          "sampleCoordinates": [
+            {
+              "x": 553,
+              "y": 158
+            },
+            {
+              "x": 553,
+              "y": 159
+            },
+            {
+              "x": 553,
+              "y": 160
+            },
+            {
+              "x": 554,
+              "y": 160
+            },
+            {
+              "x": 554,
+              "y": 161
+            },
+            {
+              "x": 554,
+              "y": 162
+            },
+            {
+              "x": 555,
+              "y": 162
+            },
+            {
+              "x": 554,
+              "y": 163
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 488,
+          "finalRedTintPixels": 1528,
+          "finalOtherPixels": 252
+        }
+      ]
+    },
+    "candidateMinusRuntimeHoles": {
+      "componentCount": 80,
+      "largestComponents": [
+        {
+          "id": "candidate-minus-runtime-000",
+          "pixels": 3295,
+          "bounds": {
+            "left": 330,
+            "top": 18,
+            "right": 574,
+            "bottom": 262,
+            "rightInclusive": 573,
+            "bottomInclusive": 261
+          },
+          "sampleCoordinates": [
+            {
+              "x": 330,
+              "y": 18
+            },
+            {
+              "x": 331,
+              "y": 18
+            },
+            {
+              "x": 332,
+              "y": 18
+            },
+            {
+              "x": 333,
+              "y": 18
+            },
+            {
+              "x": 334,
+              "y": 18
+            },
+            {
+              "x": 335,
+              "y": 18
+            },
+            {
+              "x": 336,
+              "y": 18
+            },
+            {
+              "x": 337,
+              "y": 18
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 3295,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "candidate-minus-runtime-001",
+          "pixels": 3295,
+          "bounds": {
+            "left": 330,
+            "top": 330,
+            "right": 574,
+            "bottom": 574,
+            "rightInclusive": 573,
+            "bottomInclusive": 573
+          },
+          "sampleCoordinates": [
+            {
+              "x": 573,
+              "y": 330
+            },
+            {
+              "x": 573,
+              "y": 331
+            },
+            {
+              "x": 573,
+              "y": 332
+            },
+            {
+              "x": 573,
+              "y": 333
+            },
+            {
+              "x": 573,
+              "y": 334
+            },
+            {
+              "x": 573,
+              "y": 335
+            },
+            {
+              "x": 573,
+              "y": 336
+            },
+            {
+              "x": 572,
+              "y": 337
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 3295,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "candidate-minus-runtime-002",
+          "pixels": 3293,
+          "bounds": {
+            "left": 18,
+            "top": 18,
+            "right": 262,
+            "bottom": 262,
+            "rightInclusive": 261,
+            "bottomInclusive": 261
+          },
+          "sampleCoordinates": [
+            {
+              "x": 250,
+              "y": 18
+            },
+            {
+              "x": 251,
+              "y": 18
+            },
+            {
+              "x": 252,
+              "y": 18
+            },
+            {
+              "x": 253,
+              "y": 18
+            },
+            {
+              "x": 254,
+              "y": 18
+            },
+            {
+              "x": 255,
+              "y": 18
+            },
+            {
+              "x": 256,
+              "y": 18
+            },
+            {
+              "x": 257,
+              "y": 18
+            }
+          ],
+          "originalTargetPixels": 59,
+          "finalWhiteLayerPixels": 3293,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "candidate-minus-runtime-003",
+          "pixels": 3293,
+          "bounds": {
+            "left": 18,
+            "top": 330,
+            "right": 262,
+            "bottom": 574,
+            "rightInclusive": 261,
+            "bottomInclusive": 573
+          },
+          "sampleCoordinates": [
+            {
+              "x": 18,
+              "y": 330
+            },
+            {
+              "x": 18,
+              "y": 331
+            },
+            {
+              "x": 18,
+              "y": 332
+            },
+            {
+              "x": 18,
+              "y": 333
+            },
+            {
+              "x": 18,
+              "y": 334
+            },
+            {
+              "x": 18,
+              "y": 335
+            },
+            {
+              "x": 18,
+              "y": 336
+            },
+            {
+              "x": 18,
+              "y": 337
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 3293,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "candidate-minus-runtime-004",
+          "pixels": 9,
+          "bounds": {
+            "left": 262,
+            "top": 17,
+            "right": 271,
+            "bottom": 18,
+            "rightInclusive": 270,
+            "bottomInclusive": 17
+          },
+          "sampleCoordinates": [
+            {
+              "x": 262,
+              "y": 17
+            },
+            {
+              "x": 263,
+              "y": 17
+            },
+            {
+              "x": 264,
+              "y": 17
+            },
+            {
+              "x": 265,
+              "y": 17
+            },
+            {
+              "x": 266,
+              "y": 17
+            },
+            {
+              "x": 267,
+              "y": 17
+            },
+            {
+              "x": 268,
+              "y": 17
+            },
+            {
+              "x": 269,
+              "y": 17
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "candidate-minus-runtime-005",
+          "pixels": 9,
+          "bounds": {
+            "left": 321,
+            "top": 17,
+            "right": 330,
+            "bottom": 18,
+            "rightInclusive": 329,
+            "bottomInclusive": 17
+          },
+          "sampleCoordinates": [
+            {
+              "x": 321,
+              "y": 17
+            },
+            {
+              "x": 322,
+              "y": 17
+            },
+            {
+              "x": 323,
+              "y": 17
+            },
+            {
+              "x": 324,
+              "y": 17
+            },
+            {
+              "x": 325,
+              "y": 17
+            },
+            {
+              "x": 326,
+              "y": 17
+            },
+            {
+              "x": 327,
+              "y": 17
+            },
+            {
+              "x": 328,
+              "y": 17
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "candidate-minus-runtime-006",
+          "pixels": 9,
+          "bounds": {
+            "left": 17,
+            "top": 262,
+            "right": 18,
+            "bottom": 271,
+            "rightInclusive": 17,
+            "bottomInclusive": 270
+          },
+          "sampleCoordinates": [
+            {
+              "x": 17,
+              "y": 262
+            },
+            {
+              "x": 17,
+              "y": 263
+            },
+            {
+              "x": 17,
+              "y": 264
+            },
+            {
+              "x": 17,
+              "y": 265
+            },
+            {
+              "x": 17,
+              "y": 266
+            },
+            {
+              "x": 17,
+              "y": 267
+            },
+            {
+              "x": 17,
+              "y": 268
+            },
+            {
+              "x": 17,
+              "y": 269
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "candidate-minus-runtime-007",
+          "pixels": 9,
+          "bounds": {
+            "left": 574,
+            "top": 262,
+            "right": 575,
+            "bottom": 271,
+            "rightInclusive": 574,
+            "bottomInclusive": 270
+          },
+          "sampleCoordinates": [
+            {
+              "x": 574,
+              "y": 262
+            },
+            {
+              "x": 574,
+              "y": 263
+            },
+            {
+              "x": 574,
+              "y": 264
+            },
+            {
+              "x": 574,
+              "y": 265
+            },
+            {
+              "x": 574,
+              "y": 266
+            },
+            {
+              "x": 574,
+              "y": 267
+            },
+            {
+              "x": 574,
+              "y": 268
+            },
+            {
+              "x": 574,
+              "y": 269
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "candidate-minus-runtime-008",
+          "pixels": 9,
+          "bounds": {
+            "left": 17,
+            "top": 321,
+            "right": 18,
+            "bottom": 330,
+            "rightInclusive": 17,
+            "bottomInclusive": 329
+          },
+          "sampleCoordinates": [
+            {
+              "x": 17,
+              "y": 321
+            },
+            {
+              "x": 17,
+              "y": 322
+            },
+            {
+              "x": 17,
+              "y": 323
+            },
+            {
+              "x": 17,
+              "y": 324
+            },
+            {
+              "x": 17,
+              "y": 325
+            },
+            {
+              "x": 17,
+              "y": 326
+            },
+            {
+              "x": 17,
+              "y": 327
+            },
+            {
+              "x": 17,
+              "y": 328
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "candidate-minus-runtime-009",
+          "pixels": 9,
+          "bounds": {
+            "left": 574,
+            "top": 321,
+            "right": 575,
+            "bottom": 330,
+            "rightInclusive": 574,
+            "bottomInclusive": 329
+          },
+          "sampleCoordinates": [
+            {
+              "x": 574,
+              "y": 321
+            },
+            {
+              "x": 574,
+              "y": 322
+            },
+            {
+              "x": 574,
+              "y": 323
+            },
+            {
+              "x": 574,
+              "y": 324
+            },
+            {
+              "x": 574,
+              "y": 325
+            },
+            {
+              "x": 574,
+              "y": 326
+            },
+            {
+              "x": 574,
+              "y": 327
+            },
+            {
+              "x": 574,
+              "y": 328
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        }
+      ]
+    },
+    "finalWhiteLayer": {
+      "componentCount": 17,
+      "largestComponents": [
+        {
+          "id": "final-white-layer-000",
+          "pixels": 15208,
+          "bounds": {
+            "left": 4,
+            "top": 4,
+            "right": 588,
+            "bottom": 588,
+            "rightInclusive": 587,
+            "bottomInclusive": 587
+          },
+          "sampleCoordinates": [
+            {
+              "x": 277,
+              "y": 4
+            },
+            {
+              "x": 278,
+              "y": 4
+            },
+            {
+              "x": 279,
+              "y": 4
+            },
+            {
+              "x": 280,
+              "y": 4
+            },
+            {
+              "x": 281,
+              "y": 4
+            },
+            {
+              "x": 282,
+              "y": 4
+            },
+            {
+              "x": 283,
+              "y": 4
+            },
+            {
+              "x": 284,
+              "y": 4
+            }
+          ],
+          "originalTargetPixels": 59,
+          "finalWhiteLayerPixels": 15208,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "final-white-layer-001",
+          "pixels": 9,
+          "bounds": {
+            "left": 262,
+            "top": 17,
+            "right": 271,
+            "bottom": 18,
+            "rightInclusive": 270,
+            "bottomInclusive": 17
+          },
+          "sampleCoordinates": [
+            {
+              "x": 262,
+              "y": 17
+            },
+            {
+              "x": 263,
+              "y": 17
+            },
+            {
+              "x": 264,
+              "y": 17
+            },
+            {
+              "x": 265,
+              "y": 17
+            },
+            {
+              "x": 266,
+              "y": 17
+            },
+            {
+              "x": 267,
+              "y": 17
+            },
+            {
+              "x": 268,
+              "y": 17
+            },
+            {
+              "x": 269,
+              "y": 17
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "final-white-layer-002",
+          "pixels": 9,
+          "bounds": {
+            "left": 321,
+            "top": 17,
+            "right": 330,
+            "bottom": 18,
+            "rightInclusive": 329,
+            "bottomInclusive": 17
+          },
+          "sampleCoordinates": [
+            {
+              "x": 321,
+              "y": 17
+            },
+            {
+              "x": 322,
+              "y": 17
+            },
+            {
+              "x": 323,
+              "y": 17
+            },
+            {
+              "x": 324,
+              "y": 17
+            },
+            {
+              "x": 325,
+              "y": 17
+            },
+            {
+              "x": 326,
+              "y": 17
+            },
+            {
+              "x": 327,
+              "y": 17
+            },
+            {
+              "x": 328,
+              "y": 17
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "final-white-layer-003",
+          "pixels": 9,
+          "bounds": {
+            "left": 17,
+            "top": 262,
+            "right": 18,
+            "bottom": 271,
+            "rightInclusive": 17,
+            "bottomInclusive": 270
+          },
+          "sampleCoordinates": [
+            {
+              "x": 17,
+              "y": 262
+            },
+            {
+              "x": 17,
+              "y": 263
+            },
+            {
+              "x": 17,
+              "y": 264
+            },
+            {
+              "x": 17,
+              "y": 265
+            },
+            {
+              "x": 17,
+              "y": 266
+            },
+            {
+              "x": 17,
+              "y": 267
+            },
+            {
+              "x": 17,
+              "y": 268
+            },
+            {
+              "x": 17,
+              "y": 269
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "final-white-layer-004",
+          "pixels": 9,
+          "bounds": {
+            "left": 574,
+            "top": 262,
+            "right": 575,
+            "bottom": 271,
+            "rightInclusive": 574,
+            "bottomInclusive": 270
+          },
+          "sampleCoordinates": [
+            {
+              "x": 574,
+              "y": 262
+            },
+            {
+              "x": 574,
+              "y": 263
+            },
+            {
+              "x": 574,
+              "y": 264
+            },
+            {
+              "x": 574,
+              "y": 265
+            },
+            {
+              "x": 574,
+              "y": 266
+            },
+            {
+              "x": 574,
+              "y": 267
+            },
+            {
+              "x": 574,
+              "y": 268
+            },
+            {
+              "x": 574,
+              "y": 269
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "final-white-layer-005",
+          "pixels": 9,
+          "bounds": {
+            "left": 17,
+            "top": 321,
+            "right": 18,
+            "bottom": 330,
+            "rightInclusive": 17,
+            "bottomInclusive": 329
+          },
+          "sampleCoordinates": [
+            {
+              "x": 17,
+              "y": 321
+            },
+            {
+              "x": 17,
+              "y": 322
+            },
+            {
+              "x": 17,
+              "y": 323
+            },
+            {
+              "x": 17,
+              "y": 324
+            },
+            {
+              "x": 17,
+              "y": 325
+            },
+            {
+              "x": 17,
+              "y": 326
+            },
+            {
+              "x": 17,
+              "y": 327
+            },
+            {
+              "x": 17,
+              "y": 328
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "final-white-layer-006",
+          "pixels": 9,
+          "bounds": {
+            "left": 574,
+            "top": 321,
+            "right": 575,
+            "bottom": 330,
+            "rightInclusive": 574,
+            "bottomInclusive": 329
+          },
+          "sampleCoordinates": [
+            {
+              "x": 574,
+              "y": 321
+            },
+            {
+              "x": 574,
+              "y": 322
+            },
+            {
+              "x": 574,
+              "y": 323
+            },
+            {
+              "x": 574,
+              "y": 324
+            },
+            {
+              "x": 574,
+              "y": 325
+            },
+            {
+              "x": 574,
+              "y": 326
+            },
+            {
+              "x": 574,
+              "y": 327
+            },
+            {
+              "x": 574,
+              "y": 328
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "final-white-layer-007",
+          "pixels": 9,
+          "bounds": {
+            "left": 262,
+            "top": 574,
+            "right": 271,
+            "bottom": 575,
+            "rightInclusive": 270,
+            "bottomInclusive": 574
+          },
+          "sampleCoordinates": [
+            {
+              "x": 262,
+              "y": 574
+            },
+            {
+              "x": 263,
+              "y": 574
+            },
+            {
+              "x": 264,
+              "y": 574
+            },
+            {
+              "x": 265,
+              "y": 574
+            },
+            {
+              "x": 266,
+              "y": 574
+            },
+            {
+              "x": 267,
+              "y": 574
+            },
+            {
+              "x": 268,
+              "y": 574
+            },
+            {
+              "x": 269,
+              "y": 574
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 9,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        }
+      ]
+    },
+    "finalRedTint": {
+      "componentCount": 4,
+      "largestComponents": [
+        {
+          "id": "final-red-tint-000",
+          "pixels": 1528,
+          "bounds": {
+            "left": 7,
+            "top": 181,
+            "right": 31,
+            "bottom": 411,
+            "rightInclusive": 30,
+            "bottomInclusive": 410
+          },
+          "sampleCoordinates": [
+            {
+              "x": 30,
+              "y": 181
+            },
+            {
+              "x": 30,
+              "y": 182
+            },
+            {
+              "x": 29,
+              "y": 183
+            },
+            {
+              "x": 30,
+              "y": 183
+            },
+            {
+              "x": 29,
+              "y": 184
+            },
+            {
+              "x": 28,
+              "y": 185
+            },
+            {
+              "x": 29,
+              "y": 185
+            },
+            {
+              "x": 28,
+              "y": 186
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 0,
+          "finalRedTintPixels": 1528,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "final-red-tint-001",
+          "pixels": 1528,
+          "bounds": {
+            "left": 561,
+            "top": 181,
+            "right": 585,
+            "bottom": 411,
+            "rightInclusive": 584,
+            "bottomInclusive": 410
+          },
+          "sampleCoordinates": [
+            {
+              "x": 561,
+              "y": 181
+            },
+            {
+              "x": 561,
+              "y": 182
+            },
+            {
+              "x": 561,
+              "y": 183
+            },
+            {
+              "x": 562,
+              "y": 183
+            },
+            {
+              "x": 562,
+              "y": 184
+            },
+            {
+              "x": 562,
+              "y": 185
+            },
+            {
+              "x": 563,
+              "y": 185
+            },
+            {
+              "x": 562,
+              "y": 186
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 0,
+          "finalRedTintPixels": 1528,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "final-red-tint-002",
+          "pixels": 1526,
+          "bounds": {
+            "left": 181,
+            "top": 7,
+            "right": 411,
+            "bottom": 31,
+            "rightInclusive": 410,
+            "bottomInclusive": 30
+          },
+          "sampleCoordinates": [
+            {
+              "x": 274,
+              "y": 7
+            },
+            {
+              "x": 275,
+              "y": 7
+            },
+            {
+              "x": 276,
+              "y": 7
+            },
+            {
+              "x": 277,
+              "y": 7
+            },
+            {
+              "x": 278,
+              "y": 7
+            },
+            {
+              "x": 279,
+              "y": 7
+            },
+            {
+              "x": 280,
+              "y": 7
+            },
+            {
+              "x": 281,
+              "y": 7
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 0,
+          "finalRedTintPixels": 1526,
+          "finalOtherPixels": 0
+        },
+        {
+          "id": "final-red-tint-003",
+          "pixels": 1526,
+          "bounds": {
+            "left": 181,
+            "top": 561,
+            "right": 411,
+            "bottom": 585,
+            "rightInclusive": 410,
+            "bottomInclusive": 584
+          },
+          "sampleCoordinates": [
+            {
+              "x": 181,
+              "y": 561
+            },
+            {
+              "x": 182,
+              "y": 561
+            },
+            {
+              "x": 183,
+              "y": 561
+            },
+            {
+              "x": 408,
+              "y": 561
+            },
+            {
+              "x": 409,
+              "y": 561
+            },
+            {
+              "x": 410,
+              "y": 561
+            },
+            {
+              "x": 183,
+              "y": 562
+            },
+            {
+              "x": 184,
+              "y": 562
+            }
+          ],
+          "originalTargetPixels": 0,
+          "finalWhiteLayerPixels": 0,
+          "finalRedTintPixels": 1526,
+          "finalOtherPixels": 0
+        }
+      ]
+    },
+    "originalTargetCluster": {
+      "componentCount": 1,
+      "largestComponents": [
+        {
+          "id": "original-target-000",
+          "pixels": 59,
+          "bounds": {
+            "left": 94,
+            "top": 84,
+            "right": 105,
+            "bottom": 94,
+            "rightInclusive": 104,
+            "bottomInclusive": 93
+          },
+          "sampleCoordinates": [
+            {
+              "x": 96,
+              "y": 84
+            },
+            {
+              "x": 97,
+              "y": 84
+            },
+            {
+              "x": 98,
+              "y": 84
+            },
+            {
+              "x": 99,
+              "y": 84
+            },
+            {
+              "x": 100,
+              "y": 84
+            },
+            {
+              "x": 101,
+              "y": 84
+            },
+            {
+              "x": 102,
+              "y": 84
+            },
+            {
+              "x": 103,
+              "y": 84
+            }
+          ],
+          "originalTargetPixels": 59,
+          "finalWhiteLayerPixels": 59,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0
+        }
+      ]
+    }
+  },
+  "zoneSpatialComparison": {
+    "draw_oval_outer_boundary": {
+      "candidatePixels": 10856,
+      "redRuntimeDispatchPixels": 5548,
+      "candidateMinusRuntimePixels": 5308,
+      "originalTargetPixels": 59,
+      "originalTargetsInsideRuntime": 0,
+      "finalWhiteLayerPixels": 6176,
+      "finalRedTintPixels": 3700,
+      "finalOtherPixels": 980,
+      "redRuntimeFinalWhiteLayerPixels": 868,
+      "redRuntimeFinalRedTintPixels": 3700,
+      "redRuntimeFinalOtherPixels": 980,
+      "targetDistanceToRedRuntimeDispatch": {
+        "pixels": 59,
+        "minEuclidean": 70.936591,
+        "maxEuclidean": 84.386018,
+        "averageEuclidean": 77.870976,
+        "minManhattan": 100,
+        "maxManhattan": 119,
+        "minChebyshev": 54,
+        "maxChebyshev": 64,
+        "nearestPixel": {
+          "x": 104,
+          "y": 84,
+          "nearest": {
+            "x": 158,
+            "y": 38,
+            "dx": 54,
+            "dy": -46,
+            "euclidean": 70.936591,
+            "manhattan": 100,
+            "chebyshev": 54
+          }
+        }
+      }
+    },
+    "difference_oval_inner_boundary": {
+      "candidatePixels": 6168,
+      "redRuntimeDispatchPixels": 1192,
+      "candidateMinusRuntimePixels": 4976,
+      "originalTargetPixels": 0,
+      "originalTargetsInsideRuntime": 0,
+      "finalWhiteLayerPixels": 4976,
+      "finalRedTintPixels": 1176,
+      "finalOtherPixels": 16,
+      "redRuntimeFinalWhiteLayerPixels": 0,
+      "redRuntimeFinalRedTintPixels": 1176,
+      "redRuntimeFinalOtherPixels": 16,
+      "targetDistanceToRedRuntimeDispatch": null
+    },
+    "halo_interior": {
+      "candidatePixels": 3568,
+      "redRuntimeDispatchPixels": 1248,
+      "candidateMinusRuntimePixels": 2320,
+      "originalTargetPixels": 0,
+      "originalTargetsInsideRuntime": 0,
+      "finalWhiteLayerPixels": 2320,
+      "finalRedTintPixels": 1232,
+      "finalOtherPixels": 16,
+      "redRuntimeFinalWhiteLayerPixels": 0,
+      "redRuntimeFinalRedTintPixels": 1232,
+      "redRuntimeFinalOtherPixels": 16,
+      "targetDistanceToRedRuntimeDispatch": null
+    },
+    "outside_draw_oval": {
+      "candidatePixels": 1832,
+      "redRuntimeDispatchPixels": 1100,
+      "candidateMinusRuntimePixels": 732,
+      "originalTargetPixels": 0,
+      "originalTargetsInsideRuntime": 0,
+      "finalWhiteLayerPixels": 1832,
+      "finalRedTintPixels": 0,
+      "finalOtherPixels": 0,
+      "redRuntimeFinalWhiteLayerPixels": 1100,
+      "redRuntimeFinalRedTintPixels": 0,
+      "redRuntimeFinalOtherPixels": 0,
+      "targetDistanceToRedRuntimeDispatch": null
+    },
+    "blurred_content_envelope": {
+      "candidatePixels": 20592,
+      "redRuntimeDispatchPixels": 7988,
+      "candidateMinusRuntimePixels": 12604,
+      "originalTargetPixels": 59,
+      "originalTargetsInsideRuntime": 0,
+      "finalWhiteLayerPixels": 13472,
+      "finalRedTintPixels": 6108,
+      "finalOtherPixels": 1012,
+      "redRuntimeFinalWhiteLayerPixels": 868,
+      "redRuntimeFinalRedTintPixels": 6108,
+      "redRuntimeFinalOtherPixels": 1012,
+      "targetDistanceToRedRuntimeDispatch": {
+        "pixels": 59,
+        "minEuclidean": 70.936591,
+        "maxEuclidean": 84.386018,
+        "averageEuclidean": 77.870976,
+        "minManhattan": 100,
+        "maxManhattan": 119,
+        "minChebyshev": 54,
+        "maxChebyshev": 64,
+        "nearestPixel": {
+          "x": 104,
+          "y": 84,
+          "nearest": {
+            "x": 158,
+            "y": 38,
+            "dx": 54,
+            "dy": -46,
+            "euclidean": 70.936591,
+            "manhattan": 100,
+            "chebyshev": 54
+          }
+        }
+      }
+    }
+  },
+  "originalTargetClusterSummary": {
+    "bounds": {
+      "left": 94,
+      "top": 84,
+      "right": 105,
+      "bottom": 94,
+      "rightInclusive": 104,
+      "bottomInclusive": 93
+    },
+    "pixels": 59,
+    "componentCount": 1,
+    "insideRedCandidateDomain": 59,
+    "insideRedRuntimeDispatchDomain": 0,
+    "insideCandidateMinusRuntimeHole": 59,
+    "finalWhiteLayerPixels": 59,
+    "finalRedTintPixels": 0,
+    "targetHoleComponent": {
+      "id": "candidate-minus-runtime-002",
+      "pixels": 3293,
+      "bounds": {
+        "left": 18,
+        "top": 18,
+        "right": 262,
+        "bottom": 262,
+        "rightInclusive": 261,
+        "bottomInclusive": 261
+      },
+      "sampleCoordinates": [
+        {
+          "x": 250,
+          "y": 18
+        },
+        {
+          "x": 251,
+          "y": 18
+        },
+        {
+          "x": 252,
+          "y": 18
+        },
+        {
+          "x": 253,
+          "y": 18
+        },
+        {
+          "x": 254,
+          "y": 18
+        },
+        {
+          "x": 255,
+          "y": 18
+        },
+        {
+          "x": 256,
+          "y": 18
+        },
+        {
+          "x": 257,
+          "y": 18
+        }
+      ],
+      "originalTargetPixels": 59,
+      "finalWhiteLayerPixels": 3293,
+      "finalRedTintPixels": 0,
+      "finalOtherPixels": 0,
+      "minDistanceFromOriginalTargetsToRedRuntimeDispatch": 70.936591,
+      "nearestOriginalTargetToRedRuntimeDispatch": {
+        "x": 104,
+        "y": 84,
+        "nearest": {
+          "x": 158,
+          "y": 38,
+          "dx": 54,
+          "dy": -46,
+          "euclidean": 70.936591,
+          "manhattan": 100,
+          "chebyshev": 54
+        }
+      }
+    },
+    "nearestRedRuntimeDispatchStats": {
+      "pixels": 59,
+      "minEuclidean": 70.936591,
+      "maxEuclidean": 84.386018,
+      "averageEuclidean": 77.870976,
+      "minManhattan": 100,
+      "maxManhattan": 119,
+      "minChebyshev": 54,
+      "maxChebyshev": 64,
+      "nearestPixel": {
+        "x": 104,
+        "y": 84,
+        "nearest": {
+          "x": 158,
+          "y": 38,
+          "dx": 54,
+          "dy": -46,
+          "euclidean": 70.936591,
+          "manhattan": 100,
+          "chebyshev": 54
+        }
+      }
+    },
+    "sourceSubzones": {
+      "draw_oval_outer_boundary": 59,
+      "difference_oval_inner_boundary": 0,
+      "halo_interior": 0,
+      "outside_draw_oval": 0,
+      "blurred_content_envelope": 59
+    }
+  },
+  "interpretation": {
+    "nonMembershipInRuntimeRedDomain": true,
+    "reconstructedCandidateIncludesOriginalTargets": true,
+    "reconstructedCandidateOverbroadAtOriginalTargets": true,
+    "runtimeDomainFinalCompositeMismatchStillPresent": true,
+    "runtimeDomainFinalCompositeMismatchDominatesNextFix": false,
+    "spatialSeparationDominatesOriginalTargetClusterQuestion": true
+  },
+  "sourcePreservation": {
+    "for288ClassificationPreserved": true,
+    "for289DecisionPreserved": true,
+    "for290DecisionPreserved": true,
+    "for291DecisionPreserved": true,
+    "for292DecisionPreserved": true,
+    "for293DecisionPreserved": true,
+    "for294DecisionPreserved": true,
+    "for295DecisionPreserved": true
+  },
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuRendererChanged": false,
+    "cpuInstrumentationChanged": false,
+    "newRuntimeTraceGeneratedByFOR296": false,
+    "gpuRendererChanged": false,
+    "globalBlendChanged": false,
+    "setPixelSemanticsChanged": false,
+    "for288ClassificationChanged": false,
+    "for289DecisionChanged": false,
+    "for290DecisionChanged": false,
+    "for291DecisionChanged": false,
+    "for292DecisionChanged": false,
+    "for293DecisionChanged": false,
+    "for294DecisionChanged": false,
+    "for295DecisionChanged": false,
+    "m60Promoted": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
