@@ -67,6 +67,11 @@ struct Uniforms {
     // Slots past 4 * 9 = 36 floats (indices 33..35) are unused but
     // must be zeroed by the host so the uniform bytes are deterministic.
     weights:       array<vec4f, 9>,  // offset 48
+    // FOR-270 -- optional analytic clip shape applied only by final
+    // composite entries. clipKind is 0 (none), 1 (rrect intersect), or
+    // 2 (rrect difference).
+    clipShapeBounds:     vec4f,      // offset 192
+    clipShapeRadiiKind:  vec4f,      // offset 208
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -95,6 +100,46 @@ fn weight_at(k: i32) -> f32 {
     if (comp_idx == 1) { return v.y; }
     if (comp_idx == 2) { return v.z; }
     return v.w;
+}
+
+fn rrect_cov(p: vec2f, bounds: vec4f, rx_in: f32, ry_in: f32) -> f32 {
+    let centre = vec2f(0.5 * (bounds.x + bounds.z), 0.5 * (bounds.y + bounds.w));
+    let half = vec2f(0.5 * (bounds.z - bounds.x), 0.5 * (bounds.w - bounds.y));
+    let rx = max(rx_in, 1e-4);
+    let ry = max(ry_in, 1e-4);
+    let q_abs = abs(p - centre);
+    let q = q_abs - (half - vec2f(rx, ry));
+    let outer_rect_sdf = max(q_abs.x - half.x, q_abs.y - half.y);
+    let qm = max(q, vec2f(0.0, 0.0));
+    let n = vec2f(qm.x / rx, qm.y / ry);
+    let nl = length(n);
+    let nl_safe = max(nl, 1e-6);
+    let dir = n / nl_safe;
+    let effective_r = length(vec2f(rx * dir.x, ry * dir.y));
+    let corner_sdf = (nl - 1.0) * effective_r;
+    let in_corner_band = step(0.0, q.x) * step(0.0, q.y);
+    let band_sdf = mix(outer_rect_sdf, corner_sdf, in_corner_band);
+    return clamp(0.5 - band_sdf, 0.0, 1.0);
+}
+
+fn clip_cov(p: vec2f) -> f32 {
+    let clip_kind = i32(uniforms.clipShapeRadiiKind.z + 0.5);
+    if (clip_kind == 1) {
+        return rrect_cov(
+            p,
+            uniforms.clipShapeBounds,
+            uniforms.clipShapeRadiiKind.x,
+            uniforms.clipShapeRadiiKind.y,
+        );
+    } else if (clip_kind == 2) {
+        return 1.0 - rrect_cov(
+            p,
+            uniforms.clipShapeBounds,
+            uniforms.clipShapeRadiiKind.x,
+            uniforms.clipShapeRadiiKind.y,
+        );
+    }
+    return 1.0;
 }
 
 // Horizontal pass : sample along X. The fragment's dst pixel maps
@@ -201,6 +246,7 @@ fn fs_vertical_composite(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     } else if (style == 3) {
         coverage = blurAlpha * maskAlpha;
     }
+    coverage = coverage * clip_cov(pos.xy);
 
     return vec4f(
         uniforms.paintColor.r * coverage,
@@ -295,6 +341,7 @@ fn fs_composite_upsampled(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     } else if (style == 3) {
         coverage = blurAlpha * maskAlpha;
     }
+    coverage = coverage * clip_cov(pos.xy);
 
     return vec4f(
         uniforms.paintColor.r * coverage,
