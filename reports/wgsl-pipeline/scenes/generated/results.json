@@ -2240,7 +2240,7 @@
         "status": "pass",
         "image": "artifacts/crop-image-filter-nonnull-prepass/gpu.png",
         "diff": "artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
-        "similarity": 98.13,
+        "similarity": 98.44,
         "route": {
           "coverageStrategy": "webgpu.image-filter.crop-nonnull-offset-prepass",
           "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
@@ -2249,7 +2249,7 @@
         },
         "stats": {
           "pixels": 128000,
-          "matchingPixels": 125600,
+          "matchingPixels": 126000,
           "maxChannelDelta": 110,
           "threshold": 50,
           "backend": "WebGPU",
@@ -2267,7 +2267,7 @@
       },
       "stats": {
         "pixels": 128000,
-        "matchingPixels": 125600,
+        "matchingPixels": 126000,
         "maxChannelDelta": 110,
         "threshold": 50
       },
@@ -2277,6 +2277,7 @@
         "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
         "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
         "reports/wgsl-pipeline/2026-05-28-m38-image-filter-closeout.md",
+        "reports/wgsl-pipeline/2026-06-03-for-242-crop-image-filter-prepass-fidelity.md",
         "reports/wgsl-pipeline/scenes/generated/results.json",
         "reports/wgsl-pipeline/scenes/generated/artifacts/crop-image-filter-nonnull-prepass/stats.json",
         "reports/wgsl-pipeline/scenes/generated/artifacts/crop-image-filter-nonnull-prepass/route-prepass.json",
@@ -2302,7 +2303,7 @@
         "route.gpu.webgpu",
         "reference.skia-upstream",
         "maturity.generated-evidence",
-        "risk.none"
+        "risk.fidelity-gap"
       ]
     },
     {

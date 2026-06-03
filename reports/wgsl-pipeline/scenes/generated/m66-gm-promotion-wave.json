@@ -127,8 +127,8 @@
       "gpuRoute": "webgpu.image-filter.crop-nonnull.prepass",
       "pipelineKey": "imageFilter=crop input=nonnull prepass=required source=ImageFiltersCroppedGM milestone=M66",
       "fallbackReason": "none",
-      "nonClaim": "Promotes a bounded crop/non-null prepass row only; arbitrary picture prepass and recursive filter graphs remain unsupported.",
-      "tags": ["source.generated", "source.inventory", "feature.image-filter", "feature.crop", "route.cpu.oracle", "route.gpu.webgpu", "reference.skia-upstream", "maturity.generated-evidence", "maturity.adapter-backed", "risk.none"]
+      "nonClaim": "Promotes only the bounded WebGPU route for crop/non-null prepass. Strict Skia fidelity is not claimed until CPU and GPU reach the strict threshold; arbitrary picture prepass and recursive filter graphs remain unsupported.",
+      "tags": ["source.generated", "source.inventory", "feature.image-filter", "feature.crop", "route.cpu.oracle", "route.gpu.webgpu", "reference.skia-upstream", "maturity.generated-evidence", "maturity.adapter-backed", "risk.fidelity-gap"]
     },
     {
       "id": "m66-path-aa-stroke-primitive-oracle",
