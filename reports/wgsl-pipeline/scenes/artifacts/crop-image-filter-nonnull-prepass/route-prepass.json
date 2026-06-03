@@ -15,6 +15,8 @@
   "for249ProbeResult": "normal WebGPU fragment window around (385,125) matches Skia reference within maxChannelDelta=1; remaining score residual is outside this local Crop composite target window",
   "for250HighDeltaScanProbe": "high-delta-scan-for250.json",
   "for250ProbeResult": "no pixel exceeds maxChannelDelta>8; all non-identical pixels are byte-level maxChannelDelta=1, concentrated in row1-col0, row1-col1, and row2-col3",
+  "for251ColorPremulAuditProbe": "color-premul-audit-for251.json",
+  "for251ProbeResult": "6622 residual pixels remain RGB-only byte deltas with alphaDeltaNonZeroPixels=0; dominant cells include row1-col0 no-filter, so no bounded Crop renderer correction is justified",
   "finalComposite": "Crop(kDecal) UV remap against scratch texture",
   "supportDecision": "risk.fidelity-gap; no strict promotion",
   "unsupportedReasonRemoved": "image-filter.crop-input-nonnull-prepass-required",
