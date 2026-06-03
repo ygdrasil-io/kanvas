@@ -182,6 +182,8 @@ private const val WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG: String =
     "kanvas.webgpu.strokeCapJoin.experimentalRender"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
+private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
+    "kanvas.webgpu.for248.finalCropCompositeProbe"
 
 public fun selectWebGpuBlendPlan(mode: SkBlendMode): BlendPlan = when (mode) {
     in FIXED_FUNCTION_BLEND_MODES -> BlendPlan(
@@ -5940,6 +5942,59 @@ public class SkWebGpuDevice(
             // translated GM cells and incorrectly decals the crop output.
 
             val paintAlphaE = (paint?.alpha ?: 0xFF) / 255f
+            if (shouldProbeFor248FinalCropComposite(
+                    originX = originX,
+                    originY = originY,
+                    layerWidth = w0,
+                    layerHeight = h0,
+                    cropNonNullOffsetPrePass = cropNonNullOffsetPrePass,
+                )
+            ) {
+                pending.add(
+                    LayerCompositeDraw(
+                        layerView = childScratchView,
+                        layerWidth = w0,
+                        layerHeight = h0,
+                        dstOriginX = -43,
+                        dstOriginY = -5,
+                        scissor = intArrayOf(2, 0, 1, 1),
+                        paintR = 1f,
+                        paintG = 1f,
+                        paintB = 1f,
+                        paintA = 1f,
+                        r = 1f,
+                        g = 1f,
+                        b = 1f,
+                        a = 1f,
+                        mode = SkBlendMode.kSrc,
+                        colorFilterPacked = FloatArray(24),
+                        matrixPacked = IDENTITY_LAYER_MATRIX_12,
+                        imageFilterPacked = FloatArray(12),
+                    ),
+                )
+                pending.add(
+                    LayerCompositeDraw(
+                        layerView = childScratchView,
+                        layerWidth = w0,
+                        layerHeight = h0,
+                        dstOriginX = -42,
+                        dstOriginY = -5,
+                        scissor = intArrayOf(3, 0, 1, 1),
+                        paintR = paintAlphaE,
+                        paintG = paintAlphaE,
+                        paintB = paintAlphaE,
+                        paintA = paintAlphaE,
+                        r = 1f,
+                        g = 1f,
+                        b = 1f,
+                        a = paintAlphaE,
+                        mode = SkBlendMode.kSrc,
+                        colorFilterPacked = FloatArray(24),
+                        matrixPacked = IDENTITY_LAYER_MATRIX_12,
+                        imageFilterPacked = cropPacked,
+                    ),
+                )
+            }
             pending.add(
                 LayerCompositeDraw(
                     layerView = childScratchView,
@@ -8054,6 +8109,41 @@ public class SkWebGpuDevice(
         if (System.getProperty(WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG) != "true") {
             return false
         }
+        return isSelectedCropOffsetPrePassProbeCase(
+            originX = originX,
+            originY = originY,
+            layerWidth = layerWidth,
+            layerHeight = layerHeight,
+            cropNonNullOffsetPrePass = cropNonNullOffsetPrePass,
+        )
+    }
+
+    private fun shouldProbeFor248FinalCropComposite(
+        originX: Int,
+        originY: Int,
+        layerWidth: Int,
+        layerHeight: Int,
+        cropNonNullOffsetPrePass: CropNonNullOffsetPrePassPlan,
+    ): Boolean {
+        if (System.getProperty(WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG) != "true") {
+            return false
+        }
+        return isSelectedCropOffsetPrePassProbeCase(
+            originX = originX,
+            originY = originY,
+            layerWidth = layerWidth,
+            layerHeight = layerHeight,
+            cropNonNullOffsetPrePass = cropNonNullOffsetPrePass,
+        )
+    }
+
+    private fun isSelectedCropOffsetPrePassProbeCase(
+        originX: Int,
+        originY: Int,
+        layerWidth: Int,
+        layerHeight: Int,
+        cropNonNullOffsetPrePass: CropNonNullOffsetPrePassPlan,
+    ): Boolean {
         val crop = cropNonNullOffsetPrePass.cropRect
         return originX == 340 &&
             originY == 120 &&

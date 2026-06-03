@@ -1,0 +1,41 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "crop-image-filter-nonnull-prepass",
+  "linear": "FOR-248",
+  "probe": "crop-offset-final-crop-composite",
+  "targetCell": "crop == clip == dst",
+  "case": "Crop(kDecal, rect=(40,0,80,40), input=Offset(40,0,input=null))",
+  "origin": [340, 120],
+  "layerExtent": [80, 40],
+  "offset": [40, 0],
+  "cropRect": [40, 0, 80, 40],
+  "tileMode": "kDecal",
+  "finalFragment": {
+    "xy": [385, 125],
+    "dstOrigin": [340, 120],
+    "preCropLayerPixel": [45, 5],
+    "postCropScratchPixel": [45, 5],
+    "insideFinalScissor": true,
+    "insideCropRect": true,
+    "decalTransparentAfterCropRemap": false,
+    "rgba": [220, 153, 145, 255]
+  },
+  "scratchPixel": {
+    "xy": [45, 5],
+    "sentinel": [2, 0],
+    "rgba": [202, 59, 19, 255]
+  },
+  "finalCropCompositeShaderSample": {
+    "sentinel": [3, 0],
+    "forcedDstOrigin": [-42, -5],
+    "preCropLayerPixel": [45, 5],
+    "postCropScratchPixel": [45, 5],
+    "rgba": [202, 59, 19, 102]
+  },
+  "finalCompositeReadsScratchPixel45x5": true,
+  "finalFragmentObservedWhite": false,
+  "observationMethod": "diagnostic WebGPU 1x1 kSrc copies after child materialization: scratchPixel(45,5) -> output(2,0), final Crop payload remap of layerPixel(45,5) -> output(3,0); normal final GM fragment read from output(385,125)",
+  "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+  "fallbackReason": "none",
+  "supportDecision": "KEEP_DIAGNOSTIC"
+}
