@@ -1557,14 +1557,32 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         var mr = ceil(devBounds.right + strokeExpand).toInt() + margin
         var mb = ceil(devBounds.bottom + strokeExpand).toInt() + margin
 
-        // 2. Intersect with current clip + device bounds.
-        ml = maxOf(ml, clip.left, 0)
-        mt = maxOf(mt, clip.top, 0)
-        mr = minOf(mr, clip.right, width)
-        mb = minOf(mb, clip.bottom, height)
+        // 2. Keep source mask generation independent from the final clip only
+        // for active AA clips. A mask filter such as blur can pull coverage
+        // from source pixels outside a non-rect clip into pixels that survive
+        // it, and clipping the temporary source mask here truncates that
+        // contribution before [filterMask] sees it. Rect-only clips keep the
+        // established quick-reject behavior covered by BlurQuickRejectGM.
+        val preserveOffClipMaskSource = activeAaClip != null
+        if (preserveOffClipMaskSource) {
+            ml = maxOf(ml, 0)
+            mt = maxOf(mt, 0)
+            mr = minOf(mr, width)
+            mb = minOf(mb, height)
+        } else {
+            ml = maxOf(ml, clip.left, 0)
+            mt = maxOf(mt, clip.top, 0)
+            mr = minOf(mr, clip.right, width)
+            mb = minOf(mb, clip.bottom, height)
+        }
         val maskW = mr - ml
         val maskH = mb - mt
         if (maskW <= 0 || maskH <= 0) return
+        val compositeX0 = maxOf(0, clip.left - ml)
+        val compositeY0 = maxOf(0, clip.top - mt)
+        val compositeX1 = minOf(maskW, clip.right - ml)
+        val compositeY1 = minOf(maskH, clip.bottom - mt)
+        if (compositeX0 >= compositeX1 || compositeY0 >= compositeY1) return
 
         // 3. Allocate a transparent 8-bit alpha-target bitmap.
         val maskBitmap = org.skia.foundation.SkBitmap(maskW, maskH).also {
@@ -1615,10 +1633,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             org.skia.foundation.SkMaskFilter.Format.kA8 -> {
                 val blurred = effectiveMaskFilter.filterMask(srcMask, maskW, maskH)
                 if (shader != null && shaderRow != null) {
-                    for (y in 0 until maskH) {
+                    for (y in compositeY0 until compositeY1) {
                         val devY = mt + y
                         shader.shadeRow(ml, devY, maskW, shaderRow)
-                        for (x in 0 until maskW) {
+                        for (x in compositeX0 until compositeX1) {
                             val devX = ml + x
                             val maskA = blurred[y * maskW + x].toInt() and 0xFF
                             if (maskA == 0 && !mustBlendZero) continue
@@ -1634,9 +1652,9 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                     }
                 } else {
                     val rgb = effectiveColor and 0x00FFFFFF
-                    for (y in 0 until maskH) {
+                    for (y in compositeY0 until compositeY1) {
                         val devY = mt + y
-                        for (x in 0 until maskW) {
+                        for (x in compositeX0 until compositeX1) {
                             val devX = ml + x
                             val maskA = blurred[y * maskW + x].toInt() and 0xFF
                             val effA = (paintA * maskA + 127) / 255
@@ -1654,11 +1672,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 // shader (sampled here at the same device coordinates the
                 // mask covers) instead of `paint.color`.
                 if (shader != null && shaderRow != null) {
-                    for (y in 0 until maskH) {
+                    for (y in compositeY0 until compositeY1) {
                         val devY = mt + y
                         shader.shadeRow(ml, devY, maskW, shaderRow)
                         val rowOffset = y * maskW
-                        for (x in 0 until maskW) {
+                        for (x in compositeX0 until compositeX1) {
                             val devX = ml + x
                             val idx = rowOffset + x
                             val maskA = mask3d.alpha[idx].toInt() and 0xFF
@@ -1683,10 +1701,10 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                     val paintR = (effectiveColor ushr 16) and 0xFF
                     val paintG = (effectiveColor ushr 8) and 0xFF
                     val paintB = effectiveColor and 0xFF
-                    for (y in 0 until maskH) {
+                    for (y in compositeY0 until compositeY1) {
                         val devY = mt + y
                         val rowOffset = y * maskW
-                        for (x in 0 until maskW) {
+                        for (x in compositeX0 until compositeX1) {
                             val devX = ml + x
                             val idx = rowOffset + x
                             val maskA = mask3d.alpha[idx].toInt() and 0xFF
