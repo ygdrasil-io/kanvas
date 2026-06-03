@@ -9114,11 +9114,14 @@ public class SkWebGpuDevice(
 
         // Paint colour : extract premul RGBA. The shape mask is white-
         // premul, so the final premul output is paintColor * coverage.
-        val color = paint.color
-        val ca = SkColorGetA(color) / 255f
-        val cr = SkColorGetR(color) / 255f * ca
-        val cg = SkColorGetG(color) / 255f * ca
-        val cb = SkColorGetB(color) / 255f * ca
+        //
+        // FOR-273 -- bounded solid-blur colour-filter fold. The only
+        // folded paint.colorFilter shape is Blend(colour, kSrcIn), whose
+        // premul result is the filter's constant src multiplied by the
+        // solid paint alpha. Other filters keep the historical solid-blur
+        // payload rather than silently claiming broader colour-filter
+        // support for maskFilter draws.
+        val blurPaintColor = solidBlurPaintColor(paint)
 
         // Style ordinal : matches the SkBlurStyle declaration order
         // (kNormal = 0, kSolid = 1, kOuter = 2, kInner = 3). The V-pass
@@ -9142,7 +9145,10 @@ public class SkWebGpuDevice(
                 scissor = scissor,
                 kernel = finalKernel,
                 radius = finalRadius,
-                paintR = cr, paintG = cg, paintB = cb, paintA = ca,
+                paintR = blurPaintColor[0],
+                paintG = blurPaintColor[1],
+                paintB = blurPaintColor[2],
+                paintA = blurPaintColor[3],
                 blurStyleOrdinal = styleOrdinal,
                 clipShapeBounds = blurClip.bounds,
                 clipShapeRx = blurClip.rx,
@@ -9154,6 +9160,29 @@ public class SkWebGpuDevice(
             ),
         )
         return true
+    }
+
+    private fun solidBlurPaintColor(paint: SkPaint): FloatArray {
+        val paintColor = paint.color
+        val paintA = SkColorGetA(paintColor) / 255f
+        val blendParams = paint.colorFilter?.asBlendModeFilter()
+        if (blendParams?.mode == SkBlendMode.kSrcIn) {
+            val c = blendParams.colour
+            val srcA = SkColorGetA(c) / 255f
+            val outA = srcA * paintA
+            return floatArrayOf(
+                SkColorGetR(c) / 255f * outA,
+                SkColorGetG(c) / 255f * outA,
+                SkColorGetB(c) / 255f * outA,
+                outA,
+            )
+        }
+        return floatArrayOf(
+            SkColorGetR(paintColor) / 255f * paintA,
+            SkColorGetG(paintColor) / 255f * paintA,
+            SkColorGetB(paintColor) / 255f * paintA,
+            paintA,
+        )
     }
 
     /**

@@ -568,14 +568,18 @@ def validate(audit: dict[str, Any]) -> None:
             "val rgb = effectiveColor and 0x00FFFFFF",
         ),
     )
-    read_required(
+    gpu_text = read_required(
         GPU_SOURCE,
         (
             "private fun drawPathWithBlurMaskFilterIfApplicable",
-            "val color = paint.color",
-            "paintR = cr, paintG = cg, paintB = cb, paintA = ca",
+            "paintR =",
+            "paintA =",
         ),
     )
+    if "val color = paint.color" not in gpu_text and "solidBlurPaintColor(paint)" not in gpu_text:
+        fail("GPU solid blur paint-color source evidence missing")
+    if "solidBlurPaintColor(paint)" in gpu_text and "Blend(colour, kSrcIn)" not in gpu_text:
+        fail("FOR-273 folded source must document the bounded Blend(colour, kSrcIn) case")
     read_required(
         GPU_SHADER,
         (
@@ -641,9 +645,58 @@ def validate(audit: dict[str, Any]) -> None:
             fail(f"report missing `{needle}`")
 
 
+def is_for273_superseded_state(current: dict[str, Any]) -> bool:
+    try:
+        gpu = comparison(current, "gpu_vs_reference")
+        halo = gpu["subzones"]["halo_interior"]
+        return (
+            current.get("reportedStats", {}).get("gpuSimilarity", 0.0) > 97.5 and
+            halo.get("greaterThanThirtyTwoPixels") == 0 and
+            "solidBlurPaintColor(paint)" in GPU_SOURCE.read_text()
+        )
+    except Exception:
+        return False
+
+
+def validate_for273_supersession(historical: dict[str, Any], current: dict[str, Any]) -> None:
+    route = current.get("route", {})
+    if route.get("gpu") != for269.GPU_ROUTE:
+        fail("FOR-273 superseded state changed GPU route")
+    if route.get("gpuStatus") != "expected-unsupported":
+        fail("FOR-273 superseded state must stay expected-unsupported")
+    if route.get("fallbackReason") != for269.FALLBACK_REASON:
+        fail("FOR-273 superseded state changed fallback reason")
+
+    before = historical.get("reportedStats", {})
+    after = current.get("reportedStats", {})
+    if after.get("gpuSimilarity", 0.0) <= before.get("gpuSimilarity", 0.0):
+        fail("FOR-273 superseded state must improve GPU/reference similarity over FOR-272")
+    if after.get("gpuSimilarity", 0.0) >= for269.SUPPORT_THRESHOLD:
+        fail("FOR-273 superseded state must not promote GPU support from FOR-272 validation")
+    if after.get("cpuSimilarity", 0.0) >= for269.SUPPORT_THRESHOLD:
+        fail("FOR-273 superseded state must keep CPU/reference below strict threshold")
+
+    current_gpu = comparison(current, "gpu_vs_reference")
+    historical_gpu = comparison(historical, "gpu_vs_reference")
+    if current_gpu["subzones"]["halo_interior"]["greaterThanThirtyTwoPixels"] != 0:
+        fail("FOR-273 superseded state must clear the WebGPU halo-interior >32 residual")
+    if current_gpu["greaterThanThirtyTwoPixels"] >= historical_gpu["greaterThanThirtyTwoPixels"]:
+        fail("FOR-273 superseded state must reduce WebGPU/reference >32 residual pixels")
+
+
 def main() -> None:
     audit = generate_audit()
     SCENE_DIR.mkdir(parents=True, exist_ok=True)
+    if is_for273_superseded_state(audit) and AUDIT.is_file():
+        historical = for269.load_json(AUDIT)
+        validate(historical)
+        validate_for273_supersession(historical, audit)
+        print(
+            "FOR-272 validation passed: historical color/layer audit is preserved, "
+            "current artifacts are superseded by FOR-273's bounded WebGPU solid-blur "
+            "Blend(kSrcIn) fold, and support stays expected-unsupported."
+        )
+        return
     AUDIT.write_text(json_dump(audit))
     write_report(audit)
     validate(for269.load_json(AUDIT))

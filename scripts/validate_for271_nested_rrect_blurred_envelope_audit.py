@@ -535,9 +535,19 @@ def validate(audit: dict[str, Any]) -> None:
         if zone not in definitions:
             fail(f"missing subzone definition `{zone}`")
 
+    for273_superseded = (
+        audit.get("reportedStats", {}).get("gpuSimilarity", 0.0) > 97.5 and
+        "solidBlurPaintColor(paint)" in (
+            PROJECT_ROOT / "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
+        ).read_text()
+    )
+
     for name in ("gpu_vs_reference", "cpu_vs_reference", "gpu_vs_cpu"):
         item = comparison(audit, name)
-        if item.get("dominantEnvelopeSubzone") != "draw_oval_outer_boundary":
+        expected_dominant = "draw_oval_outer_boundary"
+        if for273_superseded and name == "gpu_vs_cpu":
+            expected_dominant = "difference_oval_inner_boundary"
+        if item.get("dominantEnvelopeSubzone") != expected_dominant:
             fail(f"{name} should be dominated by draw oval outer boundary")
         if item.get("blurredEnvelopeShareOfGreaterThanThirtyTwo", 0) < 99.0:
             fail(f"{name} high deltas must remain in blurred content envelope")
@@ -559,8 +569,10 @@ def validate(audit: dict[str, Any]) -> None:
         fail("overlap verdict mismatch")
     if overlap.get("gpuReferenceSharedShare", 0) < 70.0:
         fail("GPU/reference residual is not sufficiently shared with CPU/reference")
-    if overlap.get("cpuReferenceSharedShare", 0) < 90.0:
+    if not for273_superseded and overlap.get("cpuReferenceSharedShare", 0) < 90.0:
         fail("CPU/reference residual is not sufficiently shared with GPU/reference")
+    if for273_superseded and overlap.get("cpuReferenceOnlyGreaterThanThirtyTwoPixels", 0) <= 0:
+        fail("post-FOR-273 audit must retain CPU/reference-only residual evidence")
     if overlap.get("gpuCpuGreaterThanThirtyTwoPixels", 0) <= 0:
         fail("GPU/CPU comparison must expose backend color divergence")
 
