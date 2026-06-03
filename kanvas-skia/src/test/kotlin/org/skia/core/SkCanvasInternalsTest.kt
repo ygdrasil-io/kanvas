@@ -14,6 +14,7 @@ import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorType
 import org.skia.foundation.SkImage
 import org.skia.foundation.SkImageFilter
+import org.skia.foundation.SkImageFilters
 import org.graphiks.math.SkColor
 import org.graphiks.math.SkColorGetA
 import org.graphiks.math.SkColorGetB
@@ -146,6 +147,49 @@ class SkCanvasInternalsTest {
                 assertEquals(expected, bitmap.getPixel(x, y), "($x,$y)")
             }
         }
+    }
+
+    @Test
+    fun `drawRect imageFilter captures source outside output clip`() {
+        val bitmap = render(90, 50, bg = SK_ColorWHITE) {
+            save()
+            clipRect(SkRect.MakeLTRB(40f, 0f, 80f, 40f))
+            drawRect(
+                SkRect.MakeLTRB(0f, 0f, 40f, 40f),
+                SkPaint(SK_ColorRED).apply {
+                    imageFilter = SkImageFilters.Offset(40f, 0f, input = null)
+                },
+            )
+            restore()
+        }
+
+        assertEquals(SK_ColorWHITE, bitmap.getPixel(35, 5), "source outside output clip")
+        assertEquals(SK_ColorRED, bitmap.getPixel(45, 5), "offset source inside output clip")
+        assertEquals(SK_ColorWHITE, bitmap.getPixel(85, 5), "outside output clip")
+    }
+
+    @Test
+    fun `drawRect crop offset imageFilter captures source before output clip`() {
+        val bitmap = render(90, 50, bg = SK_ColorWHITE) {
+            save()
+            clipRect(SkRect.MakeLTRB(40f, 0f, 80f, 40f))
+            drawRect(
+                SkRect.MakeLTRB(0f, 0f, 40f, 40f),
+                SkPaint(SK_ColorRED).apply {
+                    imageFilter = SkImageFilters.Offset(
+                        dx = 40f,
+                        dy = 0f,
+                        input = null,
+                        cropRect = SkRect.MakeLTRB(40f, 0f, 80f, 40f),
+                    )
+                },
+            )
+            restore()
+        }
+
+        assertEquals(SK_ColorWHITE, bitmap.getPixel(35, 5), "source outside output clip")
+        assertEquals(SK_ColorRED, bitmap.getPixel(45, 5), "crop offset source inside output clip")
+        assertEquals(SK_ColorWHITE, bitmap.getPixel(85, 5), "outside output clip")
     }
 
     @Test
