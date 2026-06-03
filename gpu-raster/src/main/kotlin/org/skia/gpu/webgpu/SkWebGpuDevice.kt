@@ -12,12 +12,15 @@ import io.ygdrasil.webgpu.BufferBindingLayout
 import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.Color
 import io.ygdrasil.webgpu.ColorTargetState
+import io.ygdrasil.webgpu.ComputePipelineDescriptor
 import io.ygdrasil.webgpu.DepthStencilState
 import io.ygdrasil.webgpu.FragmentState
 import io.ygdrasil.webgpu.GPUAddressMode
 import io.ygdrasil.webgpu.GPUColorWrite
 import io.ygdrasil.webgpu.GPUCompareFunction
+import io.ygdrasil.webgpu.GPUComputePipeline
 import io.ygdrasil.webgpu.GPUFilterMode
+import io.ygdrasil.webgpu.GPUMapMode
 import io.ygdrasil.webgpu.GPUSampler
 import io.ygdrasil.webgpu.GPUSamplerBindingType
 import io.ygdrasil.webgpu.GPUStencilOperation
@@ -56,6 +59,7 @@ import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.VertexAttribute
 import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
+import io.ygdrasil.webgpu.ProgrammableStage
 import io.ygdrasil.webgpu.beginRenderPass
 import kotlinx.coroutines.runBlocking
 import org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgsl
@@ -116,6 +120,8 @@ import org.skia.pipeline.Point
 import org.skia.pipeline.ProductionRouteDiagnostics
 import org.skia.pipeline.RRectSpec
 import org.skia.pipeline.StandardCoverageReason
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.exp
@@ -361,6 +367,23 @@ public class SkWebGpuDevice(
         val rgba: IntArray,
     )
 
+    public data class For258ShaderSideProbeSnapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val diagnosticShader: String,
+        val pipelineLayout: String,
+        val samples: List<For258ShaderSideProbeSample>,
+    )
+
+    public data class For258ShaderSideProbeSample(
+        val name: String,
+        val x: Int,
+        val y: Int,
+        val observedRgbaFloat: FloatArray,
+        val observedRgba8: IntArray,
+        val valid: Boolean,
+    )
+
     public data class RawRectUniformColorWrite(
         val route: String,
         val drawIndex: Int,
@@ -438,9 +461,12 @@ public class SkWebGpuDevice(
         System.getProperty(RAW_COLOR_SENTINELS_PROPERTY, "false").toBoolean()
     private val outputReadbackBoundaryDiagnosticsEnabled: Boolean =
         System.getProperty(OUTPUT_READBACK_BOUNDARY_PROPERTY, "false").toBoolean()
+    private val for258ShaderSideProbeDiagnosticsEnabled: Boolean =
+        System.getProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY, "false").toBoolean()
     private val rawRectUniformColorWrites: MutableList<RawRectUniformColorWrite> = mutableListOf()
     private val rawRgba8TextureUploads: MutableList<RawRgba8TextureUpload> = mutableListOf()
     private val outputReadbackBoundarySamples: MutableList<OutputReadbackSample> = mutableListOf()
+    private val for258ShaderSideProbeSamples: MutableList<For258ShaderSideProbeSample> = mutableListOf()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
         PipelineKeyedCache("generated shader modules")
@@ -495,6 +521,15 @@ public class SkWebGpuDevice(
             width = width,
             height = height,
             samples = outputReadbackBoundarySamples.toList(),
+        )
+
+    public fun for258ShaderSideProbeSnapshot(): For258ShaderSideProbeSnapshot =
+        For258ShaderSideProbeSnapshot(
+            propertyName = FOR258_SHADER_SIDE_PROBE_PROPERTY,
+            enabled = for258ShaderSideProbeDiagnosticsEnabled,
+            diagnosticShader = FOR258_SHADER_SIDE_PROBE_SHADER,
+            pipelineLayout = FOR258_SHADER_SIDE_PROBE_LAYOUT,
+            samples = for258ShaderSideProbeSamples.toList(),
         )
 
     public fun buildPipelineKeyIdentityForDiagnostics(axes: Map<String, String>): PipelineKey =
@@ -709,6 +744,87 @@ public class SkWebGpuDevice(
                     ),
                 )
             }
+        }
+    }
+
+    private fun encodeFor258ShaderSideProbe(
+        encoder: io.ygdrasil.webgpu.GPUCommandEncoder,
+    ): For258ShaderSideProbeReadback? {
+        if (!for258ShaderSideProbeDiagnosticsEnabled) return null
+        for258ShaderSideProbeSamples.clear()
+        val storage = context.device.createBuffer(
+            BufferDescriptor(
+                size = FOR258_SHADER_SIDE_PROBE_BUFFER_SIZE,
+                usage = GPUBufferUsage.Storage or GPUBufferUsage.CopySrc or GPUBufferUsage.CopyDst,
+                mappedAtCreation = false,
+                label = "SkWebGpuDevice.for258ShaderSideProbe.storage.diagnosticOnly",
+            ),
+        )
+        val staging = context.device.createBuffer(
+            BufferDescriptor(
+                size = FOR258_SHADER_SIDE_PROBE_BUFFER_SIZE,
+                usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                mappedAtCreation = false,
+                label = "SkWebGpuDevice.for258ShaderSideProbe.staging.diagnosticOnly",
+            ),
+        )
+        encoder.clearBuffer(storage, 0uL, FOR258_SHADER_SIDE_PROBE_BUFFER_SIZE)
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = for258ShaderSideProbeBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = intermediateView),
+                    BindGroupEntry(binding = 1u, resource = BufferBinding(buffer = storage)),
+                ),
+            ),
+        )
+        val pass = encoder.beginComputePass()
+        pass.setPipeline(for258ShaderSideProbePipeline)
+        pass.setBindGroup(0u, bindGroup)
+        pass.dispatchWorkgroups(FOR258_SHADER_SIDE_PROBE_SAMPLE_COUNT)
+        pass.end()
+        encoder.copyBufferToBuffer(
+            source = storage,
+            sourceOffset = 0uL,
+            destination = staging,
+            destinationOffset = 0uL,
+            size = FOR258_SHADER_SIDE_PROBE_BUFFER_SIZE,
+        )
+        return For258ShaderSideProbeReadback(storage = storage, staging = staging)
+    }
+
+    private suspend fun recordFor258ShaderSideProbe(readback: For258ShaderSideProbeReadback?) {
+        if (readback == null) return
+        try {
+            readback.staging.mapAsync(GPUMapMode.Read, 0uL, FOR258_SHADER_SIDE_PROBE_BUFFER_SIZE)
+                .getOrThrow()
+            val bytes = readback.staging.getMappedRange(0uL, FOR258_SHADER_SIDE_PROBE_BUFFER_SIZE)
+                .toByteArray()
+            readback.staging.unmap()
+            val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+            for258ShaderSideProbeSamples.clear()
+            FOR258_SHADER_SIDE_PROBE_POINTS.forEachIndexed { index, point ->
+                val base = index * FOR258_SHADER_SIDE_PROBE_SAMPLE_STRIDE_BYTES
+                val observed = FloatArray(4) { channel -> buffer.getFloat(base + channel * 4) }
+                val valid = observed.all { value -> value >= 0f }
+                for258ShaderSideProbeSamples += For258ShaderSideProbeSample(
+                    name = point.name,
+                    x = point.x,
+                    y = point.y,
+                    observedRgbaFloat = observed,
+                    observedRgba8 = if (valid) {
+                        IntArray(4) { channel ->
+                            ((observed[channel] * 255f) + 0.5f).toInt().coerceIn(0, 255)
+                        }
+                    } else {
+                        intArrayOf(-1, -1, -1, -1)
+                    },
+                    valid = valid,
+                )
+            }
+        } finally {
+            readback.staging.close()
+            readback.storage.close()
         }
     }
 
@@ -2948,6 +3064,57 @@ public class SkWebGpuDevice(
             ),
         ),
     )
+
+    private val for258ShaderSideProbeShaderLazy: Lazy<GPUShaderModule> = lazy {
+        loadShader(FOR258_SHADER_SIDE_PROBE_SHADER)
+    }
+
+    private val for258ShaderSideProbeShader: GPUShaderModule
+        get() = for258ShaderSideProbeShaderLazy.value
+
+    private val for258ShaderSideProbeBindGroupLayoutLazy: Lazy<GPUBindGroupLayout> = lazy {
+        context.device.createBindGroupLayout(
+            BindGroupLayoutDescriptor(
+                entries = listOf(
+                    BindGroupLayoutEntry(
+                        binding = 0u,
+                        visibility = GPUShaderStage.Compute,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.UnfilterableFloat,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 1u,
+                        visibility = GPUShaderStage.Compute,
+                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Storage),
+                    ),
+                ),
+            ),
+        )
+    }
+
+    private val for258ShaderSideProbeBindGroupLayout: GPUBindGroupLayout
+        get() = for258ShaderSideProbeBindGroupLayoutLazy.value
+
+    private val for258ShaderSideProbePipelineLazy: Lazy<GPUComputePipeline> = lazy {
+        context.device.createComputePipeline(
+            ComputePipelineDescriptor(
+                layout = context.device.createPipelineLayout(
+                    PipelineLayoutDescriptor(bindGroupLayouts = listOf(for258ShaderSideProbeBindGroupLayout)),
+                ),
+                compute = ProgrammableStage(
+                    module = for258ShaderSideProbeShader,
+                    entryPoint = "cs_main",
+                ),
+                label = "SkWebGpuDevice.for258ShaderSideProbe.pipeline.diagnosticOnly",
+            ),
+        )
+    }
+
+    private val for258ShaderSideProbePipeline: GPUComputePipeline
+        get() = for258ShaderSideProbePipelineLazy.value
 
     // ─── Bitmap shader (G5.1) — drawImageRect with kLinear / kClamp / SrcOver ──
 
@@ -13693,6 +13860,7 @@ public class SkWebGpuDevice(
         // present pass below samples it, applies the sRGB → Rec.2020
         // transform, and writes to `target.colorTexture` for readback.
         val perDrawResources = encodePendingDrawsToIntermediate(encoder)
+        val for258ShaderSideProbeReadback = encodeFor258ShaderSideProbe(encoder)
 
         // G6.1 present pass : transform sRGB intermediate to Rec.2020
         // final, in a fragment shader (textureLoad + transform + write).
@@ -13721,6 +13889,7 @@ public class SkWebGpuDevice(
         target.encodeCopyToStaging(encoder)
         context.queue.submit(listOf(encoder.finish()))
 
+        recordFor258ShaderSideProbe(for258ShaderSideProbeReadback)
         val pixels = target.readPixels()
         recordOutputReadbackBoundary(pixels)
 
@@ -13863,6 +14032,11 @@ public class SkWebGpuDevice(
         // here (at end-of-flush) is correct.
         val materializeTargetTexture: GPUTexture? = null,
         val materializeTargetView: GPUTextureView? = null,
+    )
+
+    private data class For258ShaderSideProbeReadback(
+        val storage: GPUBuffer,
+        val staging: GPUBuffer,
     )
 
     private fun buildRectDrawResources(d: RectDraw): DrawResources {
@@ -16093,6 +16267,9 @@ public class SkWebGpuDevice(
         imageTextureCache.clear()
         stencilWritePipeline.close()
         presentPipeline.close()
+        if (for258ShaderSideProbePipelineLazy.isInitialized()) {
+            for258ShaderSideProbePipeline.close()
+        }
         handwrittenRectShader.close()
         generatedSolidRectShader?.close()
         polygonShader.close()
@@ -16114,6 +16291,9 @@ public class SkWebGpuDevice(
         layerCompositeShader.close()
         blurGaussianShader.close()
         presentShader.close()
+        if (for258ShaderSideProbeShaderLazy.isInitialized()) {
+            for258ShaderSideProbeShader.close()
+        }
         intermediateView.close()
         intermediateTexture.close()
         depthStencilView.close()
@@ -16124,11 +16304,31 @@ public class SkWebGpuDevice(
     private companion object {
         const val RAW_COLOR_SENTINELS_PROPERTY: String = "kanvas.webgpu.rawColorSentinels"
         const val OUTPUT_READBACK_BOUNDARY_PROPERTY: String = "kanvas.webgpu.for256.outputReadbackBoundary"
+        const val FOR258_SHADER_SIDE_PROBE_PROPERTY: String = "kanvas.webgpu.for258.shaderSideProbe"
+        const val FOR258_SHADER_SIDE_PROBE_SHADER: String =
+            "shaders/shader_side_probe_for258_diagnostic_only.wgsl"
+        const val FOR258_SHADER_SIDE_PROBE_LAYOUT: String =
+            "diagnostic-only compute layout: binding0 intermediate texture, binding1 storage buffer"
         const val RAW_COLOR_SENTINEL_TEXEL_SAMPLE_LIMIT: Int = 16
+        const val FOR258_SHADER_SIDE_PROBE_SAMPLE_STRIDE_BYTES: Int = 16
+        const val FOR258_SHADER_SIDE_PROBE_SAMPLE_COUNT: UInt = 2u
+        val FOR258_SHADER_SIDE_PROBE_BUFFER_SIZE: ULong =
+            (FOR258_SHADER_SIDE_PROBE_SAMPLE_STRIDE_BYTES * FOR258_SHADER_SIDE_PROBE_SAMPLE_COUNT.toInt())
+                .toULong()
         val OUTPUT_READBACK_SENTINEL_POINTS: List<Pair<Int, Int>> = listOf(
             0 to 0,
             8 to 24,
             40 to 40,
+        )
+        val FOR258_SHADER_SIDE_PROBE_POINTS: List<For258ShaderSideProbePoint> = listOf(
+            For258ShaderSideProbePoint("legacy-source-color-uniform.simple-offset-row1-col0", 40, 40),
+            For258ShaderSideProbePoint("bitmap-texel-upload-sample.bitmap-rect-nearest", 8, 24),
+        )
+
+        data class For258ShaderSideProbePoint(
+            val name: String,
+            val x: Int,
+            val y: Int,
         )
 
         private val SUPPORTED_RUNTIME_EFFECT_WGSL_IDS = setOf(

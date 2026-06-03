@@ -609,6 +609,119 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-258 shader-side diagnostic probe isolates pre-present boundary`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val simpleOffsetGm = SimpleOffsetImageFilterGM()
+        val simpleOffsetReference = TestUtils.loadReferenceBitmap(simpleOffsetGm.name())
+        assertNotNull(simpleOffsetReference, "original-888/${simpleOffsetGm.name()}.png missing")
+        val bitmapGm = DrawBitmapRectSkbug4734GM()
+        val bitmapReference = readEvidencePng(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/skia.png",
+        )
+
+        val oldRawSentinels = System.getProperty(FOR255_RAW_SENTINELS_PROPERTY)
+        val oldOutputBoundary = System.getProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY)
+        val oldShaderProbe = System.getProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY)
+        try {
+            System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, "true")
+            System.setProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY, "true")
+            System.setProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY, "true")
+            context!!.use { ctx ->
+                val simpleOffset = renderSimpleOffsetWithRawColorSentinels(ctx, simpleOffsetGm)
+                val bitmapUpload = renderBitmapUploadRawColorSentinel(ctx)
+                val bitmapScene = renderDrawBitmapRectSkbug4734WithOutputBoundary(ctx, bitmapGm)
+                val for254 = buildFor254SourceTexelRoundingAuditProbe(
+                    simpleOffsetReference!!,
+                    simpleOffset.bitmap,
+                )
+                val for255 = buildFor255RawColorSentinelProbe(
+                    sourceUniformSnapshot = simpleOffset.sentinels,
+                    bitmapUploadSnapshot = bitmapUpload.sentinels,
+                    for254 = for254,
+                )
+                val for256 = buildFor256ShaderStoreReferenceBoundaryProbe(
+                    for255 = for255,
+                    simpleOffsetOutput = simpleOffset.outputReadbackBoundary,
+                    bitmapOutput = bitmapScene.outputReadbackBoundary,
+                )
+                val for257 = buildFor257ReferenceByteExpectationAuditProbe(
+                    for255 = for255,
+                    for256 = for256,
+                    simpleOffsetReference = simpleOffsetReference,
+                    bitmapReference = bitmapReference,
+                )
+                val probe = buildFor258ShaderSideProbe(
+                    for255 = for255,
+                    for256 = for256,
+                    for257 = for257,
+                    simpleOffsetShaderSide = simpleOffset.for258ShaderSideProbe,
+                    bitmapShaderSide = bitmapScene.for258ShaderSideProbe,
+                )
+
+                assertEquals(
+                    FOR258_SHADER_SIDE_PROBE_PROPERTY,
+                    probe.propertyName,
+                    "FOR-258: opt-in shader-side probe property changed",
+                )
+                assertEquals(
+                    false,
+                    probe.defaultEnabled,
+                    "FOR-258: shader-side probe must stay disabled by default",
+                )
+                assertEquals(
+                    true,
+                    probe.runtimeSnapshotsEnabled,
+                    "FOR-258: shader-side snapshots were not enabled",
+                )
+                assertEquals(
+                    true,
+                    probe.diagnosticLayoutChanged,
+                    "FOR-258: probe must be explicitly isolated in a diagnostic-only layout",
+                )
+                assertEquals(
+                    false,
+                    probe.normalRenderingChanged,
+                    "FOR-258: normal rendering must not be relabelled as changed",
+                )
+                assertEquals(
+                    "KEEP_DIAGNOSTIC",
+                    probe.supportDecision,
+                    "FOR-258: shader-side evidence must not promote an unproven correction",
+                )
+                assertTrue(
+                    probe.cases.all { case ->
+                        case.shaderSideSampleValid &&
+                            case.presentReconstructionMatchesGpuReadback &&
+                            !case.presentReconstructionMatchesReference
+                    },
+                    "FOR-258: shader-side samples should reconstruct the existing GPU readback, not the higher reference bytes",
+                )
+                if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                    writeFor258ShaderSideProbeJson(probe)
+                }
+            }
+        } finally {
+            if (oldRawSentinels == null) {
+                System.clearProperty(FOR255_RAW_SENTINELS_PROPERTY)
+            } else {
+                System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, oldRawSentinels)
+            }
+            if (oldOutputBoundary == null) {
+                System.clearProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY)
+            } else {
+                System.setProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY, oldOutputBoundary)
+            }
+            if (oldShaderProbe == null) {
+                System.clearProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY)
+            } else {
+                System.setProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY, oldShaderProbe)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -637,6 +750,7 @@ class SimpleOffsetImageFilterWebGpuTest {
                 bitmap = rgbaBytesToBitmap(rgba, size.width, size.height),
                 sentinels = device.rawColorSentinelSnapshot(),
                 outputReadbackBoundary = device.outputReadbackBoundarySnapshot(),
+                for258ShaderSideProbe = device.for258ShaderSideProbeSnapshot(),
             )
         }
     }
@@ -657,6 +771,7 @@ class SimpleOffsetImageFilterWebGpuTest {
             device.flush()
             return OutputBoundaryRenderResult(
                 outputReadbackBoundary = device.outputReadbackBoundarySnapshot(),
+                for258ShaderSideProbe = device.for258ShaderSideProbeSnapshot(),
             )
         }
     }
@@ -928,6 +1043,113 @@ class SimpleOffsetImageFilterWebGpuTest {
             priorBoundarySummary = priorBoundarySummary,
             verdict = "Reference oracle bytes are stable and reconstructable, but they match the reference side rather than the lower GPU/readback bytes; no reference-byte correction is justified.",
         )
+
+    private fun buildFor258ShaderSideProbe(
+        for255: For255RawColorSentinelProbe,
+        for256: For256ShaderStoreReferenceBoundaryProbe,
+        for257: For257ReferenceByteExpectationAuditProbe,
+        simpleOffsetShaderSide: SkWebGpuDevice.For258ShaderSideProbeSnapshot,
+        bitmapShaderSide: SkWebGpuDevice.For258ShaderSideProbeSnapshot,
+    ): For258ShaderSideProbe {
+        val simpleOffsetSample = requireFor258ShaderSideSample(
+            simpleOffsetShaderSide,
+            "legacy-source-color-uniform.simple-offset-row1-col0",
+        )
+        val bitmapSample = requireFor258ShaderSideSample(
+            bitmapShaderSide,
+            "bitmap-texel-upload-sample.bitmap-rect-nearest",
+        )
+        return For258ShaderSideProbe(
+            propertyName = FOR258_SHADER_SIDE_PROBE_PROPERTY,
+            defaultEnabled = false,
+            runtimeSnapshotsEnabled = simpleOffsetShaderSide.enabled && bitmapShaderSide.enabled,
+            diagnosticShader = simpleOffsetShaderSide.diagnosticShader,
+            diagnosticPipelineLayout = simpleOffsetShaderSide.pipelineLayout,
+            legacySourceUniform = buildFor258Case(
+                id = for256.legacySourceUniform.id,
+                route = "webgpu.canvas.draw-rect.src-over",
+                previousHostBoundaryRgba8 = for255.legacySourceUniform.hostObservedRgba8,
+                previousWriteOrUploadBoundaryRgba8 = for256.legacySourceUniform.previousWriteOrUploadBoundaryRgba8,
+                shaderSideSample = simpleOffsetSample,
+                outputReferenceRgba = for256.legacySourceUniform.outputReferenceRgba,
+                outputGpuReadbackRgba = for256.legacySourceUniform.outputReadbackRgba,
+                outputSignedDeltaRgba = for256.legacySourceUniform.outputSignedDeltaRgba,
+                referenceOracleRgba = for257.legacySourceUniform.referenceOracleRgba,
+                priorBoundarySummary = "FOR-255 host/raw uniform bytes match [255,0,0,102]; FOR-256 final readback is [157,90,138,255]; FOR-257 reference oracle remains [158,90,139,255].",
+            ),
+            bitmapTexel = buildFor258Case(
+                id = for256.bitmapTexel.id,
+                route = "webgpu.image-rect.strict-nearest",
+                previousHostBoundaryRgba8 = for255.bitmapTexel.hostObservedRgba8,
+                previousWriteOrUploadBoundaryRgba8 = for256.bitmapTexel.previousWriteOrUploadBoundaryRgba8,
+                shaderSideSample = bitmapSample,
+                outputReferenceRgba = for256.bitmapTexel.outputReferenceRgba,
+                outputGpuReadbackRgba = for256.bitmapTexel.outputReadbackRgba,
+                outputSignedDeltaRgba = for256.bitmapTexel.outputSignedDeltaRgba,
+                referenceOracleRgba = for257.bitmapTexel.referenceOracleRgba,
+                priorBoundarySummary = "FOR-255 raw upload bytes match [149,193,207,255]; FOR-256 final readback is [148,193,207,255]; FOR-257 reference oracle remains [149,193,207,255].",
+            ),
+        )
+    }
+
+    private fun buildFor258Case(
+        id: String,
+        route: String,
+        previousHostBoundaryRgba8: IntArray,
+        previousWriteOrUploadBoundaryRgba8: IntArray,
+        shaderSideSample: SkWebGpuDevice.For258ShaderSideProbeSample,
+        outputReferenceRgba: IntArray,
+        outputGpuReadbackRgba: IntArray,
+        outputSignedDeltaRgba: IntArray,
+        referenceOracleRgba: IntArray,
+        priorBoundarySummary: String,
+    ): For258ShaderSideProbeCase {
+        val presentReconstruction = reconstructPresentFromShaderSideRgba(shaderSideSample.observedRgbaFloat)
+        return For258ShaderSideProbeCase(
+            id = id,
+            route = route,
+            previousHostBoundaryRgba8 = previousHostBoundaryRgba8,
+            previousWriteOrUploadBoundaryRgba8 = previousWriteOrUploadBoundaryRgba8,
+            shaderSideXy = intArrayOf(shaderSideSample.x, shaderSideSample.y),
+            shaderSideObservedRgbaFloat = shaderSideSample.observedRgbaFloat,
+            shaderSideObservedRgba8 = shaderSideSample.observedRgba8,
+            shaderSideSampleValid = shaderSideSample.valid,
+            presentReconstructedRgba = presentReconstruction,
+            presentReconstructionMatchesGpuReadback = presentReconstruction.contentEquals(outputGpuReadbackRgba),
+            presentReconstructionMatchesReference = presentReconstruction.contentEquals(outputReferenceRgba),
+            outputReferenceRgba = outputReferenceRgba,
+            outputGpuReadbackRgba = outputGpuReadbackRgba,
+            outputSignedDeltaRgba = outputSignedDeltaRgba,
+            referenceOracleRgba = referenceOracleRgba,
+            priorBoundarySummary = priorBoundarySummary,
+            verdict = "diagnostic-only shader-side intermediate sample reconstructs the existing GPU readback after the normal present pass; no bounded normal-path correction is isolated",
+        )
+    }
+
+    private fun requireFor258ShaderSideSample(
+        snapshot: SkWebGpuDevice.For258ShaderSideProbeSnapshot,
+        name: String,
+    ): SkWebGpuDevice.For258ShaderSideProbeSample =
+        snapshot.samples.firstOrNull { sample -> sample.name == name && sample.valid }
+            ?: error("FOR-258 missing valid shader-side diagnostic sample `$name`")
+
+    private fun reconstructPresentFromShaderSideRgba(rgba: FloatArray): IntArray {
+        val alpha = rgba[3].coerceIn(0f, 1f).toDouble()
+        val rgbUnpremul = DoubleArray(3)
+        if (alpha > 0.0) {
+            val invAlpha = 1.0 / minOf(rgba[3].toDouble(), 1.0)
+            for (channel in 0 until 3) {
+                rgbUnpremul[channel] = (rgba[channel].toDouble() * invAlpha).coerceIn(0.0, 1.0)
+            }
+        }
+        val encoded = srgbToRec2020Encoded(rgbUnpremul[0], rgbUnpremul[1], rgbUnpremul[2])
+        return intArrayOf(
+            (encoded[0] * 255.0 + 0.5).toInt().coerceIn(0, 255),
+            (encoded[1] * 255.0 + 0.5).toInt().coerceIn(0, 255),
+            (encoded[2] * 255.0 + 0.5).toInt().coerceIn(0, 255),
+            (alpha * 255.0 + 0.5).toInt().coerceIn(0, 255),
+        )
+    }
 
     private fun quantizeRgbaBytes(rgba: IntArray): IntArray =
         IntArray(4) { channel -> ((rgba[channel] / 255.0) * 255.0 + 0.5).toInt().coerceIn(0, 255) }
@@ -2267,6 +2489,53 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    private fun writeFor258ShaderSideProbeJson(probe: For258ShaderSideProbe) {
+        val contents = """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "mixed skia-upstream and artifact oracle PNGs",
+              "linear": "FOR-258",
+              "probe": "shader-side-diagnostic-probe",
+              "deltaDefinition": "signed channel delta is GPU/readback minus reference",
+              "propertyName": "${probe.propertyName}",
+              "defaultEnabled": ${probe.defaultEnabled},
+              "runtimeSnapshotsEnabled": ${probe.runtimeSnapshotsEnabled},
+              "normalRenderingChanged": ${probe.normalRenderingChanged},
+              "diagnosticLayoutChanged": ${probe.diagnosticLayoutChanged},
+              "shaderLayoutChangedForNormalPath": ${probe.shaderLayoutChangedForNormalPath},
+              "diagnosticShader": "${probe.diagnosticShader}",
+              "diagnosticPipelineLayout": "${probe.diagnosticPipelineLayout}",
+              "reusedRuntimeProperties": [
+                "$FOR255_RAW_SENTINELS_PROPERTY",
+                "$FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY"
+              ],
+              "observedBoundaries": {
+                "for255HostObserved": true,
+                "for255WriteUploadObserved": true,
+                "for256OutputReadbackObserved": true,
+                "for257ReferenceOracleReconstructed": true,
+                "shaderSideIntermediateObserved": true,
+                "presentReconstructedFromShaderSide": true
+              },
+              "legacySourceUniform": ${probe.legacySourceUniform.toJson(indent = "              ").trimStart()},
+              "bitmapTexelUpload": ${probe.bitmapTexel.toJson(indent = "              ").trimStart()},
+              "interpretation": "FOR-258 uses an opt-in diagnostic-only compute shader and isolated storage-buffer layout to sample the intermediate texture after shader consumption/blend/store and before the normal present pass. Reconstructing the normal present pass from those shader-side samples matches the existing GPU readback bytes, not the higher reference/oracle bytes from FOR-257. No bounded normal-path correction is isolated.",
+              "observationMethod": "opt-in SkWebGpuDevice FOR-258 shader-side compute probe enabled only by kanvas.webgpu.for258.shaderSideProbe; normal render shaders, render pipelines, thresholds, Crop routing, fallback policy, and normal CPU/readback behavior are unchanged",
+              "remainingBoundary": "${probe.remainingBoundary}",
+              "supportDecision": "${probe.supportDecision}",
+              "correctionApplied": false,
+              "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+            }
+            """.trimIndent() + "\n"
+        listOf(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/shader-side-diagnostic-probe-for258",
+            "reports/wgsl-pipeline/scenes/artifacts/shader-side-diagnostic-probe-for258",
+        ).forEach { path ->
+            val dir = repoFile(path).apply { mkdirs() }
+            File(dir, "shader-side-diagnostic-probe-for258.json").writeText(contents)
+        }
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -2493,6 +2762,29 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
         """.trimIndent().prependIndent(indent)
 
+    private fun For258ShaderSideProbeCase.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "route": "$route",
+          "previousHostBoundaryRgba8": ${jsonArray(previousHostBoundaryRgba8)},
+          "previousWriteOrUploadBoundaryRgba8": ${jsonArray(previousWriteOrUploadBoundaryRgba8)},
+          "shaderSideXy": ${jsonArray(shaderSideXy)},
+          "shaderSideObservedRgbaFloat": ${jsonArray(shaderSideObservedRgbaFloat)},
+          "shaderSideObservedRgba8": ${jsonArray(shaderSideObservedRgba8)},
+          "shaderSideSampleValid": $shaderSideSampleValid,
+          "presentReconstructedRgba": ${jsonArray(presentReconstructedRgba)},
+          "presentReconstructionMatchesGpuReadback": $presentReconstructionMatchesGpuReadback,
+          "presentReconstructionMatchesReference": $presentReconstructionMatchesReference,
+          "outputReferenceRgba": ${jsonArray(outputReferenceRgba)},
+          "outputGpuReadbackRgba": ${jsonArray(outputGpuReadbackRgba)},
+          "outputSignedDeltaRgba": ${jsonArray(outputSignedDeltaRgba)},
+          "referenceOracleRgba": ${jsonArray(referenceOracleRgba)},
+          "priorBoundarySummary": "$priorBoundarySummary",
+          "verdict": "$verdict"
+        }
+        """.trimIndent().prependIndent(indent)
+
     private fun signedDeltaHistogramToJson(histogram: List<Map<Int, Int>>, indent: String): String {
         val channels = listOf("r", "g", "b", "a")
         return channels.indices.joinToString(
@@ -2574,6 +2866,7 @@ class SimpleOffsetImageFilterWebGpuTest {
         const val FOR255_RAW_SENTINELS_PROPERTY: String = "kanvas.webgpu.rawColorSentinels"
         const val FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY: String =
             "kanvas.webgpu.for256.outputReadbackBoundary"
+        const val FOR258_SHADER_SIDE_PROBE_PROPERTY: String = "kanvas.webgpu.for258.shaderSideProbe"
         const val WRITE_EVIDENCE_PROPERTY: String = "kanvas.sceneEvidence.write"
         val DOMINANT_FOR251_CELL_IDS: List<String> = listOf(
             "row1-col0-no-filter",
@@ -2897,10 +3190,12 @@ class SimpleOffsetImageFilterWebGpuTest {
         val bitmap: SkBitmap,
         val sentinels: SkWebGpuDevice.RawColorSentinelSnapshot,
         val outputReadbackBoundary: SkWebGpuDevice.OutputReadbackBoundarySnapshot,
+        val for258ShaderSideProbe: SkWebGpuDevice.For258ShaderSideProbeSnapshot,
     )
 
     private data class OutputBoundaryRenderResult(
         val outputReadbackBoundary: SkWebGpuDevice.OutputReadbackBoundarySnapshot,
+        val for258ShaderSideProbe: SkWebGpuDevice.For258ShaderSideProbeSnapshot,
     )
 
     private data class RawUploadSentinelRenderResult(
@@ -3026,5 +3321,43 @@ class SimpleOffsetImageFilterWebGpuTest {
         val shaderSideProbeRequiredNext: Boolean = true
         val remainingBoundary: String =
             "shader-consumption/blend-store/present-quantization"
+    }
+
+    private data class For258ShaderSideProbeCase(
+        val id: String,
+        val route: String,
+        val previousHostBoundaryRgba8: IntArray,
+        val previousWriteOrUploadBoundaryRgba8: IntArray,
+        val shaderSideXy: IntArray,
+        val shaderSideObservedRgbaFloat: FloatArray,
+        val shaderSideObservedRgba8: IntArray,
+        val shaderSideSampleValid: Boolean,
+        val presentReconstructedRgba: IntArray,
+        val presentReconstructionMatchesGpuReadback: Boolean,
+        val presentReconstructionMatchesReference: Boolean,
+        val outputReferenceRgba: IntArray,
+        val outputGpuReadbackRgba: IntArray,
+        val outputSignedDeltaRgba: IntArray,
+        val referenceOracleRgba: IntArray,
+        val priorBoundarySummary: String,
+        val verdict: String,
+    )
+
+    private data class For258ShaderSideProbe(
+        val propertyName: String,
+        val defaultEnabled: Boolean,
+        val runtimeSnapshotsEnabled: Boolean,
+        val diagnosticShader: String,
+        val diagnosticPipelineLayout: String,
+        val legacySourceUniform: For258ShaderSideProbeCase,
+        val bitmapTexel: For258ShaderSideProbeCase,
+    ) {
+        val cases: List<For258ShaderSideProbeCase> = listOf(legacySourceUniform, bitmapTexel)
+        val supportDecision: String = "KEEP_DIAGNOSTIC"
+        val normalRenderingChanged: Boolean = false
+        val diagnosticLayoutChanged: Boolean = true
+        val shaderLayoutChangedForNormalPath: Boolean = false
+        val remainingBoundary: String =
+            "shader-consumption/blend-store-before-present"
     }
 }
