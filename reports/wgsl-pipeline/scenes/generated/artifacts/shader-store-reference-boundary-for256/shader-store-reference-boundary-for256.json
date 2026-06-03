@@ -1,0 +1,55 @@
+{
+  "backend": "WebGPU",
+  "referenceBackend": "mixed skia-upstream and artifact oracle PNGs",
+  "linear": "FOR-256",
+  "probe": "shader-store-reference-boundary-audit",
+  "deltaDefinition": "signed channel delta is GPU/readback minus reference",
+  "propertyName": "kanvas.webgpu.for256.outputReadbackBoundary",
+  "defaultEnabled": false,
+  "runtimeSnapshotsEnabled": true,
+  "observedBoundaries": {
+    "for255HostObserved": true,
+    "for255WriteUploadObserved": true,
+    "shaderObserved": "notUsed",
+    "outputReadbackObserved": true,
+    "referenceComparisonObserved": true
+  },
+  "shaderLayoutChanged": false,
+  "shaderSideProbe": {
+    "status": "notUsed",
+    "reason": "FOR-256 uses an output/readback boundary probe, not a storage-buffer shader probe; WGSL modules, bind groups, render pipeline layout, blend state, thresholds, and normal rendering are unchanged."
+  },
+  "pipelineLayoutDifference": "none; this diagnostic records selected bytes from the existing flush() readback ByteArray after the normal present pass and does not add WGSL storage, bind groups, render targets, blend changes, or CPU/readback fallback",
+  "legacySourceUniform": {
+    "id": "legacy-source-color-uniform.simple-offset-row1-col0",
+    "previousHostBoundaryRgba8": [255, 0, 0, 102],
+    "previousWriteOrUploadBoundaryRgba8": [255, 0, 0, 102],
+    "outputReferenceRgba": [158, 90, 139, 255],
+    "outputComparisonGpuRgba": [157, 90, 138, 255],
+    "outputReadbackXy": [40, 40],
+    "outputReadbackRgba": [157, 90, 138, 255],
+    "outputSignedDeltaRgba": [-1, 0, -1, 0],
+    "outputMaxChannelDelta": 1,
+    "readbackMatchesComparisonGpu": true,
+    "verdict": "final readback bytes match the GPU bytes used by the reference comparison; the 1-byte RGB residual is already present by the output/readback boundary"
+  },
+  "bitmapTexelUpload": {
+    "id": "bitmap-texel-upload-sample.bitmap-rect-nearest",
+    "previousHostBoundaryRgba8": [149, 193, 207, 255],
+    "previousWriteOrUploadBoundaryRgba8": [149, 193, 207, 255],
+    "outputReferenceRgba": [149, 193, 207, 255],
+    "outputComparisonGpuRgba": [148, 193, 207, 255],
+    "outputReadbackXy": [8, 24],
+    "outputReadbackRgba": [148, 193, 207, 255],
+    "outputSignedDeltaRgba": [-1, 0, 0, 0],
+    "outputMaxChannelDelta": 1,
+    "readbackMatchesComparisonGpu": true,
+    "verdict": "final readback bytes match the GPU bytes used by the reference comparison; the 1-byte RGB residual is already present by the output/readback boundary"
+  },
+  "interpretation": "FOR-255 proved host packing and RGBA8 upload bytes are correct. FOR-256 proves the final readback bytes match the GPU bytes used by the reference comparison for both residual cases, so the remaining boundary is before or at shader consumption/blend/store/present quantization, or in the upstream reference-byte expectation. No bounded correction is isolated.",
+  "observationMethod": "opt-in SkWebGpuDevice output/readback boundary enabled only by kanvas.webgpu.for256.outputReadbackBoundary; records selected bytes already returned by flush() after the normal present/readback path; shaders, pipeline layout, thresholds, Crop routing, fallback policy, and normal CPU/readback behavior are unchanged",
+  "remainingBoundary": "shader-consumption/blend-store/present-quantization-or-reference-byte-expectation",
+  "supportDecision": "KEEP_DIAGNOSTIC",
+  "correctionApplied": false,
+  "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+}

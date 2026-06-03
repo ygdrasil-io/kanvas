@@ -347,6 +347,20 @@ public class SkWebGpuDevice(
         val rgba8TextureUploads: List<RawRgba8TextureUpload>,
     )
 
+    public data class OutputReadbackBoundarySnapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val width: Int,
+        val height: Int,
+        val samples: List<OutputReadbackSample>,
+    )
+
+    public data class OutputReadbackSample(
+        val x: Int,
+        val y: Int,
+        val rgba: IntArray,
+    )
+
     public data class RawRectUniformColorWrite(
         val route: String,
         val drawIndex: Int,
@@ -422,8 +436,11 @@ public class SkWebGpuDevice(
     private val cacheCounters: CacheCounters = CacheCounters()
     private val rawColorSentinelDiagnosticsEnabled: Boolean =
         System.getProperty(RAW_COLOR_SENTINELS_PROPERTY, "false").toBoolean()
+    private val outputReadbackBoundaryDiagnosticsEnabled: Boolean =
+        System.getProperty(OUTPUT_READBACK_BOUNDARY_PROPERTY, "false").toBoolean()
     private val rawRectUniformColorWrites: MutableList<RawRectUniformColorWrite> = mutableListOf()
     private val rawRgba8TextureUploads: MutableList<RawRgba8TextureUpload> = mutableListOf()
+    private val outputReadbackBoundarySamples: MutableList<OutputReadbackSample> = mutableListOf()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
         PipelineKeyedCache("generated shader modules")
@@ -470,6 +487,15 @@ public class SkWebGpuDevice(
         rectUniformColorWrites = rawRectUniformColorWrites.toList(),
         rgba8TextureUploads = rawRgba8TextureUploads.toList(),
     )
+
+    public fun outputReadbackBoundarySnapshot(): OutputReadbackBoundarySnapshot =
+        OutputReadbackBoundarySnapshot(
+            propertyName = OUTPUT_READBACK_BOUNDARY_PROPERTY,
+            enabled = outputReadbackBoundaryDiagnosticsEnabled,
+            width = width,
+            height = height,
+            samples = outputReadbackBoundarySamples.toList(),
+        )
 
     public fun buildPipelineKeyIdentityForDiagnostics(axes: Map<String, String>): PipelineKey =
         pipelineKeyIdentity(
@@ -664,6 +690,26 @@ public class SkWebGpuDevice(
             format = "RGBA8Unorm",
             texelSamples = samples,
         )
+    }
+
+    private fun recordOutputReadbackBoundary(pixels: ByteArray) {
+        if (!outputReadbackBoundaryDiagnosticsEnabled) return
+        outputReadbackBoundarySamples.clear()
+        OUTPUT_READBACK_SENTINEL_POINTS.forEach { (x, y) ->
+            if (x in 0 until width && y in 0 until height) {
+                val base = ((y * width) + x) * 4
+                outputReadbackBoundarySamples += OutputReadbackSample(
+                    x = x,
+                    y = y,
+                    rgba = intArrayOf(
+                        pixels[base].toInt() and 0xFF,
+                        pixels[base + 1].toInt() and 0xFF,
+                        pixels[base + 2].toInt() and 0xFF,
+                        pixels[base + 3].toInt() and 0xFF,
+                    ),
+                )
+            }
+        }
     }
 
     private fun targetColorSpaceBlendFlag(): Float = if (targetColorSpaceBlend) 1f else 0f
@@ -13676,6 +13722,7 @@ public class SkWebGpuDevice(
         context.queue.submit(listOf(encoder.finish()))
 
         val pixels = target.readPixels()
+        recordOutputReadbackBoundary(pixels)
 
         closeDrawResources(perDrawResources)
         pending.clear()
@@ -16076,7 +16123,13 @@ public class SkWebGpuDevice(
 
     private companion object {
         const val RAW_COLOR_SENTINELS_PROPERTY: String = "kanvas.webgpu.rawColorSentinels"
+        const val OUTPUT_READBACK_BOUNDARY_PROPERTY: String = "kanvas.webgpu.for256.outputReadbackBoundary"
         const val RAW_COLOR_SENTINEL_TEXEL_SAMPLE_LIMIT: Int = 16
+        val OUTPUT_READBACK_SENTINEL_POINTS: List<Pair<Int, Int>> = listOf(
+            0 to 0,
+            8 to 24,
+            40 to 40,
+        )
 
         private val SUPPORTED_RUNTIME_EFFECT_WGSL_IDS = setOf(
             "wgsl/runtime_linear_gradient_rt",
