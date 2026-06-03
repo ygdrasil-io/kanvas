@@ -1,0 +1,293 @@
+{
+  "linear": "FOR-285",
+  "parent": "FOR-241",
+  "probe": "m60-post-payload-residual",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/Reference/WebGPU",
+  "decision": "NEXT_FIX_CPU_ACTIVE_AA_DIFFERENCE_CLIP_STORE_ORDER_NOT_PAYLOAD",
+  "nextAction": "INSTRUMENT_CPU_MASK_FILTER_A8_SRCIN_RUNTIME_STORE_UNDER_ACTIVE_AA_DIFFERENCE_CLIP",
+  "residualClassification": "POST_DISPATCH_LAYER_CLIP_STORE_ORDER_RESIDUAL",
+  "sourceAudits": {
+    "for278": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-boundary-layer-composite-fixture-for278.json",
+    "for283": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-dispatch-blend-store-trace-for283.json",
+    "for284": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-mask-filter-a8-srcin-payload-patch-for284.json"
+  },
+  "sourceImages": {
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png",
+    "cpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png",
+    "gpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png"
+  },
+  "route": {
+    "cpu": "cpu.coverage.nested-rrect-clip-oracle",
+    "gpu": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "coverageStrategy": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold",
+    "sourceNeedles": {
+      "gmUsesDrawRRectOval": true,
+      "drawRRectRoutesToDrawPath": true,
+      "drawPathRoutesMaskFilterToPatchedCallsite": true,
+      "for284SrcInBranchPresent": true
+    }
+  },
+  "m60BeforeFor284": {
+    "cpuSimilarity": 97.31,
+    "cpuMatchingPixels": 908439,
+    "cpuMaxChannelDelta": 237,
+    "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
+    "gpuSimilarity": 98.48,
+    "gpuMatchingPixels": 919363,
+    "gpuMaxChannelDelta": 57,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 2869
+  },
+  "m60PostFor284": {
+    "cpuSimilarity": 97.31,
+    "cpuMatchingPixels": 908439,
+    "cpuMaxChannelDelta": 237,
+    "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
+    "gpuSimilarity": 98.48,
+    "gpuMatchingPixels": 919363,
+    "gpuMaxChannelDelta": 57,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 2869,
+    "integrationTestSimilarity": 97.31,
+    "integrationTestMatchingPixels": 908439
+  },
+  "m60DeltaAfterFor284": {
+    "cpuSimilarity": 0.0,
+    "cpuMatchingPixels": 0.0,
+    "cpuMaxChannelDelta": 0.0,
+    "cpuReferenceGreaterThanThirtyTwoPixels": 0.0,
+    "gpuSimilarity": 0.0,
+    "gpuMatchingPixels": 0.0,
+    "gpuMaxChannelDelta": 0.0,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 0.0
+  },
+  "artifactFreshness": {
+    "directCpuReferenceGreaterThanThirtyTwoPixels": 15726,
+    "directGpuReferenceGreaterThanThirtyTwoPixels": 2869,
+    "for284CpuReferenceGreaterThanThirtyTwoPixels": 15726,
+    "for284GpuReferenceGreaterThanThirtyTwoPixels": 2869,
+    "checkedInM60ArtifactsMatchFor284PostCounters": true,
+    "obsoleteArtifactRuledOutForCheckedInEvidence": true
+  },
+  "for283LocalTraceComparison": {
+    "targetPixels": 89,
+    "dispatchInputRedPayloadPixels": 89,
+    "nonZeroCovPixels": 89,
+    "dstBeforeBlendWhitePixels": 89,
+    "blendResultRedTintPixels": 89,
+    "blendResultRedDominantPixels": 82,
+    "readBackRedDominantPixels": 9,
+    "readBackWhiteLayerPixels": 78,
+    "blendVsReadBackGreaterThanThirtyTwoPixels": 81
+  },
+  "for284PayloadPatchComparison": {
+    "patchDecision": "CPU_MASK_FILTER_A8_SOLID_COLOR_FILTER_PAYLOAD_PATCH_APPLIED",
+    "supportDecision": "KEEP_EXPECTED_UNSUPPORTED_AFTER_TARGETED_CPU_PAYLOAD_PATCH",
+    "beforeFor283TargetPixels": 89,
+    "beforeDispatchRedPayloadPixels": 89,
+    "beforeBlendRedTintPixels": 89,
+    "beforeCpuReadbackRedDominantPixels": 9,
+    "beforeCpuWhiteLayerPixels": 78,
+    "patchScope": {
+      "productionFiles": [
+        "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt"
+      ],
+      "testFiles": [
+        "kanvas-skia/src/test/kotlin/org/skia/core/For275CpuSrcInBlurLayerFixtureTest.kt"
+      ],
+      "globalBlendChanged": false,
+      "setPixelChanged": false,
+      "gpuChanged": false,
+      "coordinatePatch": false,
+      "ganeshOrGraphiteAdded": false,
+      "skSLCompilerAdded": false
+    }
+  },
+  "currentBoundaryBuckets": {
+    "windows": [
+      {
+        "name": "draw_oval_outer_boundary_max_cpu_reference_delta_window",
+        "subzone": "draw_oval_outer_boundary",
+        "bounds": {
+          "left": 94,
+          "top": 84,
+          "right": 105,
+          "bottom": 95
+        },
+        "targetPixels": 59,
+        "cpuColorBucketsOnTarget": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 59,
+          "red_tinted_reference_like": 0,
+          "gray_background_like": 0,
+          "other_opaque": 0
+        },
+        "referenceColorBucketsOnTarget": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 0,
+          "red_tinted_reference_like": 32,
+          "gray_background_like": 0,
+          "other_opaque": 27
+        },
+        "gpuColorBucketsOnTarget": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 3,
+          "red_tinted_reference_like": 34,
+          "gray_background_like": 0,
+          "other_opaque": 22
+        },
+        "cpuWhiteLayerPixelsOnTarget": 59,
+        "cpuRedTintPixelsOnTarget": 0,
+        "referenceRedTintPixelsOnTarget": 32,
+        "gpuRedTintPixelsOnTarget": 34
+      },
+      {
+        "name": "difference_oval_inner_boundary_max_cpu_reference_delta_window",
+        "subzone": "difference_oval_inner_boundary",
+        "bounds": {
+          "left": 257,
+          "top": 12,
+          "right": 268,
+          "bottom": 23
+        },
+        "targetPixels": 18,
+        "cpuColorBucketsOnTarget": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 14,
+          "red_tinted_reference_like": 0,
+          "gray_background_like": 0,
+          "other_opaque": 4
+        },
+        "referenceColorBucketsOnTarget": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 0,
+          "red_tinted_reference_like": 12,
+          "gray_background_like": 0,
+          "other_opaque": 6
+        },
+        "gpuColorBucketsOnTarget": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 0,
+          "red_tinted_reference_like": 12,
+          "gray_background_like": 0,
+          "other_opaque": 6
+        },
+        "cpuWhiteLayerPixelsOnTarget": 14,
+        "cpuRedTintPixelsOnTarget": 0,
+        "referenceRedTintPixelsOnTarget": 12,
+        "gpuRedTintPixelsOnTarget": 12
+      },
+      {
+        "name": "halo_interior_max_cpu_reference_delta_window",
+        "subzone": "halo_interior",
+        "bounds": {
+          "left": 221,
+          "top": 16,
+          "right": 232,
+          "bottom": 27
+        },
+        "targetPixels": 12,
+        "cpuColorBucketsOnTarget": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 5,
+          "red_tinted_reference_like": 0,
+          "gray_background_like": 0,
+          "other_opaque": 7
+        },
+        "referenceColorBucketsOnTarget": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 0,
+          "red_tinted_reference_like": 12,
+          "gray_background_like": 0,
+          "other_opaque": 0
+        },
+        "gpuColorBucketsOnTarget": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 0,
+          "red_tinted_reference_like": 12,
+          "gray_background_like": 0,
+          "other_opaque": 0
+        },
+        "cpuWhiteLayerPixelsOnTarget": 5,
+        "cpuRedTintPixelsOnTarget": 0,
+        "referenceRedTintPixelsOnTarget": 12,
+        "gpuRedTintPixelsOnTarget": 12
+      }
+    ],
+    "combined": {
+      "targetPixels": 89,
+      "cpuColorBucketsOnTarget": {
+        "transparent": 0,
+        "black_or_clear_rgb": 0,
+        "white_or_layer_background": 78,
+        "red_tinted_reference_like": 0,
+        "gray_background_like": 0,
+        "other_opaque": 11
+      },
+      "referenceColorBucketsOnTarget": {
+        "transparent": 0,
+        "black_or_clear_rgb": 0,
+        "white_or_layer_background": 0,
+        "red_tinted_reference_like": 56,
+        "gray_background_like": 0,
+        "other_opaque": 33
+      },
+      "gpuColorBucketsOnTarget": {
+        "transparent": 0,
+        "black_or_clear_rgb": 0,
+        "white_or_layer_background": 3,
+        "red_tinted_reference_like": 58,
+        "gray_background_like": 0,
+        "other_opaque": 28
+      }
+    },
+    "for282CpuReferenceLikeRedPayloadPixels": 0
+  },
+  "causeMatrix": {
+    "routeDifferent": {
+      "selected": false,
+      "evidence": "M60 drawRRect(oval) routes through SkPath.RRect -> drawPath -> drawPathWithMaskFilter, and the FOR-284 SrcIn payload branch is present."
+    },
+    "maskOrExtentZero": {
+      "selected": false,
+      "evidence": "FOR-283/FOR-281 target windows retain 89/89 non-zero mask/dispatch pixels and 89/89 non-zero clip coverage on the same CPU/reference >32 pixels."
+    },
+    "obsoleteMeasurementArtifact": {
+      "selected": false,
+      "evidence": "The checked-in PNGs recompute CPU/reference >32=15726 and GPU/reference >32=2869, matching the post-FOR-284 counters."
+    },
+    "layerClipStoreOrder": {
+      "selected": true,
+      "evidence": "The same 89 local pixels have a red SrcIn payload and red-tinted pre-store model, but committed CPU readback remains dominated by 78 white/layer pixels and full-scene metrics have zero delta after FOR-284."
+    }
+  },
+  "decisionRationale": "FOR-284 fixed the local A8 solid SrcIn payload contract, but M60 still has identical full-scene counters and the same FOR-278 red/white buckets. The active route reaches the patched callsite and the checked-in artifacts are internally current, so the next production work should instrument the runtime store/composite interaction under the active AA difference clip instead of changing global blend, setPixel, GPU, or thresholds.",
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuRendererChanged": false,
+    "gpuRendererChanged": false,
+    "globalBlendChanged": false,
+    "setPixelChanged": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
