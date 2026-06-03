@@ -66,6 +66,32 @@ class For275CpuSrcInBlurLayerFixtureTest {
         writeEvidence(evidence)
     }
 
+    @Test
+    fun `FOR-276 CPU mask filter keeps source outside AA clip before blur`() {
+        val clipped = renderIntersectHaloAaClip()
+        val unclipped = renderUnclippedBlur()
+        val evidence = ClipOrderEvidence.from(clipped, unclipped)
+
+        writeFor276Evidence(evidence)
+
+        assertTrue(
+            evidence.unclippedRedSupportInClip > 0,
+            "halo AA clip must overlap red blur support from the unclipped control",
+        )
+        assertTrue(
+            evidence.clippedRedSupportInClip > 0,
+            "CPU mask-filter path must keep off-clip source before blur and composite only through the final AA clip",
+        )
+        assertTrue(
+            evidence.clippedRedSupportInClip >= evidence.unclippedRedSupportInClip * 80 / 100,
+            "bounded AA-clip fixture should recover most red blur support inside the final clip",
+        )
+        assertTrue(
+            evidence.samples.isNotEmpty(),
+            "signed RGB samples are required for the FOR-276 PM audit",
+        )
+    }
+
     private fun renderDifferenceClip(useLayer: Boolean): SkBitmap {
         val bitmap = SkBitmap(WIDTH, HEIGHT).also { it.eraseColor(SK_ColorWHITE) }
         val canvas = SkCanvas(bitmap)
@@ -84,6 +110,16 @@ class For275CpuSrcInBlurLayerFixtureTest {
         return bitmap
     }
 
+    private fun renderIntersectHaloAaClip(): SkBitmap {
+        val bitmap = SkBitmap(WIDTH, HEIGHT).also { it.eraseColor(SK_ColorWHITE) }
+        val canvas = SkCanvas(bitmap)
+        canvas.save()
+        canvas.clipRRect(SkRRect.MakeOval(HALO_CLIP), SkClipOp.kIntersect, doAntiAlias = true)
+        canvas.drawRRect(OUTER_OVAL, blurSrcInPaint())
+        canvas.restore()
+        return bitmap
+    }
+
     private fun blurSrcInPaint(): SkPaint =
         SkPaint().apply {
             isAntiAlias = true
@@ -95,6 +131,12 @@ class For275CpuSrcInBlurLayerFixtureTest {
         val root = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip")
             .apply { mkdirs() }
         File(root, "cpu-srcin-blur-layer-fixture-for275.json").writeText(evidence.toJson())
+    }
+
+    private fun writeFor276Evidence(evidence: ClipOrderEvidence) {
+        val root = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip")
+            .apply { mkdirs() }
+        File(root, "cpu-mask-filter-clip-order-for276.json").writeText(evidence.toJson())
     }
 
     private fun repoFile(path: String): File {
@@ -203,6 +245,136 @@ class For275CpuSrcInBlurLayerFixtureTest {
         }
     }
 
+    private data class ClipOrderEvidence(
+        val clipRect: String,
+        val clipPixels: Int,
+        val unclippedRedSupportInClip: Int,
+        val clippedRedSupportInClip: Int,
+        val lostRedSupportInClip: Int,
+        val recoveredShareOfUnclippedSupport: Double,
+        val samples: List<ClipOrderSample>,
+    ) {
+        fun toJson(): String = """
+{
+  "linear": "FOR-276",
+  "parent": "FOR-241",
+  "probe": "cpu-mask-filter-clip-order",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "fixture": {
+    "width": $WIDTH,
+    "height": $HEIGHT,
+    "sigma": $SIGMA,
+    "outerOval": {"left": 18, "top": 14, "right": 78, "bottom": 58},
+    "intersectHaloClip": $clipRect,
+    "paintChain": "SkBlurMaskFilter(kNormal) + SkColorFilters.Blend(RED, kSrcIn)",
+    "variants": ["intersectHaloClip", "unclippedBlurControl"]
+  },
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "supportThreshold": 99.95,
+  "routePreservation": {
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required"
+  },
+  "maskFilterClipOrder": {
+    "preFixBaseline": {
+      "source": "FOR-276 exploratory run before SkBitmapDevice correction",
+      "clippedRedSupportInClip": 0,
+      "lostRedSupportInClip": 10,
+      "recoveredShareOfUnclippedSupport": 0.0
+    },
+    "clipPixels": $clipPixels,
+    "unclippedRedSupportInClip": $unclippedRedSupportInClip,
+    "clippedRedSupportInClip": $clippedRedSupportInClip,
+    "lostRedSupportInClip": $lostRedSupportInClip,
+    "recoveredShareOfUnclippedSupport": $recoveredShareOfUnclippedSupport,
+    "samples": [
+${samples.joinToString(",\n") { it.toJson().prependIndent("      ") }}
+    ]
+  },
+  "boundedCorrection": {
+    "sourceMaskBounds": "device bounds expanded by mask-filter margin for active AA clips, not truncated to final clip",
+    "finalCompositionBounds": "current clip rect plus active AA clip coverage",
+    "wideClipStackSupportAdded": false
+  },
+  "dominantFixtureHypothesis": "CPU_MASK_FILTER_SOURCE_CLIP_ORDER_WAS_TRUNCATING_BLUR_SOURCE",
+  "nextAction": "REGENERATE_M60_SCENE_EVIDENCE_AND_RECHECK_CPU_GPU_REFERENCE_THRESHOLD_BEFORE_PROMOTION",
+  "strictPreservation": {
+    "productionRendererChanged": true,
+    "cpuRendererChanged": true,
+    "gpuRendererChanged": false,
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "fallbackOrReadbackAdded": false,
+    "wideClipStackSupportAdded": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false
+  }
+}
+""".trimIndent() + "\n"
+
+        companion object {
+            fun from(clipped: SkBitmap, unclipped: SkBitmap): ClipOrderEvidence {
+                var clipPixels = 0
+                var unclippedRedSupport = 0
+                var clippedRedSupport = 0
+                var lostRedSupport = 0
+                val samples = mutableListOf<ClipOrderSample>()
+                for (y in 0 until HEIGHT) {
+                    for (x in 0 until WIDTH) {
+                        if (!isInsideHaloClip(x, y)) continue
+                        clipPixels++
+                        val unclippedPx = unclipped.getPixel(x, y)
+                        val clippedPx = clipped.getPixel(x, y)
+                        val unclippedRed = isRedBlurPayload(unclippedPx)
+                        val clippedRed = isRedBlurPayload(clippedPx)
+                        if (unclippedRed) {
+                            unclippedRedSupport++
+                            if (clippedRed) {
+                                clippedRedSupport++
+                            } else {
+                                lostRedSupport++
+                            }
+                            if (samples.size < 8) {
+                                samples += ClipOrderSample(x, y, unclippedPx, clippedPx)
+                            }
+                        }
+                    }
+                }
+                val recoveredShare = if (unclippedRedSupport == 0) {
+                    0.0
+                } else {
+                    clippedRedSupport * 100.0 / unclippedRedSupport
+                }
+                return ClipOrderEvidence(
+                    clipRect = "{\"left\": 14, \"top\": 30, \"right\": 18, \"bottom\": 42}",
+                    clipPixels = clipPixels,
+                    unclippedRedSupportInClip = unclippedRedSupport,
+                    clippedRedSupportInClip = clippedRedSupport,
+                    lostRedSupportInClip = lostRedSupport,
+                    recoveredShareOfUnclippedSupport = round3(recoveredShare),
+                    samples = samples,
+                )
+            }
+        }
+    }
+
+    private data class ClipOrderSample(
+        val x: Int,
+        val y: Int,
+        val unclippedRgba: SkColor,
+        val clippedRgba: SkColor,
+    ) {
+        fun toJson(): String = """
+{
+        "x": $x,
+        "y": $y,
+        "unclippedBlurControlRgba": ${rgba(unclippedRgba)},
+        "intersectHaloClipRgba": ${rgba(clippedRgba)},
+        "clipMinusUnclippedSignedRgba": ${signedRgba(clippedRgba, unclippedRgba)}
+      }""".trimIndent()
+    }
+
     private data class LayerComparison(
         val greaterThanZeroPixels: Int,
         val greaterThanThirtyTwoPixels: Int,
@@ -281,6 +453,10 @@ ${samples.joinToString(",\n") { it.toJson().prependIndent("      ") }}
         const val SIGMA = 1.366025f
         val OUTER_OVAL: SkRRect = SkRRect.MakeOval(SkRect.MakeLTRB(18f, 14f, 78f, 58f))
         val INNER_OVAL: SkRRect = SkRRect.MakeOval(SkRect.MakeLTRB(25f, 20f, 71f, 52f))
+        val HALO_CLIP: SkRect = SkRect.MakeLTRB(14f, 30f, 18f, 42f)
+
+        fun isInsideHaloClip(x: Int, y: Int): Boolean =
+            x >= 14 && x < 18 && y >= 30 && y < 42
 
         fun isWhiteOrLayer(c: SkColor): Boolean =
             SkColorGetA(c) >= 250 &&
