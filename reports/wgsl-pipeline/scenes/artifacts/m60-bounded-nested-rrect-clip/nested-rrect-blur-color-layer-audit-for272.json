@@ -1,0 +1,1610 @@
+{
+  "linear": "FOR-272",
+  "parent": "FOR-241",
+  "probe": "nested-rrect-blur-color-layer-audit",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "Reference/CPU/WebGPU",
+  "sourceAudit": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/nested-rrect-blurred-envelope-audit-for271.json",
+  "sourceTest": "org.skia.gpu.webgpu.NestedClipSceneCaptureTest",
+  "artifactRoot": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip",
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "residualClassification": "COLOR_LAYER_PAYLOAD_POLARITY_WITH_SHARED_CPU_REFERENCE_RESIDUAL",
+  "dominantHypothesis": "GPU_SOLID_BLUR_COLOR_FILTER_NOT_FOLDED_PLUS_CPU_REFERENCE_LAYER_RESIDUAL",
+  "nextAction": "BOUNDED_GPU_SOLID_BLUR_COLOR_FILTER_FOLD_CANDIDATE_AFTER_CPU_REFERENCE_DECISION",
+  "decisionRationale": "FOR-272 does not promote the scene. Alpha is unchanged in FOR-271 high-delta pixels. Reference pixels in the blur envelope are red-tinted, WebGPU pixels skew black/clear RGB, and CPU pixels skew white layer/background. The GPU path has a bounded color-filter fold candidate, but CPU/reference remains below the strict threshold in the same envelope.",
+  "route": {
+    "cpu": "cpu.coverage.nested-rrect-clip-oracle",
+    "gpu": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "coverageStrategy": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported"
+  },
+  "reportedStats": {
+    "cpuSimilarity": 97.31,
+    "gpuSimilarity": 97.5,
+    "threshold": 99.95,
+    "cpuMatchingPixels": 908439,
+    "gpuMatchingPixels": 910225,
+    "cpuMaxChannelDelta": 237,
+    "gpuMaxChannelDelta": 203
+  },
+  "geometry": {
+    "sourceScene": "BlurredClippedCircleGM",
+    "deviceSize": {
+      "width": 1164,
+      "height": 802
+    },
+    "canvasScale": 2,
+    "sourceClipStack": [
+      {
+        "kind": "clipRect",
+        "op": "intersect",
+        "localBounds": [
+          0,
+          0,
+          1164,
+          802
+        ]
+      },
+      {
+        "kind": "clipRect",
+        "op": "intersect",
+        "localBounds": [
+          0,
+          0,
+          1164,
+          802
+        ]
+      },
+      {
+        "kind": "clipRRect",
+        "shape": "oval",
+        "op": "difference",
+        "localBounds": [
+          8,
+          8,
+          288,
+          288
+        ]
+      }
+    ],
+    "deviceClipRects": [
+      {
+        "kind": "clipRect",
+        "op": "intersect",
+        "deviceBounds": [
+          0,
+          0,
+          2328,
+          1604
+        ]
+      },
+      {
+        "kind": "clipRect",
+        "op": "intersect",
+        "deviceBounds": [
+          0,
+          0,
+          2328,
+          1604
+        ]
+      }
+    ],
+    "differenceOvalDeviceBounds": [
+      16,
+      16,
+      576,
+      576
+    ],
+    "drawOvalDeviceBounds": [
+      8,
+      8,
+      584,
+      584
+    ],
+    "boundaryBandDevicePixels": 3,
+    "note": "The two intersected clip rects cover the whole 1164x802 surface after scale(2); the strict final-clip exterior is the oval removed by clipRRect(kDifference)."
+  },
+  "sourceModel": {
+    "gmPaintChain": {
+      "source": "skia-integration-tests/src/main/kotlin/org/skia/tests/BlurredClippedCircleGM.kt",
+      "draw": "drawRRect(drawOval, paint)",
+      "maskFilter": "SkBlurMaskFilter.Make(SkBlurStyle.kNormal, 1.366025f)",
+      "colorFilter": "SkColorFilters.Blend(SK_ColorRED, SkBlendMode.kSrcIn)",
+      "shader": "none",
+      "paintColorDefault": "SkPaint default solid color is the unfiltered destination for the Blend color filter."
+    },
+    "cpuModelEvidence": {
+      "source": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+      "solidMaskFilterColor": "drawPathWithMaskFilter computes transformPaintColor(applyColorFilter(paint.colorFilter, paint.color)) before mask alpha modulation.",
+      "observedPolarity": "CPU/reference high-delta pixels are mostly white layer/background in the same red-tinted reference envelope."
+    },
+    "webGpuModelEvidence": {
+      "source": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+      "shader": "gpu-raster/src/main/resources/shaders/blur_gaussian.wgsl",
+      "solidMaskFilterColor": "drawPathWithBlurMaskFilterIfApplicable extracts paintColor from paint.color for the blur V/composite pass.",
+      "shaderComposite": "blur_gaussian.wgsl multiplies blurred coverage by uniforms.paintColor in fs_vertical_composite/fs_composite_upsampled.",
+      "observedPolarity": "WebGPU/reference high-delta pixels are black/clear RGB where the reference is red-tinted."
+    }
+  },
+  "comparisons": [
+    {
+      "comparison": "gpu_vs_reference",
+      "base": "reference",
+      "actual": "gpu",
+      "greaterThanThirtyTwoPixels": 19361,
+      "maxChannelDelta": 203,
+      "signedDeltaSummaryOnBlurredEnvelopeGt32": {
+        "meanSignedRgba": [
+          -146.615,
+          -36.157,
+          -11.198,
+          0.0
+        ],
+        "minSignedRgba": [
+          -203,
+          -72,
+          -50,
+          0
+        ],
+        "maxSignedRgba": [
+          13,
+          51,
+          56,
+          0
+        ]
+      },
+      "subzones": {
+        "difference_oval_inner_boundary": {
+          "pixels": 10584,
+          "greaterThanThirtyTwoPixels": 5925,
+          "meanBaseRgba": [
+            226.521,
+            151.868,
+            132.154,
+            255.0
+          ],
+          "meanActualRgba": [
+            124.783,
+            124.783,
+            124.783,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              -181.233,
+              -49.025,
+              -13.923,
+              0.0
+            ],
+            "minSignedRgba": [
+              -203,
+              -61,
+              -42,
+              0
+            ],
+            "maxSignedRgba": [
+              13,
+              51,
+              56,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 5247,
+            "gray_background_like": 0,
+            "other_opaque": 678
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 4688,
+            "white_or_layer_background": 4,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 58,
+            "other_opaque": 1175
+          },
+          "maxChannelDelta": 203,
+          "meanMaxChannelDeltaOnGt32": 181.332
+        },
+        "draw_oval_outer_boundary": {
+          "pixels": 10856,
+          "greaterThanThirtyTwoPixels": 9868,
+          "meanBaseRgba": [
+            218.862,
+            137.856,
+            124.45,
+            255.0
+          ],
+          "meanActualRgba": [
+            122.694,
+            122.687,
+            122.687,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              -105.715,
+              -19.399,
+              -4.927,
+              0.0
+            ],
+            "minSignedRgba": [
+              -202,
+              -72,
+              -50,
+              0
+            ],
+            "maxSignedRgba": [
+              8,
+              38,
+              43,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 3939,
+            "gray_background_like": 0,
+            "other_opaque": 5929
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 2296,
+            "white_or_layer_background": 710,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 439,
+            "other_opaque": 6423
+          },
+          "maxChannelDelta": 202,
+          "meanMaxChannelDeltaOnGt32": 114.086
+        },
+        "halo_interior": {
+          "pixels": 3568,
+          "greaterThanThirtyTwoPixels": 3568,
+          "meanBaseRgba": [
+            202.583,
+            61.475,
+            24.358,
+            255.0
+          ],
+          "meanActualRgba": [
+            0.339,
+            0.339,
+            0.339,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              -202.245,
+              -61.136,
+              -24.02,
+              0.0
+            ],
+            "minSignedRgba": [
+              -203,
+              -65,
+              -32,
+              0
+            ],
+            "maxSignedRgba": [
+              -201,
+              -59,
+              -20,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 3568,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 3568,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "maxChannelDelta": 203,
+          "meanMaxChannelDeltaOnGt32": 202.245
+        },
+        "removed_difference_oval_interior": {
+          "pixels": 241056,
+          "greaterThanThirtyTwoPixels": 0,
+          "meanBaseRgba": [
+            255.0,
+            255.0,
+            255.0,
+            255.0
+          ],
+          "meanActualRgba": [
+            255.0,
+            255.0,
+            255.0,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "minSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "maxSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "maxChannelDelta": 0,
+          "meanMaxChannelDeltaOnGt32": 0.0
+        },
+        "outside_draw_oval": {
+          "pixels": 667464,
+          "greaterThanThirtyTwoPixels": 0,
+          "meanBaseRgba": [
+            254.97,
+            254.915,
+            254.91,
+            255.0
+          ],
+          "meanActualRgba": [
+            254.995,
+            254.995,
+            254.995,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "minSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "maxSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "maxChannelDelta": 28,
+          "meanMaxChannelDeltaOnGt32": 0.0
+        }
+      }
+    },
+    {
+      "comparison": "cpu_vs_reference",
+      "base": "reference",
+      "actual": "cpu",
+      "greaterThanThirtyTwoPixels": 15726,
+      "maxChannelDelta": 237,
+      "signedDeltaSummaryOnBlurredEnvelopeGt32": {
+        "meanSignedRgba": [
+          40.078,
+          137.583,
+          159.165,
+          0.0
+        ],
+        "minSignedRgba": [
+          11,
+          31,
+          25,
+          0
+        ],
+        "maxSignedRgba": [
+          53,
+          196,
+          237,
+          0
+        ]
+      },
+      "subzones": {
+        "difference_oval_inner_boundary": {
+          "pixels": 10584,
+          "greaterThanThirtyTwoPixels": 5201,
+          "meanBaseRgba": [
+            226.521,
+            151.868,
+            132.154,
+            255.0
+          ],
+          "meanActualRgba": [
+            250.357,
+            237.8,
+            234.294,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              48.141,
+              173.852,
+              206.74,
+              0.0
+            ],
+            "minSignedRgba": [
+              11,
+              31,
+              33,
+              0
+            ],
+            "maxSignedRgba": [
+              53,
+              196,
+              237,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 4399,
+            "gray_background_like": 0,
+            "other_opaque": 802
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 5001,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 200
+          },
+          "maxChannelDelta": 237,
+          "meanMaxChannelDeltaOnGt32": 206.74
+        },
+        "draw_oval_outer_boundary": {
+          "pixels": 10856,
+          "greaterThanThirtyTwoPixels": 8077,
+          "meanBaseRgba": [
+            218.862,
+            137.856,
+            124.45,
+            255.0
+          ],
+          "meanActualRgba": [
+            243.947,
+            213.43,
+            204.888,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              31.37,
+              98.116,
+              107.845,
+              0.0
+            ],
+            "minSignedRgba": [
+              11,
+              31,
+              25,
+              0
+            ],
+            "maxSignedRgba": [
+              52,
+              190,
+              224,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 2388,
+            "gray_background_like": 0,
+            "other_opaque": 5689
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 6157,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 1920
+          },
+          "maxChannelDelta": 224,
+          "meanMaxChannelDeltaOnGt32": 108.375
+        },
+        "halo_interior": {
+          "pixels": 3568,
+          "greaterThanThirtyTwoPixels": 2448,
+          "meanBaseRgba": [
+            202.583,
+            61.475,
+            24.358,
+            255.0
+          ],
+          "meanActualRgba": [
+            238.036,
+            191.82,
+            178.87,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              51.677,
+              190.746,
+              227.419,
+              0.0
+            ],
+            "minSignedRgba": [
+              18,
+              64,
+              77,
+              0
+            ],
+            "maxSignedRgba": [
+              53,
+              196,
+              235,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 2448,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 2360,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 88
+          },
+          "maxChannelDelta": 235,
+          "meanMaxChannelDeltaOnGt32": 227.419
+        },
+        "removed_difference_oval_interior": {
+          "pixels": 241056,
+          "greaterThanThirtyTwoPixels": 0,
+          "meanBaseRgba": [
+            255.0,
+            255.0,
+            255.0,
+            255.0
+          ],
+          "meanActualRgba": [
+            255.0,
+            255.0,
+            255.0,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "minSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "maxSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "maxChannelDelta": 0,
+          "meanMaxChannelDeltaOnGt32": 0.0
+        },
+        "outside_draw_oval": {
+          "pixels": 667464,
+          "greaterThanThirtyTwoPixels": 0,
+          "meanBaseRgba": [
+            254.97,
+            254.915,
+            254.91,
+            255.0
+          ],
+          "meanActualRgba": [
+            255.0,
+            254.999,
+            254.999,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "minSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "maxSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "maxChannelDelta": 32,
+          "meanMaxChannelDeltaOnGt32": 0.0
+        }
+      }
+    },
+    {
+      "comparison": "gpu_vs_cpu",
+      "base": "cpu",
+      "actual": "gpu",
+      "greaterThanThirtyTwoPixels": 17660,
+      "maxChannelDelta": 255,
+      "signedDeltaSummaryOnBlurredEnvelopeGt32": {
+        "meanSignedRgba": [
+          -195.322,
+          -160.526,
+          -150.786,
+          0.0
+        ],
+        "minSignedRgba": [
+          -255,
+          -255,
+          -255,
+          0
+        ],
+        "maxSignedRgba": [
+          -33,
+          -13,
+          -7,
+          0
+        ]
+      },
+      "subzones": {
+        "difference_oval_inner_boundary": {
+          "pixels": 10584,
+          "greaterThanThirtyTwoPixels": 5984,
+          "meanBaseRgba": [
+            250.357,
+            237.8,
+            234.294,
+            255.0
+          ],
+          "meanActualRgba": [
+            124.783,
+            124.783,
+            124.783,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              -221.42,
+              -199.21,
+              -193.009,
+              0.0
+            ],
+            "minSignedRgba": [
+              -255,
+              -255,
+              -255,
+              0
+            ],
+            "maxSignedRgba": [
+              -37,
+              -37,
+              -19,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 4936,
+            "red_tinted_reference_like": 848,
+            "gray_background_like": 0,
+            "other_opaque": 200
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 4688,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 88,
+            "other_opaque": 1208
+          },
+          "maxChannelDelta": 255,
+          "meanMaxChannelDeltaOnGt32": 221.42
+        },
+        "draw_oval_outer_boundary": {
+          "pixels": 10856,
+          "greaterThanThirtyTwoPixels": 8108,
+          "meanBaseRgba": [
+            243.947,
+            213.43,
+            204.888,
+            255.0
+          ],
+          "meanActualRgba": [
+            122.694,
+            122.687,
+            122.687,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              -157.413,
+              -118.355,
+              -107.415,
+              0.0
+            ],
+            "minSignedRgba": [
+              -253,
+              -253,
+              -253,
+              0
+            ],
+            "maxSignedRgba": [
+              -33,
+              -13,
+              -7,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 4420,
+            "red_tinted_reference_like": 1448,
+            "gray_background_like": 0,
+            "other_opaque": 2240
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 2296,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 580,
+            "other_opaque": 5232
+          },
+          "maxChannelDelta": 253,
+          "meanMaxChannelDeltaOnGt32": 157.416
+        },
+        "halo_interior": {
+          "pixels": 3568,
+          "greaterThanThirtyTwoPixels": 3568,
+          "meanBaseRgba": [
+            238.036,
+            191.82,
+            178.87,
+            255.0
+          ],
+          "meanActualRgba": [
+            0.339,
+            0.339,
+            0.339,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              -237.697,
+              -191.481,
+              -178.531,
+              0.0
+            ],
+            "minSignedRgba": [
+              -255,
+              -255,
+              -255,
+              0
+            ],
+            "maxSignedRgba": [
+              -201,
+              -59,
+              -19,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 2360,
+            "red_tinted_reference_like": 1120,
+            "gray_background_like": 0,
+            "other_opaque": 88
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 3568,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "maxChannelDelta": 255,
+          "meanMaxChannelDeltaOnGt32": 237.697
+        },
+        "removed_difference_oval_interior": {
+          "pixels": 241056,
+          "greaterThanThirtyTwoPixels": 0,
+          "meanBaseRgba": [
+            255.0,
+            255.0,
+            255.0,
+            255.0
+          ],
+          "meanActualRgba": [
+            255.0,
+            255.0,
+            255.0,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "minSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "maxSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "maxChannelDelta": 0,
+          "meanMaxChannelDeltaOnGt32": 0.0
+        },
+        "outside_draw_oval": {
+          "pixels": 667464,
+          "greaterThanThirtyTwoPixels": 0,
+          "meanBaseRgba": [
+            255.0,
+            254.999,
+            254.999,
+            255.0
+          ],
+          "meanActualRgba": [
+            254.995,
+            254.995,
+            254.995,
+            255.0
+          ],
+          "signedDeltaOnGt32": {
+            "meanSignedRgba": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "minSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "maxSignedRgba": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "baseColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "actualColorBucketsOnGt32": {
+            "transparent": 0,
+            "black_or_clear_rgb": 0,
+            "white_or_layer_background": 0,
+            "red_tinted_reference_like": 0,
+            "gray_background_like": 0,
+            "other_opaque": 0
+          },
+          "maxChannelDelta": 4,
+          "meanMaxChannelDeltaOnGt32": 0.0
+        }
+      }
+    }
+  ],
+  "hypothesesBySubzone": {
+    "difference_oval_inner_boundary": {
+      "dominantHypothesis": "MIXED_BOUNDARY_COLOR_PAYLOAD_AND_LAYER_EDGE",
+      "rationale": "The oval boundary band combines the same WebGPU black/clear RGB polarity with CPU white layer/background pixels, so a boundary-only composite fix would not explain both backends.",
+      "gpuBlackOrClearRgbHighDeltaPixels": 4688,
+      "cpuWhiteLayerHighDeltaPixels": 5001
+    },
+    "draw_oval_outer_boundary": {
+      "dominantHypothesis": "MIXED_BOUNDARY_COLOR_PAYLOAD_AND_LAYER_EDGE",
+      "rationale": "The oval boundary band combines the same WebGPU black/clear RGB polarity with CPU white layer/background pixels, so a boundary-only composite fix would not explain both backends.",
+      "gpuBlackOrClearRgbHighDeltaPixels": 2296,
+      "cpuWhiteLayerHighDeltaPixels": 6157
+    },
+    "halo_interior": {
+      "dominantHypothesis": "GPU_SOLID_BLUR_COLOR_FILTER_NOT_FOLDED_WITH_CPU_BACKGROUND_LAYER_RETENTION",
+      "rationale": "Reference samples are red-tinted, WebGPU high-delta samples are black/clear RGB, and CPU high-delta samples are mostly white layer/background. This points to a WebGPU solid-blur paint-color payload issue plus an independent CPU/reference layer or mask-extent residual.",
+      "gpuBlackOrClearRgbHighDeltaPixels": 3568,
+      "cpuWhiteLayerHighDeltaPixels": 2360
+    },
+    "removed_difference_oval_interior": {
+      "dominantHypothesis": "NOT_PRIMARY_FOR_FOR272",
+      "rationale": "No >32 residual in this FOR-271 subzone; final composite/background outside the blur envelope is not the current blocker."
+    },
+    "outside_draw_oval": {
+      "dominantHypothesis": "NOT_PRIMARY_FOR_FOR272",
+      "rationale": "No >32 residual in this FOR-271 subzone; final composite/background outside the blur envelope is not the current blocker."
+    }
+  },
+  "signedRgbSamplesBySubzone": {
+    "difference_oval_inner_boundary": [
+      {
+        "x": 262,
+        "y": 17,
+        "subzone": "difference_oval_inner_boundary",
+        "referenceRgba": [
+          202,
+          59,
+          18,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          196,
+          237,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -202,
+          -59,
+          -18,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -255,
+          -255,
+          -255,
+          0
+        ],
+        "maxObservedChannelDelta": 255
+      },
+      {
+        "x": 329,
+        "y": 17,
+        "subzone": "difference_oval_inner_boundary",
+        "referenceRgba": [
+          202,
+          59,
+          18,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          196,
+          237,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -202,
+          -59,
+          -18,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -255,
+          -255,
+          -255,
+          0
+        ],
+        "maxObservedChannelDelta": 255
+      },
+      {
+        "x": 249,
+        "y": 18,
+        "subzone": "difference_oval_inner_boundary",
+        "referenceRgba": [
+          202,
+          59,
+          18,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          252,
+          252,
+          255
+        ],
+        "gpuRgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          193,
+          234,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -202,
+          -59,
+          -18,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -255,
+          -252,
+          -252,
+          0
+        ],
+        "maxObservedChannelDelta": 255
+      },
+      {
+        "x": 250,
+        "y": 18,
+        "subzone": "difference_oval_inner_boundary",
+        "referenceRgba": [
+          202,
+          59,
+          18,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          196,
+          237,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -202,
+          -59,
+          -18,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -255,
+          -255,
+          -255,
+          0
+        ],
+        "maxObservedChannelDelta": 255
+      }
+    ],
+    "draw_oval_outer_boundary": [
+      {
+        "x": 205,
+        "y": 25,
+        "subzone": "draw_oval_outer_boundary",
+        "referenceRgba": [
+          203,
+          68,
+          37,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          2,
+          2,
+          2,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          52,
+          187,
+          218,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -201,
+          -66,
+          -35,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -253,
+          -253,
+          -253,
+          0
+        ],
+        "maxObservedChannelDelta": 253
+      },
+      {
+        "x": 386,
+        "y": 25,
+        "subzone": "draw_oval_outer_boundary",
+        "referenceRgba": [
+          203,
+          68,
+          37,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          2,
+          2,
+          2,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          52,
+          187,
+          218,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -201,
+          -66,
+          -35,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -253,
+          -253,
+          -253,
+          0
+        ],
+        "maxObservedChannelDelta": 253
+      },
+      {
+        "x": 202,
+        "y": 26,
+        "subzone": "draw_oval_outer_boundary",
+        "referenceRgba": [
+          203,
+          68,
+          37,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          2,
+          2,
+          2,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          52,
+          187,
+          218,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -201,
+          -66,
+          -35,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -253,
+          -253,
+          -253,
+          0
+        ],
+        "maxObservedChannelDelta": 253
+      },
+      {
+        "x": 389,
+        "y": 26,
+        "subzone": "draw_oval_outer_boundary",
+        "referenceRgba": [
+          203,
+          68,
+          37,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          2,
+          2,
+          2,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          52,
+          187,
+          218,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -201,
+          -66,
+          -35,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -253,
+          -253,
+          -253,
+          0
+        ],
+        "maxObservedChannelDelta": 253
+      }
+    ],
+    "halo_interior": [
+      {
+        "x": 225,
+        "y": 21,
+        "subzone": "halo_interior",
+        "referenceRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          252,
+          252,
+          255
+        ],
+        "gpuRgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          192,
+          231,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -202,
+          -60,
+          -21,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -255,
+          -252,
+          -252,
+          0
+        ],
+        "maxObservedChannelDelta": 255
+      },
+      {
+        "x": 226,
+        "y": 21,
+        "subzone": "halo_interior",
+        "referenceRgba": [
+          202,
+          60,
+          20,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          195,
+          235,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -202,
+          -60,
+          -20,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -255,
+          -255,
+          -255,
+          0
+        ],
+        "maxObservedChannelDelta": 255
+      },
+      {
+        "x": 365,
+        "y": 21,
+        "subzone": "halo_interior",
+        "referenceRgba": [
+          202,
+          60,
+          20,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          195,
+          235,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -202,
+          -60,
+          -20,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -255,
+          -255,
+          -255,
+          0
+        ],
+        "maxObservedChannelDelta": 255
+      },
+      {
+        "x": 366,
+        "y": 21,
+        "subzone": "halo_interior",
+        "referenceRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          252,
+          252,
+          255
+        ],
+        "gpuRgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          192,
+          231,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -202,
+          -60,
+          -21,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -255,
+          -252,
+          -252,
+          0
+        ],
+        "maxObservedChannelDelta": 255
+      }
+    ],
+    "removed_difference_oval_interior": [],
+    "outside_draw_oval": []
+  },
+  "globalHypothesisRanking": [
+    {
+      "hypothesis": "webgpu_solid_blur_uses_unfiltered_paint_color",
+      "classification": "DOMINANT_FOR_WEBGPU_COLOR_POLARITY",
+      "evidence": "WebGPU high-delta samples are black/clear RGB while reference samples are red-tinted; source evidence shows paint.color feeds blur paintColor."
+    },
+    {
+      "hypothesis": "cpu_reference_layer_or_mask_extent_residual",
+      "classification": "DOMINANT_FOR_CPU_REFERENCE_RESIDUAL",
+      "evidence": "CPU high-delta samples in the same envelope are mostly white layer/background, not red-tinted payload."
+    },
+    {
+      "hypothesis": "color_filter_blur_order",
+      "classification": "NOT_PRIMARY_AS_A_PURE_ORDER_SWAP",
+      "evidence": "For solid paint with Blend(RED,kSrcIn), applying the filter before mask-alpha modulation should still produce a red payload; observed backend polarities are black and white."
+    },
+    {
+      "hypothesis": "final_composite_clip_or_alpha",
+      "classification": "REJECTED_AS_PRIMARY_AFTER_FOR270",
+      "evidence": "FOR-271 reports zero alpha >32 pixels, no >32 residual in removed_difference_oval_interior/outside_draw_oval, and retained FOR-270 clip-mask improvement."
+    },
+    {
+      "hypothesis": "source_mask_color",
+      "classification": "SECONDARY_TO_PAYLOAD_FOLDING",
+      "evidence": "The blur mask source is white alpha coverage; WebGPU black output follows from multiplying coverage by unfiltered black paintColor, not from the white mask itself."
+    }
+  ],
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required"
+  }
+}
