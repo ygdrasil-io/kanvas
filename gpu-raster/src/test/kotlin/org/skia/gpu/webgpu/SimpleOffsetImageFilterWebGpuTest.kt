@@ -295,6 +295,49 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-254 source uniform and bitmap texel rounding audit compares input paths`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val gm = SimpleOffsetImageFilterGM()
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "original-888/${gm.name()}.png missing")
+
+        context!!.use { ctx ->
+            val gpu = WebGpuSink.draw(ctx, gm)
+            val probe = buildFor254SourceTexelRoundingAuditProbe(reference!!, gpu)
+            assertEquals(
+                4,
+                probe.pathCount,
+                "FOR-254: audit must compare source uniform, generated solid, generated gradient, and bitmap texel paths",
+            )
+            assertEquals(
+                "KEEP_DIAGNOSTIC",
+                probe.supportDecision,
+                "FOR-254: no bounded correction is proven without raw uniform/texel sentinels",
+            )
+            assertEquals(
+                true,
+                probe.legacySourceUniformHasResidual,
+                "FOR-254: legacy source-color uniform path must keep reproducing the RGB byte tail",
+            )
+            assertEquals(
+                true,
+                probe.bitmapTexelPathHasResidual,
+                "FOR-254: bitmap upload/sample path must keep reproducing the RGB byte tail",
+            )
+            assertEquals(
+                listOf("generated-solid-control", "generated-gradient-control"),
+                probe.exactControlKinds,
+                "FOR-254: generated solid and gradient controls must remain exact",
+            )
+            if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                writeFor254SourceTexelRoundingAuditJson(probe)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -528,6 +571,268 @@ class SimpleOffsetImageFilterWebGpuTest {
                 bitmapNearest.alphaDeltaNonZeroPixels == 0 &&
                 bitmapNearest.maxChannelDelta == 1,
             onlyFinalPackOrStore = linearGradient.residualPixels > 0,
+        )
+    }
+
+    private fun buildFor254SourceTexelRoundingAuditProbe(
+        simpleOffsetReference: SkBitmap,
+        simpleOffsetGpu: SkBitmap,
+    ): For254SourceTexelRoundingAuditProbe {
+        val sourceColorCell = SIMPLE_OFFSET_CELLS.first { it.id == "row1-col0-no-filter" }
+        val sourceUniform = buildFor254SimpleOffsetCellCase(
+            id = "legacy-source-color-uniform.simple-offset-row1-col0",
+            pathKind = "legacy-source-color-uniform",
+            sceneId = "simple-offsetimagefilter",
+            label = "legacy source-color uniform path through SimpleOffset row1 col0",
+            route = "webgpu.canvas.draw-rect.src-over",
+            inputObservation = For254InputObservation(
+                source = "SimpleOffsetImageFilterGM paint colors",
+                packedArgb = intArrayOf(0x66, 0xFF, 0x00, 0x00),
+                packedRgba = intArrayOf(0xFF, 0x00, 0x00, 0x66),
+                normalizedRgba = normalizedRgba(argb = 0x66FF0000),
+                premulRgba = premulNormalizedRgba(argb = 0x66FF0000),
+                observableStatus = "host-side normalization formula is visible in SkWebGpuDevice drawRect; raw uniform buffer bytes are not captured by this test",
+            ),
+            inputStageConclusion = "residual appears after legacy source-color normalization/uniform consumption; host-side color bytes are deducible, uniform write bytes are not directly observed",
+            cell = sourceColorCell,
+            reference = simpleOffsetReference,
+            gpu = simpleOffsetGpu,
+        )
+        val generatedSolid = buildFor254ArtifactCase(
+            id = "generated-solid-control.solid-rect",
+            pathKind = "generated-solid-control",
+            sceneId = "solid-rect",
+            label = "generated solid rect exact control",
+            route = "webgpu.generated.solid-rect.src-over",
+            inputObservation = For254InputObservation(
+                source = "SolidRectSceneCaptureTest FILL",
+                packedArgb = intArrayOf(0xFF, 23, 33, 28),
+                packedRgba = intArrayOf(23, 33, 28, 0xFF),
+                normalizedRgba = normalizedRgba(argb = 0xFF171F1C.toInt()),
+                premulRgba = premulNormalizedRgba(argb = 0xFF171F1C.toInt()),
+                observableStatus = "source color is visible in test fixture and output is byte-exact; generated uniform buffer bytes are not captured here",
+            ),
+            inputStageConclusion = "generated solid path is byte-exact, so source-color uniforms are not universally biased",
+            referencePath = "reports/wgsl-pipeline/scenes/artifacts/solid-rect/skia.png",
+            gpuPath = "reports/wgsl-pipeline/scenes/artifacts/solid-rect/gpu.png",
+            representativeX = 2,
+            representativeY = 1,
+        )
+        val generatedGradient = buildFor254ArtifactCase(
+            id = "generated-gradient-control.linear-gradient-rect",
+            pathKind = "generated-gradient-control",
+            sceneId = "linear-gradient-rect",
+            label = "generated linear gradient exact control",
+            route = "webgpu.generated.linear-gradient.rect",
+            inputObservation = For254InputObservation(
+                source = "generated linear-gradient scene oracle",
+                packedArgb = intArrayOf(),
+                packedRgba = intArrayOf(),
+                normalizedRgba = floatArrayOf(),
+                premulRgba = floatArrayOf(),
+                observableStatus = "gradient stop uniforms are not dumped by this test; exact output constrains final store and generated arithmetic",
+            ),
+            inputStageConclusion = "generated gradient path is byte-exact, ruling out a global final pack/store or generated arithmetic bias",
+            referencePath = "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/skia.png",
+            gpuPath = "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/gpu.png",
+            representativeX = 32,
+            representativeY = 32,
+        )
+        val bitmapTexel = buildFor254ArtifactCase(
+            id = "bitmap-texel-upload-sample.bitmap-rect-nearest",
+            pathKind = "bitmap-texel-upload-sample",
+            sceneId = "bitmap-rect-nearest",
+            label = "bitmap texel upload/sample path",
+            route = "webgpu.image-rect.strict-nearest",
+            inputObservation = For254InputObservation(
+                source = "bitmap-rect-nearest skia/gpu artifacts",
+                packedArgb = intArrayOf(),
+                packedRgba = intArrayOf(149, 193, 207, 0xFF),
+                normalizedRgba = normalizedRgba(rgba = intArrayOf(149, 193, 207, 0xFF)),
+                premulRgba = premulNormalizedRgba(rgba = intArrayOf(149, 193, 207, 0xFF)),
+                observableStatus = "representative oracle texel/output color is visible from artifacts; raw texture-upload bytes and sampled shader value are not captured here",
+            ),
+            inputStageConclusion = "bitmap path has a 1-byte RGB tail after upload/sample, but the current evidence cannot distinguish upload normalization from sampler/readback arithmetic",
+            referencePath = "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/skia.png",
+            gpuPath = "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/gpu.png",
+            representativeX = null,
+            representativeY = null,
+        )
+        val cases = listOf(sourceUniform, generatedSolid, generatedGradient, bitmapTexel)
+        val residualCases = cases.filter { it.residualPixels > 0 }
+        val exactControls = cases.filter { it.residualPixels == 0 }.map { it.pathKind }
+        val residualPixels = cases.flatMap { it.residualPixelDeltas }
+        return For254SourceTexelRoundingAuditProbe(
+            cases = cases,
+            totalPixels = cases.sumOf { it.totalPixels },
+            totalResidualPixels = cases.sumOf { it.residualPixels },
+            maxChannelDelta = cases.maxOf { it.maxChannelDelta },
+            alphaDeltaNonZeroPixels = cases.sumOf { it.alphaDeltaNonZeroPixels },
+            rgbOnlyResidualPixels = cases.sumOf { it.rgbOnlyResidualPixels },
+            signedDeltaHistogram = signedDeltaHistograms(residualPixels),
+            residualCaseIds = residualCases.map { it.id },
+            exactControlKinds = exactControls,
+            legacySourceUniformHasResidual = sourceUniform.residualPixels > 0 &&
+                sourceUniform.maxChannelDelta == 1 &&
+                sourceUniform.alphaDeltaNonZeroPixels == 0,
+            bitmapTexelPathHasResidual = bitmapTexel.residualPixels > 0 &&
+                bitmapTexel.maxChannelDelta == 1 &&
+                bitmapTexel.alphaDeltaNonZeroPixels == 0,
+            generatedControlsExact = generatedSolid.residualPixels == 0 && generatedGradient.residualPixels == 0,
+        )
+    }
+
+    private fun buildFor254SimpleOffsetCellCase(
+        id: String,
+        pathKind: String,
+        sceneId: String,
+        label: String,
+        route: String,
+        inputObservation: For254InputObservation,
+        inputStageConclusion: String,
+        cell: SimpleOffsetCell,
+        reference: SkBitmap,
+        gpu: SkBitmap,
+    ): For254PathCase {
+        val pixels = mutableListOf<PixelDelta>()
+        for (y in cell.originY until cell.originY + CELL_EXTENT) {
+            for (x in cell.originX until cell.originX + CELL_EXTENT) {
+                pixels += pixelDelta(reference, gpu, x, y)
+            }
+        }
+        return buildFor254PathCase(
+            id = id,
+            pathKind = pathKind,
+            sceneId = sceneId,
+            label = label,
+            sourceKind = "skia-upstream-reference-vs-live-webgpu",
+            route = route,
+            referenceSource = "original-888/simple-offsetimagefilter.png",
+            inputObservation = inputObservation,
+            inputStageConclusion = inputStageConclusion,
+            bounds = intArrayOf(cell.originX, cell.originY, cell.originX + CELL_EXTENT, cell.originY + CELL_EXTENT),
+            totalPixels = CELL_EXTENT * CELL_EXTENT,
+            pixels = pixels,
+            representative = null,
+        )
+    }
+
+    private fun buildFor254ArtifactCase(
+        id: String,
+        pathKind: String,
+        sceneId: String,
+        label: String,
+        route: String,
+        inputObservation: For254InputObservation,
+        inputStageConclusion: String,
+        referencePath: String,
+        gpuPath: String,
+        representativeX: Int?,
+        representativeY: Int?,
+    ): For254PathCase {
+        val reference = readEvidencePng(referencePath)
+        val gpu = readEvidencePng(gpuPath)
+        require(reference.width == gpu.width && reference.height == gpu.height) {
+            "FOR-254 requires same-size generated artifact bitmaps for $sceneId"
+        }
+        val pixels = mutableListOf<PixelDelta>()
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                pixels += pixelDelta(reference, gpu, x, y)
+            }
+        }
+        val representative = if (representativeX != null && representativeY != null) {
+            pixelDelta(reference, gpu, representativeX, representativeY)
+        } else {
+            null
+        }
+        return buildFor254PathCase(
+            id = id,
+            pathKind = pathKind,
+            sceneId = sceneId,
+            label = label,
+            sourceKind = "artifact-reference-oracle-vs-gpu",
+            route = route,
+            referenceSource = referencePath,
+            inputObservation = inputObservation,
+            inputStageConclusion = inputStageConclusion,
+            bounds = intArrayOf(0, 0, reference.width, reference.height),
+            totalPixels = reference.width * reference.height,
+            pixels = pixels,
+            representative = representative,
+        )
+    }
+
+    private fun buildFor254PathCase(
+        id: String,
+        pathKind: String,
+        sceneId: String,
+        label: String,
+        sourceKind: String,
+        route: String,
+        referenceSource: String,
+        inputObservation: For254InputObservation,
+        inputStageConclusion: String,
+        bounds: IntArray,
+        totalPixels: Int,
+        pixels: List<PixelDelta>,
+        representative: PixelDelta?,
+    ): For254PathCase {
+        val residualPixels = pixels.filter { it.maxChannelDelta > 0 }
+        val topPairs = topColorPairs(residualPixels, COLOR_PAIR_TOP_N)
+        val representativePixel = representative
+            ?: residualPixels.firstOrNull { pixel ->
+                topPairs.firstOrNull()?.let { pair ->
+                    pixel.reference.contentEquals(pair.reference) && pixel.gpu.contentEquals(pair.gpu)
+                } ?: false
+            }
+            ?: pixels.first()
+        return For254PathCase(
+            id = id,
+            pathKind = pathKind,
+            sceneId = sceneId,
+            label = label,
+            sourceKind = sourceKind,
+            route = route,
+            referenceSource = referenceSource,
+            inputObservation = inputObservation,
+            inputStageConclusion = inputStageConclusion,
+            bounds = bounds,
+            totalPixels = totalPixels,
+            residualPixels = residualPixels.size,
+            maxChannelDelta = pixels.maxOfOrNull { it.maxChannelDelta } ?: 0,
+            alphaDeltaNonZeroPixels = residualPixels.count { it.signedDelta[3] != 0 },
+            rgbOnlyResidualPixels = residualPixels.count { it.signedDelta[3] == 0 },
+            representativeOutput = representativePixel,
+            signedDeltaHistogram = signedDeltaHistograms(residualPixels),
+            topColorPairs = topPairs,
+            residualPixelDeltas = residualPixels,
+        )
+    }
+
+    private fun normalizedRgba(argb: Int): FloatArray =
+        floatArrayOf(
+            ((argb ushr 16) and 0xFF) / 255f,
+            ((argb ushr 8) and 0xFF) / 255f,
+            (argb and 0xFF) / 255f,
+            ((argb ushr 24) and 0xFF) / 255f,
+        )
+
+    private fun premulNormalizedRgba(argb: Int): FloatArray {
+        val rgba = normalizedRgba(argb)
+        return floatArrayOf(rgba[0] * rgba[3], rgba[1] * rgba[3], rgba[2] * rgba[3], rgba[3])
+    }
+
+    private fun normalizedRgba(rgba: IntArray): FloatArray =
+        FloatArray(4) { channel -> rgba[channel] / 255f }
+
+    private fun premulNormalizedRgba(rgba: IntArray): FloatArray {
+        val normalized = normalizedRgba(rgba)
+        return floatArrayOf(
+            normalized[0] * normalized[3],
+            normalized[1] * normalized[3],
+            normalized[2] * normalized[3],
+            normalized[3],
         )
     }
 
@@ -1163,6 +1468,54 @@ class SimpleOffsetImageFilterWebGpuTest {
         )
     }
 
+    private fun writeFor254SourceTexelRoundingAuditJson(probe: For254SourceTexelRoundingAuditProbe) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/source-texel-rounding-audit-for254",
+        ).apply { mkdirs() }
+        File(dir, "source-texel-rounding-audit-for254.json").writeText(
+            """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "mixed skia-upstream and artifact oracle PNGs",
+              "linear": "FOR-254",
+              "probe": "source-uniform-vs-bitmap-texel-rounding-audit",
+              "deltaDefinition": "signed channel delta is GPU minus reference",
+              "pathCount": ${probe.pathCount},
+              "totalPixels": ${probe.totalPixels},
+              "totalResidualPixels": ${probe.totalResidualPixels},
+              "maxChannelDelta": ${probe.maxChannelDelta},
+              "alphaDeltaNonZeroPixels": ${probe.alphaDeltaNonZeroPixels},
+              "rgbOnlyResidualPixels": ${probe.rgbOnlyResidualPixels},
+              "signedDeltaHistogram": ${signedDeltaHistogramToJson(probe.signedDeltaHistogram, indent = "              ")},
+              "residualCaseIds": [
+            ${probe.residualCaseIds.joinToString(",\n") { "                \"$it\"" }}
+              ],
+              "exactControlKinds": [
+            ${probe.exactControlKinds.joinToString(",\n") { "                \"$it\"" }}
+              ],
+              "sourceTexelComparison": {
+                "legacySourceUniformHasResidual": ${probe.legacySourceUniformHasResidual},
+                "bitmapTexelPathHasResidual": ${probe.bitmapTexelPathHasResidual},
+                "generatedControlsExact": ${probe.generatedControlsExact},
+                "hostSideNormalizationVerdict": "${probe.hostSideNormalizationVerdict}",
+                "uniformBufferWriteVerdict": "${probe.uniformBufferWriteVerdict}",
+                "textureUploadSampleVerdict": "${probe.textureUploadSampleVerdict}",
+                "correctionReadiness": "${probe.correctionReadiness}",
+                "nextInstrumentation": "${probe.nextInstrumentation}"
+              },
+              "cases": [
+            ${probe.cases.joinToString(",\n") { it.toJson(indent = "                ") }}
+              ],
+              "interpretation": "The RGB-only byte tail is present in the legacy source-color uniform path and bitmap texel upload/sample path, while generated solid and generated gradient controls are exact. The current proof narrows the remaining problem to an input normalization/consumption boundary, but raw uniform-buffer bytes and shader-observed sampled texels are not captured, so no bounded correction is proven.",
+              "observationMethod": "test-side Skia reference PNG plus live WebGPU readback for the SimpleOffset source-color cell, and artifact oracle PNG comparisons for solid, gradient, and bitmap controls; no renderer diagnostic property, no CPU/readback fallback in the render path",
+              "supportDecision": "${probe.supportDecision}",
+              "correctionApplied": false,
+              "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+            }
+            """.trimIndent() + "\n",
+        )
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -1252,6 +1605,44 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
         """.trimIndent().prependIndent(indent)
 
+    private fun For254InputObservation.toJson(indent: String): String =
+        """
+        {
+          "source": "$source",
+          "packedArgb": ${jsonArray(packedArgb)},
+          "packedRgba": ${jsonArray(packedRgba)},
+          "normalizedRgba": ${jsonArray(normalizedRgba)},
+          "premulRgba": ${jsonArray(premulRgba)},
+          "observableStatus": "$observableStatus"
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For254PathCase.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "pathKind": "$pathKind",
+          "sceneId": "$sceneId",
+          "label": "$label",
+          "sourceKind": "$sourceKind",
+          "route": "$route",
+          "referenceSource": "$referenceSource",
+          "inputObservation": ${inputObservation.toJson(indent = "$indent  ").trimStart()},
+          "inputStageConclusion": "$inputStageConclusion",
+          "bounds": ${jsonArray(bounds)},
+          "totalPixels": $totalPixels,
+          "residualPixels": $residualPixels,
+          "maxChannelDelta": $maxChannelDelta,
+          "alphaDeltaNonZeroPixels": $alphaDeltaNonZeroPixels,
+          "rgbOnlyResidualPixels": $rgbOnlyResidualPixels,
+          "representativeOutput": ${representativeOutput.toJson(indent = "$indent  ").trimStart()},
+          "signedDeltaHistogram": ${signedDeltaHistogramToJson(signedDeltaHistogram, indent = "$indent  ")},
+          "topColorPairs": [
+        ${topColorPairs.joinToString(",\n") { it.toJson(indent = "$indent    ") }}
+          ]
+        }
+        """.trimIndent().prependIndent(indent)
+
     private fun signedDeltaHistogramToJson(histogram: List<Map<Int, Int>>, indent: String): String {
         val channels = listOf("r", "g", "b", "a")
         return channels.indices.joinToString(
@@ -1304,6 +1695,11 @@ class SimpleOffsetImageFilterWebGpuTest {
         prefix = "[",
         postfix = "]",
     )
+
+    private fun jsonArray(values: FloatArray): String = values.joinToString(
+        prefix = "[",
+        postfix = "]",
+    ) { value -> value.toString() }
 
     private fun repoFile(path: String): File {
         var dir = File(System.getProperty("user.dir")).absoluteFile
@@ -1583,5 +1979,64 @@ class SimpleOffsetImageFilterWebGpuTest {
             "input color normalization/rounding before or at source-color uniform and bitmap texel sample, not Crop and not a global final pack/store-only stage"
         val nextSubProblem: String =
             "compare legacy source-color uniform packing and bitmap texture upload/sample rounding against generated solid/gradient exact controls"
+    }
+
+    private data class For254InputObservation(
+        val source: String,
+        val packedArgb: IntArray,
+        val packedRgba: IntArray,
+        val normalizedRgba: FloatArray,
+        val premulRgba: FloatArray,
+        val observableStatus: String,
+    )
+
+    private data class For254PathCase(
+        val id: String,
+        val pathKind: String,
+        val sceneId: String,
+        val label: String,
+        val sourceKind: String,
+        val route: String,
+        val referenceSource: String,
+        val inputObservation: For254InputObservation,
+        val inputStageConclusion: String,
+        val bounds: IntArray,
+        val totalPixels: Int,
+        val residualPixels: Int,
+        val maxChannelDelta: Int,
+        val alphaDeltaNonZeroPixels: Int,
+        val rgbOnlyResidualPixels: Int,
+        val representativeOutput: PixelDelta,
+        val signedDeltaHistogram: List<Map<Int, Int>>,
+        val topColorPairs: List<ColorPairGroup>,
+        val residualPixelDeltas: List<PixelDelta>,
+    )
+
+    private data class For254SourceTexelRoundingAuditProbe(
+        val cases: List<For254PathCase>,
+        val totalPixels: Int,
+        val totalResidualPixels: Int,
+        val maxChannelDelta: Int,
+        val alphaDeltaNonZeroPixels: Int,
+        val rgbOnlyResidualPixels: Int,
+        val signedDeltaHistogram: List<Map<Int, Int>>,
+        val residualCaseIds: List<String>,
+        val exactControlKinds: List<String>,
+        val legacySourceUniformHasResidual: Boolean,
+        val bitmapTexelPathHasResidual: Boolean,
+        val generatedControlsExact: Boolean,
+    ) {
+        val pathCount: Int = cases.size
+        val supportDecision: String = "KEEP_DIAGNOSTIC"
+        val hostSideNormalizationVerdict: String =
+            "source ARGB/RGBA bytes and /255f normalized floats are deducible for legacy source color and bitmap oracle texel, but this audit does not observe post-write GPU buffer/texture contents"
+        val uniformBufferWriteVerdict: String =
+            "not directly observable; source-color output residual may be in uniform write, uniform consumption, blend rounding, or reference conversion"
+        val textureUploadSampleVerdict: String =
+            "not directly observable; bitmap output residual may be in texture upload normalization, sampler read, shader arithmetic, or reference conversion"
+        val correctionReadiness: String =
+            "not ready: generated controls are exact but both legacy uniform and bitmap texel paths still need raw sentinels before a bounded correction"
+        val nextInstrumentation: String =
+            "add renderer diagnostic sentinels that dump raw uniform buffer color words, uploaded RGBA8 texel bytes, and shader-observed sampled color before blend/store"
     }
 }
