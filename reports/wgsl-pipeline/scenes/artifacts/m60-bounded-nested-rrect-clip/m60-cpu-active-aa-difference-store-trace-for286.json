@@ -1,0 +1,2012 @@
+{
+  "linear": "FOR-286",
+  "parent": "FOR-241",
+  "probe": "cpu-active-aa-difference-store-trace",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/Reference/WebGPU",
+  "sourceAudits": {
+    "for278": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-boundary-layer-composite-fixture-for278.json",
+    "for283": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-dispatch-blend-store-trace-for283.json",
+    "for285": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-post-payload-residual-for285.json"
+  },
+  "sourceImages": {
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png",
+    "cpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png",
+    "gpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png"
+  },
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "NEXT_FIX_CPU_ACTIVE_AA_DIFFERENCE_CLIP_STORE_ORDER_NOT_SRCOVER_OR_PAYLOAD",
+  "nextAction": "TARGET_CPU_ACTIVE_AA_DIFFERENCE_CLIP_STORE_ORDER",
+  "residualClassification": "CPU_ACTIVE_AA_DIFFERENCE_LAYER_STORE_ORDER_RESIDUAL",
+  "route": {
+    "cpu": "cpu.coverage.nested-rrect-clip-oracle",
+    "gpu": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "coverageStrategy": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold",
+    "sourceNeedles": {
+      "gmUsesWhiteSrcLayerBeforeDifferenceBlur": true,
+      "gmHasNoSaveLayer": true,
+      "a8SrcInPayloadBranchPresent": true,
+      "dispatchBlendRoutesNullBlenderToBlend": true,
+      "blendAppliesActiveAaClipCoverage": true,
+      "srcOverFastPathStoresOpaqueSrc": true,
+      "srcOverFastPathStoresComputedOut": true,
+      "bitmapSetPixelDirectRgba8888Store": true
+    }
+  },
+  "traceModel": {
+    "observationBoundary": "Bounded reconstruction over the committed M60 CPU/reference/GPU images, the FOR-278 windows, and the current SkBitmapDevice A8 SrcIn + kSrcOver store branches.",
+    "dispatchSource": "FOR-284 branch applies Blend(RED,kSrcIn) after mask alpha, then calls dispatchBlend.",
+    "coverageAppliedInBlend": "blend() folds activeAaClip clipCoverage(x,y) into src.alpha before SrcOver.",
+    "dstBeforeBlend": "BlurredClippedCircleGM draws a white kSrc background before the difference clipped blur.",
+    "valueWritten": "For kSrcOver, sa==255 writes src directly; 0<sa<255 reads dst and writes SkColorSetARGB(outA,outR,outG,outB).",
+    "readBackAfterDraw": "Committed CPU PNG pixel after the GM draw completes.",
+    "maskBounds": {
+      "left": 2,
+      "top": 2,
+      "right": 590,
+      "bottom": 590,
+      "margin": 5
+    }
+  },
+  "sourcePreservation": {
+    "for283TargetPixelsPreserved": true,
+    "for283BlendRedTintPreserved": true,
+    "for285DecisionPreserved": true,
+    "for285ResidualPreserved": true
+  },
+  "windows": [
+    {
+      "name": "draw_oval_outer_boundary_max_cpu_reference_delta_window",
+      "subzone": "draw_oval_outer_boundary",
+      "bounds": {
+        "left": 94,
+        "top": 84,
+        "right": 105,
+        "bottom": 95
+      },
+      "maskPixels": 59,
+      "targetPixels": 59,
+      "metrics": {
+        "targetPixels": 59,
+        "dispatchWouldRunPixels": 59,
+        "dispatchInputRedPayloadPixels": 59,
+        "coverageAppliedNonZeroPixels": 59,
+        "coverageAppliedFullPixels": 59,
+        "dstBeforeBlendWhitePixels": 59,
+        "blendResultRedTintPixels": 59,
+        "blendResultRedDominantPixels": 52,
+        "writeWouldRunPixels": 59,
+        "writeMatchesBlendResultPixels": 59,
+        "writeRedTintPixels": 59,
+        "writeRedDominantPixels": 52,
+        "writeOpaqueSrcFastPathPixels": 0,
+        "writePartialSrcFastPathPixels": 59,
+        "readBackMatchesWrittenPixels": 0,
+        "readBackRedDominantPixels": 0,
+        "readBackWhiteLayerPixels": 59,
+        "writtenVsReadBackGreaterThanThirtyTwoPixels": 52,
+        "writtenVsReadBackMaxChannelDelta": 251,
+        "coverageMin": 255,
+        "coverageMax": 255,
+        "coverageMean": 255.0,
+        "writeAlphaMin": 255,
+        "writeAlphaMax": 255,
+        "writeAlphaMean": 255.0
+      },
+      "anchorTrace": {
+        "x": 99,
+        "y": 89,
+        "subzone": "draw_oval_outer_boundary",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          250
+        ],
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputBlender": "null",
+        "dispatchWouldRun": true,
+        "cov": 255,
+        "srcAfterCoverageRgba": [
+          255,
+          0,
+          0,
+          250
+        ],
+        "dstBeforeBlendRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "blendResultBeforeStoreRgba": [
+          255,
+          5,
+          5,
+          255
+        ],
+        "readBackAfterCpuOutputRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "referenceRgba": [
+          203,
+          65,
+          31,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "dispatchInputCarriesRedPayload": true,
+        "srcAfterCoverageCarriesRedPayload": true,
+        "blendResultCarriesRedTint": true,
+        "blendResultRedDominant": true,
+        "readBackRedDominant": false,
+        "readBackIsWhiteOrLayer": true,
+        "blendVsReadBackMaxChannelDelta": 250,
+        "blendMinusReadBackSignedRgba": [
+          0,
+          -250,
+          -250,
+          0
+        ],
+        "blendVsReferenceMaxChannelDelta": 60,
+        "readBackVsReferenceMaxChannelDelta": 224,
+        "referenceVsReadBackSignedRgba": [
+          -52,
+          -190,
+          -224,
+          0
+        ],
+        "maskAAfterBlur": 250,
+        "srcAlphaBeforeClipModulation": 250,
+        "srcAlphaAfterClipModulation": 250,
+        "coverageAppliedInBlend": 255,
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          250
+        ],
+        "dstReadBySrcOverBranch": true,
+        "blendResultBeforeWriteRgba": [
+          255,
+          5,
+          5,
+          255
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "writeWouldRun": true,
+        "valueWrittenRgba": [
+          255,
+          5,
+          5,
+          255
+        ],
+        "readBackAfterDrawRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "writeMatchesBlendResult": true,
+        "blendVsWriteMaxChannelDelta": 0,
+        "readBackMatchesWritten": false,
+        "writtenVsReadBackMaxChannelDelta": 250,
+        "writtenMinusReadBackSignedRgba": [
+          0,
+          -250,
+          -250,
+          0
+        ],
+        "writtenVsReferenceMaxChannelDelta": 60,
+        "writeCarriesRedTint": true,
+        "writeRedDominant": true
+      }
+    },
+    {
+      "name": "difference_oval_inner_boundary_max_cpu_reference_delta_window",
+      "subzone": "difference_oval_inner_boundary",
+      "bounds": {
+        "left": 257,
+        "top": 12,
+        "right": 268,
+        "bottom": 23
+      },
+      "maskPixels": 67,
+      "targetPixels": 18,
+      "metrics": {
+        "targetPixels": 18,
+        "dispatchWouldRunPixels": 18,
+        "dispatchInputRedPayloadPixels": 18,
+        "coverageAppliedNonZeroPixels": 18,
+        "coverageAppliedFullPixels": 8,
+        "dstBeforeBlendWhitePixels": 18,
+        "blendResultRedTintPixels": 18,
+        "blendResultRedDominantPixels": 18,
+        "writeWouldRunPixels": 18,
+        "writeMatchesBlendResultPixels": 18,
+        "writeRedTintPixels": 18,
+        "writeRedDominantPixels": 18,
+        "writeOpaqueSrcFastPathPixels": 8,
+        "writePartialSrcFastPathPixels": 10,
+        "readBackMatchesWrittenPixels": 0,
+        "readBackRedDominantPixels": 3,
+        "readBackWhiteLayerPixels": 14,
+        "writtenVsReadBackGreaterThanThirtyTwoPixels": 17,
+        "writtenVsReadBackMaxChannelDelta": 255,
+        "coverageMin": 32,
+        "coverageMax": 255,
+        "coverageMean": 189.777778,
+        "writeAlphaMin": 255,
+        "writeAlphaMax": 255,
+        "writeAlphaMean": 255.0
+      },
+      "anchorTrace": {
+        "x": 262,
+        "y": 17,
+        "subzone": "difference_oval_inner_boundary",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputBlender": "null",
+        "dispatchWouldRun": true,
+        "cov": 255,
+        "srcAfterCoverageRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "dstBeforeBlendRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "blendResultBeforeStoreRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "readBackAfterCpuOutputRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "referenceRgba": [
+          202,
+          59,
+          18,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          59,
+          19,
+          255
+        ],
+        "dispatchInputCarriesRedPayload": true,
+        "srcAfterCoverageCarriesRedPayload": true,
+        "blendResultCarriesRedTint": true,
+        "blendResultRedDominant": true,
+        "readBackRedDominant": false,
+        "readBackIsWhiteOrLayer": true,
+        "blendVsReadBackMaxChannelDelta": 255,
+        "blendMinusReadBackSignedRgba": [
+          0,
+          -255,
+          -255,
+          0
+        ],
+        "blendVsReferenceMaxChannelDelta": 59,
+        "readBackVsReferenceMaxChannelDelta": 237,
+        "referenceVsReadBackSignedRgba": [
+          -53,
+          -196,
+          -237,
+          0
+        ],
+        "maskAAfterBlur": 255,
+        "srcAlphaBeforeClipModulation": 255,
+        "srcAlphaAfterClipModulation": 255,
+        "coverageAppliedInBlend": 255,
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "dstReadBySrcOverBranch": false,
+        "blendResultBeforeWriteRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+        "writeWouldRun": true,
+        "valueWrittenRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "readBackAfterDrawRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "writeMatchesBlendResult": true,
+        "blendVsWriteMaxChannelDelta": 0,
+        "readBackMatchesWritten": false,
+        "writtenVsReadBackMaxChannelDelta": 255,
+        "writtenMinusReadBackSignedRgba": [
+          0,
+          -255,
+          -255,
+          0
+        ],
+        "writtenVsReferenceMaxChannelDelta": 59,
+        "writeCarriesRedTint": true,
+        "writeRedDominant": true
+      }
+    },
+    {
+      "name": "halo_interior_max_cpu_reference_delta_window",
+      "subzone": "halo_interior",
+      "bounds": {
+        "left": 221,
+        "top": 16,
+        "right": 232,
+        "bottom": 27
+      },
+      "maskPixels": 22,
+      "targetPixels": 12,
+      "metrics": {
+        "targetPixels": 12,
+        "dispatchWouldRunPixels": 12,
+        "dispatchInputRedPayloadPixels": 12,
+        "coverageAppliedNonZeroPixels": 12,
+        "coverageAppliedFullPixels": 12,
+        "dstBeforeBlendWhitePixels": 12,
+        "blendResultRedTintPixels": 12,
+        "blendResultRedDominantPixels": 12,
+        "writeWouldRunPixels": 12,
+        "writeMatchesBlendResultPixels": 12,
+        "writeRedTintPixels": 12,
+        "writeRedDominantPixels": 12,
+        "writeOpaqueSrcFastPathPixels": 10,
+        "writePartialSrcFastPathPixels": 2,
+        "readBackMatchesWrittenPixels": 0,
+        "readBackRedDominantPixels": 6,
+        "readBackWhiteLayerPixels": 5,
+        "writtenVsReadBackGreaterThanThirtyTwoPixels": 12,
+        "writtenVsReadBackMaxChannelDelta": 255,
+        "coverageMin": 255,
+        "coverageMax": 255,
+        "coverageMean": 255.0,
+        "writeAlphaMin": 255,
+        "writeAlphaMax": 255,
+        "writeAlphaMean": 255.0
+      },
+      "anchorTrace": {
+        "x": 226,
+        "y": 21,
+        "subzone": "halo_interior",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputBlender": "null",
+        "dispatchWouldRun": true,
+        "cov": 255,
+        "srcAfterCoverageRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "dstBeforeBlendRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "blendResultBeforeStoreRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "readBackAfterCpuOutputRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "referenceRgba": [
+          202,
+          60,
+          20,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          59,
+          19,
+          255
+        ],
+        "dispatchInputCarriesRedPayload": true,
+        "srcAfterCoverageCarriesRedPayload": true,
+        "blendResultCarriesRedTint": true,
+        "blendResultRedDominant": true,
+        "readBackRedDominant": false,
+        "readBackIsWhiteOrLayer": true,
+        "blendVsReadBackMaxChannelDelta": 255,
+        "blendMinusReadBackSignedRgba": [
+          0,
+          -255,
+          -255,
+          0
+        ],
+        "blendVsReferenceMaxChannelDelta": 60,
+        "readBackVsReferenceMaxChannelDelta": 235,
+        "referenceVsReadBackSignedRgba": [
+          -53,
+          -195,
+          -235,
+          0
+        ],
+        "maskAAfterBlur": 255,
+        "srcAlphaBeforeClipModulation": 255,
+        "srcAlphaAfterClipModulation": 255,
+        "coverageAppliedInBlend": 255,
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "dstReadBySrcOverBranch": false,
+        "blendResultBeforeWriteRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+        "writeWouldRun": true,
+        "valueWrittenRgba": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "readBackAfterDrawRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "writeMatchesBlendResult": true,
+        "blendVsWriteMaxChannelDelta": 0,
+        "readBackMatchesWritten": false,
+        "writtenVsReadBackMaxChannelDelta": 255,
+        "writtenMinusReadBackSignedRgba": [
+          0,
+          -255,
+          -255,
+          0
+        ],
+        "writtenVsReferenceMaxChannelDelta": 60,
+        "writeCarriesRedTint": true,
+        "writeRedDominant": true
+      }
+    }
+  ],
+  "combinedBoundaryFixture": {
+    "maskPixels": 148,
+    "targetPixels": 89,
+    "metrics": {
+      "targetPixels": 89,
+      "dispatchWouldRunPixels": 89,
+      "dispatchInputRedPayloadPixels": 89,
+      "coverageAppliedNonZeroPixels": 89,
+      "coverageAppliedFullPixels": 79,
+      "dstBeforeBlendWhitePixels": 89,
+      "blendResultRedTintPixels": 89,
+      "blendResultRedDominantPixels": 82,
+      "writeWouldRunPixels": 89,
+      "writeMatchesBlendResultPixels": 89,
+      "writeRedTintPixels": 89,
+      "writeRedDominantPixels": 82,
+      "writeOpaqueSrcFastPathPixels": 18,
+      "writePartialSrcFastPathPixels": 71,
+      "readBackMatchesWrittenPixels": 0,
+      "readBackRedDominantPixels": 9,
+      "readBackWhiteLayerPixels": 78,
+      "writtenVsReadBackGreaterThanThirtyTwoPixels": 81,
+      "writtenVsReadBackMaxChannelDelta": 255,
+      "coverageMin": 32,
+      "coverageMax": 255,
+      "coverageMean": 241.808989,
+      "writeAlphaMin": 255,
+      "writeAlphaMax": 255,
+      "writeAlphaMean": 255.0
+    }
+  },
+  "highDeltaTraceSamples": [
+    {
+      "x": 262,
+      "y": 17,
+      "subzone": "difference_oval_inner_boundary",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "referenceRgba": [
+        202,
+        59,
+        18,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 255,
+      "blendMinusReadBackSignedRgba": [
+        0,
+        -255,
+        -255,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 59,
+      "readBackVsReferenceMaxChannelDelta": 237,
+      "referenceVsReadBackSignedRgba": [
+        -53,
+        -196,
+        -237,
+        0
+      ],
+      "maskAAfterBlur": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstReadBySrcOverBranch": false,
+      "blendResultBeforeWriteRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 255,
+      "writtenMinusReadBackSignedRgba": [
+        0,
+        -255,
+        -255,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 59,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 237
+    },
+    {
+      "x": 226,
+      "y": 21,
+      "subzone": "halo_interior",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "referenceRgba": [
+        202,
+        60,
+        20,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 255,
+      "blendMinusReadBackSignedRgba": [
+        0,
+        -255,
+        -255,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 60,
+      "readBackVsReferenceMaxChannelDelta": 235,
+      "referenceVsReadBackSignedRgba": [
+        -53,
+        -195,
+        -235,
+        0
+      ],
+      "maskAAfterBlur": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstReadBySrcOverBranch": false,
+      "blendResultBeforeWriteRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 255,
+      "writtenMinusReadBackSignedRgba": [
+        0,
+        -255,
+        -255,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 60,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 235
+    },
+    {
+      "x": 222,
+      "y": 22,
+      "subzone": "halo_interior",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "referenceRgba": [
+        202,
+        60,
+        20,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 255,
+      "blendMinusReadBackSignedRgba": [
+        0,
+        -255,
+        -255,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 60,
+      "readBackVsReferenceMaxChannelDelta": 235,
+      "referenceVsReadBackSignedRgba": [
+        -53,
+        -195,
+        -235,
+        0
+      ],
+      "maskAAfterBlur": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstReadBySrcOverBranch": false,
+      "blendResultBeforeWriteRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 255,
+      "writtenMinusReadBackSignedRgba": [
+        0,
+        -255,
+        -255,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 60,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 235
+    },
+    {
+      "x": 221,
+      "y": 22,
+      "subzone": "halo_interior",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "referenceRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 255,
+      "blendMinusReadBackSignedRgba": [
+        0,
+        -255,
+        -255,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 60,
+      "readBackVsReferenceMaxChannelDelta": 234,
+      "referenceVsReadBackSignedRgba": [
+        -53,
+        -195,
+        -234,
+        0
+      ],
+      "maskAAfterBlur": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstReadBySrcOverBranch": false,
+      "blendResultBeforeWriteRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 255,
+      "writtenMinusReadBackSignedRgba": [
+        0,
+        -255,
+        -255,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 60,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 234
+    },
+    {
+      "x": 225,
+      "y": 21,
+      "subzone": "halo_interior",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        255,
+        252,
+        252,
+        255
+      ],
+      "referenceRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 252,
+      "blendMinusReadBackSignedRgba": [
+        0,
+        -252,
+        -252,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 60,
+      "readBackVsReferenceMaxChannelDelta": 231,
+      "referenceVsReadBackSignedRgba": [
+        -53,
+        -192,
+        -231,
+        0
+      ],
+      "maskAAfterBlur": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstReadBySrcOverBranch": false,
+      "blendResultBeforeWriteRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        255,
+        252,
+        252,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 252,
+      "writtenMinusReadBackSignedRgba": [
+        0,
+        -252,
+        -252,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 60,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 231
+    },
+    {
+      "x": 261,
+      "y": 17,
+      "subzone": "difference_oval_inner_boundary",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        254,
+        249,
+        247,
+        255
+      ],
+      "referenceRgba": [
+        202,
+        59,
+        18,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 249,
+      "blendMinusReadBackSignedRgba": [
+        1,
+        -249,
+        -247,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 59,
+      "readBackVsReferenceMaxChannelDelta": 229,
+      "referenceVsReadBackSignedRgba": [
+        -52,
+        -190,
+        -229,
+        0
+      ],
+      "maskAAfterBlur": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstReadBySrcOverBranch": false,
+      "blendResultBeforeWriteRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        254,
+        249,
+        247,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 249,
+      "writtenMinusReadBackSignedRgba": [
+        1,
+        -249,
+        -247,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 59,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 229
+    },
+    {
+      "x": 263,
+      "y": 17,
+      "subzone": "difference_oval_inner_boundary",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 240,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        240
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        15,
+        15,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "referenceRgba": [
+        203,
+        64,
+        29,
+        255
+      ],
+      "gpuRgba": [
+        203,
+        65,
+        31,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 240,
+      "blendMinusReadBackSignedRgba": [
+        0,
+        -240,
+        -240,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 52,
+      "readBackVsReferenceMaxChannelDelta": 226,
+      "referenceVsReadBackSignedRgba": [
+        -52,
+        -191,
+        -226,
+        0
+      ],
+      "maskAAfterBlur": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 240,
+      "coverageAppliedInBlend": 240,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        240
+      ],
+      "dstReadBySrcOverBranch": true,
+      "blendResultBeforeWriteRgba": [
+        255,
+        15,
+        15,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        15,
+        15,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 240,
+      "writtenMinusReadBackSignedRgba": [
+        0,
+        -240,
+        -240,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 52,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 226
+    },
+    {
+      "x": 99,
+      "y": 89,
+      "subzone": "draw_oval_outer_boundary",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        250
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        250
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        5,
+        5,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "referenceRgba": [
+        203,
+        65,
+        31,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 250,
+      "blendMinusReadBackSignedRgba": [
+        0,
+        -250,
+        -250,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 60,
+      "readBackVsReferenceMaxChannelDelta": 224,
+      "referenceVsReadBackSignedRgba": [
+        -52,
+        -190,
+        -224,
+        0
+      ],
+      "maskAAfterBlur": 250,
+      "srcAlphaBeforeClipModulation": 250,
+      "srcAlphaAfterClipModulation": 250,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        250
+      ],
+      "dstReadBySrcOverBranch": true,
+      "blendResultBeforeWriteRgba": [
+        255,
+        5,
+        5,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        5,
+        5,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 250,
+      "writtenMinusReadBackSignedRgba": [
+        0,
+        -250,
+        -250,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 60,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 224
+    },
+    {
+      "x": 98,
+      "y": 90,
+      "subzone": "draw_oval_outer_boundary",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        251
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        251
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        4,
+        4,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "referenceRgba": [
+        203,
+        65,
+        31,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 251,
+      "blendMinusReadBackSignedRgba": [
+        0,
+        -251,
+        -251,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 61,
+      "readBackVsReferenceMaxChannelDelta": 224,
+      "referenceVsReadBackSignedRgba": [
+        -52,
+        -190,
+        -224,
+        0
+      ],
+      "maskAAfterBlur": 251,
+      "srcAlphaBeforeClipModulation": 251,
+      "srcAlphaAfterClipModulation": 251,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        251
+      ],
+      "dstReadBySrcOverBranch": true,
+      "blendResultBeforeWriteRgba": [
+        255,
+        4,
+        4,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        4,
+        4,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 251,
+      "writtenMinusReadBackSignedRgba": [
+        0,
+        -251,
+        -251,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 61,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 224
+    },
+    {
+      "x": 259,
+      "y": 17,
+      "subzone": "difference_oval_inner_boundary",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        252,
+        243,
+        241,
+        255
+      ],
+      "referenceRgba": [
+        202,
+        59,
+        18,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 243,
+      "blendMinusReadBackSignedRgba": [
+        3,
+        -243,
+        -241,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 59,
+      "readBackVsReferenceMaxChannelDelta": 223,
+      "referenceVsReadBackSignedRgba": [
+        -50,
+        -184,
+        -223,
+        0
+      ],
+      "maskAAfterBlur": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstReadBySrcOverBranch": false,
+      "blendResultBeforeWriteRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        252,
+        243,
+        241,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 243,
+      "writtenMinusReadBackSignedRgba": [
+        3,
+        -243,
+        -241,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 59,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 223
+    },
+    {
+      "x": 260,
+      "y": 17,
+      "subzone": "difference_oval_inner_boundary",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        252,
+        243,
+        241,
+        255
+      ],
+      "referenceRgba": [
+        202,
+        59,
+        18,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 243,
+      "blendMinusReadBackSignedRgba": [
+        3,
+        -243,
+        -241,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 59,
+      "readBackVsReferenceMaxChannelDelta": 223,
+      "referenceVsReadBackSignedRgba": [
+        -50,
+        -184,
+        -223,
+        0
+      ],
+      "maskAAfterBlur": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "dstReadBySrcOverBranch": false,
+      "blendResultBeforeWriteRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        252,
+        243,
+        241,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 243,
+      "writtenMinusReadBackSignedRgba": [
+        3,
+        -243,
+        -241,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 59,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 223
+    },
+    {
+      "x": 102,
+      "y": 86,
+      "subzone": "draw_oval_outer_boundary",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        249
+      ],
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputBlender": "null",
+      "dispatchWouldRun": true,
+      "cov": 255,
+      "srcAfterCoverageRgba": [
+        255,
+        0,
+        0,
+        249
+      ],
+      "dstBeforeBlendRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "blendResultBeforeStoreRgba": [
+        255,
+        6,
+        6,
+        255
+      ],
+      "readBackAfterCpuOutputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "referenceRgba": [
+        203,
+        66,
+        33,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "dispatchInputCarriesRedPayload": true,
+      "srcAfterCoverageCarriesRedPayload": true,
+      "blendResultCarriesRedTint": true,
+      "blendResultRedDominant": true,
+      "readBackRedDominant": false,
+      "readBackIsWhiteOrLayer": true,
+      "blendVsReadBackMaxChannelDelta": 249,
+      "blendMinusReadBackSignedRgba": [
+        0,
+        -249,
+        -249,
+        0
+      ],
+      "blendVsReferenceMaxChannelDelta": 60,
+      "readBackVsReferenceMaxChannelDelta": 222,
+      "referenceVsReadBackSignedRgba": [
+        -52,
+        -189,
+        -222,
+        0
+      ],
+      "maskAAfterBlur": 249,
+      "srcAlphaBeforeClipModulation": 249,
+      "srcAlphaAfterClipModulation": 249,
+      "coverageAppliedInBlend": 255,
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        249
+      ],
+      "dstReadBySrcOverBranch": true,
+      "blendResultBeforeWriteRgba": [
+        255,
+        6,
+        6,
+        255
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+      "writeWouldRun": true,
+      "valueWrittenRgba": [
+        255,
+        6,
+        6,
+        255
+      ],
+      "readBackAfterDrawRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "writeMatchesBlendResult": true,
+      "blendVsWriteMaxChannelDelta": 0,
+      "readBackMatchesWritten": false,
+      "writtenVsReadBackMaxChannelDelta": 249,
+      "writtenMinusReadBackSignedRgba": [
+        0,
+        -249,
+        -249,
+        0
+      ],
+      "writtenVsReferenceMaxChannelDelta": 60,
+      "writeCarriesRedTint": true,
+      "writeRedDominant": true,
+      "cpuReferenceMaxChannelDelta": 222
+    }
+  ],
+  "causeMatrix": {
+    "srcOverMath": {
+      "selected": false,
+      "evidence": "The reconstructed kSrcOver branch writes the exact pre-write blend result for 89/89 FOR-278 target pixels; 89/89 written values carry red tint."
+    },
+    "activeAaClipApplication": {
+      "selected": false,
+      "evidence": "activeAaClip coverage is applied in blend() and remains non-zero for 89/89 target pixels; coverage modulation still leaves 89/89 red-tinted write values."
+    },
+    "layerOrStoreOrder": {
+      "selected": true,
+      "evidence": "The reconstructed store writes red-tinted values for 89/89 target pixels, but the committed CPU output reads back only 9 red-dominant pixels and 78 white/layer pixels."
+    },
+    "proofInsufficient": {
+      "selected": false,
+      "evidence": "FOR-286 has enough bounded reconstruction evidence to choose the next correction target, while still avoiding any production renderer change in this ticket."
+    }
+  },
+  "decisionRationale": "The FOR-286 store reconstruction keeps the FOR-285 route and M60 counters unchanged, then adds the missing write-stage value. Source entering dispatchBlend is red, activeAaClip coverage is non-zero, SrcOver produces the value that setPixel would write, and that value is red-tinted for all 89 FOR-278 target pixels. The final CPU readback is still dominated by white/layer pixels, so the next production fix should target CPU active-AA difference clip store/order behavior, not global SrcOver math, payload generation, setPixel storage, GPU/WebGPU, or thresholds.",
+  "fullSceneM60": {
+    "cpuSimilarity": 97.31,
+    "cpuMatchingPixels": 908439,
+    "cpuMaxChannelDelta": 237,
+    "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
+    "gpuSimilarity": 98.48,
+    "gpuMatchingPixels": 919363,
+    "gpuMaxChannelDelta": 57,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 2869
+  },
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuRendererChanged": false,
+    "gpuRendererChanged": false,
+    "globalBlendChanged": false,
+    "setPixelChanged": false,
+    "m60Promoted": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
