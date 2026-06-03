@@ -722,6 +722,116 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-259 intermediate store present audit narrows residual boundary`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val simpleOffsetGm = SimpleOffsetImageFilterGM()
+        val simpleOffsetReference = TestUtils.loadReferenceBitmap(simpleOffsetGm.name())
+        assertNotNull(simpleOffsetReference, "original-888/${simpleOffsetGm.name()}.png missing")
+        val bitmapGm = DrawBitmapRectSkbug4734GM()
+        val bitmapReference = readEvidencePng(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/skia.png",
+        )
+
+        val oldRawSentinels = System.getProperty(FOR255_RAW_SENTINELS_PROPERTY)
+        val oldOutputBoundary = System.getProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY)
+        val oldShaderProbe = System.getProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY)
+        try {
+            System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, "true")
+            System.setProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY, "true")
+            System.setProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY, "true")
+            context!!.use { ctx ->
+                val simpleOffset = renderSimpleOffsetWithRawColorSentinels(ctx, simpleOffsetGm)
+                val bitmapUpload = renderBitmapUploadRawColorSentinel(ctx)
+                val bitmapScene = renderDrawBitmapRectSkbug4734WithOutputBoundary(ctx, bitmapGm)
+                val for254 = buildFor254SourceTexelRoundingAuditProbe(
+                    simpleOffsetReference!!,
+                    simpleOffset.bitmap,
+                )
+                val for255 = buildFor255RawColorSentinelProbe(
+                    sourceUniformSnapshot = simpleOffset.sentinels,
+                    bitmapUploadSnapshot = bitmapUpload.sentinels,
+                    for254 = for254,
+                )
+                val for256 = buildFor256ShaderStoreReferenceBoundaryProbe(
+                    for255 = for255,
+                    simpleOffsetOutput = simpleOffset.outputReadbackBoundary,
+                    bitmapOutput = bitmapScene.outputReadbackBoundary,
+                )
+                val for257 = buildFor257ReferenceByteExpectationAuditProbe(
+                    for255 = for255,
+                    for256 = for256,
+                    simpleOffsetReference = simpleOffsetReference,
+                    bitmapReference = bitmapReference,
+                )
+                val for258 = buildFor258ShaderSideProbe(
+                    for255 = for255,
+                    for256 = for256,
+                    for257 = for257,
+                    simpleOffsetShaderSide = simpleOffset.for258ShaderSideProbe,
+                    bitmapShaderSide = bitmapScene.for258ShaderSideProbe,
+                )
+                val probe = buildFor259IntermediateStorePresentAuditProbe(for258)
+
+                assertEquals(
+                    "KEEP_DIAGNOSTIC",
+                    probe.supportDecision,
+                    "FOR-259: intermediate store audit must not promote an unbounded correction",
+                )
+                assertEquals(
+                    "RGBA16Float",
+                    probe.intermediateFormat,
+                    "FOR-259: normal intermediate format evidence changed",
+                )
+                assertEquals(
+                    false,
+                    probe.normalRenderingChanged,
+                    "FOR-259: normal rendering must remain unchanged",
+                )
+                assertEquals(
+                    false,
+                    probe.correctionApplied,
+                    "FOR-259: diagnostic evidence must not apply a normal-path correction",
+                )
+                assertTrue(
+                    probe.cases.all { case ->
+                        case.currentRgba16FloatPresentMatchesGpuReadback &&
+                            !case.currentRgba16FloatPresentMatchesReference &&
+                            case.rgba8StoreBeforePresentMatchesReference &&
+                            !case.rgba8StoreBeforePresentMatchesGpuReadback
+                    },
+                    "FOR-259: RGBA8 store-before-present simulation should isolate the byte-quantization boundary for both residual cases",
+                )
+                assertEquals(
+                    "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+                    probe.remainingBoundary,
+                    "FOR-259: remaining boundary must be narrowed from FOR-258",
+                )
+                if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                    writeFor259IntermediateStorePresentAuditJson(probe)
+                }
+            }
+        } finally {
+            if (oldRawSentinels == null) {
+                System.clearProperty(FOR255_RAW_SENTINELS_PROPERTY)
+            } else {
+                System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, oldRawSentinels)
+            }
+            if (oldOutputBoundary == null) {
+                System.clearProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY)
+            } else {
+                System.setProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY, oldOutputBoundary)
+            }
+            if (oldShaderProbe == null) {
+                System.clearProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY)
+            } else {
+                System.setProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY, oldShaderProbe)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -1126,6 +1236,57 @@ class SimpleOffsetImageFilterWebGpuTest {
         )
     }
 
+    private fun buildFor259IntermediateStorePresentAuditProbe(
+        for258: For258ShaderSideProbe,
+    ): For259IntermediateStorePresentAuditProbe =
+        For259IntermediateStorePresentAuditProbe(
+            reusedRuntimeProperties = listOf(
+                FOR255_RAW_SENTINELS_PROPERTY,
+                FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY,
+                FOR258_SHADER_SIDE_PROBE_PROPERTY,
+            ),
+            diagnosticShader = for258.diagnosticShader,
+            diagnosticPipelineLayout = for258.diagnosticPipelineLayout,
+            legacySourceUniform = buildFor259Case(for258.legacySourceUniform),
+            bitmapTexel = buildFor259Case(for258.bitmapTexel),
+        )
+
+    private fun buildFor259Case(
+        for258Case: For258ShaderSideProbeCase,
+    ): For259IntermediateStorePresentCase {
+        val rgba8StoreBeforePresentFloat = quantizeToRgba8StoreFloat(for258Case.shaderSideObservedRgbaFloat)
+        val rgba8StoreBeforePresentRgba = quantizeRgbaFloatsToBytes(rgba8StoreBeforePresentFloat)
+        val rgba8StoreBeforePresentReconstruction =
+            reconstructPresentFromShaderSideRgba(rgba8StoreBeforePresentFloat)
+        return For259IntermediateStorePresentCase(
+            id = for258Case.id,
+            route = for258Case.route,
+            previousHostBoundaryRgba8 = for258Case.previousHostBoundaryRgba8,
+            previousWriteOrUploadBoundaryRgba8 = for258Case.previousWriteOrUploadBoundaryRgba8,
+            shaderSideXy = for258Case.shaderSideXy,
+            for258ShaderSideRgbaFloat = for258Case.shaderSideObservedRgbaFloat,
+            for258ShaderSideRgba8 = for258Case.shaderSideObservedRgba8,
+            currentRgba16FloatPresentReconstructedRgba = for258Case.presentReconstructedRgba,
+            currentRgba16FloatPresentMatchesGpuReadback =
+                for258Case.presentReconstructedRgba.contentEquals(for258Case.outputGpuReadbackRgba),
+            currentRgba16FloatPresentMatchesReference =
+                for258Case.presentReconstructedRgba.contentEquals(for258Case.outputReferenceRgba),
+            rgba8StoreBeforePresentRgbaFloat = rgba8StoreBeforePresentFloat,
+            rgba8StoreBeforePresentRgba8 = rgba8StoreBeforePresentRgba,
+            rgba8StoreBeforePresentReconstructedRgba = rgba8StoreBeforePresentReconstruction,
+            rgba8StoreBeforePresentMatchesGpuReadback =
+                rgba8StoreBeforePresentReconstruction.contentEquals(for258Case.outputGpuReadbackRgba),
+            rgba8StoreBeforePresentMatchesReference =
+                rgba8StoreBeforePresentReconstruction.contentEquals(for258Case.outputReferenceRgba),
+            outputReferenceRgba = for258Case.outputReferenceRgba,
+            outputGpuReadbackRgba = for258Case.outputGpuReadbackRgba,
+            outputSignedDeltaRgba = for258Case.outputSignedDeltaRgba,
+            referenceOracleRgba = for258Case.referenceOracleRgba,
+            priorBoundarySummary = for258Case.priorBoundarySummary,
+            verdict = "current RGBA16Float intermediate textureLoad plus present reconstruction matches GPU/readback; a bounded test-side RGBA8Unorm store/load simulation before the same present reconstruction matches the reference/oracle bytes, so the remaining boundary is the intermediate store-to-present byte-quantization policy rather than host packing, upload, final readback, or reference-byte expectation",
+        )
+    }
+
     private fun requireFor258ShaderSideSample(
         snapshot: SkWebGpuDevice.For258ShaderSideProbeSnapshot,
         name: String,
@@ -1150,6 +1311,14 @@ class SimpleOffsetImageFilterWebGpuTest {
             (alpha * 255.0 + 0.5).toInt().coerceIn(0, 255),
         )
     }
+
+    private fun quantizeToRgba8StoreFloat(rgba: FloatArray): FloatArray {
+        val rgba8 = quantizeRgbaFloatsToBytes(rgba)
+        return FloatArray(4) { channel -> rgba8[channel] / 255f }
+    }
+
+    private fun quantizeRgbaFloatsToBytes(rgba: FloatArray): IntArray =
+        IntArray(4) { channel -> ((rgba[channel] * 255f) + 0.5f).toInt().coerceIn(0, 255) }
 
     private fun quantizeRgbaBytes(rgba: IntArray): IntArray =
         IntArray(4) { channel -> ((rgba[channel] / 255.0) * 255.0 + 0.5).toInt().coerceIn(0, 255) }
@@ -2536,6 +2705,62 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    private fun writeFor259IntermediateStorePresentAuditJson(
+        probe: For259IntermediateStorePresentAuditProbe,
+    ) {
+        val contents = """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "mixed skia-upstream and artifact oracle PNGs",
+              "linear": "FOR-259",
+              "probe": "intermediate-store-present-audit",
+              "deltaDefinition": "signed channel delta is GPU/readback minus reference",
+              "newRendererProperty": "none",
+              "reusedRuntimeProperties": [
+            ${probe.reusedRuntimeProperties.joinToString(",\n") { "                \"$it\"" }}
+              ],
+              "defaultEnabled": false,
+              "runtimeSnapshotsEnabled": true,
+              "normalRenderingChanged": ${probe.normalRenderingChanged},
+              "normalShadersChanged": false,
+              "normalThresholdsChanged": false,
+              "cropPolicyChanged": false,
+              "fallbackPolicyChanged": false,
+              "targetColorSpaceBlendGloballyEnabled": false,
+              "diagnosticShader": "${probe.diagnosticShader}",
+              "diagnosticPipelineLayout": "${probe.diagnosticPipelineLayout}",
+              "intermediateFormat": "${probe.intermediateFormat}",
+              "boundedDiagnosticAlternative": "${probe.boundedDiagnosticAlternative}",
+              "observedBoundaries": {
+                "for255HostObserved": true,
+                "for255WriteUploadObserved": true,
+                "for256OutputReadbackObserved": true,
+                "for257ReferenceOracleReconstructed": true,
+                "for258ShaderSideRgba16FloatObserved": true,
+                "currentPresentReconstructedFromRgba16Float": true,
+                "rgba8StoreBeforePresentSimulated": true
+              },
+              "legacySourceUniform": ${probe.legacySourceUniform.toJson(indent = "              ").trimStart()},
+              "bitmapTexelUpload": ${probe.bitmapTexel.toJson(indent = "              ").trimStart()},
+              "formatStoreFinding": "${probe.formatStoreFinding}",
+              "admissibleCorrection": "${probe.admissibleCorrection}",
+              "remainingBoundary": "${probe.remainingBoundary}",
+              "interpretation": "FOR-259 reuses the opt-in FOR-258 shader-side sample of the normal RGBA16Float intermediate texture, reconstructs the current present output, and compares a bounded test-side RGBA8Unorm store/load simulation before the same present reconstruction. Current RGBA16Float reconstruction matches GPU/readback; the RGBA8 store-before-present simulation matches the reference/oracle bytes for both residual cases. This narrows the residual to intermediate store-to-present byte-quantization policy, but does not justify changing the normal precision policy globally.",
+              "observationMethod": "test-only audit built from existing opt-in FOR-255/FOR-256/FOR-258 runtime snapshots and FOR-257 reference/oracle reconstruction; no new renderer property, no normal shader change, no threshold change, no Crop correction, no fallback-policy change, and no global targetColorSpaceBlend change",
+              "supportDecision": "${probe.supportDecision}",
+              "correctionApplied": ${probe.correctionApplied},
+              "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+            }
+            """.trimIndent() + "\n"
+        listOf(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/intermediate-store-present-audit-for259",
+            "reports/wgsl-pipeline/scenes/artifacts/intermediate-store-present-audit-for259",
+        ).forEach { path ->
+            val dir = repoFile(path).apply { mkdirs() }
+            File(dir, "intermediate-store-present-audit-for259.json").writeText(contents)
+        }
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -2776,6 +3001,33 @@ class SimpleOffsetImageFilterWebGpuTest {
           "presentReconstructedRgba": ${jsonArray(presentReconstructedRgba)},
           "presentReconstructionMatchesGpuReadback": $presentReconstructionMatchesGpuReadback,
           "presentReconstructionMatchesReference": $presentReconstructionMatchesReference,
+          "outputReferenceRgba": ${jsonArray(outputReferenceRgba)},
+          "outputGpuReadbackRgba": ${jsonArray(outputGpuReadbackRgba)},
+          "outputSignedDeltaRgba": ${jsonArray(outputSignedDeltaRgba)},
+          "referenceOracleRgba": ${jsonArray(referenceOracleRgba)},
+          "priorBoundarySummary": "$priorBoundarySummary",
+          "verdict": "$verdict"
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For259IntermediateStorePresentCase.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "route": "$route",
+          "previousHostBoundaryRgba8": ${jsonArray(previousHostBoundaryRgba8)},
+          "previousWriteOrUploadBoundaryRgba8": ${jsonArray(previousWriteOrUploadBoundaryRgba8)},
+          "shaderSideXy": ${jsonArray(shaderSideXy)},
+          "for258ShaderSideRgbaFloat": ${jsonArray(for258ShaderSideRgbaFloat)},
+          "for258ShaderSideRgba8": ${jsonArray(for258ShaderSideRgba8)},
+          "currentRgba16FloatPresentReconstructedRgba": ${jsonArray(currentRgba16FloatPresentReconstructedRgba)},
+          "currentRgba16FloatPresentMatchesGpuReadback": $currentRgba16FloatPresentMatchesGpuReadback,
+          "currentRgba16FloatPresentMatchesReference": $currentRgba16FloatPresentMatchesReference,
+          "rgba8StoreBeforePresentRgbaFloat": ${jsonArray(rgba8StoreBeforePresentRgbaFloat)},
+          "rgba8StoreBeforePresentRgba8": ${jsonArray(rgba8StoreBeforePresentRgba8)},
+          "rgba8StoreBeforePresentReconstructedRgba": ${jsonArray(rgba8StoreBeforePresentReconstructedRgba)},
+          "rgba8StoreBeforePresentMatchesGpuReadback": $rgba8StoreBeforePresentMatchesGpuReadback,
+          "rgba8StoreBeforePresentMatchesReference": $rgba8StoreBeforePresentMatchesReference,
           "outputReferenceRgba": ${jsonArray(outputReferenceRgba)},
           "outputGpuReadbackRgba": ${jsonArray(outputGpuReadbackRgba)},
           "outputSignedDeltaRgba": ${jsonArray(outputSignedDeltaRgba)},
@@ -3359,5 +3611,51 @@ class SimpleOffsetImageFilterWebGpuTest {
         val shaderLayoutChangedForNormalPath: Boolean = false
         val remainingBoundary: String =
             "shader-consumption/blend-store-before-present"
+    }
+
+    private data class For259IntermediateStorePresentCase(
+        val id: String,
+        val route: String,
+        val previousHostBoundaryRgba8: IntArray,
+        val previousWriteOrUploadBoundaryRgba8: IntArray,
+        val shaderSideXy: IntArray,
+        val for258ShaderSideRgbaFloat: FloatArray,
+        val for258ShaderSideRgba8: IntArray,
+        val currentRgba16FloatPresentReconstructedRgba: IntArray,
+        val currentRgba16FloatPresentMatchesGpuReadback: Boolean,
+        val currentRgba16FloatPresentMatchesReference: Boolean,
+        val rgba8StoreBeforePresentRgbaFloat: FloatArray,
+        val rgba8StoreBeforePresentRgba8: IntArray,
+        val rgba8StoreBeforePresentReconstructedRgba: IntArray,
+        val rgba8StoreBeforePresentMatchesGpuReadback: Boolean,
+        val rgba8StoreBeforePresentMatchesReference: Boolean,
+        val outputReferenceRgba: IntArray,
+        val outputGpuReadbackRgba: IntArray,
+        val outputSignedDeltaRgba: IntArray,
+        val referenceOracleRgba: IntArray,
+        val priorBoundarySummary: String,
+        val verdict: String,
+    )
+
+    private data class For259IntermediateStorePresentAuditProbe(
+        val reusedRuntimeProperties: List<String>,
+        val diagnosticShader: String,
+        val diagnosticPipelineLayout: String,
+        val legacySourceUniform: For259IntermediateStorePresentCase,
+        val bitmapTexel: For259IntermediateStorePresentCase,
+    ) {
+        val cases: List<For259IntermediateStorePresentCase> = listOf(legacySourceUniform, bitmapTexel)
+        val supportDecision: String = "KEEP_DIAGNOSTIC"
+        val normalRenderingChanged: Boolean = false
+        val correctionApplied: Boolean = false
+        val intermediateFormat: String = "RGBA16Float"
+        val boundedDiagnosticAlternative: String =
+            "test-side RGBA8Unorm store/load simulation before present reconstruction"
+        val formatStoreFinding: String =
+            "rgba8_store_before_present_simulation_matches_reference_for_both_cases; current_rgba16float_store_present_matches_gpu_readback"
+        val admissibleCorrection: String =
+            "none_applied: changing the normal intermediate precision or adding present-time byte quantization would alter global rendering policy and needs broader before/after scene evidence"
+        val remainingBoundary: String =
+            "rgba16float-intermediate-store-to-present-byte-quantization-policy"
     }
 }
