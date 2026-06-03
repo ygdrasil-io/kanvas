@@ -22,12 +22,12 @@
   },
   "reportedStats": {
     "cpuSimilarity": 97.31,
-    "gpuSimilarity": 97.5,
+    "gpuSimilarity": 98.48,
     "threshold": 99.95,
     "cpuMatchingPixels": 908439,
-    "gpuMatchingPixels": 910225,
+    "gpuMatchingPixels": 919363,
     "cpuMaxChannelDelta": 237,
-    "gpuMaxChannelDelta": 203
+    "gpuMaxChannelDelta": 57
   },
   "geometry": {
     "sourceScene": "BlurredClippedCircleGM",
@@ -119,17 +119,17 @@
     {
       "comparison": "gpu_vs_reference",
       "totalPixels": 933528,
-      "exactMatchingPixels": 906386,
-      "exactSimilarity": 97.092535,
-      "exactMismatchPixels": 27142,
-      "toleranceOneMismatchPixels": 25992,
-      "greaterThanEightPixels": 23303,
-      "greaterThanThirtyTwoPixels": 19361,
-      "maxChannelDelta": 203,
-      "blurredEnvelopeGreaterThanThirtyTwoPixels": 19361,
+      "exactMatchingPixels": 908659,
+      "exactSimilarity": 97.33602,
+      "exactMismatchPixels": 24869,
+      "toleranceOneMismatchPixels": 20906,
+      "greaterThanEightPixels": 14165,
+      "greaterThanThirtyTwoPixels": 2869,
+      "maxChannelDelta": 57,
+      "blurredEnvelopeGreaterThanThirtyTwoPixels": 2869,
       "blurredEnvelopeShareOfGreaterThanThirtyTwo": 100.0,
       "dominantEnvelopeSubzone": "draw_oval_outer_boundary",
-      "dominantEnvelopeSubzoneShareOfGreaterThanThirtyTwo": 50.968442,
+      "dominantEnvelopeSubzoneShareOfGreaterThanThirtyTwo": 97.455559,
       "subzones": {
         "difference_oval_inner_boundary": {
           "pixels": 10584,
@@ -139,13 +139,13 @@
             "right": 579,
             "bottom": 579
           },
-          "exactMismatchPixels": 6462,
-          "exactMatchPixels": 4122,
-          "toleranceOneMismatchPixels": 6415,
-          "greaterThanEightPixels": 6289,
-          "greaterThanThirtyTwoPixels": 5925,
-          "maxChannelDelta": 203,
-          "meanMaxChannelDelta": 102.189626
+          "exactMismatchPixels": 4221,
+          "exactMatchPixels": 6363,
+          "toleranceOneMismatchPixels": 1778,
+          "greaterThanEightPixels": 1095,
+          "greaterThanThirtyTwoPixels": 73,
+          "maxChannelDelta": 57,
+          "meanMaxChannelDelta": 2.434429
         },
         "draw_oval_outer_boundary": {
           "pixels": 10856,
@@ -155,13 +155,13 @@
             "right": 587,
             "bottom": 587
           },
-          "exactMismatchPixels": 10856,
-          "exactMatchPixels": 0,
-          "toleranceOneMismatchPixels": 10856,
-          "greaterThanEightPixels": 10856,
-          "greaterThanThirtyTwoPixels": 9868,
-          "maxChannelDelta": 202,
-          "meanMaxChannelDelta": 106.427321
+          "exactMismatchPixels": 10824,
+          "exactMatchPixels": 32,
+          "toleranceOneMismatchPixels": 10687,
+          "greaterThanEightPixels": 9935,
+          "greaterThanThirtyTwoPixels": 2796,
+          "maxChannelDelta": 43,
+          "meanMaxChannelDelta": 24.58843
         },
         "halo_interior": {
           "pixels": 3568,
@@ -173,11 +173,11 @@
           },
           "exactMismatchPixels": 3568,
           "exactMatchPixels": 0,
-          "toleranceOneMismatchPixels": 3568,
-          "greaterThanEightPixels": 3568,
-          "greaterThanThirtyTwoPixels": 3568,
-          "maxChannelDelta": 203,
-          "meanMaxChannelDelta": 202.244675
+          "toleranceOneMismatchPixels": 3288,
+          "greaterThanEightPixels": 545,
+          "greaterThanThirtyTwoPixels": 0,
+          "maxChannelDelta": 14,
+          "meanMaxChannelDelta": 5.129765
         },
         "removed_difference_oval_interior": {
           "pixels": 241056,
@@ -209,7 +209,7 @@
           "greaterThanEightPixels": 2590,
           "greaterThanThirtyTwoPixels": 0,
           "maxChannelDelta": 28,
-          "meanMaxChannelDelta": 0.084605
+          "meanMaxChannelDelta": 0.084689
         },
         "surviving_clip_other": {
           "pixels": 0,
@@ -225,41 +225,41 @@
       },
       "colorPremulClassification": {
         "scope": "blurred_content_envelope_gt32",
-        "pixels": 19361,
+        "pixels": 2869,
         "alphaDeltaGreaterThanThirtyTwoPixels": 0,
-        "rgbDeltaGreaterThanThirtyTwoPixels": 19361,
+        "rgbDeltaGreaterThanThirtyTwoPixels": 2869,
         "maxChannelCounts": {
-          "r": 16692,
+          "r": 0,
           "g": 0,
-          "b": 2669,
+          "b": 2869,
           "a": 0
         },
         "signedDeltaSummary": {
           "meanRgba": [
-            -146.615154,
-            -36.15681,
-            -11.198492,
+            11.417916,
+            33.432555,
+            36.008017,
             0.0
           ],
           "minRgba": [
-            -203,
-            -72,
-            -50,
+            -9,
+            -35,
+            -39,
             0
           ],
           "maxRgba": [
-            13,
-            51,
-            56,
+            18,
+            53,
+            57,
             0
           ]
         },
-        "unpremulComparablePixels": 19361,
-        "unpremulMaxDelta": 203,
-        "unpremulMeanDelta": 150.91173,
+        "unpremulComparablePixels": 2869,
+        "unpremulMaxDelta": 57,
+        "unpremulMeanDelta": 36.967236,
         "buckets": {
           "alpha_or_coverage_scaled_rgb_close_unpremul": 0,
-          "rgb_payload_shift_alpha_close": 19361,
+          "rgb_payload_shift_alpha_close": 2869,
           "mixed_alpha_and_color_shift": 0,
           "premul_rgb_delta_alpha_close": 0,
           "transparent_edge_or_one_alpha_zero": 0
@@ -269,303 +269,303 @@
       "highDeltaSamples": [
         {
           "comparison": "gpu_vs_reference",
-          "x": 294,
-          "y": 11,
-          "subzone": "halo_interior",
+          "x": 343,
+          "y": 571,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            62,
-            26,
+            230,
+            185,
+            180,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            248,
+            238,
+            237,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            18,
+            53,
+            57,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 57
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 295,
-          "y": 11,
-          "subzone": "halo_interior",
+          "x": 344,
+          "y": 571,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            62,
-            26,
+            218,
+            143,
+            133,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            232,
+            193,
+            189,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            14,
+            50,
+            56,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 56
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 296,
-          "y": 11,
-          "subzone": "halo_interior",
+          "x": 248,
+          "y": 571,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            62,
-            26,
+            231,
+            188,
+            183,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            248,
+            238,
+            237,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            17,
+            50,
+            54,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 54
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 297,
-          "y": 11,
-          "subzone": "halo_interior",
+          "x": 358,
+          "y": 23,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            62,
-            26,
+            230,
+            186,
+            181,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            247,
+            235,
+            234,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            17,
+            49,
+            53,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 53
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 272,
-          "y": 12,
-          "subzone": "halo_interior",
+          "x": 345,
+          "y": 571,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            63,
-            27,
+            210,
+            105,
+            89,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            220,
+            150,
+            142,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -63,
-            -27,
+            10,
+            45,
+            53,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 53
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 273,
-          "y": 12,
-          "subzone": "halo_interior",
+          "x": 233,
+          "y": 23,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            62,
-            26,
+            231,
+            187,
+            182,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            247,
+            235,
+            234,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            16,
+            48,
+            52,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 52
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 274,
-          "y": 12,
-          "subzone": "halo_interior",
+          "x": 247,
+          "y": 571,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            62,
-            26,
+            219,
+            146,
+            137,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            232,
+            193,
+            189,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            13,
+            47,
+            52,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 52
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 275,
-          "y": 12,
-          "subzone": "halo_interior",
+          "x": 246,
+          "y": 571,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            62,
-            25,
+            210,
+            107,
+            91,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            220,
+            150,
+            142,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -25,
+            10,
+            43,
+            51,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 51
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 276,
-          "y": 12,
-          "subzone": "halo_interior",
+          "x": 359,
+          "y": 23,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            61,
-            24,
+            215,
+            132,
+            121,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            227,
+            177,
+            171,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -24,
+            12,
+            45,
+            50,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 50
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 277,
-          "y": 12,
-          "subzone": "halo_interior",
+          "x": 354,
+          "y": 22,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            61,
-            24,
+            223,
+            162,
+            154,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            237,
+            206,
+            203,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -24,
+            14,
+            44,
+            49,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 49
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 278,
-          "y": 12,
-          "subzone": "halo_interior",
+          "x": 355,
+          "y": 22,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            61,
-            24,
+            211,
+            111,
+            96,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            221,
+            154,
+            145,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -24,
+            10,
+            43,
+            49,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 49
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 279,
-          "y": 12,
-          "subzone": "halo_interior",
+          "x": 232,
+          "y": 23,
+          "subzone": "difference_oval_inner_boundary",
           "referenceOrCpuRgba": [
-            203,
-            61,
-            23,
+            216,
+            133,
+            122,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            227,
+            177,
+            171,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -23,
+            11,
+            44,
+            49,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 49
         }
       ]
     },
@@ -1025,17 +1025,17 @@
     {
       "comparison": "gpu_vs_cpu",
       "totalPixels": 933528,
-      "exactMatchingPixels": 910936,
-      "exactSimilarity": 97.579933,
-      "exactMismatchPixels": 22592,
-      "toleranceOneMismatchPixels": 21576,
-      "greaterThanEightPixels": 19668,
-      "greaterThanThirtyTwoPixels": 17660,
-      "maxChannelDelta": 255,
-      "blurredEnvelopeGreaterThanThirtyTwoPixels": 17660,
+      "exactMatchingPixels": 912240,
+      "exactSimilarity": 97.719618,
+      "exactMismatchPixels": 21288,
+      "toleranceOneMismatchPixels": 19580,
+      "greaterThanEightPixels": 16384,
+      "greaterThanThirtyTwoPixels": 12200,
+      "maxChannelDelta": 236,
+      "blurredEnvelopeGreaterThanThirtyTwoPixels": 12200,
       "blurredEnvelopeShareOfGreaterThanThirtyTwo": 100.0,
-      "dominantEnvelopeSubzone": "draw_oval_outer_boundary",
-      "dominantEnvelopeSubzoneShareOfGreaterThanThirtyTwo": 45.911665,
+      "dominantEnvelopeSubzone": "difference_oval_inner_boundary",
+      "dominantEnvelopeSubzoneShareOfGreaterThanThirtyTwo": 42.098361,
       "subzones": {
         "difference_oval_inner_boundary": {
           "pixels": 10584,
@@ -1045,13 +1045,13 @@
             "right": 579,
             "bottom": 579
           },
-          "exactMismatchPixels": 6232,
-          "exactMatchPixels": 4352,
-          "toleranceOneMismatchPixels": 6216,
-          "greaterThanEightPixels": 6176,
-          "greaterThanThirtyTwoPixels": 5984,
-          "maxChannelDelta": 255,
-          "meanMaxChannelDelta": 125.574074
+          "exactMismatchPixels": 5388,
+          "exactMatchPixels": 5196,
+          "toleranceOneMismatchPixels": 5372,
+          "greaterThanEightPixels": 5332,
+          "greaterThanThirtyTwoPixels": 5136,
+          "maxChannelDelta": 236,
+          "meanMaxChannelDelta": 100.496221
         },
         "draw_oval_outer_boundary": {
           "pixels": 10856,
@@ -1064,10 +1064,10 @@
           "exactMismatchPixels": 10856,
           "exactMatchPixels": 0,
           "toleranceOneMismatchPixels": 10856,
-          "greaterThanEightPixels": 9924,
-          "greaterThanThirtyTwoPixels": 8108,
-          "maxChannelDelta": 253,
-          "meanMaxChannelDelta": 121.254882
+          "greaterThanEightPixels": 8596,
+          "greaterThanThirtyTwoPixels": 4616,
+          "maxChannelDelta": 235,
+          "meanMaxChannelDelta": 77.140752
         },
         "halo_interior": {
           "pixels": 3568,
@@ -1077,13 +1077,13 @@
             "right": 581,
             "bottom": 581
           },
-          "exactMismatchPixels": 3568,
-          "exactMatchPixels": 0,
-          "toleranceOneMismatchPixels": 3568,
-          "greaterThanEightPixels": 3568,
-          "greaterThanThirtyTwoPixels": 3568,
-          "maxChannelDelta": 255,
-          "meanMaxChannelDelta": 237.697309
+          "exactMismatchPixels": 3108,
+          "exactMatchPixels": 460,
+          "toleranceOneMismatchPixels": 2688,
+          "greaterThanEightPixels": 2456,
+          "greaterThanThirtyTwoPixels": 2448,
+          "maxChannelDelta": 236,
+          "meanMaxChannelDelta": 159.704036
         },
         "removed_difference_oval_interior": {
           "pixels": 241056,
@@ -1111,11 +1111,11 @@
           },
           "exactMismatchPixels": 1936,
           "exactMatchPixels": 665528,
-          "toleranceOneMismatchPixels": 936,
+          "toleranceOneMismatchPixels": 664,
           "greaterThanEightPixels": 0,
           "greaterThanThirtyTwoPixels": 0,
           "maxChannelDelta": 4,
-          "meanMaxChannelDelta": 0.00525
+          "meanMaxChannelDelta": 0.004219
         },
         "surviving_clip_other": {
           "pixels": 0,
@@ -1131,41 +1131,41 @@
       },
       "colorPremulClassification": {
         "scope": "blurred_content_envelope_gt32",
-        "pixels": 17660,
+        "pixels": 12200,
         "alphaDeltaGreaterThanThirtyTwoPixels": 0,
-        "rgbDeltaGreaterThanThirtyTwoPixels": 17660,
+        "rgbDeltaGreaterThanThirtyTwoPixels": 12200,
         "maxChannelCounts": {
-          "r": 17636,
-          "g": 24,
-          "b": 0,
+          "r": 0,
+          "g": 68,
+          "b": 12132,
           "a": 0
         },
         "signedDeltaSummary": {
           "meanRgba": [
-            -195.321971,
-            -160.526387,
-            -150.786183,
+            -46.574918,
+            -165.339426,
+            -194.77418,
             0.0
           ],
           "minRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
           "maxRgba": [
-            -33,
-            -13,
-            -7,
+            -12,
+            -31,
+            -25,
             0
           ]
         },
-        "unpremulComparablePixels": 17660,
-        "unpremulMaxDelta": 255,
-        "unpremulMeanDelta": 195.32333,
+        "unpremulComparablePixels": 12200,
+        "unpremulMaxDelta": 236,
+        "unpremulMeanDelta": 194.792541,
         "buckets": {
           "alpha_or_coverage_scaled_rgb_close_unpremul": 0,
-          "rgb_payload_shift_alpha_close": 17660,
+          "rgb_payload_shift_alpha_close": 12200,
           "mixed_alpha_and_color_shift": 0,
           "premul_rgb_delta_alpha_close": 0,
           "transparent_edge_or_one_alpha_zero": 0
@@ -1185,18 +1185,18 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
         },
         {
           "comparison": "gpu_vs_cpu",
@@ -1210,43 +1210,18 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
-        },
-        {
-          "comparison": "gpu_vs_cpu",
-          "x": 249,
-          "y": 18,
-          "subzone": "difference_oval_inner_boundary",
-          "referenceOrCpuRgba": [
-            255,
-            252,
-            252,
-            255
-          ],
-          "actualRgba": [
-            0,
-            0,
-            0,
-            255
-          ],
-          "signedDeltaRgba": [
-            -255,
-            -252,
-            -252,
-            0
-          ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
         },
         {
           "comparison": "gpu_vs_cpu",
@@ -1260,18 +1235,18 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
         },
         {
           "comparison": "gpu_vs_cpu",
@@ -1285,18 +1260,18 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
         },
         {
           "comparison": "gpu_vs_cpu",
@@ -1310,18 +1285,18 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
         },
         {
           "comparison": "gpu_vs_cpu",
@@ -1335,18 +1310,18 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
         },
         {
           "comparison": "gpu_vs_cpu",
@@ -1360,18 +1335,18 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
         },
         {
           "comparison": "gpu_vs_cpu",
@@ -1385,18 +1360,18 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
         },
         {
           "comparison": "gpu_vs_cpu",
@@ -1410,18 +1385,18 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
         },
         {
           "comparison": "gpu_vs_cpu",
@@ -1435,18 +1410,18 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
         },
         {
           "comparison": "gpu_vs_cpu",
@@ -1460,37 +1435,62 @@
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            202,
+            59,
+            19,
             255
           ],
           "signedDeltaRgba": [
-            -255,
-            -255,
-            -255,
+            -53,
+            -196,
+            -236,
             0
           ],
-          "maxChannelDelta": 255
+          "maxChannelDelta": 236
+        },
+        {
+          "comparison": "gpu_vs_cpu",
+          "x": 341,
+          "y": 18,
+          "subzone": "difference_oval_inner_boundary",
+          "referenceOrCpuRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            202,
+            59,
+            19,
+            255
+          ],
+          "signedDeltaRgba": [
+            -53,
+            -196,
+            -236,
+            0
+          ],
+          "maxChannelDelta": 236
         }
       ]
     }
   ],
   "overlap": {
-    "gpuReferenceGreaterThanThirtyTwoPixels": 19361,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 2869,
     "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
-    "sharedGpuCpuReferenceGreaterThanThirtyTwoPixels": 14978,
-    "gpuReferenceSharedShare": 77.361707,
-    "cpuReferenceSharedShare": 95.243546,
-    "gpuReferenceOnlyGreaterThanThirtyTwoPixels": 4383,
-    "cpuReferenceOnlyGreaterThanThirtyTwoPixels": 748,
-    "gpuCpuGreaterThanThirtyTwoPixels": 17660,
-    "gpuCpuOverlapWithGpuReferenceGt32": 17387,
-    "gpuCpuOverlapWithCpuReferenceGt32": 13273,
+    "sharedGpuCpuReferenceGreaterThanThirtyTwoPixels": 2833,
+    "gpuReferenceSharedShare": 98.745207,
+    "cpuReferenceSharedShare": 18.014753,
+    "gpuReferenceOnlyGreaterThanThirtyTwoPixels": 36,
+    "cpuReferenceOnlyGreaterThanThirtyTwoPixels": 12893,
+    "gpuCpuGreaterThanThirtyTwoPixels": 12200,
+    "gpuCpuOverlapWithGpuReferenceGt32": 556,
+    "gpuCpuOverlapWithCpuReferenceGt32": 12169,
     "sharedBySubzone": {
-      "difference_oval_inner_boundary": 5070,
-      "draw_oval_outer_boundary": 7460,
-      "halo_interior": 2448,
+      "difference_oval_inner_boundary": 73,
+      "draw_oval_outer_boundary": 2760,
+      "halo_interior": 0,
       "removed_difference_oval_interior": 0,
       "outside_draw_oval": 0
     },

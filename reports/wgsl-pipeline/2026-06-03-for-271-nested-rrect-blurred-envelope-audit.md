@@ -8,7 +8,7 @@ Decision: `KEEP_EXPECTED_UNSUPPORTED`
 
 The remaining residual after FOR-270 is localized to `blurred_content_envelope`.
 The route remains `webgpu.coverage.nested-rrect-clip.expected-unsupported` with fallback `coverage.nested-clip-visual-parity-below-threshold`;
-no promotion is valid because GPU/reference `97.5`
+no promotion is valid because GPU/reference `98.48`
 and CPU/reference `97.31` are both below
 the strict `99.95` threshold.
 
@@ -16,15 +16,15 @@ the strict `99.95` threshold.
 
 | Comparison | >32 pixels | Dominant subzone | Share | Max delta |
 |---|---:|---|---:|---:|
-| GPU/reference | 19361 | `draw_oval_outer_boundary` | 50.968442% | 203 |
+| GPU/reference | 2869 | `draw_oval_outer_boundary` | 97.455559% | 57 |
 | CPU/reference | 15726 | `draw_oval_outer_boundary` | 51.360804% | 237 |
-| GPU/CPU | 17660 | `draw_oval_outer_boundary` | 45.911665% | 255 |
+| GPU/CPU | 12200 | `difference_oval_inner_boundary` | 42.098361% | 236 |
 
 | Subzone | GPU/reference >32 | CPU/reference >32 | GPU/CPU >32 |
 |---|---:|---:|---:|
-| `draw_oval_outer_boundary` | 9868 | 8077 | 8108 |
-| `difference_oval_inner_boundary` | 5925 | 5201 | 5984 |
-| `halo_interior` | 3568 | 2448 | 3568 |
+| `draw_oval_outer_boundary` | 2796 | 8077 | 4616 |
+| `difference_oval_inner_boundary` | 73 | 5201 | 5136 |
+| `halo_interior` | 0 | 2448 | 2448 |
 | `removed_difference_oval_interior` | 0 | 0 | 0 |
 | `outside_draw_oval` | 0 | 0 | 0 |
 
@@ -32,9 +32,9 @@ the strict `99.95` threshold.
 
 | Comparison | Classification | Alpha >32 | RGB >32 | RGB payload shift |
 |---|---|---:|---:|---:|
-| GPU/reference | `COLOR_PAYLOAD_SHIFT_ALPHA_UNCHANGED` | 0 | 19361 | 19361 |
+| GPU/reference | `COLOR_PAYLOAD_SHIFT_ALPHA_UNCHANGED` | 0 | 2869 | 2869 |
 | CPU/reference | `COLOR_PAYLOAD_SHIFT_ALPHA_UNCHANGED` | 0 | 15726 | 15726 |
-| GPU/CPU | `COLOR_PAYLOAD_SHIFT_ALPHA_UNCHANGED` | 0 | 17660 | 17660 |
+| GPU/CPU | `COLOR_PAYLOAD_SHIFT_ALPHA_UNCHANGED` | 0 | 12200 | 12200 |
 
 The high-delta pixels have unchanged alpha and are classified as RGB payload
 differences, not premultiplied-alpha coverage differences. GPU/reference skews
@@ -45,12 +45,12 @@ lighter/white samples.
 
 | Measure | Value |
 |---|---:|
-| Shared CPU+GPU/reference >32 pixels | 14978 |
-| Share of GPU/reference >32 also CPU/reference >32 | 77.361707% |
-| Share of CPU/reference >32 also GPU/reference >32 | 95.243546% |
-| GPU/reference-only >32 pixels | 4383 |
-| CPU/reference-only >32 pixels | 748 |
-| GPU/CPU >32 pixels | 17660 |
+| Shared CPU+GPU/reference >32 pixels | 2833 |
+| Share of GPU/reference >32 also CPU/reference >32 | 98.745207% |
+| Share of CPU/reference >32 also GPU/reference >32 | 18.014753% |
+| GPU/reference-only >32 pixels | 36 |
+| CPU/reference-only >32 pixels | 12893 |
+| GPU/CPU >32 pixels | 12200 |
 
 Verdict: `SHARED_REFERENCE_RESIDUAL_WITH_BACKEND_COLOR_POLARITY_DIFFERENCE`. The residual is not safely WebGPU-local:
 CPU/reference is already below the strict threshold in the same blurred-envelope

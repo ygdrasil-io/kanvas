@@ -22,12 +22,12 @@
   },
   "reportedStats": {
     "cpuSimilarity": 97.31,
-    "gpuSimilarity": 97.5,
+    "gpuSimilarity": 98.48,
     "threshold": 99.95,
     "cpuMatchingPixels": 908439,
-    "gpuMatchingPixels": 910225,
+    "gpuMatchingPixels": 919363,
     "cpuMaxChannelDelta": 237,
-    "gpuMaxChannelDelta": 203
+    "gpuMaxChannelDelta": 57
   },
   "geometry": {
     "sourceScene": "BlurredClippedCircleGM",
@@ -119,13 +119,13 @@
     {
       "comparison": "gpu_vs_reference",
       "totalPixels": 933528,
-      "exactMatchingPixels": 906386,
-      "exactSimilarity": 97.092535,
-      "exactMismatchPixels": 27142,
-      "toleranceOneMismatchPixels": 25992,
-      "greaterThanEightPixels": 23303,
-      "greaterThanThirtyTwoPixels": 19361,
-      "maxChannelDelta": 203,
+      "exactMatchingPixels": 908659,
+      "exactSimilarity": 97.33602,
+      "exactMismatchPixels": 24869,
+      "toleranceOneMismatchPixels": 20906,
+      "greaterThanEightPixels": 14165,
+      "greaterThanThirtyTwoPixels": 2869,
+      "maxChannelDelta": 57,
       "dominantGreaterThanThirtyTwoZone": "blurred_content_envelope",
       "dominantGreaterThanThirtyTwoZoneShare": 100.0,
       "zones": {
@@ -137,13 +137,13 @@
             "right": 1164,
             "bottom": 802
           },
-          "exactMismatchPixels": 27142,
-          "exactMatchPixels": 906386,
-          "toleranceOneMismatchPixels": 25992,
-          "greaterThanEightPixels": 23303,
-          "greaterThanThirtyTwoPixels": 19361,
-          "maxChannelDelta": 203,
-          "meanMaxChannelDelta": 3.229716
+          "exactMismatchPixels": 24869,
+          "exactMatchPixels": 908659,
+          "toleranceOneMismatchPixels": 20906,
+          "greaterThanEightPixels": 14165,
+          "greaterThanThirtyTwoPixels": 2869,
+          "maxChannelDelta": 57,
+          "meanMaxChannelDelta": 0.393698
         },
         "outside_clip_removed_difference_oval": {
           "pixels": 246288,
@@ -153,13 +153,13 @@
             "right": 576,
             "bottom": 576
           },
-          "exactMismatchPixels": 1110,
-          "exactMatchPixels": 245178,
-          "toleranceOneMismatchPixels": 1063,
-          "greaterThanEightPixels": 937,
-          "greaterThanThirtyTwoPixels": 573,
-          "maxChannelDelta": 101,
-          "meanMaxChannelDelta": 0.174495
+          "exactMismatchPixels": 1106,
+          "exactMatchPixels": 245182,
+          "toleranceOneMismatchPixels": 1012,
+          "greaterThanEightPixels": 633,
+          "greaterThanThirtyTwoPixels": 36,
+          "maxChannelDelta": 57,
+          "meanMaxChannelDelta": 0.053799
         },
         "intersected_rectangles_surviving_difference": {
           "pixels": 687240,
@@ -169,13 +169,13 @@
             "right": 1164,
             "bottom": 802
           },
-          "exactMismatchPixels": 26032,
-          "exactMatchPixels": 661208,
-          "toleranceOneMismatchPixels": 24929,
-          "greaterThanEightPixels": 22366,
-          "greaterThanThirtyTwoPixels": 18788,
-          "maxChannelDelta": 203,
-          "meanMaxChannelDelta": 4.324623
+          "exactMismatchPixels": 23763,
+          "exactMatchPixels": 663477,
+          "toleranceOneMismatchPixels": 19894,
+          "greaterThanEightPixels": 13532,
+          "greaterThanThirtyTwoPixels": 2833,
+          "maxChannelDelta": 47,
+          "meanMaxChannelDelta": 0.515508
         },
         "difference_rrect_oval_boundary": {
           "pixels": 10584,
@@ -185,13 +185,13 @@
             "right": 579,
             "bottom": 579
           },
-          "exactMismatchPixels": 6462,
-          "exactMatchPixels": 4122,
-          "toleranceOneMismatchPixels": 6415,
-          "greaterThanEightPixels": 6289,
-          "greaterThanThirtyTwoPixels": 5925,
-          "maxChannelDelta": 203,
-          "meanMaxChannelDelta": 102.189626
+          "exactMismatchPixels": 4221,
+          "exactMatchPixels": 6363,
+          "toleranceOneMismatchPixels": 1778,
+          "greaterThanEightPixels": 1095,
+          "greaterThanThirtyTwoPixels": 73,
+          "maxChannelDelta": 57,
+          "meanMaxChannelDelta": 2.434429
         },
         "blurred_content_envelope": {
           "pixels": 25008,
@@ -201,13 +201,13 @@
             "right": 587,
             "bottom": 587
           },
-          "exactMismatchPixels": 20886,
-          "exactMatchPixels": 4122,
-          "toleranceOneMismatchPixels": 20839,
-          "greaterThanEightPixels": 20713,
-          "greaterThanThirtyTwoPixels": 19361,
-          "maxChannelDelta": 203,
-          "meanMaxChannelDelta": 118.304503
+          "exactMismatchPixels": 18613,
+          "exactMatchPixels": 6395,
+          "toleranceOneMismatchPixels": 15753,
+          "greaterThanEightPixels": 11575,
+          "greaterThanThirtyTwoPixels": 2869,
+          "maxChannelDelta": 57,
+          "meanMaxChannelDelta": 12.43606
         },
         "outside_draw_oval": {
           "pixels": 672928,
@@ -217,415 +217,415 @@
             "right": 1164,
             "bottom": 802
           },
-          "exactMismatchPixels": 11720,
-          "exactMatchPixels": 661208,
-          "toleranceOneMismatchPixels": 10617,
-          "greaterThanEightPixels": 8054,
-          "greaterThanThirtyTwoPixels": 4476,
-          "maxChannelDelta": 98,
-          "meanMaxChannelDelta": 0.440809
+          "exactMismatchPixels": 11713,
+          "exactMatchPixels": 661215,
+          "toleranceOneMismatchPixels": 10580,
+          "greaterThanEightPixels": 7705,
+          "greaterThanThirtyTwoPixels": 2756,
+          "maxChannelDelta": 43,
+          "meanMaxChannelDelta": 0.323595
         }
       },
       "highDeltaSamples": [
         {
           "comparison": "gpu_vs_reference",
-          "x": 294,
-          "y": 11,
-          "region": "blurred_content_envelope",
+          "x": 343,
+          "y": 571,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            62,
-            26,
+            230,
+            185,
+            180,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            248,
+            238,
+            237,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            18,
+            53,
+            57,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 57
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 295,
-          "y": 11,
-          "region": "blurred_content_envelope",
+          "x": 344,
+          "y": 571,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            62,
-            26,
+            218,
+            143,
+            133,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            232,
+            193,
+            189,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            14,
+            50,
+            56,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 56
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 296,
-          "y": 11,
-          "region": "blurred_content_envelope",
+          "x": 248,
+          "y": 571,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            62,
-            26,
+            231,
+            188,
+            183,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            248,
+            238,
+            237,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            17,
+            50,
+            54,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 54
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 297,
-          "y": 11,
-          "region": "blurred_content_envelope",
+          "x": 358,
+          "y": 23,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            62,
-            26,
+            230,
+            186,
+            181,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            247,
+            235,
+            234,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            17,
+            49,
+            53,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 53
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 272,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 345,
+          "y": 571,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            63,
-            27,
+            210,
+            105,
+            89,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            220,
+            150,
+            142,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -63,
-            -27,
+            10,
+            45,
+            53,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 53
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 273,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 233,
+          "y": 23,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            62,
-            26,
+            231,
+            187,
+            182,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            247,
+            235,
+            234,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            16,
+            48,
+            52,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 52
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 274,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 247,
+          "y": 571,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            62,
-            26,
+            219,
+            146,
+            137,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            232,
+            193,
+            189,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -26,
+            13,
+            47,
+            52,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 52
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 275,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 246,
+          "y": 571,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            62,
-            25,
+            210,
+            107,
+            91,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            220,
+            150,
+            142,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -62,
-            -25,
+            10,
+            43,
+            51,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 51
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 276,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 359,
+          "y": 23,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            61,
-            24,
+            215,
+            132,
+            121,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            227,
+            177,
+            171,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -24,
+            12,
+            45,
+            50,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 50
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 277,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 354,
+          "y": 22,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            61,
-            24,
+            223,
+            162,
+            154,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            237,
+            206,
+            203,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -24,
+            14,
+            44,
+            49,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 49
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 278,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 355,
+          "y": 22,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            61,
-            24,
+            211,
+            111,
+            96,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            221,
+            154,
+            145,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -24,
+            10,
+            43,
+            49,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 49
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 279,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 232,
+          "y": 23,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            61,
-            23,
+            216,
+            133,
+            122,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            227,
+            177,
+            171,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -23,
+            11,
+            44,
+            49,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 49
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 280,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 236,
+          "y": 22,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            61,
-            23,
+            211,
+            111,
+            97,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            221,
+            154,
+            145,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -23,
+            10,
+            43,
+            48,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 48
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 311,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 237,
+          "y": 22,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            61,
-            23,
+            223,
+            162,
+            155,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            237,
+            206,
+            203,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -23,
+            14,
+            44,
+            48,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 48
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 312,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 356,
+          "y": 22,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            61,
-            23,
+            204,
+            72,
+            43,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            209,
+            106,
+            90,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -23,
+            5,
+            34,
+            47,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 47
         },
         {
           "comparison": "gpu_vs_reference",
-          "x": 313,
-          "y": 12,
-          "region": "blurred_content_envelope",
+          "x": 360,
+          "y": 23,
+          "region": "difference_rrect_oval_boundary",
           "referenceRgba": [
-            203,
-            61,
-            24,
+            206,
+            86,
+            64,
             255
           ],
           "actualRgba": [
-            0,
-            0,
-            0,
+            213,
+            123,
+            111,
             255
           ],
           "signedDeltaRgba": [
-            -203,
-            -61,
-            -24,
+            7,
+            37,
+            47,
             0
           ],
-          "maxChannelDelta": 203
+          "maxChannelDelta": 47
         }
       ]
     },
@@ -1157,11 +1157,11 @@
   "for270Effect": {
     "boundedFix": "webgpu.blur-composite-analytic-clip-shape",
     "for269GpuSimilarity": 71.22,
-    "for270GpuSimilarity": 97.5,
+    "for270GpuSimilarity": 98.48,
     "for269GpuRemovedOvalGreaterThanThirtyTwoPixels": 246288,
-    "for270GpuRemovedOvalGreaterThanThirtyTwoPixels": 573,
+    "for270GpuRemovedOvalGreaterThanThirtyTwoPixels": 36,
     "for269GpuRemovedOvalDominantShare": 92.912221,
-    "for270GpuRemovedOvalShare": 2.959558,
+    "for270GpuRemovedOvalShare": 1.254793,
     "for270GpuDominantGreaterThanThirtyTwoZone": "blurred_content_envelope",
     "for270CpuDominantGreaterThanThirtyTwoZone": "blurred_content_envelope"
   }
