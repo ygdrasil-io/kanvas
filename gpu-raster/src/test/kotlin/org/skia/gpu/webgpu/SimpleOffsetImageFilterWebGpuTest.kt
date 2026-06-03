@@ -133,6 +133,45 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-250 high delta scan classifies SimpleOffset residual pixels by cell`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val gm = SimpleOffsetImageFilterGM()
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "original-888/${gm.name()}.png missing")
+
+        context!!.use { ctx ->
+            val gpu = WebGpuSink.draw(ctx, gm)
+            val probe = buildFor250HighDeltaScanProbe(reference!!, gpu)
+            assertTrue(
+                probe.totalPixelsAboveThreshold > 0,
+                "FOR-250: scene-level residual scan must keep finding the high-delta tail",
+            )
+            assertTrue(
+                probe.maxChannelDelta > HIGH_DELTA_THRESHOLD,
+                "FOR-250: max delta unexpectedly collapsed; keep the scan diagnostic until root-cause proof",
+            )
+            assertArrayEquals(
+                intArrayOf(0),
+                intArrayOf(probe.totalPixelsAboveStrictHighDeltaThreshold),
+                "FOR-250: no >8 high-delta pixel is expected; the residual is a diffuse byte-level tail",
+            )
+            assertTrue(
+                probe.topPixels.isNotEmpty(),
+                "FOR-250: high-delta scan must keep a stable top-pixel list",
+            )
+            assertTrue(
+                probe.cellAggregates.any { it.pixelsAboveThreshold > 0 },
+                "FOR-250: high-delta pixels should classify into SimpleOffset cells",
+            )
+            if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                writeFor250HighDeltaScanJson(probe)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -142,6 +181,96 @@ class SimpleOffsetImageFilterWebGpuTest {
             (pixel ushr 24) and 0xFF,
         )
     }
+
+    private fun buildFor250HighDeltaScanProbe(reference: SkBitmap, gpu: SkBitmap): For250HighDeltaScanProbe {
+        require(reference.width == gpu.width && reference.height == gpu.height) {
+            "FOR-250 requires same-size reference/GPU bitmaps"
+        }
+        val highDeltaPixels = mutableListOf<ClassifiedPixelDelta>()
+        var maxDelta = 0
+        var strictHighDeltaCount = 0
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                val delta = pixelDelta(reference, gpu, x, y)
+                maxDelta = maxOf(maxDelta, delta.maxChannelDelta)
+                if (delta.maxChannelDelta > STRICT_HIGH_DELTA_THRESHOLD) {
+                    strictHighDeltaCount += 1
+                }
+                if (delta.maxChannelDelta > HIGH_DELTA_THRESHOLD) {
+                    highDeltaPixels += ClassifiedPixelDelta(
+                        cellId = classifySimpleOffsetCell(x, y)?.id ?: OUTSIDE_CELLS_ID,
+                        pixel = delta,
+                    )
+                }
+            }
+        }
+        val topPixels = highDeltaPixels
+            .sortedWith(
+                compareByDescending<ClassifiedPixelDelta> { it.pixel.maxChannelDelta }
+                    .thenBy { it.pixel.y }
+                    .thenBy { it.pixel.x },
+            )
+            .take(HIGH_DELTA_TOP_N)
+        val aggregates = SIMPLE_OFFSET_CELLS
+            .map { cell -> buildCellAggregate(cell, highDeltaPixels.filter { it.cellId == cell.id }) }
+        val outsidePixels = highDeltaPixels.filter { it.cellId == OUTSIDE_CELLS_ID }
+        val outsideAggregate = SimpleOffsetResidualAggregate(
+            id = OUTSIDE_CELLS_ID,
+            label = "outside SimpleOffset inferred 80x80 cells",
+            origin = intArrayOf(0, 0),
+            bounds = intArrayOf(0, 0, reference.width, reference.height),
+            case = "background or unclassified GM area",
+            pixelsAboveThreshold = outsidePixels.size,
+            maxChannelDelta = outsidePixels.maxOfOrNull { it.pixel.maxChannelDelta } ?: 0,
+            topPixels = outsidePixels
+                .sortedWith(
+                    compareByDescending<ClassifiedPixelDelta> { it.pixel.maxChannelDelta }
+                        .thenBy { it.pixel.y }
+                        .thenBy { it.pixel.x },
+                )
+                .take(3),
+        )
+        return For250HighDeltaScanProbe(
+            width = reference.width,
+            height = reference.height,
+            threshold = HIGH_DELTA_THRESHOLD,
+            strictHighDeltaThreshold = STRICT_HIGH_DELTA_THRESHOLD,
+            totalPixelsAboveThreshold = highDeltaPixels.size,
+            totalPixelsAboveStrictHighDeltaThreshold = strictHighDeltaCount,
+            maxChannelDelta = maxDelta,
+            topPixels = topPixels,
+            cellAggregates = aggregates + outsideAggregate,
+        )
+    }
+
+    private fun buildCellAggregate(
+        cell: SimpleOffsetCell,
+        pixels: List<ClassifiedPixelDelta>,
+    ): SimpleOffsetResidualAggregate =
+        SimpleOffsetResidualAggregate(
+            id = cell.id,
+            label = cell.label,
+            origin = intArrayOf(cell.originX, cell.originY),
+            bounds = intArrayOf(cell.originX, cell.originY, cell.originX + CELL_EXTENT, cell.originY + CELL_EXTENT),
+            case = cell.case,
+            pixelsAboveThreshold = pixels.size,
+            maxChannelDelta = pixels.maxOfOrNull { it.pixel.maxChannelDelta } ?: 0,
+            topPixels = pixels
+                .sortedWith(
+                    compareByDescending<ClassifiedPixelDelta> { it.pixel.maxChannelDelta }
+                        .thenBy { it.pixel.y }
+                        .thenBy { it.pixel.x },
+                )
+                .take(3),
+        )
+
+    private fun classifySimpleOffsetCell(x: Int, y: Int): SimpleOffsetCell? =
+        SIMPLE_OFFSET_CELLS.firstOrNull { cell ->
+            x >= cell.originX &&
+                x < cell.originX + CELL_EXTENT &&
+                y >= cell.originY &&
+                y < cell.originY + CELL_EXTENT
+        }
 
     private fun buildFor249ResidualProbe(reference: SkBitmap, gpu: SkBitmap): For249ResidualProbe {
         require(reference.width == gpu.width && reference.height == gpu.height) {
@@ -316,6 +445,54 @@ class SimpleOffsetImageFilterWebGpuTest {
         )
     }
 
+    private fun writeFor250HighDeltaScanJson(probe: For250HighDeltaScanProbe) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/crop-image-filter-nonnull-prepass",
+        ).apply { mkdirs() }
+        File(dir, "high-delta-scan-for250.json").writeText(
+            """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "skia-upstream",
+              "sceneId": "crop-image-filter-nonnull-prepass",
+              "linear": "FOR-250",
+              "probe": "high-delta-scene-scan",
+              "threshold": {
+                "metric": "max absolute RGBA channel delta",
+                "operator": ">",
+                "value": ${probe.threshold}
+              },
+              "strictHighDeltaThreshold": {
+                "metric": "max absolute RGBA channel delta",
+                "operator": ">",
+                "value": ${probe.strictHighDeltaThreshold},
+                "totalPixelsAboveThreshold": ${probe.totalPixelsAboveStrictHighDeltaThreshold}
+              },
+              "imageSize": [${probe.width}, ${probe.height}],
+              "totalPixelsAboveThreshold": ${probe.totalPixelsAboveThreshold},
+              "maxChannelDelta": ${probe.maxChannelDelta},
+              "topPixelLimit": $HIGH_DELTA_TOP_N,
+              "topPixels": [
+            ${probe.topPixels.joinToString(",\n") { it.toJson(indent = "                ") }}
+              ],
+              "simpleOffsetCellClassifier": {
+                "source": "SimpleOffsetImageFilterGM explicit translate grid",
+                "cellExtent": [$CELL_EXTENT, $CELL_EXTENT],
+                "fallbackCell": "$OUTSIDE_CELLS_ID"
+              },
+              "cellAggregates": [
+            ${probe.cellAggregates.joinToString(",\n") { it.toJson(indent = "                ") }}
+              ],
+              "interpretation": "The scene-level residual has no >8 high-delta pixels; the remaining score loss is a diffuse byte-level tail. FOR-250 records the non-identical pixel distribution by inferred SimpleOffset cell and keeps the renderer unchanged until a bounded error is proven.",
+              "observationMethod": "test-side Skia reference PNG and normal WebGPU render readback; no renderer diagnostic property, no CPU/readback fallback in the render path",
+              "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+              "fallbackReason": "none",
+              "supportDecision": "KEEP_DIAGNOSTIC"
+            }
+            """.trimIndent() + "\n",
+        )
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -328,11 +505,35 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
         """.trimIndent().prependIndent(indent)
 
+    private fun ClassifiedPixelDelta.toJson(indent: String): String =
+        """
+        {
+          "cellId": "$cellId",
+          "pixel": ${pixel.toJson(indent = "$indent  ").trimStart()}
+        }
+        """.trimIndent().prependIndent(indent)
+
     private fun NamedPixelDelta.toJson(indent: String): String =
         """
         {
           "name": "$name",
           "sample": ${sample.toJson(indent = "$indent  ").trimStart()}
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun SimpleOffsetResidualAggregate.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "label": "$label",
+          "origin": ${jsonArray(origin)},
+          "bounds": ${jsonArray(bounds)},
+          "case": "$case",
+          "pixelsAboveThreshold": $pixelsAboveThreshold,
+          "maxChannelDelta": $maxChannelDelta,
+          "topPixels": [
+        ${topPixels.joinToString(",\n") { it.toJson(indent = "$indent    ") }}
+          ]
         }
         """.trimIndent().prependIndent(indent)
 
@@ -353,10 +554,95 @@ class SimpleOffsetImageFilterWebGpuTest {
         const val TARGET_X: Int = 385
         const val TARGET_Y: Int = 125
         const val WINDOW_RADIUS: Int = 2
+        const val CELL_EXTENT: Int = 80
+        const val HIGH_DELTA_THRESHOLD: Int = 0
+        const val STRICT_HIGH_DELTA_THRESHOLD: Int = 8
+        const val HIGH_DELTA_TOP_N: Int = 20
+        const val OUTSIDE_CELLS_ID: String = "outside-simple-offset-cells"
         const val FOR247_PROBE_PROPERTY: String = "kanvas.webgpu.for247.cropOffsetScratchProbe"
         const val FOR248_PROBE_PROPERTY: String = "kanvas.webgpu.for248.finalCropCompositeProbe"
         const val WRITE_EVIDENCE_PROPERTY: String = "kanvas.sceneEvidence.write"
+        val SIMPLE_OFFSET_CELLS: List<SimpleOffsetCell> = listOf(
+            SimpleOffsetCell(
+                id = "row1-col0-no-filter",
+                label = "row 1 col 0: blue source only",
+                originX = 40,
+                originY = 40,
+                case = "no image filter",
+            ),
+            SimpleOffsetCell(
+                id = "row1-col1-offset-no-crop",
+                label = "row 1 col 1: Offset(20,20), no crop, no clip",
+                originX = 140,
+                originY = 40,
+                case = "Offset(20,20,input=null)",
+            ),
+            SimpleOffsetCell(
+                id = "row1-col2-offset-crop-src",
+                label = "row 1 col 2: Offset(20,20), crop == src",
+                originX = 240,
+                originY = 40,
+                case = "Offset(20,20,input=null,cropRect=src)",
+            ),
+            SimpleOffsetCell(
+                id = "row1-col3-offset-clip-src",
+                label = "row 1 col 3: Offset(20,20), clip == src",
+                originX = 340,
+                originY = 40,
+                case = "Offset(20,20,input=null), clip=src",
+            ),
+            SimpleOffsetCell(
+                id = "row1-col4-offset-crop-20x20",
+                label = "row 1 col 4: Offset(20,20), crop 20x20",
+                originX = 440,
+                originY = 40,
+                case = "Offset(20,20,input=null,cropRect=20x20)",
+            ),
+            SimpleOffsetCell(
+                id = "row1-col5-offset-clip-dst",
+                label = "row 1 col 5: Offset(20,20), clip == dst",
+                originX = 540,
+                originY = 40,
+                case = "Offset(20,20,input=null), clip=dst",
+            ),
+            SimpleOffsetCell(
+                id = "row2-col0-crop-clip-src",
+                label = "row 2 col 0: crop == clip == src",
+                originX = 40,
+                originY = 120,
+                case = "Offset(40,0,input=null,cropRect=src), clip=src",
+            ),
+            SimpleOffsetCell(
+                id = "row2-col1-crop-src-clip-dst",
+                label = "row 2 col 1: crop == src, clip == dst",
+                originX = 140,
+                originY = 120,
+                case = "Offset(40,0,input=null,cropRect=src), clip=dst",
+            ),
+            SimpleOffsetCell(
+                id = "row2-col2-crop-dst-clip-src",
+                label = "row 2 col 2: crop == dst, clip == src",
+                originX = 240,
+                originY = 120,
+                case = "Offset(40,0,input=null,cropRect=dst), clip=src",
+            ),
+            SimpleOffsetCell(
+                id = "row2-col3-crop-clip-dst",
+                label = "row 2 col 3: crop == clip == dst",
+                originX = 340,
+                originY = 120,
+                case = "Offset(40,0,input=null,cropRect=dst), clip=dst",
+            ),
+        )
     }
+
+    private data class SimpleOffsetCell(
+        val id: String,
+        val label: String,
+        val originX: Int,
+        val originY: Int,
+        val case: String,
+    )
 
     private data class PixelDelta(
         val x: Int,
@@ -373,6 +659,11 @@ class SimpleOffsetImageFilterWebGpuTest {
         val sample: PixelDelta,
     )
 
+    private data class ClassifiedPixelDelta(
+        val cellId: String,
+        val pixel: PixelDelta,
+    )
+
     private data class For249ResidualProbe(
         val target: PixelDelta,
         val window: List<PixelDelta>,
@@ -381,4 +672,27 @@ class SimpleOffsetImageFilterWebGpuTest {
         val windowMaxChannelDelta: Int = window.maxOf { it.maxChannelDelta }
         val maxObservedDelta: Int = (window + cellSamples.map { it.sample }).maxOf { it.maxChannelDelta }
     }
+
+    private data class SimpleOffsetResidualAggregate(
+        val id: String,
+        val label: String,
+        val origin: IntArray,
+        val bounds: IntArray,
+        val case: String,
+        val pixelsAboveThreshold: Int,
+        val maxChannelDelta: Int,
+        val topPixels: List<ClassifiedPixelDelta>,
+    )
+
+    private data class For250HighDeltaScanProbe(
+        val width: Int,
+        val height: Int,
+        val threshold: Int,
+        val strictHighDeltaThreshold: Int,
+        val totalPixelsAboveThreshold: Int,
+        val totalPixelsAboveStrictHighDeltaThreshold: Int,
+        val maxChannelDelta: Int,
+        val topPixels: List<ClassifiedPixelDelta>,
+        val cellAggregates: List<SimpleOffsetResidualAggregate>,
+    )
 }
