@@ -19,6 +19,7 @@ import org.skia.tests.SimpleOffsetImageFilterGM
 import java.io.File
 import java.awt.image.BufferedImage
 import javax.imageio.ImageIO
+import kotlin.math.pow
 
 /**
  * O6 cross-test : `SimpleOffsetImageFilterGM`
@@ -513,6 +514,101 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-257 reference byte expectation audit preserves shader-side boundary`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val simpleOffsetGm = SimpleOffsetImageFilterGM()
+        val simpleOffsetReference = TestUtils.loadReferenceBitmap(simpleOffsetGm.name())
+        assertNotNull(simpleOffsetReference, "original-888/${simpleOffsetGm.name()}.png missing")
+        val bitmapGm = DrawBitmapRectSkbug4734GM()
+        val bitmapReference = readEvidencePng(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/skia.png",
+        )
+
+        val oldRawSentinels = System.getProperty(FOR255_RAW_SENTINELS_PROPERTY)
+        val oldOutputBoundary = System.getProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY)
+        try {
+            System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, "true")
+            System.setProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY, "true")
+            context!!.use { ctx ->
+                val simpleOffset = renderSimpleOffsetWithRawColorSentinels(ctx, simpleOffsetGm)
+                val bitmapUpload = renderBitmapUploadRawColorSentinel(ctx)
+                val bitmapScene = renderDrawBitmapRectSkbug4734WithOutputBoundary(ctx, bitmapGm)
+                val for254 = buildFor254SourceTexelRoundingAuditProbe(
+                    simpleOffsetReference!!,
+                    simpleOffset.bitmap,
+                )
+                val for255 = buildFor255RawColorSentinelProbe(
+                    sourceUniformSnapshot = simpleOffset.sentinels,
+                    bitmapUploadSnapshot = bitmapUpload.sentinels,
+                    for254 = for254,
+                )
+                val for256 = buildFor256ShaderStoreReferenceBoundaryProbe(
+                    for255 = for255,
+                    simpleOffsetOutput = simpleOffset.outputReadbackBoundary,
+                    bitmapOutput = bitmapScene.outputReadbackBoundary,
+                )
+                val probe = buildFor257ReferenceByteExpectationAuditProbe(
+                    for255 = for255,
+                    for256 = for256,
+                    simpleOffsetReference = simpleOffsetReference,
+                    bitmapReference = bitmapReference,
+                )
+
+                assertEquals(
+                    "KEEP_DIAGNOSTIC",
+                    probe.supportDecision,
+                    "FOR-257: reference-byte audit must not promote a bounded correction",
+                )
+                assertEquals(
+                    false,
+                    probe.referenceByteExpectationExplainsResidual,
+                    "FOR-257: current oracle reconstruction must not claim the -1 RGB tail is expected",
+                )
+                assertEquals(
+                    true,
+                    probe.shaderSideProbeRequiredNext,
+                    "FOR-257: remaining boundary should require a separate shader-side probe",
+                )
+                assertArrayEquals(
+                    intArrayOf(158, 90, 139, 255),
+                    probe.legacySourceUniform.referenceOracleRgba,
+                    "FOR-257: SimpleOffset reference oracle bytes changed",
+                )
+                assertArrayEquals(
+                    intArrayOf(149, 193, 207, 255),
+                    probe.bitmapTexel.referenceOracleRgba,
+                    "FOR-257: bitmap nearest reference oracle bytes changed",
+                )
+                assertTrue(
+                    probe.cases.all { case ->
+                        case.referenceOracleMatchesComparison &&
+                            case.reconstructions.any { it.matchesReferenceBytes } &&
+                            !case.referenceByteExpectationExplainsResidual
+                    },
+                    "FOR-257: every residual case must reconstruct the reference bytes without explaining the GPU -1 tail",
+                )
+
+                if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                    writeFor257ReferenceByteExpectationAuditJson(probe)
+                }
+            }
+        } finally {
+            if (oldRawSentinels == null) {
+                System.clearProperty(FOR255_RAW_SENTINELS_PROPERTY)
+            } else {
+                System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, oldRawSentinels)
+            }
+            if (oldOutputBoundary == null) {
+                System.clearProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY)
+            } else {
+                System.setProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY, oldOutputBoundary)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -701,6 +797,175 @@ class SimpleOffsetImageFilterWebGpuTest {
                 verdict = "final readback bytes match the GPU bytes used by the reference comparison; the 1-byte RGB residual is already present by the output/readback boundary",
             ),
         )
+    }
+
+    private fun buildFor257ReferenceByteExpectationAuditProbe(
+        for255: For255RawColorSentinelProbe,
+        for256: For256ShaderStoreReferenceBoundaryProbe,
+        simpleOffsetReference: SkBitmap,
+        bitmapReference: BufferedImage,
+    ): For257ReferenceByteExpectationAuditProbe {
+        val sourceXy = for256.legacySourceUniform.outputReadbackXy
+        val bitmapXy = for256.bitmapTexel.outputReadbackXy
+        val sourceOracleRgba = rgbaAt(simpleOffsetReference, sourceXy[0], sourceXy[1])
+        val bitmapOracleRgba = rgbaAt(bitmapReference, bitmapXy[0], bitmapXy[1])
+        val sourceCase = buildFor257Case(
+            id = for256.legacySourceUniform.id,
+            route = "webgpu.canvas.draw-rect.src-over",
+            previousHostBoundaryRgba8 = for256.legacySourceUniform.previousHostBoundaryRgba8,
+            previousWriteOrUploadBoundaryRgba8 = for256.legacySourceUniform.previousWriteOrUploadBoundaryRgba8,
+            outputXy = sourceXy,
+            outputReferenceRgba = for256.legacySourceUniform.outputReferenceRgba,
+            outputGpuReadbackRgba = for256.legacySourceUniform.outputReadbackRgba,
+            outputSignedDeltaRgba = for256.legacySourceUniform.outputSignedDeltaRgba,
+            outputMaxChannelDelta = for256.legacySourceUniform.outputMaxChannelDelta,
+            referenceOracleRgba = sourceOracleRgba,
+            reconstructions = listOf(
+                For257ReferenceByteReconstruction(
+                    name = "skia-upstream-reference-png-sample",
+                    source = "original-888/simple-offsetimagefilter.png",
+                    xy = sourceXy,
+                    reconstructedRgba = sourceOracleRgba,
+                    interpretation = "Existing upstream PNG oracle byte at the comparison sample; this reconstructs the reference expectation used by the current test harness.",
+                ),
+                For257ReferenceByteReconstruction(
+                    name = "reference-byte-roundtrip-quantization",
+                    source = "round(referenceByte / 255 * 255)",
+                    xy = sourceXy,
+                    reconstructedRgba = quantizeRgbaBytes(sourceOracleRgba),
+                    interpretation = "Deterministic byte round-trip of the already-quantized reference oracle; proves stable reference bytes but does not explain why GPU readback is one byte lower.",
+                ),
+                For257ReferenceByteReconstruction(
+                    name = "local-source-over-present-formula",
+                    source = "host RGBA8 source-over white, then local sRGB-to-Rec2020 present conversion",
+                    xy = sourceXy,
+                    reconstructedRgba = reconstructLocalSourceOverPresentRgba(
+                        for255.legacySourceUniform.hostObservedRgba8,
+                    ),
+                    interpretation = "A visible local formula does not reproduce the upstream reference byte, so it is not a valid correction oracle for this ticket.",
+                ),
+            ),
+            priorBoundarySummary = "FOR-255 host/raw uniform bytes match [255,0,0,102]; FOR-256 readback matches GPU comparison bytes at [40,40].",
+        )
+        val bitmapCase = buildFor257Case(
+            id = for256.bitmapTexel.id,
+            route = "webgpu.image-rect.strict-nearest",
+            previousHostBoundaryRgba8 = for256.bitmapTexel.previousHostBoundaryRgba8,
+            previousWriteOrUploadBoundaryRgba8 = for256.bitmapTexel.previousWriteOrUploadBoundaryRgba8,
+            outputXy = bitmapXy,
+            outputReferenceRgba = for256.bitmapTexel.outputReferenceRgba,
+            outputGpuReadbackRgba = for256.bitmapTexel.outputReadbackRgba,
+            outputSignedDeltaRgba = for256.bitmapTexel.outputSignedDeltaRgba,
+            outputMaxChannelDelta = for256.bitmapTexel.outputMaxChannelDelta,
+            referenceOracleRgba = bitmapOracleRgba,
+            reconstructions = listOf(
+                For257ReferenceByteReconstruction(
+                    name = "bitmap-nearest-reference-png-sample",
+                    source = "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/skia.png",
+                    xy = bitmapXy,
+                    reconstructedRgba = bitmapOracleRgba,
+                    interpretation = "Generated Skia artifact oracle byte at the strict-nearest representative sample.",
+                ),
+                For257ReferenceByteReconstruction(
+                    name = "nearest-upload-texel-reference-expectation",
+                    source = "FOR-255 raw uploaded RGBA8 texel under strict-nearest sampling",
+                    xy = bitmapXy,
+                    reconstructedRgba = for255.bitmapTexel.rawUploadObservedRgba8,
+                    interpretation = "The strict-nearest reference expectation equals the uploaded representative texel; GPU readback is still one red byte lower.",
+                ),
+                For257ReferenceByteReconstruction(
+                    name = "reference-byte-roundtrip-quantization",
+                    source = "round(referenceByte / 255 * 255)",
+                    xy = bitmapXy,
+                    reconstructedRgba = quantizeRgbaBytes(bitmapOracleRgba),
+                    interpretation = "Deterministic byte round-trip of the artifact oracle; stable reference bytes remain higher than GPU readback.",
+                ),
+            ),
+            priorBoundarySummary = "FOR-255 raw upload bytes match [149,193,207,255]; FOR-256 readback matches GPU comparison bytes at [8,24].",
+        )
+        return For257ReferenceByteExpectationAuditProbe(
+            reusedRuntimeProperties = listOf(
+                FOR255_RAW_SENTINELS_PROPERTY,
+                FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY,
+            ),
+            legacySourceUniform = sourceCase,
+            bitmapTexel = bitmapCase,
+        )
+    }
+
+    private fun buildFor257Case(
+        id: String,
+        route: String,
+        previousHostBoundaryRgba8: IntArray,
+        previousWriteOrUploadBoundaryRgba8: IntArray,
+        outputXy: IntArray,
+        outputReferenceRgba: IntArray,
+        outputGpuReadbackRgba: IntArray,
+        outputSignedDeltaRgba: IntArray,
+        outputMaxChannelDelta: Int,
+        referenceOracleRgba: IntArray,
+        reconstructions: List<For257ReferenceByteReconstruction>,
+        priorBoundarySummary: String,
+    ): For257ReferenceByteExpectationCase =
+        For257ReferenceByteExpectationCase(
+            id = id,
+            route = route,
+            previousHostBoundaryRgba8 = previousHostBoundaryRgba8,
+            previousWriteOrUploadBoundaryRgba8 = previousWriteOrUploadBoundaryRgba8,
+            outputXy = outputXy,
+            outputReferenceRgba = outputReferenceRgba,
+            outputGpuReadbackRgba = outputGpuReadbackRgba,
+            outputSignedDeltaRgba = outputSignedDeltaRgba,
+            outputMaxChannelDelta = outputMaxChannelDelta,
+            referenceOracleRgba = referenceOracleRgba,
+            referenceOracleMatchesComparison = referenceOracleRgba.contentEquals(outputReferenceRgba),
+            reconstructions = reconstructions.map { reconstruction ->
+                reconstruction.copy(
+                    matchesReferenceBytes = reconstruction.reconstructedRgba.contentEquals(outputReferenceRgba),
+                    matchesGpuReadbackBytes = reconstruction.reconstructedRgba.contentEquals(outputGpuReadbackRgba),
+                )
+            },
+            priorBoundarySummary = priorBoundarySummary,
+            verdict = "Reference oracle bytes are stable and reconstructable, but they match the reference side rather than the lower GPU/readback bytes; no reference-byte correction is justified.",
+        )
+
+    private fun quantizeRgbaBytes(rgba: IntArray): IntArray =
+        IntArray(4) { channel -> ((rgba[channel] / 255.0) * 255.0 + 0.5).toInt().coerceIn(0, 255) }
+
+    private fun reconstructLocalSourceOverPresentRgba(sourceRgba8: IntArray): IntArray {
+        val alpha = sourceRgba8[3] / 255.0
+        val blendedSrgb = DoubleArray(3) { channel ->
+            (sourceRgba8[channel] / 255.0) * alpha + (1.0 - alpha)
+        }
+        val encoded = srgbToRec2020Encoded(blendedSrgb[0], blendedSrgb[1], blendedSrgb[2])
+        return intArrayOf(
+            (encoded[0] * 255.0 + 0.5).toInt().coerceIn(0, 255),
+            (encoded[1] * 255.0 + 0.5).toInt().coerceIn(0, 255),
+            (encoded[2] * 255.0 + 0.5).toInt().coerceIn(0, 255),
+            255,
+        )
+    }
+
+    private fun srgbToRec2020Encoded(r: Double, g: Double, b: Double): DoubleArray {
+        val lr = srgbToLinear(r)
+        val lg = srgbToLinear(g)
+        val lb = srgbToLinear(b)
+        val rr = 0.62740 * lr + 0.32928 * lg + 0.04338 * lb
+        val rg = 0.06909 * lr + 0.91954 * lg + 0.01136 * lb
+        val rb = 0.01639 * lr + 0.08801 * lg + 0.89559 * lb
+        return doubleArrayOf(
+            rec2020Encode(rr).coerceIn(0.0, 1.0),
+            rec2020Encode(rg).coerceIn(0.0, 1.0),
+            rec2020Encode(rb).coerceIn(0.0, 1.0),
+        )
+    }
+
+    private fun srgbToLinear(v: Double): Double =
+        if (v <= 0.04045) v / 12.92 else ((v + 0.055) / 1.055).pow(2.4)
+
+    private fun rec2020Encode(v: Double): Double {
+        val c = maxOf(v, 0.0)
+        return if (c < 0.0181) 4.5 * c else 1.0993 * c.pow(0.45) - 0.0993
     }
 
     private fun requireOutputReadbackSample(
@@ -1955,6 +2220,53 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    private fun writeFor257ReferenceByteExpectationAuditJson(
+        probe: For257ReferenceByteExpectationAuditProbe,
+    ) {
+        val contents = """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "mixed skia-upstream and artifact oracle PNGs",
+              "linear": "FOR-257",
+              "probe": "reference-byte-expectation-audit",
+              "deltaDefinition": "signed channel delta is GPU/readback minus reference",
+              "newRendererProperty": "none",
+              "reusedRuntimeProperties": [
+            ${probe.reusedRuntimeProperties.joinToString(",\n") { "                \"$it\"" }}
+              ],
+              "defaultEnabled": false,
+              "runtimeSnapshotsEnabled": true,
+              "normalRenderingChanged": false,
+              "shaderLayoutChanged": false,
+              "observedBoundaries": {
+                "for255HostObserved": true,
+                "for255WriteUploadObserved": true,
+                "for256OutputReadbackObserved": true,
+                "referenceOracleReconstructed": true,
+                "shaderObserved": "notCaptured"
+              },
+              "legacySourceUniform": ${probe.legacySourceUniform.toJson(indent = "              ").trimStart()},
+              "bitmapTexelUpload": ${probe.bitmapTexel.toJson(indent = "              ").trimStart()},
+              "referenceByteExpectationFinding": "${probe.referenceByteExpectationFinding}",
+              "admissibleCorrection": "${probe.admissibleCorrection}",
+              "shaderSideProbeRequiredNext": ${probe.shaderSideProbeRequiredNext},
+              "remainingBoundary": "${probe.remainingBoundary}",
+              "interpretation": "FOR-257 reconstructs stable reference/oracle bytes for both residual cases and compares them with FOR-255 host/write-upload boundaries plus FOR-256 readback bytes. The reconstructed reference bytes match the reference side, not the lower GPU/readback side, so the -1 RGB tail is not proven to be an admissible reference-byte expectation correction. A separate shader-side probe with an isolated diagnostic layout is the next bounded boundary if this residual must be root-caused further.",
+              "observationMethod": "test-side reference/oracle PNG byte reconstruction plus existing opt-in FOR-255/FOR-256 snapshots; no new renderer property, no shader/pipeline layout change, no threshold change, no Crop correction, and no normal CPU/readback fallback",
+              "supportDecision": "${probe.supportDecision}",
+              "correctionApplied": false,
+              "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+            }
+            """.trimIndent() + "\n"
+        listOf(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/reference-byte-expectation-audit-for257",
+            "reports/wgsl-pipeline/scenes/artifacts/reference-byte-expectation-audit-for257",
+        ).forEach { path ->
+            val dir = repoFile(path).apply { mkdirs() }
+            File(dir, "reference-byte-expectation-audit-for257.json").writeText(contents)
+        }
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -2142,6 +2454,42 @@ class SimpleOffsetImageFilterWebGpuTest {
           "outputMaxChannelDelta": $outputMaxChannelDelta,
           "readbackMatchesComparisonGpu": $readbackMatchesComparisonGpu,
           "verdict": "$verdict"
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For257ReferenceByteExpectationCase.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "route": "$route",
+          "previousHostBoundaryRgba8": ${jsonArray(previousHostBoundaryRgba8)},
+          "previousWriteOrUploadBoundaryRgba8": ${jsonArray(previousWriteOrUploadBoundaryRgba8)},
+          "outputXy": ${jsonArray(outputXy)},
+          "outputReferenceRgba": ${jsonArray(outputReferenceRgba)},
+          "outputGpuReadbackRgba": ${jsonArray(outputGpuReadbackRgba)},
+          "outputSignedDeltaRgba": ${jsonArray(outputSignedDeltaRgba)},
+          "outputMaxChannelDelta": $outputMaxChannelDelta,
+          "referenceOracleRgba": ${jsonArray(referenceOracleRgba)},
+          "referenceOracleMatchesComparison": $referenceOracleMatchesComparison,
+          "referenceByteExpectationExplainsResidual": $referenceByteExpectationExplainsResidual,
+          "reconstructions": [
+        ${reconstructions.joinToString(",\n") { it.toJson(indent = "$indent    ") }}
+          ],
+          "priorBoundarySummary": "$priorBoundarySummary",
+          "verdict": "$verdict"
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For257ReferenceByteReconstruction.toJson(indent: String): String =
+        """
+        {
+          "name": "$name",
+          "source": "$source",
+          "xy": ${jsonArray(xy)},
+          "reconstructedRgba": ${jsonArray(reconstructedRgba)},
+          "matchesReferenceBytes": $matchesReferenceBytes,
+          "matchesGpuReadbackBytes": $matchesGpuReadbackBytes,
+          "interpretation": "$interpretation"
         }
         """.trimIndent().prependIndent(indent)
 
@@ -2629,5 +2977,54 @@ class SimpleOffsetImageFilterWebGpuTest {
         val supportDecision: String = "KEEP_DIAGNOSTIC"
         val remainingBoundary: String =
             "shader-consumption/blend-store/present-quantization-or-reference-byte-expectation"
+    }
+
+    private data class For257ReferenceByteReconstruction(
+        val name: String,
+        val source: String,
+        val xy: IntArray,
+        val reconstructedRgba: IntArray,
+        val interpretation: String,
+        val matchesReferenceBytes: Boolean = false,
+        val matchesGpuReadbackBytes: Boolean = false,
+    )
+
+    private data class For257ReferenceByteExpectationCase(
+        val id: String,
+        val route: String,
+        val previousHostBoundaryRgba8: IntArray,
+        val previousWriteOrUploadBoundaryRgba8: IntArray,
+        val outputXy: IntArray,
+        val outputReferenceRgba: IntArray,
+        val outputGpuReadbackRgba: IntArray,
+        val outputSignedDeltaRgba: IntArray,
+        val outputMaxChannelDelta: Int,
+        val referenceOracleRgba: IntArray,
+        val referenceOracleMatchesComparison: Boolean,
+        val reconstructions: List<For257ReferenceByteReconstruction>,
+        val priorBoundarySummary: String,
+        val verdict: String,
+    ) {
+        val referenceByteExpectationExplainsResidual: Boolean =
+            reconstructions.any { it.matchesGpuReadbackBytes } &&
+                !referenceOracleRgba.contentEquals(outputReferenceRgba)
+    }
+
+    private data class For257ReferenceByteExpectationAuditProbe(
+        val reusedRuntimeProperties: List<String>,
+        val legacySourceUniform: For257ReferenceByteExpectationCase,
+        val bitmapTexel: For257ReferenceByteExpectationCase,
+    ) {
+        val cases: List<For257ReferenceByteExpectationCase> = listOf(legacySourceUniform, bitmapTexel)
+        val supportDecision: String = "KEEP_DIAGNOSTIC"
+        val referenceByteExpectationExplainsResidual: Boolean =
+            cases.any { it.referenceByteExpectationExplainsResidual }
+        val referenceByteExpectationFinding: String =
+            "not_proven: reconstructed reference/oracle bytes match the reference side for both cases, not the lower GPU/readback bytes"
+        val admissibleCorrection: String =
+            "none_applied: a reference-byte correction would rewrite stable Skia/oracle expectations without shader-side proof"
+        val shaderSideProbeRequiredNext: Boolean = true
+        val remainingBoundary: String =
+            "shader-consumption/blend-store/present-quantization"
     }
 }
