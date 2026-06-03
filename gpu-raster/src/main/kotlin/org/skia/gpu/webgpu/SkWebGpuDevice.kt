@@ -180,6 +180,8 @@ private const val WEBGPU_COVERAGE_SELECTOR_FLAG: String = "kanvas.webgpu.coverag
 private const val WEBGPU_COVERAGE_SELECTOR_DISABLED_REASON: String = "coverage.webgpu-selector-disabled"
 private const val WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG: String =
     "kanvas.webgpu.strokeCapJoin.experimentalRender"
+private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
+    "kanvas.webgpu.for247.cropOffsetScratchProbe"
 
 public fun selectWebGpuBlendPlan(mode: SkBlendMode): BlendPlan = when (mode) {
     in FIXED_FUNCTION_BLEND_MODES -> BlendPlan(
@@ -5838,6 +5840,38 @@ public class SkWebGpuDevice(
             )
             val childScratchView = childScratch.createView()
 
+            if (shouldProbeFor247CropOffsetScratch(
+                    originX = originX,
+                    originY = originY,
+                    layerWidth = w0,
+                    layerHeight = h0,
+                    cropNonNullOffsetPrePass = cropNonNullOffsetPrePass,
+                )
+            ) {
+                pending.add(
+                    LayerCompositeDraw(
+                        layerView = gpuSrc.intermediateView,
+                        layerWidth = w0,
+                        layerHeight = h0,
+                        dstOriginX = -5,
+                        dstOriginY = -5,
+                        scissor = intArrayOf(0, 0, 1, 1),
+                        paintR = 1f,
+                        paintG = 1f,
+                        paintB = 1f,
+                        paintA = 1f,
+                        r = 1f,
+                        g = 1f,
+                        b = 1f,
+                        a = 1f,
+                        mode = SkBlendMode.kSrc,
+                        colorFilterPacked = FloatArray(24),
+                        matrixPacked = IDENTITY_LAYER_MATRIX_12,
+                        imageFilterPacked = FloatArray(12),
+                    ),
+                )
+            }
+
             pending.add(
                 LayerCompositeDraw(
                     layerView = gpuSrc.intermediateView,
@@ -5862,6 +5896,38 @@ public class SkWebGpuDevice(
                     materializeTargetView = childScratchView,
                 ),
             )
+
+            if (shouldProbeFor247CropOffsetScratch(
+                    originX = originX,
+                    originY = originY,
+                    layerWidth = w0,
+                    layerHeight = h0,
+                    cropNonNullOffsetPrePass = cropNonNullOffsetPrePass,
+                )
+            ) {
+                pending.add(
+                    LayerCompositeDraw(
+                        layerView = childScratchView,
+                        layerWidth = w0,
+                        layerHeight = h0,
+                        dstOriginX = -44,
+                        dstOriginY = -5,
+                        scissor = intArrayOf(1, 0, 1, 1),
+                        paintR = 1f,
+                        paintG = 1f,
+                        paintB = 1f,
+                        paintA = 1f,
+                        r = 1f,
+                        g = 1f,
+                        b = 1f,
+                        a = 1f,
+                        mode = SkBlendMode.kSrc,
+                        colorFilterPacked = FloatArray(24),
+                        matrixPacked = IDENTITY_LAYER_MATRIX_12,
+                        imageFilterPacked = FloatArray(12),
+                    ),
+                )
+            }
 
             val cropPacked = packCropImageFilterPayload(
                 cropNonNullOffsetPrePass.cropRect,
@@ -7976,6 +8042,30 @@ public class SkWebGpuDevice(
             offsetDx = floor(childOffset.dx + 0.5f).toInt(),
             offsetDy = floor(childOffset.dy + 0.5f).toInt(),
         )
+    }
+
+    private fun shouldProbeFor247CropOffsetScratch(
+        originX: Int,
+        originY: Int,
+        layerWidth: Int,
+        layerHeight: Int,
+        cropNonNullOffsetPrePass: CropNonNullOffsetPrePassPlan,
+    ): Boolean {
+        if (System.getProperty(WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG) != "true") {
+            return false
+        }
+        val crop = cropNonNullOffsetPrePass.cropRect
+        return originX == 340 &&
+            originY == 120 &&
+            layerWidth == 80 &&
+            layerHeight == 40 &&
+            cropNonNullOffsetPrePass.offsetDx == 40 &&
+            cropNonNullOffsetPrePass.offsetDy == 0 &&
+            cropNonNullOffsetPrePass.cropTileMode == SkTileMode.kDecal &&
+            crop.left == 40f &&
+            crop.top == 0f &&
+            crop.right == 80f &&
+            crop.bottom == 40f
     }
 
     private fun packCropImageFilterPayload(rect: SkRect, tileMode: SkTileMode): FloatArray {

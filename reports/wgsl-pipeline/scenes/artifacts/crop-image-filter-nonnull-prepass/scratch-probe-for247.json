@@ -1,0 +1,24 @@
+{
+  "backend": "WebGPU",
+  "sceneId": "crop-image-filter-nonnull-prepass",
+  "linear": "FOR-247",
+  "probe": "crop-offset-pre-final-crop-scratch",
+  "targetCell": "crop == clip == dst",
+  "case": "Crop(kDecal, rect=(40,0,80,40), input=Offset(40,0,input=null))",
+  "origin": [340, 120],
+  "layerExtent": [80, 40],
+  "offset": [40, 0],
+  "sourceLocal": {
+    "xy": [5, 5],
+    "rgba": [202, 59, 19, 255]
+  },
+  "scratchPixel": {
+    "xy": [45, 5],
+    "rgba": [202, 59, 19, 255]
+  },
+  "matchesSourceLocal": true,
+  "observationMethod": "diagnostic WebGPU 1x1 kSrc copies before final Crop: sourceLocal(5,5) -> output(0,0), scratchPixel(45,5) -> output(1,0)",
+  "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+  "fallbackReason": "none",
+  "supportDecision": "KEEP_DIAGNOSTIC"
+}
