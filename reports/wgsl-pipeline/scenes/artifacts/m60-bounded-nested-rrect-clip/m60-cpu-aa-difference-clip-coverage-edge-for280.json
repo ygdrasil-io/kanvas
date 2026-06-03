@@ -1,0 +1,641 @@
+{
+  "linear": "FOR-280",
+  "parent": "FOR-241",
+  "probe": "cpu-aa-difference-clip-coverage-edge",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/Reference/WebGPU",
+  "sourceAudits": {
+    "for277": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-post-for276-cpu-residual-audit-for277.json",
+    "for278": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-boundary-layer-composite-fixture-for278.json",
+    "for279": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-layer-boundary-composite-for279.json"
+  },
+  "sourceImages": {
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png",
+    "cpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png",
+    "gpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png"
+  },
+  "sourceTest": "org.skia.gpu.webgpu.NestedClipSceneCaptureTest",
+  "artifactRoot": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip",
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "REFUSE_CORRECTION_PENDING_EXPLICIT_SKAA_CLIP_AND_MASK_FILTER_TRACE",
+  "decisionRationale": "FOR-280 confirms that the FOR-278 high-delta pixels are on the remaining SkAAClip difference -> drawPathWithMaskFilter -> clipCoverage path, but a production correction is still not causal enough. A 4x4 estimate of the final difference clip keeps all 89 CPU/reference >32 target pixels non-zero and 79 of them fully covered, including all three anchors. The visible CPU loss therefore cannot be explained by final clipCoverage alone; the missing observable is the mask-filter source/blur alpha before clipCoverage and blend.",
+  "route": {
+    "cpu": "cpu.coverage.nested-rrect-clip-oracle",
+    "gpu": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "coverageStrategy": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required"
+  },
+  "coverageModel": {
+    "skAaClipPathCoverage": "4x4 supersampled path coverage quantized with c * 255 / 16",
+    "differenceFormula": "parentCoverage=255, pathCoverage=b => clipCoverage=255-b",
+    "dispatchFormula": "drawPathWithMaskFilter computes effA=paintA*maskA/255 then dispatchBlend applies src.alpha*=clipCoverage/255",
+    "observableBoundary": "maskA is local to drawPathWithMaskFilter and clipCoverage is private; this audit uses final PNG pixels plus a deterministic 4x4 edge estimate, not renderer instrumentation."
+  },
+  "causalPath": [
+    {
+      "file": "skia-integration-tests/src/main/kotlin/org/skia/tests/BlurredClippedCircleGM.kt",
+      "function": "BlurredClippedCircleGM.onDraw",
+      "role": "issues save/clipRRect(kDifference)/drawRRect with blur and Blend(RED, kSrcIn)"
+    },
+    {
+      "file": "kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt",
+      "function": "SkCanvas.clipPathDifference",
+      "role": "rasterizes the oval into SkAAClip and applies kDifference"
+    },
+    {
+      "file": "kanvas-skia/src/main/kotlin/org/skia/foundation/SkAAClip.kt",
+      "function": "SkAAClip.op + coverage",
+      "role": "combines parent coverage with path coverage and serves clipCoverage(x,y)"
+    },
+    {
+      "file": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+      "function": "SkBitmapDevice.drawPathWithMaskFilter",
+      "role": "builds blurred mask alpha, then dispatches blended pixels through final clipCoverage"
+    }
+  ],
+  "for278RegeneratedMatchesSource": true,
+  "for279DecisionPreserved": true,
+  "windows": [
+    {
+      "name": "draw_oval_outer_boundary_max_cpu_reference_delta_window",
+      "subzone": "draw_oval_outer_boundary",
+      "bounds": {
+        "left": 94,
+        "top": 84,
+        "right": 105,
+        "bottom": 95
+      },
+      "maskPixels": 59,
+      "anchorSample": {
+        "x": 99,
+        "y": 89,
+        "subzone": "draw_oval_outer_boundary",
+        "referenceRgba": [
+          203,
+          65,
+          31,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          52,
+          190,
+          224,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -1,
+          -5,
+          -10,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -53,
+          -195,
+          -234,
+          0
+        ],
+        "cpuReferenceMaxChannelDelta": 224,
+        "estimatedDifferenceClipCoverage": 255,
+        "estimatedDrawOvalCoverage": 255,
+        "estimatedDifferenceClipCoverageBucket": "full",
+        "estimatedDrawOvalCoverageBucket": "full"
+      },
+      "metrics": {
+        "pixels": 59,
+        "cpuReferenceGreaterThanThirtyTwoPixels": 59,
+        "gpuReferenceGreaterThanThirtyTwoPixels": 11,
+        "cpuReferenceMaxChannelDelta": 224,
+        "gpuReferenceMaxChannelDelta": 41,
+        "estimatedDifferenceClipCoverageOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 59
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "estimatedDrawOvalCoverageOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 17,
+            "partial": 8,
+            "full": 34
+          },
+          "min": 0,
+          "max": 255,
+          "mean": 166.338983
+        },
+        "cpuActualColorBucketsOnGt32": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 59,
+          "red_tinted_reference_like": 0,
+          "gray_background_like": 0,
+          "other_opaque": 0
+        },
+        "referenceColorBucketsOnGt32": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 0,
+          "red_tinted_reference_like": 32,
+          "gray_background_like": 0,
+          "other_opaque": 27
+        },
+        "gpuActualColorBucketsOnGpuGt32": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 2,
+          "red_tinted_reference_like": 0,
+          "gray_background_like": 0,
+          "other_opaque": 9
+        },
+        "cpuMinusReferenceOnGt32": {
+          "meanSignedRgba": [
+            41.186,
+            137.932,
+            155.305,
+            0.0
+          ],
+          "minSignedRgba": [
+            13,
+            36,
+            38,
+            0
+          ],
+          "maxSignedRgba": [
+            52,
+            190,
+            224,
+            0
+          ],
+          "alphaGreaterThanThirtyTwoPixels": 0
+        },
+        "gpuMinusReferenceOnGt32": {
+          "meanSignedRgba": [
+            12.182,
+            35.818,
+            38.727,
+            0.0
+          ],
+          "minSignedRgba": [
+            11,
+            31,
+            33,
+            0
+          ],
+          "maxSignedRgba": [
+            14,
+            39,
+            41,
+            0
+          ],
+          "alphaGreaterThanThirtyTwoPixels": 0
+        }
+      }
+    },
+    {
+      "name": "difference_oval_inner_boundary_max_cpu_reference_delta_window",
+      "subzone": "difference_oval_inner_boundary",
+      "bounds": {
+        "left": 257,
+        "top": 12,
+        "right": 268,
+        "bottom": 23
+      },
+      "maskPixels": 67,
+      "anchorSample": {
+        "x": 262,
+        "y": 17,
+        "subzone": "difference_oval_inner_boundary",
+        "referenceRgba": [
+          202,
+          59,
+          18,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          59,
+          19,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          196,
+          237,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          0,
+          0,
+          1,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -53,
+          -196,
+          -236,
+          0
+        ],
+        "cpuReferenceMaxChannelDelta": 237,
+        "estimatedDifferenceClipCoverage": 255,
+        "estimatedDrawOvalCoverage": 255,
+        "estimatedDifferenceClipCoverageBucket": "full",
+        "estimatedDrawOvalCoverageBucket": "full"
+      },
+      "metrics": {
+        "pixels": 67,
+        "cpuReferenceGreaterThanThirtyTwoPixels": 18,
+        "gpuReferenceGreaterThanThirtyTwoPixels": 0,
+        "cpuReferenceMaxChannelDelta": 237,
+        "gpuReferenceMaxChannelDelta": 19,
+        "estimatedDifferenceClipCoverageOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 10,
+            "full": 8
+          },
+          "min": 32,
+          "max": 255,
+          "mean": 189.777778
+        },
+        "estimatedDrawOvalCoverageOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 18
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "cpuActualColorBucketsOnGt32": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 14,
+          "red_tinted_reference_like": 0,
+          "gray_background_like": 0,
+          "other_opaque": 4
+        },
+        "referenceColorBucketsOnGt32": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 0,
+          "red_tinted_reference_like": 12,
+          "gray_background_like": 0,
+          "other_opaque": 6
+        },
+        "gpuActualColorBucketsOnGpuGt32": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 0,
+          "red_tinted_reference_like": 0,
+          "gray_background_like": 0,
+          "other_opaque": 0
+        },
+        "cpuMinusReferenceOnGt32": {
+          "meanSignedRgba": [
+            40.167,
+            138.667,
+            161.222,
+            0.0
+          ],
+          "minSignedRgba": [
+            14,
+            39,
+            41,
+            0
+          ],
+          "maxSignedRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "alphaGreaterThanThirtyTwoPixels": 0
+        },
+        "gpuMinusReferenceOnGt32": {
+          "meanSignedRgba": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "minSignedRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "maxSignedRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "alphaGreaterThanThirtyTwoPixels": 0
+        }
+      }
+    },
+    {
+      "name": "halo_interior_max_cpu_reference_delta_window",
+      "subzone": "halo_interior",
+      "bounds": {
+        "left": 221,
+        "top": 16,
+        "right": 232,
+        "bottom": 27
+      },
+      "maskPixels": 22,
+      "anchorSample": {
+        "x": 226,
+        "y": 21,
+        "subzone": "halo_interior",
+        "referenceRgba": [
+          202,
+          60,
+          20,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          59,
+          19,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          195,
+          235,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          0,
+          -1,
+          -1,
+          0
+        ],
+        "gpuMinusCpuSignedRgba": [
+          -53,
+          -196,
+          -236,
+          0
+        ],
+        "cpuReferenceMaxChannelDelta": 235,
+        "estimatedDifferenceClipCoverage": 255,
+        "estimatedDrawOvalCoverage": 255,
+        "estimatedDifferenceClipCoverageBucket": "full",
+        "estimatedDrawOvalCoverageBucket": "full"
+      },
+      "metrics": {
+        "pixels": 22,
+        "cpuReferenceGreaterThanThirtyTwoPixels": 12,
+        "gpuReferenceGreaterThanThirtyTwoPixels": 0,
+        "cpuReferenceMaxChannelDelta": 235,
+        "gpuReferenceMaxChannelDelta": 11,
+        "estimatedDifferenceClipCoverageOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 12
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "estimatedDrawOvalCoverageOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 12
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "cpuActualColorBucketsOnGt32": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 5,
+          "red_tinted_reference_like": 0,
+          "gray_background_like": 0,
+          "other_opaque": 7
+        },
+        "referenceColorBucketsOnGt32": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 0,
+          "red_tinted_reference_like": 12,
+          "gray_background_like": 0,
+          "other_opaque": 0
+        },
+        "gpuActualColorBucketsOnGpuGt32": {
+          "transparent": 0,
+          "black_or_clear_rgb": 0,
+          "white_or_layer_background": 0,
+          "red_tinted_reference_like": 0,
+          "gray_background_like": 0,
+          "other_opaque": 0
+        },
+        "cpuMinusReferenceOnGt32": {
+          "meanSignedRgba": [
+            41.583,
+            152.583,
+            182.5,
+            0.0
+          ],
+          "minSignedRgba": [
+            22,
+            82,
+            96,
+            0
+          ],
+          "maxSignedRgba": [
+            53,
+            195,
+            235,
+            0
+          ],
+          "alphaGreaterThanThirtyTwoPixels": 0
+        },
+        "gpuMinusReferenceOnGt32": {
+          "meanSignedRgba": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "minSignedRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "maxSignedRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "alphaGreaterThanThirtyTwoPixels": 0
+        }
+      }
+    }
+  ],
+  "combinedBoundaryFixture": {
+    "maskPixels": 148,
+    "metrics": {
+      "pixels": 148,
+      "cpuReferenceGreaterThanThirtyTwoPixels": 89,
+      "gpuReferenceGreaterThanThirtyTwoPixels": 11,
+      "cpuReferenceMaxChannelDelta": 237,
+      "gpuReferenceMaxChannelDelta": 41,
+      "estimatedDifferenceClipCoverageOnCpuReferenceGt32": {
+        "buckets": {
+          "zero": 0,
+          "partial": 10,
+          "full": 79
+        },
+        "min": 32,
+        "max": 255,
+        "mean": 241.808989
+      },
+      "estimatedDrawOvalCoverageOnCpuReferenceGt32": {
+        "buckets": {
+          "zero": 17,
+          "partial": 8,
+          "full": 64
+        },
+        "min": 0,
+        "max": 255,
+        "mean": 196.224719
+      },
+      "cpuActualColorBucketsOnGt32": {
+        "transparent": 0,
+        "black_or_clear_rgb": 0,
+        "white_or_layer_background": 78,
+        "red_tinted_reference_like": 0,
+        "gray_background_like": 0,
+        "other_opaque": 11
+      },
+      "referenceColorBucketsOnGt32": {
+        "transparent": 0,
+        "black_or_clear_rgb": 0,
+        "white_or_layer_background": 0,
+        "red_tinted_reference_like": 56,
+        "gray_background_like": 0,
+        "other_opaque": 33
+      },
+      "gpuActualColorBucketsOnGpuGt32": {
+        "transparent": 0,
+        "black_or_clear_rgb": 0,
+        "white_or_layer_background": 2,
+        "red_tinted_reference_like": 0,
+        "gray_background_like": 0,
+        "other_opaque": 9
+      },
+      "cpuMinusReferenceOnGt32": {
+        "meanSignedRgba": [
+          41.034,
+          140.056,
+          160.169,
+          0.0
+        ],
+        "minSignedRgba": [
+          13,
+          36,
+          38,
+          0
+        ],
+        "maxSignedRgba": [
+          53,
+          196,
+          237,
+          0
+        ],
+        "alphaGreaterThanThirtyTwoPixels": 0
+      },
+      "gpuMinusReferenceOnGt32": {
+        "meanSignedRgba": [
+          12.182,
+          35.818,
+          38.727,
+          0.0
+        ],
+        "minSignedRgba": [
+          11,
+          31,
+          33,
+          0
+        ],
+        "maxSignedRgba": [
+          14,
+          39,
+          41,
+          0
+        ],
+        "alphaGreaterThanThirtyTwoPixels": 0
+      }
+    }
+  },
+  "alphaRgbRelation": {
+    "cpuReferenceAlphaGreaterThanThirtyTwoPixels": 0,
+    "cpuActualWhiteLayerPixels": 78,
+    "referenceRedTintPixels": 56,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 11,
+    "interpretation": "Le residu porte sur la charge RGB visible avec alpha opaque: les pixels CPU cibles sont majoritairement blancs/fond-layer alors que la reference reste rouge teintee; l'alpha ne differe jamais de plus de 32. Comme la couverture finale `difference` estimee est non nulle pour chaque pixel cible, une correction limitee a `clipCoverage` ou au composite fond/layer serait non causale."
+  },
+  "fullSceneM60": {
+    "cpuSimilarity": 97.31,
+    "cpuMatchingPixels": 908439,
+    "cpuMaxChannelDelta": 237,
+    "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
+    "gpuSimilarity": 98.48,
+    "gpuMatchingPixels": 919363,
+    "gpuMaxChannelDelta": 57,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 2869
+  },
+  "nextAction": "INSTRUMENT_CPU_MASK_FILTER_AND_SKAA_CLIP_COVERAGE_EDGE_TRACE",
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuRendererChanged": false,
+    "gpuRendererChanged": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
