@@ -23,6 +23,7 @@ import org.skia.foundation.SkPathFillType
 import org.skia.foundation.SkShader
 import org.skia.foundation.SkStroker
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.asBlendModeFilter
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
@@ -1526,8 +1527,16 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         // For shader paths, the per-pixel colour comes from the shader
         // (already in device working space) ; `effectiveColor` only
         // carries the paint's alpha modulator for those.
+        val colorFilter = paint.colorFilter
+        val filterMaskPayloadAfterMask = colorFilter
+            ?.asBlendModeFilter()
+            ?.mode == SkBlendMode.kSrcIn
         val effectiveColor = if (shader == null) {
-            transformPaintColor(applyColorFilter(paint.colorFilter, paint.color))
+            if (colorFilter == null) {
+                transformPaintColor(paint.color)
+            } else {
+                transformPaintColor(applyColorFilter(paint.colorFilter, paint.color))
+            }
         } else {
             paint.color
         }
@@ -1605,8 +1614,8 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             blendMode = SkBlendMode.kSrc
             this.maskFilter = null
             this.shader = null
-            colorFilter = null
-            pathEffect = null
+            this.colorFilter = null
+            this.pathEffect = null
         }
         maskDevice.drawPath(path, maskCtm, maskClip, whitePaint)
 
@@ -1657,9 +1666,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                         for (x in compositeX0 until compositeX1) {
                             val devX = ml + x
                             val maskA = blurred[y * maskW + x].toInt() and 0xFF
-                            val effA = (paintA * maskA + 127) / 255
-                            if (effA == 0 && !mustBlendZero) continue
-                            dispatchBlend(devX, devY, (effA shl 24) or rgb, mode, blender)
+                            if (!filterMaskPayloadAfterMask) {
+                                val effA = (paintA * maskA + 127) / 255
+                                if (effA == 0 && !mustBlendZero) continue
+                                dispatchBlend(devX, devY, (effA shl 24) or rgb, mode, blender)
+                            } else {
+                                val baseA = SkColorGetA(paint.color)
+                                val maskedA = (baseA * maskA + 127) / 255
+                                if (maskedA == 0 && !mustBlendZero) continue
+                                val src = transformPaintColor(
+                                    applyColorFilter(colorFilter, (maskedA shl 24) or (paint.color and 0x00FFFFFF)),
+                                )
+                                dispatchBlend(devX, devY, src, mode, blender)
+                            }
                         }
                     }
                 }
