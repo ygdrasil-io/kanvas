@@ -1,12 +1,17 @@
 package org.skia.gpu.webgpu
 
+import org.graphiks.math.SkRect
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
+import org.skia.core.SkCanvas
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorType
+import org.skia.foundation.SkImage
+import org.skia.foundation.SkSamplingOptions
 import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.testing.TestUtils
 import org.skia.tests.SimpleOffsetImageFilterGM
@@ -338,6 +343,75 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-255 raw color sentinels capture uniform and texel input boundary`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val gm = SimpleOffsetImageFilterGM()
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "original-888/${gm.name()}.png missing")
+
+        val oldSentinels = System.getProperty(FOR255_RAW_SENTINELS_PROPERTY)
+        try {
+            System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, "true")
+            context!!.use { ctx ->
+                val simpleOffset = renderSimpleOffsetWithRawColorSentinels(ctx, gm)
+                val bitmapTexel = renderBitmapUploadRawColorSentinel(ctx)
+                val for254 = buildFor254SourceTexelRoundingAuditProbe(reference!!, simpleOffset.bitmap)
+                val probe = buildFor255RawColorSentinelProbe(
+                    sourceUniformSnapshot = simpleOffset.sentinels,
+                    bitmapUploadSnapshot = bitmapTexel.sentinels,
+                    for254 = for254,
+                )
+                assertEquals(
+                    FOR255_RAW_SENTINELS_PROPERTY,
+                    probe.propertyName,
+                    "FOR-255: opt-in property name changed",
+                )
+                assertEquals(
+                    false,
+                    probe.defaultEnabled,
+                    "FOR-255: raw sentinels must stay disabled by default",
+                )
+                assertEquals(
+                    intArrayOf(255, 0, 0, 102).toList(),
+                    probe.legacySourceUniform.rawWriteObservedRgba8.toList(),
+                    "FOR-255: legacy source-color uniform raw bytes changed",
+                )
+                assertEquals(
+                    listOf("3f800000", "00000000", "00000000", "3ecccccd"),
+                    probe.legacySourceUniform.rawUniformWordHex,
+                    "FOR-255: legacy source-color uniform raw float words changed",
+                )
+                assertEquals(
+                    intArrayOf(149, 193, 207, 255).toList(),
+                    probe.bitmapTexel.rawUploadObservedRgba8.toList(),
+                    "FOR-255: raw uploaded RGBA8 texel bytes changed",
+                )
+                assertEquals(
+                    "notCaptured",
+                    probe.shaderObserved.status,
+                    "FOR-255: shader-observed sentinel unexpectedly changed class",
+                )
+                assertEquals(
+                    "KEEP_DIAGNOSTIC",
+                    probe.supportDecision,
+                    "FOR-255: raw sentinels do not yet prove a bounded correction",
+                )
+                if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                    writeFor255RawColorSentinelAuditJson(probe)
+                }
+            }
+        } finally {
+            if (oldSentinels == null) {
+                System.clearProperty(FOR255_RAW_SENTINELS_PROPERTY)
+            } else {
+                System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, oldSentinels)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -345,6 +419,118 @@ class SimpleOffsetImageFilterWebGpuTest {
             (pixel ushr 8) and 0xFF,
             pixel and 0xFF,
             (pixel ushr 24) and 0xFF,
+        )
+    }
+
+    private fun renderSimpleOffsetWithRawColorSentinels(
+        context: WebGpuContext,
+        gm: SimpleOffsetImageFilterGM,
+    ): RawSentinelRenderResult {
+        val size = gm.size()
+        SkWebGpuDevice(
+            context,
+            size.width,
+            size.height,
+            applyColorspaceTransform = true,
+        ).use { device ->
+            device.setBackground(gm.bgColor())
+            gm.draw(SkCanvas(device))
+            val rgba = device.flush()
+            return RawSentinelRenderResult(
+                bitmap = rgbaBytesToBitmap(rgba, size.width, size.height),
+                sentinels = device.rawColorSentinelSnapshot(),
+            )
+        }
+    }
+
+    private fun renderBitmapUploadRawColorSentinel(context: WebGpuContext): RawUploadSentinelRenderResult {
+        val image = SkImage(
+            width = 1,
+            height = 1,
+            pixels = intArrayOf((0xFF shl 24) or (149 shl 16) or (193 shl 8) or 207),
+        )
+        SkWebGpuDevice(context, width = 1, height = 1).use { device ->
+            device.setBackground(0xFFFFFFFF.toInt())
+            SkCanvas(device).drawImageRect(
+                image,
+                SkRect.MakeWH(1f, 1f),
+                SkRect.MakeXYWH(0f, 0f, 1f, 1f),
+                SkSamplingOptions.nearest(),
+            )
+            val rgba = device.flush()
+            return RawUploadSentinelRenderResult(
+                outputRgba = intArrayOf(
+                    rgba[0].toInt() and 0xFF,
+                    rgba[1].toInt() and 0xFF,
+                    rgba[2].toInt() and 0xFF,
+                    rgba[3].toInt() and 0xFF,
+                ),
+                sentinels = device.rawColorSentinelSnapshot(),
+            )
+        }
+    }
+
+    private fun rgbaBytesToBitmap(rgba: ByteArray, w: Int, h: Int): SkBitmap {
+        require(rgba.size == w * h * 4) {
+            "RGBA buffer size mismatch: expected ${w * h * 4} bytes for $w x $h, got ${rgba.size}"
+        }
+        val bitmap = SkBitmap(w, h, colorType = SkColorType.kRGBA_8888)
+        for (i in 0 until w * h) {
+            val base = i * 4
+            val r = rgba[base].toInt() and 0xFF
+            val g = rgba[base + 1].toInt() and 0xFF
+            val b = rgba[base + 2].toInt() and 0xFF
+            val a = rgba[base + 3].toInt() and 0xFF
+            bitmap.pixels8888[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        return bitmap
+    }
+
+    private fun buildFor255RawColorSentinelProbe(
+        sourceUniformSnapshot: SkWebGpuDevice.RawColorSentinelSnapshot,
+        bitmapUploadSnapshot: SkWebGpuDevice.RawColorSentinelSnapshot,
+        for254: For254SourceTexelRoundingAuditProbe,
+    ): For255RawColorSentinelProbe {
+        val sourceCase = for254.cases.single { it.id == "legacy-source-color-uniform.simple-offset-row1-col0" }
+        val bitmapCase = for254.cases.single { it.id == "bitmap-texel-upload-sample.bitmap-rect-nearest" }
+        val sourceUniformWrite = sourceUniformSnapshot.rectUniformColorWrites.firstOrNull { write ->
+            write.scissor.contentEquals(intArrayOf(40, 40, 40, 40)) &&
+                write.sourceRgba8.contentEquals(intArrayOf(255, 0, 0, 102))
+        } ?: error("FOR-255 missing raw source-color uniform sentinel for SimpleOffset row1-col0")
+        val bitmapUpload = bitmapUploadSnapshot.rgba8TextureUploads.firstOrNull { upload ->
+            upload.texelSamples.any { sample -> sample.rgba.contentEquals(intArrayOf(149, 193, 207, 255)) }
+        } ?: error("FOR-255 missing raw uploaded RGBA8 texel sentinel")
+        val bitmapTexel = bitmapUpload.texelSamples.first { sample ->
+            sample.rgba.contentEquals(intArrayOf(149, 193, 207, 255))
+        }
+        return For255RawColorSentinelProbe(
+            propertyName = FOR255_RAW_SENTINELS_PROPERTY,
+            defaultEnabled = false,
+            runtimeSnapshotsEnabled = sourceUniformSnapshot.enabled && bitmapUploadSnapshot.enabled,
+            legacySourceUniform = For255UniformBoundary(
+                id = sourceCase.id,
+                hostObservedRgba8 = sourceCase.inputObservation.packedRgba,
+                hostObservedNormalizedRgba = sourceCase.inputObservation.normalizedRgba,
+                rawWriteObservedRgba8 = sourceUniformWrite.sourceRgba8,
+                rawUniformWordBits = sourceUniformWrite.rawColorWordBits,
+                rawUniformWordHex = sourceUniformWrite.rawColorWordHex,
+                scissor = sourceUniformWrite.scissor,
+                output = sourceCase.representativeOutput,
+                verdict = "raw uniform write matches host-normalized legacy source color; the 1-byte RGB tail remains after uniform consumption/blend/reference comparison",
+            ),
+            bitmapTexel = For255BitmapBoundary(
+                id = bitmapCase.id,
+                hostObservedRgba8 = bitmapCase.inputObservation.packedRgba,
+                rawUploadObservedRgba8 = bitmapTexel.rgba,
+                uploadSize = intArrayOf(bitmapUpload.width, bitmapUpload.height),
+                uploadTexelXy = intArrayOf(bitmapTexel.x, bitmapTexel.y),
+                output = bitmapCase.representativeOutput,
+                verdict = "raw RGBA8 upload bytes match the representative bitmap texel; the 1-byte RGB tail remains after texture normalization/sample/reference comparison",
+            ),
+            shaderObserved = For255ShaderObservedBoundary(
+                status = "notCaptured",
+                reason = "Capturing pre-blend shader values would require a diagnostic WGSL/storage-buffer or alternate render target path. That would change pipeline layout/shader code for this ticket; FOR-255 keeps normal rendering unchanged and records only already-computed host/write/upload sentinels.",
+            ),
         )
     }
 
@@ -1516,6 +1702,42 @@ class SimpleOffsetImageFilterWebGpuTest {
         )
     }
 
+    private fun writeFor255RawColorSentinelAuditJson(probe: For255RawColorSentinelProbe) {
+        val contents = """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "mixed skia-upstream and artifact oracle PNGs",
+              "linear": "FOR-255",
+              "probe": "raw-color-sentinel-boundary-audit",
+              "deltaDefinition": "signed channel delta is GPU minus reference",
+              "propertyName": "${probe.propertyName}",
+              "defaultEnabled": ${probe.defaultEnabled},
+              "runtimeSnapshotsEnabled": ${probe.runtimeSnapshotsEnabled},
+              "observedBoundaries": {
+                "hostObserved": true,
+                "uploadWriteObserved": true,
+                "shaderObserved": "${probe.shaderObserved.status}",
+                "outputReferenceGpuObserved": true
+              },
+              "legacySourceUniform": ${probe.legacySourceUniform.toJson(indent = "              ").trimStart()},
+              "bitmapTexelUpload": ${probe.bitmapTexel.toJson(indent = "              ").trimStart()},
+              "shaderObserved": ${probe.shaderObserved.toJson(indent = "              ").trimStart()},
+              "interpretation": "The raw legacy source-color uniform words match the host-normalized RGBA input and the raw bitmap upload bytes match the representative RGBA8 texel. The remaining RGB-only 1-byte tail is therefore downstream of host packing/upload, or in reference/output comparison, but FOR-255 does not capture shader-observed pre-blend values without changing shader/pipeline layout.",
+              "observationMethod": "opt-in SkWebGpuDevice raw sentinels enabled only by kanvas.webgpu.rawColorSentinels; records already-computed uniform floats before queue.writeBuffer and RGBA8 bytes before queue.writeTexture; normal render path, shaders, thresholds, fallback policy and CPU/readback behavior are unchanged",
+              "supportDecision": "${probe.supportDecision}",
+              "correctionApplied": false,
+              "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+            }
+            """.trimIndent() + "\n"
+        listOf(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/raw-color-sentinel-audit-for255",
+            "reports/wgsl-pipeline/scenes/artifacts/raw-color-sentinel-audit-for255",
+        ).forEach { path ->
+            val dir = repoFile(path).apply { mkdirs() }
+            File(dir, "raw-color-sentinel-audit-for255.json").writeText(contents)
+        }
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -1643,6 +1865,44 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
         """.trimIndent().prependIndent(indent)
 
+    private fun For255UniformBoundary.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "hostObservedRgba8": ${jsonArray(hostObservedRgba8)},
+          "hostObservedNormalizedRgba": ${jsonArray(hostObservedNormalizedRgba)},
+          "rawWriteObservedRgba8": ${jsonArray(rawWriteObservedRgba8)},
+          "rawUniformWordBits": ${jsonArray(rawUniformWordBits)},
+          "rawUniformWordHex": [
+        ${rawUniformWordHex.joinToString(",\n") { "$indent    \"$it\"" }}
+          ],
+          "scissor": ${jsonArray(scissor)},
+          "outputReferenceGpu": ${output.toJson(indent = "$indent  ").trimStart()},
+          "verdict": "$verdict"
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For255BitmapBoundary.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "hostObservedRgba8": ${jsonArray(hostObservedRgba8)},
+          "rawUploadObservedRgba8": ${jsonArray(rawUploadObservedRgba8)},
+          "uploadSize": ${jsonArray(uploadSize)},
+          "uploadTexelXy": ${jsonArray(uploadTexelXy)},
+          "outputReferenceGpu": ${output.toJson(indent = "$indent  ").trimStart()},
+          "verdict": "$verdict"
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For255ShaderObservedBoundary.toJson(indent: String): String =
+        """
+        {
+          "status": "$status",
+          "reason": "$reason"
+        }
+        """.trimIndent().prependIndent(indent)
+
     private fun signedDeltaHistogramToJson(histogram: List<Map<Int, Int>>, indent: String): String {
         val channels = listOf("r", "g", "b", "a")
         return channels.indices.joinToString(
@@ -1721,6 +1981,7 @@ class SimpleOffsetImageFilterWebGpuTest {
         const val OUTSIDE_CELLS_ID: String = "outside-simple-offset-cells"
         const val FOR247_PROBE_PROPERTY: String = "kanvas.webgpu.for247.cropOffsetScratchProbe"
         const val FOR248_PROBE_PROPERTY: String = "kanvas.webgpu.for248.finalCropCompositeProbe"
+        const val FOR255_RAW_SENTINELS_PROPERTY: String = "kanvas.webgpu.rawColorSentinels"
         const val WRITE_EVIDENCE_PROPERTY: String = "kanvas.sceneEvidence.write"
         val DOMINANT_FOR251_CELL_IDS: List<String> = listOf(
             "row1-col0-no-filter",
@@ -2038,5 +2299,53 @@ class SimpleOffsetImageFilterWebGpuTest {
             "not ready: generated controls are exact but both legacy uniform and bitmap texel paths still need raw sentinels before a bounded correction"
         val nextInstrumentation: String =
             "add renderer diagnostic sentinels that dump raw uniform buffer color words, uploaded RGBA8 texel bytes, and shader-observed sampled color before blend/store"
+    }
+
+    private data class RawSentinelRenderResult(
+        val bitmap: SkBitmap,
+        val sentinels: SkWebGpuDevice.RawColorSentinelSnapshot,
+    )
+
+    private data class RawUploadSentinelRenderResult(
+        val outputRgba: IntArray,
+        val sentinels: SkWebGpuDevice.RawColorSentinelSnapshot,
+    )
+
+    private data class For255UniformBoundary(
+        val id: String,
+        val hostObservedRgba8: IntArray,
+        val hostObservedNormalizedRgba: FloatArray,
+        val rawWriteObservedRgba8: IntArray,
+        val rawUniformWordBits: IntArray,
+        val rawUniformWordHex: List<String>,
+        val scissor: IntArray,
+        val output: PixelDelta,
+        val verdict: String,
+    )
+
+    private data class For255BitmapBoundary(
+        val id: String,
+        val hostObservedRgba8: IntArray,
+        val rawUploadObservedRgba8: IntArray,
+        val uploadSize: IntArray,
+        val uploadTexelXy: IntArray,
+        val output: PixelDelta,
+        val verdict: String,
+    )
+
+    private data class For255ShaderObservedBoundary(
+        val status: String,
+        val reason: String,
+    )
+
+    private data class For255RawColorSentinelProbe(
+        val propertyName: String,
+        val defaultEnabled: Boolean,
+        val runtimeSnapshotsEnabled: Boolean,
+        val legacySourceUniform: For255UniformBoundary,
+        val bitmapTexel: For255BitmapBoundary,
+        val shaderObserved: For255ShaderObservedBoundary,
+    ) {
+        val supportDecision: String = "KEEP_DIAGNOSTIC"
     }
 }
