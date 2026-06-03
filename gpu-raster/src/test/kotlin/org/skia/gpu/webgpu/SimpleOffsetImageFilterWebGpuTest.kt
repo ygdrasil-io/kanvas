@@ -832,6 +832,121 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-260 intermediate quantization candidate before after audit stays diagnostic`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val simpleOffsetGm = SimpleOffsetImageFilterGM()
+        val simpleOffsetReference = TestUtils.loadReferenceBitmap(simpleOffsetGm.name())
+        assertNotNull(simpleOffsetReference, "original-888/${simpleOffsetGm.name()}.png missing")
+        val bitmapGm = DrawBitmapRectSkbug4734GM()
+        val bitmapReference = readEvidencePng(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/skia.png",
+        )
+
+        val oldRawSentinels = System.getProperty(FOR255_RAW_SENTINELS_PROPERTY)
+        val oldOutputBoundary = System.getProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY)
+        val oldShaderProbe = System.getProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY)
+        try {
+            System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, "true")
+            System.setProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY, "true")
+            System.setProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY, "true")
+            context!!.use { ctx ->
+                val simpleOffset = renderSimpleOffsetWithRawColorSentinels(ctx, simpleOffsetGm)
+                val bitmapUpload = renderBitmapUploadRawColorSentinel(ctx)
+                val bitmapScene = renderDrawBitmapRectSkbug4734WithOutputBoundary(ctx, bitmapGm)
+                val for254 = buildFor254SourceTexelRoundingAuditProbe(
+                    simpleOffsetReference!!,
+                    simpleOffset.bitmap,
+                )
+                val for255 = buildFor255RawColorSentinelProbe(
+                    sourceUniformSnapshot = simpleOffset.sentinels,
+                    bitmapUploadSnapshot = bitmapUpload.sentinels,
+                    for254 = for254,
+                )
+                val for256 = buildFor256ShaderStoreReferenceBoundaryProbe(
+                    for255 = for255,
+                    simpleOffsetOutput = simpleOffset.outputReadbackBoundary,
+                    bitmapOutput = bitmapScene.outputReadbackBoundary,
+                )
+                val for257 = buildFor257ReferenceByteExpectationAuditProbe(
+                    for255 = for255,
+                    for256 = for256,
+                    simpleOffsetReference = simpleOffsetReference,
+                    bitmapReference = bitmapReference,
+                )
+                val for258 = buildFor258ShaderSideProbe(
+                    for255 = for255,
+                    for256 = for256,
+                    for257 = for257,
+                    simpleOffsetShaderSide = simpleOffset.for258ShaderSideProbe,
+                    bitmapShaderSide = bitmapScene.for258ShaderSideProbe,
+                )
+                val for259 = buildFor259IntermediateStorePresentAuditProbe(for258)
+                val probe = buildFor260IntermediateQuantizationCandidateAuditProbe(for259)
+
+                assertEquals(
+                    "KEEP_DIAGNOSTIC",
+                    probe.supportDecision,
+                    "FOR-260: candidate policy must stay diagnostic until whole-scene intermediate evidence exists",
+                )
+                assertEquals(
+                    false,
+                    probe.correctionApplied,
+                    "FOR-260: no normal-path intermediate policy correction may be applied",
+                )
+                assertEquals(
+                    5,
+                    probe.caseCount,
+                    "FOR-260: audit must cover two FOR-259 residuals, two exact controls, and one precision fixture",
+                )
+                assertEquals(
+                    setOf(
+                        "legacy-source-color-uniform.simple-offset-row1-col0",
+                        "bitmap-texel-upload-sample.bitmap-rect-nearest",
+                    ),
+                    probe.cases.filter { it.kind == "for259-residual-representative-sample" }.map { it.id }.toSet(),
+                    "FOR-260: FOR-259 residual representatives must be preserved",
+                )
+                assertTrue(
+                    probe.cases.filter { it.kind == "exact-or-near-exact-whole-scene-control" }
+                        .all { it.current.exactSimilarity == 100.0 && it.candidate.exactSimilarity == 100.0 },
+                    "FOR-260: exact controls must not regress under the bounded diagnostic proxy",
+                )
+                assertTrue(
+                    probe.cases.single { it.kind == "precision-intermediate-sensitive-fixture" }
+                        .verdict.contains("does not enable targetColorSpaceBlend"),
+                    "FOR-260: precision fixture must keep targetColorSpaceBlend scoped out",
+                )
+                assertEquals(
+                    "missing_whole_scene_intermediate_rgba8_candidate_evidence_for_exact_and_precision_sensitive_routes",
+                    probe.missingCondition,
+                    "FOR-260: missing condition must name why no safe correction is proven",
+                )
+                if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                    writeFor260IntermediateQuantizationCandidateAuditJson(probe)
+                }
+            }
+        } finally {
+            if (oldRawSentinels == null) {
+                System.clearProperty(FOR255_RAW_SENTINELS_PROPERTY)
+            } else {
+                System.setProperty(FOR255_RAW_SENTINELS_PROPERTY, oldRawSentinels)
+            }
+            if (oldOutputBoundary == null) {
+                System.clearProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY)
+            } else {
+                System.setProperty(FOR256_OUTPUT_READBACK_BOUNDARY_PROPERTY, oldOutputBoundary)
+            }
+            if (oldShaderProbe == null) {
+                System.clearProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY)
+            } else {
+                System.setProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY, oldShaderProbe)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -1286,6 +1401,223 @@ class SimpleOffsetImageFilterWebGpuTest {
             verdict = "current RGBA16Float intermediate textureLoad plus present reconstruction matches GPU/readback; a bounded test-side RGBA8Unorm store/load simulation before the same present reconstruction matches the reference/oracle bytes, so the remaining boundary is the intermediate store-to-present byte-quantization policy rather than host packing, upload, final readback, or reference-byte expectation",
         )
     }
+
+    private fun buildFor260IntermediateQuantizationCandidateAuditProbe(
+        for259: For259IntermediateStorePresentAuditProbe,
+    ): For260IntermediateQuantizationCandidateAuditProbe {
+        val cases = listOf(
+            buildFor260ResidualCase(for259.legacySourceUniform),
+            buildFor260ResidualCase(for259.bitmapTexel),
+            buildFor260WholeSceneControl(
+                id = "generated-solid-control.solid-rect",
+                sceneId = "solid-rect",
+                route = "webgpu.coverage.analytic-rect",
+                statsPath = "reports/wgsl-pipeline/scenes/artifacts/solid-rect/stats.json",
+                routePath = "reports/wgsl-pipeline/scenes/artifacts/solid-rect/route-gpu.json",
+                referencePath = "reports/wgsl-pipeline/scenes/artifacts/solid-rect/skia.png",
+                gpuPath = "reports/wgsl-pipeline/scenes/artifacts/solid-rect/gpu.png",
+            ),
+            buildFor260WholeSceneControl(
+                id = "generated-gradient-control.linear-gradient-rect",
+                sceneId = "linear-gradient-rect",
+                route = "webgpu.generated.linear-gradient.rect",
+                statsPath = "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/stats.json",
+                routePath = "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/route-gpu.json",
+                referencePath = "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/skia.png",
+                gpuPath = "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/gpu.png",
+            ),
+            buildFor260PrecisionFixture(),
+        )
+        return For260IntermediateQuantizationCandidateAuditProbe(
+            reusedRuntimeProperties = for259.reusedRuntimeProperties,
+            diagnosticShader = for259.diagnosticShader,
+            diagnosticPipelineLayout = for259.diagnosticPipelineLayout,
+            cases = cases,
+        )
+    }
+
+    private fun buildFor260ResidualCase(
+        for259Case: For259IntermediateStorePresentCase,
+    ): For260EvaluationCase {
+        val current = For260PolicyStats(
+            policy = "current-rgba16float-intermediate",
+            evaluationKind = "representative-sample-present-reconstruction",
+            totalPixels = 1,
+            matchingPixels = if (for259Case.currentRgba16FloatPresentMatchesReference) 1 else 0,
+            exactSimilarity = if (for259Case.currentRgba16FloatPresentMatchesReference) 100.0 else 0.0,
+            maxDelta = for259Case.outputSignedDeltaRgba.maxOf { kotlin.math.abs(it) },
+            referenceRgba = for259Case.outputReferenceRgba,
+            observedRgba = for259Case.currentRgba16FloatPresentReconstructedRgba,
+            signedDeltaRgba = for259Case.outputSignedDeltaRgba,
+            intermediateObserved = true,
+            intermediateFormat = "RGBA16Float",
+            routeDiagnostics = for259Case.route,
+            routeDiagnosticsPath = null,
+            routeDiagnosticsRationale = "FOR-259 representative shader-side sample from the normal RGBA16Float intermediate texture.",
+        )
+        val candidateSignedDelta = signedDelta(
+            reference = for259Case.outputReferenceRgba,
+            actual = for259Case.rgba8StoreBeforePresentReconstructedRgba,
+        )
+        val candidateMatchesReference =
+            for259Case.rgba8StoreBeforePresentReconstructedRgba.contentEquals(for259Case.outputReferenceRgba)
+        val candidate = For260PolicyStats(
+            policy = "diagnostic-rgba8unorm-store-load-before-present",
+            evaluationKind = "representative-sample-rgba8-store-load-simulation",
+            totalPixels = 1,
+            matchingPixels = if (candidateMatchesReference) 1 else 0,
+            exactSimilarity = if (candidateMatchesReference) 100.0 else 0.0,
+            maxDelta = candidateSignedDelta.maxOf { kotlin.math.abs(it) },
+            referenceRgba = for259Case.outputReferenceRgba,
+            observedRgba = for259Case.rgba8StoreBeforePresentReconstructedRgba,
+            signedDeltaRgba = candidateSignedDelta,
+            intermediateObserved = true,
+            intermediateFormat = "RGBA8Unorm diagnostic simulation",
+            routeDiagnostics = for259Case.route,
+            routeDiagnosticsPath = null,
+            routeDiagnosticsRationale = "Bounded test-side RGBA8Unorm store/load simulation before the same present reconstruction used by FOR-259.",
+        )
+        return For260EvaluationCase(
+            id = for259Case.id,
+            sceneId = if (for259Case.id.startsWith("legacy-source-color-uniform")) {
+                "simple-offsetimagefilter"
+            } else {
+                "bitmap-rect-nearest"
+            },
+            kind = "for259-residual-representative-sample",
+            route = for259Case.route,
+            current = current,
+            candidate = candidate,
+            regression = candidate.exactSimilarity < current.exactSimilarity,
+            correctionScope = "representative residual sample only",
+            verdict = "candidate improves the FOR-259 representative sample, but this is not a safe correction because the audit has not observed whole-scene intermediate RGBA8 candidate behavior for exact or precision-sensitive routes",
+        )
+    }
+
+    private fun buildFor260WholeSceneControl(
+        id: String,
+        sceneId: String,
+        route: String,
+        statsPath: String,
+        routePath: String,
+        referencePath: String,
+        gpuPath: String,
+    ): For260EvaluationCase {
+        val reference = readEvidencePng(referencePath)
+        val gpu = readEvidencePng(gpuPath)
+        val stats = compareImages(reference, gpu)
+        val current = For260PolicyStats(
+            policy = "current-rgba16float-intermediate",
+            evaluationKind = "whole-scene-artifact-reference-vs-gpu",
+            totalPixels = stats.totalPixels,
+            matchingPixels = stats.matchingPixels,
+            exactSimilarity = stats.exactSimilarity,
+            maxDelta = stats.maxDelta,
+            referenceRgba = stats.representative.reference,
+            observedRgba = stats.representative.gpu,
+            signedDeltaRgba = stats.representative.signedDelta,
+            intermediateObserved = false,
+            intermediateFormat = "RGBA16Float",
+            routeDiagnostics = route,
+            routeDiagnosticsPath = routePath,
+            routeDiagnosticsRationale = "Existing scene route diagnostics are reused; this FOR-260 audit does not add a renderer hook for whole-scene intermediate sampling.",
+        )
+        val candidate = current.copy(
+            policy = "diagnostic-rgba8unorm-store-load-before-present",
+            evaluationKind = "whole-scene-final-byte-idempotence-proxy",
+            intermediateObserved = false,
+            intermediateFormat = "RGBA8Unorm diagnostic proxy",
+            routeDiagnosticsRationale = "Current GPU output is already byte-exact against the reference; final-byte RGBA8 re-quantization is idempotent, but this is only a no-regression proxy, not proof that an intermediate RGBA8 policy is globally safe.",
+        )
+        return For260EvaluationCase(
+            id = id,
+            sceneId = sceneId,
+            kind = "exact-or-near-exact-whole-scene-control",
+            route = route,
+            current = current,
+            candidate = candidate,
+            regression = candidate.exactSimilarity < current.exactSimilarity,
+            correctionScope = "whole-scene no-regression proxy from $statsPath",
+            verdict = "current whole-scene artifact is exact and the diagnostic final-byte proxy does not regress; missing condition remains an observed intermediate candidate render for this route",
+        )
+    }
+
+    private fun buildFor260PrecisionFixture(): For260EvaluationCase {
+        val statsPath = "reports/wgsl-pipeline/scenes/artifacts/m60-target-colorspace-neutral-aa/stats.json"
+        val reference = readEvidencePng("reports/wgsl-pipeline/scenes/artifacts/m60-target-colorspace-neutral-aa/skia.png")
+        val postPresent = readEvidencePng(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-target-colorspace-neutral-aa/gpu-post-present.png",
+        )
+        val targetBlend = readEvidencePng(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-target-colorspace-neutral-aa/gpu-target-blend.png",
+        )
+        val currentPixel = pixelDelta(reference, postPresent, x = 0, y = 0)
+        val targetBlendPixel = pixelDelta(reference, targetBlend, x = 0, y = 0)
+        val current = For260PolicyStats(
+            policy = "current-rgba16float-intermediate",
+            evaluationKind = "single-pixel-precision-fixture-post-present",
+            totalPixels = 1,
+            matchingPixels = if (currentPixel.maxChannelDelta == 0) 1 else 0,
+            exactSimilarity = if (currentPixel.maxChannelDelta == 0) 100.0 else 0.0,
+            maxDelta = currentPixel.maxChannelDelta,
+            referenceRgba = currentPixel.reference,
+            observedRgba = currentPixel.gpu,
+            signedDeltaRgba = currentPixel.signedDelta,
+            intermediateObserved = false,
+            intermediateFormat = "RGBA16Float",
+            routeDiagnostics = "webgpu.present-pass.srgb-to-rec2020-after-blend",
+            routeDiagnosticsPath = statsPath,
+            routeDiagnosticsRationale = "The fixture has stats.json with sourceRoute/targetRoute instead of route-gpu.json.",
+        )
+        val candidate = current.copy(
+            policy = "diagnostic-rgba8unorm-store-load-before-present",
+            evaluationKind = "single-pixel-final-byte-idempotence-proxy",
+            intermediateFormat = "RGBA8Unorm diagnostic proxy",
+            routeDiagnosticsRationale = "Byte quantizing the already-produced post-present sample remains ${jsonArray(currentPixel.gpu)}; the known correction for this fixture is targetColorSpaceBlend, which FOR-260 explicitly does not enable.",
+        )
+        return For260EvaluationCase(
+            id = "precision-fixture.m60-target-colorspace-neutral-aa",
+            sceneId = "m60-target-colorspace-neutral-aa",
+            kind = "precision-intermediate-sensitive-fixture",
+            route = "webgpu.present-pass.srgb-to-rec2020-after-blend",
+            current = current,
+            candidate = candidate,
+            regression = false,
+            correctionScope = "single-pixel precision fixture from $statsPath",
+            verdict = "candidate does not fix the neutral AA precision fixture and does not enable targetColorSpaceBlend; target-blend diagnostic sample is ${jsonArray(targetBlendPixel.gpu)} with maxDelta ${targetBlendPixel.maxChannelDelta}, so intermediate RGBA8 quantization is not a substitute for the target-colorspace blend condition",
+        )
+    }
+
+    private fun compareImages(reference: BufferedImage, gpu: BufferedImage): For260ImageStats {
+        require(reference.width == gpu.width && reference.height == gpu.height) {
+            "FOR-260 requires same-size evidence bitmaps"
+        }
+        var matching = 0
+        var maxDelta = 0
+        var representative: PixelDelta? = null
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                val delta = pixelDelta(reference, gpu, x, y)
+                if (delta.maxChannelDelta == 0) {
+                    matching += 1
+                } else if (representative == null) {
+                    representative = delta
+                }
+                maxDelta = maxOf(maxDelta, delta.maxChannelDelta)
+            }
+        }
+        val total = reference.width * reference.height
+        return For260ImageStats(
+            totalPixels = total,
+            matchingPixels = matching,
+            exactSimilarity = matching * 100.0 / total,
+            maxDelta = maxDelta,
+            representative = representative ?: pixelDelta(reference, gpu, x = 0, y = 0),
+        )
+    }
+
+    private fun signedDelta(reference: IntArray, actual: IntArray): IntArray =
+        IntArray(4) { channel -> actual[channel] - reference[channel] }
 
     private fun requireFor258ShaderSideSample(
         snapshot: SkWebGpuDevice.For258ShaderSideProbeSnapshot,
@@ -2761,6 +3093,68 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    private fun writeFor260IntermediateQuantizationCandidateAuditJson(
+        probe: For260IntermediateQuantizationCandidateAuditProbe,
+    ) {
+        val contents = """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "mixed skia-upstream and artifact oracle PNGs",
+              "linear": "FOR-260",
+              "probe": "intermediate-quantization-candidate-before-after-audit",
+              "deltaDefinition": "signed channel delta is candidate/current output minus reference",
+              "newRendererProperty": "none",
+              "reusedRuntimeProperties": [
+            ${probe.reusedRuntimeProperties.joinToString(",\n") { "                \"$it\"" }}
+              ],
+              "defaultEnabled": false,
+              "runtimeSnapshotsEnabled": true,
+              "normalRenderingChanged": ${probe.normalRenderingChanged},
+              "normalShadersChanged": false,
+              "normalThresholdsChanged": false,
+              "cropPolicyChanged": false,
+              "fallbackPolicyChanged": false,
+              "targetColorSpaceBlendGloballyEnabled": false,
+              "diagnosticShader": "${probe.diagnosticShader}",
+              "diagnosticPipelineLayout": "${probe.diagnosticPipelineLayout}",
+              "currentPolicy": "${probe.currentPolicy}",
+              "boundedDiagnosticCandidate": "${probe.boundedDiagnosticCandidate}",
+              "caseCount": ${probe.caseCount},
+              "observedBoundaries": {
+                "for259ResidualRepresentativeSamples": true,
+                "exactControlWholeSceneArtifacts": true,
+                "precisionFixtureArtifact": true,
+                "wholeSceneIntermediateCandidateObserved": false
+              },
+              "cases": [
+            ${probe.cases.joinToString(",\n") { it.toJson(indent = "                ") }}
+              ],
+              "summary": {
+                "candidateImprovesResidualRepresentatives": ${probe.candidateImprovesResidualRepresentatives},
+                "exactControlsRegressed": ${probe.exactControlsRegressed},
+                "precisionFixtureCorrected": ${probe.precisionFixtureCorrected},
+                "safeCorrectionProven": ${probe.safeCorrectionProven}
+              },
+              "finding": "${probe.finding}",
+              "admissibleCorrection": "${probe.admissibleCorrection}",
+              "missingCondition": "${probe.missingCondition}",
+              "remainingBoundary": "${probe.remainingBoundary}",
+              "interpretation": "FOR-260 compares the current RGBA16Float policy with a bounded diagnostic RGBA8Unorm store/load candidate. The candidate fixes the two FOR-259 representative residual samples, and exact controls remain stable under a final-byte no-regression proxy, but no whole-scene intermediate candidate render exists for exact controls or the precision-sensitive target-colorspace fixture. The candidate therefore remains diagnostic only.",
+              "observationMethod": "test-only audit composed from FOR-259 representative shader-side evidence plus existing whole-scene artifacts and the M60 precision fixture; no new renderer property, no normal shader change, no threshold change, no Crop correction, no fallback-policy change, and no global targetColorSpaceBlend change",
+              "supportDecision": "${probe.supportDecision}",
+              "correctionApplied": ${probe.correctionApplied},
+              "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+            }
+            """.trimIndent() + "\n"
+        listOf(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/intermediate-quantization-candidate-audit-for260",
+            "reports/wgsl-pipeline/scenes/artifacts/intermediate-quantization-candidate-audit-for260",
+        ).forEach { path ->
+            val dir = repoFile(path).apply { mkdirs() }
+            File(dir, "intermediate-quantization-candidate-audit-for260.json").writeText(contents)
+        }
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -3034,6 +3428,41 @@ class SimpleOffsetImageFilterWebGpuTest {
           "referenceOracleRgba": ${jsonArray(referenceOracleRgba)},
           "priorBoundarySummary": "$priorBoundarySummary",
           "verdict": "$verdict"
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For260EvaluationCase.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "sceneId": "$sceneId",
+          "kind": "$kind",
+          "route": "$route",
+          "current": ${current.toJson(indent = "$indent  ").trimStart()},
+          "candidate": ${candidate.toJson(indent = "$indent  ").trimStart()},
+          "regression": $regression,
+          "correctionScope": "$correctionScope",
+          "verdict": "$verdict"
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For260PolicyStats.toJson(indent: String): String =
+        """
+        {
+          "policy": "$policy",
+          "evaluationKind": "$evaluationKind",
+          "totalPixels": $totalPixels,
+          "matchingPixels": $matchingPixels,
+          "exactSimilarity": $exactSimilarity,
+          "maxDelta": $maxDelta,
+          "referenceRgba": ${jsonArray(referenceRgba)},
+          "observedRgba": ${jsonArray(observedRgba)},
+          "signedDeltaRgba": ${jsonArray(signedDeltaRgba)},
+          "intermediateObserved": $intermediateObserved,
+          "intermediateFormat": "$intermediateFormat",
+          "routeDiagnostics": "$routeDiagnostics",
+          "routeDiagnosticsPath": ${routeDiagnosticsPath?.let { "\"$it\"" } ?: "null"},
+          "routeDiagnosticsRationale": "$routeDiagnosticsRationale"
         }
         """.trimIndent().prependIndent(indent)
 
@@ -3655,6 +4084,76 @@ class SimpleOffsetImageFilterWebGpuTest {
             "rgba8_store_before_present_simulation_matches_reference_for_both_cases; current_rgba16float_store_present_matches_gpu_readback"
         val admissibleCorrection: String =
             "none_applied: changing the normal intermediate precision or adding present-time byte quantization would alter global rendering policy and needs broader before/after scene evidence"
+        val remainingBoundary: String =
+            "rgba16float-intermediate-store-to-present-byte-quantization-policy"
+    }
+
+    private data class For260ImageStats(
+        val totalPixels: Int,
+        val matchingPixels: Int,
+        val exactSimilarity: Double,
+        val maxDelta: Int,
+        val representative: PixelDelta,
+    )
+
+    private data class For260PolicyStats(
+        val policy: String,
+        val evaluationKind: String,
+        val totalPixels: Int,
+        val matchingPixels: Int,
+        val exactSimilarity: Double,
+        val maxDelta: Int,
+        val referenceRgba: IntArray,
+        val observedRgba: IntArray,
+        val signedDeltaRgba: IntArray,
+        val intermediateObserved: Boolean,
+        val intermediateFormat: String,
+        val routeDiagnostics: String,
+        val routeDiagnosticsPath: String?,
+        val routeDiagnosticsRationale: String,
+    )
+
+    private data class For260EvaluationCase(
+        val id: String,
+        val sceneId: String,
+        val kind: String,
+        val route: String,
+        val current: For260PolicyStats,
+        val candidate: For260PolicyStats,
+        val regression: Boolean,
+        val correctionScope: String,
+        val verdict: String,
+    )
+
+    private data class For260IntermediateQuantizationCandidateAuditProbe(
+        val reusedRuntimeProperties: List<String>,
+        val diagnosticShader: String,
+        val diagnosticPipelineLayout: String,
+        val cases: List<For260EvaluationCase>,
+    ) {
+        val caseCount: Int = cases.size
+        val currentPolicy: String = "RGBA16Float intermediate store/load before present"
+        val boundedDiagnosticCandidate: String =
+            "test-side RGBA8Unorm store/load or equivalent intermediate quantization before present reconstruction"
+        val supportDecision: String = "KEEP_DIAGNOSTIC"
+        val normalRenderingChanged: Boolean = false
+        val correctionApplied: Boolean = false
+        val candidateImprovesResidualRepresentatives: Boolean = cases
+            .filter { it.kind == "for259-residual-representative-sample" }
+            .all { it.candidate.exactSimilarity > it.current.exactSimilarity }
+        val exactControlsRegressed: Boolean = cases
+            .filter { it.kind == "exact-or-near-exact-whole-scene-control" }
+            .any { it.regression || it.candidate.exactSimilarity < 100.0 }
+        val precisionFixtureCorrected: Boolean = cases
+            .filter { it.kind == "precision-intermediate-sensitive-fixture" }
+            .any { it.candidate.matchingPixels == it.candidate.totalPixels }
+        val safeCorrectionProven: Boolean = false
+        val finding: String =
+            "candidate_improves_for259_representative_samples_but_lacks_whole_scene_intermediate_candidate_evidence"
+        val admissibleCorrection: String =
+            "none_applied: current RGBA16Float policy remains default because exact controls and precision-sensitive routes only have artifact/proxy evidence, not observed whole-scene RGBA8 intermediate candidate renders"
+        val missingCondition: String =
+            "missing_whole_scene_intermediate_rgba8_candidate_evidence_for_exact_and_precision_sensitive_routes"
         val remainingBoundary: String =
             "rgba16float-intermediate-store-to-present-byte-quantization-policy"
     }
