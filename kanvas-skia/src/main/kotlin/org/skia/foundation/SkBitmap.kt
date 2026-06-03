@@ -8,6 +8,7 @@ import org.graphiks.math.SkColorGetG
 import org.graphiks.math.SkColorGetR
 import org.graphiks.math.SkColorSetARGB
 import org.skia.core.SkColorSpaceXformSteps
+import org.skia.core.SkCpuWriteChronologyTrace
 import org.graphiks.math.SkIPoint
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkISize
@@ -152,6 +153,12 @@ public class SkBitmap(
      * `ClipDrawDrawGM`) would drift, capping their similarity scores.
      */
     public fun eraseColor(c: SkColor) {
+        val traceTargets = SkCpuWriteChronologyTrace.bitmapDirectWriteTargets(width, height)
+        val traceBefore = if (traceTargets.isEmpty()) {
+            emptyList()
+        } else {
+            traceTargets.map { target -> getPixel(target.x, target.y) }
+        }
         // Decode the SkColor as non-premul sRGB float `[0, 1]`.
         var r = SkColorGetR(c) / 255f
         var g = SkColorGetG(c) / 255f
@@ -228,6 +235,21 @@ public class SkBitmap(
                 pixelsGray8.fill(li.toByte())
             }
             else -> error("SkBitmap.eraseColor unsupported for colorType=$colorType")
+        }
+        for (i in traceTargets.indices) {
+            val target = traceTargets[i]
+            val after = getPixel(target.x, target.y)
+            SkCpuWriteChronologyTrace.recordBitmapDirectWrite(
+                x = target.x,
+                y = target.y,
+                width = width,
+                height = height,
+                source = "SkBitmap.eraseColor",
+                branch = "SkBitmap.eraseColor.${colorType.name}.fill",
+                valueBefore = traceBefore[i],
+                valueWritten = after,
+                valueReadAfter = after,
+            )
         }
     }
 
@@ -342,6 +364,8 @@ public class SkBitmap(
 
     public fun setPixel(x: Int, y: Int, c: SkColor) {
         if (x !in 0 until width || y !in 0 until height) return
+        val trace = SkCpuWriteChronologyTrace.shouldTraceBitmapDirectWrite(x, y, width, height)
+        val before = if (trace) getPixel(x, y) else 0
         when (colorType) {
             SkColorType.kRGBA_8888 -> pixels8888[y * width + x] = c
             SkColorType.kBGRA_8888 -> pixelsBGRA8888[y * width + x] = c
@@ -381,6 +405,19 @@ public class SkBitmap(
                 pixelsGray8[y * width + x] = l.toByte()
             }
             else -> error("SkBitmap.setPixel unsupported for colorType=$colorType")
+        }
+        if (trace) {
+            SkCpuWriteChronologyTrace.recordBitmapDirectWrite(
+                x = x,
+                y = y,
+                width = width,
+                height = height,
+                source = "SkBitmap.setPixel",
+                branch = "SkBitmap.setPixel.${colorType.name}",
+                valueBefore = before,
+                valueWritten = c,
+                valueReadAfter = getPixel(x, y),
+            )
         }
     }
 
