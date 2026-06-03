@@ -254,6 +254,47 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-253 bitmap source rounding audit isolates residual stage`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val gm = SimpleOffsetImageFilterGM()
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "original-888/${gm.name()}.png missing")
+
+        context!!.use { ctx ->
+            val gpu = WebGpuSink.draw(ctx, gm)
+            val probe = buildFor253BitmapSourceRoundingAuditProbe(reference!!, gpu)
+            assertEquals(
+                3,
+                probe.microCaseCount,
+                "FOR-253: audit must cover source-color, bitmap nearest, and gradient control cases",
+            )
+            assertTrue(
+                probe.appearsBeforeBitmapSampling,
+                "FOR-253: source-color residual must prove the bias exists without bitmap sampling",
+            )
+            assertTrue(
+                probe.appearsDuringBitmapNearestPath,
+                "FOR-253: bitmap-nearest residual must keep reproducing the source/input color tail",
+            )
+            assertEquals(
+                false,
+                probe.onlyFinalPackOrStore,
+                "FOR-253: exact gradient control rules out a global final pack/store-only defect",
+            )
+            assertEquals(
+                "KEEP_DIAGNOSTIC",
+                probe.supportDecision,
+                "FOR-253: no bounded correction is proven by this audit",
+            )
+            if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                writeFor253BitmapSourceRoundingAuditJson(probe)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -427,6 +468,169 @@ class SimpleOffsetImageFilterWebGpuTest {
                 .filter { it.residualPixels > 0 && it.maxChannelDelta == 1 && it.alphaDeltaNonZeroPixels == 0 }
                 .map { it.id },
             samplesWithoutResidual = samples.filter { it.residualPixels == 0 }.map { it.id },
+        )
+    }
+
+    private fun buildFor253BitmapSourceRoundingAuditProbe(
+        simpleOffsetReference: SkBitmap,
+        simpleOffsetGpu: SkBitmap,
+    ): For253BitmapSourceRoundingAuditProbe {
+        val sourceColorCell = SIMPLE_OFFSET_CELLS.first { it.id == "row1-col0-no-filter" }
+        val sourceColor = buildFor253SimpleOffsetCellCase(
+            id = "source-color-constant.simple-offset-row1-col0",
+            sceneId = "simple-offsetimagefilter",
+            label = "source-color constant through SimpleOffset row1 col0",
+            route = "webgpu.canvas.draw-rect.src-over",
+            colorProductionStage = "source-color constant path before any bitmap sampling",
+            stageIsolation = "appears-before-bitmap-sampling",
+            cell = sourceColorCell,
+            reference = simpleOffsetReference,
+            gpu = simpleOffsetGpu,
+        )
+        val bitmapNearest = buildFor253ArtifactCase(
+            id = "bitmap-nearest.generated-whole-scene",
+            sceneId = "bitmap-rect-nearest",
+            label = "bitmap nearest strict sampling generated scene",
+            route = "webgpu.image-rect.strict-nearest",
+            colorProductionStage = "bitmap texture sample and source texel normalization",
+            stageIsolation = "appears-during-bitmap-nearest-path",
+            referencePath = "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/skia.png",
+            gpuPath = "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/gpu.png",
+        )
+        val linearGradient = buildFor253ArtifactCase(
+            id = "linear-gradient.generated-whole-scene",
+            sceneId = "linear-gradient-rect",
+            label = "linear gradient generated WGSL control scene",
+            route = "webgpu.generated.linear-gradient.rect",
+            colorProductionStage = "generated gradient arithmetic plus final render-target store control",
+            stageIsolation = "exact-final-pack-store-control",
+            referencePath = "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/skia.png",
+            gpuPath = "reports/wgsl-pipeline/scenes/generated/artifacts/linear-gradient-rect/gpu.png",
+        )
+        val cases = listOf(sourceColor, bitmapNearest, linearGradient)
+        val residualCases = cases.filter { it.residualPixels > 0 }
+        val exactCases = cases.filter { it.residualPixels == 0 }
+        val residualPixels = cases.flatMap { it.residualPixelDeltas }
+        return For253BitmapSourceRoundingAuditProbe(
+            microCases = cases,
+            totalPixels = cases.sumOf { it.totalPixels },
+            totalResidualPixels = cases.sumOf { it.residualPixels },
+            maxChannelDelta = cases.maxOf { it.maxChannelDelta },
+            alphaDeltaNonZeroPixels = cases.sumOf { it.alphaDeltaNonZeroPixels },
+            rgbOnlyResidualPixels = cases.sumOf { it.rgbOnlyResidualPixels },
+            signedDeltaHistogram = signedDeltaHistograms(residualPixels),
+            residualCaseIds = residualCases.map { it.id },
+            exactControlCaseIds = exactCases.map { it.id },
+            appearsBeforeBitmapSampling = sourceColor.residualPixels > 0 &&
+                sourceColor.alphaDeltaNonZeroPixels == 0 &&
+                sourceColor.maxChannelDelta == 1,
+            appearsDuringBitmapNearestPath = bitmapNearest.residualPixels > 0 &&
+                bitmapNearest.alphaDeltaNonZeroPixels == 0 &&
+                bitmapNearest.maxChannelDelta == 1,
+            onlyFinalPackOrStore = linearGradient.residualPixels > 0,
+        )
+    }
+
+    private fun buildFor253SimpleOffsetCellCase(
+        id: String,
+        sceneId: String,
+        label: String,
+        route: String,
+        colorProductionStage: String,
+        stageIsolation: String,
+        cell: SimpleOffsetCell,
+        reference: SkBitmap,
+        gpu: SkBitmap,
+    ): For253MicroCase {
+        val pixels = mutableListOf<PixelDelta>()
+        for (y in cell.originY until cell.originY + CELL_EXTENT) {
+            for (x in cell.originX until cell.originX + CELL_EXTENT) {
+                pixels += pixelDelta(reference, gpu, x, y)
+            }
+        }
+        return buildFor253MicroCase(
+            id = id,
+            sceneId = sceneId,
+            label = label,
+            sourceKind = "skia-upstream-reference-vs-live-webgpu",
+            route = route,
+            colorProductionStage = colorProductionStage,
+            stageIsolation = stageIsolation,
+            bounds = intArrayOf(cell.originX, cell.originY, cell.originX + CELL_EXTENT, cell.originY + CELL_EXTENT),
+            totalPixels = CELL_EXTENT * CELL_EXTENT,
+            pixels = pixels,
+        )
+    }
+
+    private fun buildFor253ArtifactCase(
+        id: String,
+        sceneId: String,
+        label: String,
+        route: String,
+        colorProductionStage: String,
+        stageIsolation: String,
+        referencePath: String,
+        gpuPath: String,
+    ): For253MicroCase {
+        val reference = readEvidencePng(referencePath)
+        val gpu = readEvidencePng(gpuPath)
+        require(reference.width == gpu.width && reference.height == gpu.height) {
+            "FOR-253 requires same-size generated artifact bitmaps for $sceneId"
+        }
+        val pixels = mutableListOf<PixelDelta>()
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                pixels += pixelDelta(reference, gpu, x, y)
+            }
+        }
+        return buildFor253MicroCase(
+            id = id,
+            sceneId = sceneId,
+            label = label,
+            sourceKind = "generated-scene-artifact-reference-vs-gpu",
+            route = route,
+            colorProductionStage = colorProductionStage,
+            stageIsolation = stageIsolation,
+            bounds = intArrayOf(0, 0, reference.width, reference.height),
+            totalPixels = reference.width * reference.height,
+            pixels = pixels,
+        )
+    }
+
+    private fun buildFor253MicroCase(
+        id: String,
+        sceneId: String,
+        label: String,
+        sourceKind: String,
+        route: String,
+        colorProductionStage: String,
+        stageIsolation: String,
+        bounds: IntArray,
+        totalPixels: Int,
+        pixels: List<PixelDelta>,
+    ): For253MicroCase {
+        val residualPixels = pixels.filter { it.maxChannelDelta > 0 }
+        val topPairs = topColorPairs(residualPixels, COLOR_PAIR_TOP_N)
+        return For253MicroCase(
+            id = id,
+            sceneId = sceneId,
+            label = label,
+            sourceKind = sourceKind,
+            route = route,
+            colorProductionStage = colorProductionStage,
+            stageIsolation = stageIsolation,
+            bounds = bounds,
+            totalPixels = totalPixels,
+            residualPixels = residualPixels.size,
+            maxChannelDelta = pixels.maxOfOrNull { it.maxChannelDelta } ?: 0,
+            alphaDeltaNonZeroPixels = residualPixels.count { it.signedDelta[3] != 0 },
+            rgbOnlyResidualPixels = residualPixels.count { it.signedDelta[3] == 0 },
+            signedDeltaHistogram = signedDeltaHistograms(residualPixels),
+            topColorPairs = topPairs,
+            representativeReferenceRgba = topPairs.firstOrNull()?.reference ?: intArrayOf(),
+            representativeGpuRgba = topPairs.firstOrNull()?.gpu ?: intArrayOf(),
+            representativeSignedDeltaRgba = topPairs.firstOrNull()?.signedDelta ?: intArrayOf(),
+            residualPixelDeltas = residualPixels,
         )
     }
 
@@ -914,6 +1118,51 @@ class SimpleOffsetImageFilterWebGpuTest {
         )
     }
 
+    private fun writeFor253BitmapSourceRoundingAuditJson(probe: For253BitmapSourceRoundingAuditProbe) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-source-rounding-audit-for253",
+        ).apply { mkdirs() }
+        File(dir, "bitmap-source-rounding-audit-for253.json").writeText(
+            """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "mixed skia-upstream and generated-scene oracle",
+              "linear": "FOR-253",
+              "probe": "bitmap-source-rounding-stage-audit",
+              "deltaDefinition": "signed channel delta is GPU minus reference",
+              "microCaseCount": ${probe.microCaseCount},
+              "totalPixels": ${probe.totalPixels},
+              "totalResidualPixels": ${probe.totalResidualPixels},
+              "maxChannelDelta": ${probe.maxChannelDelta},
+              "alphaDeltaNonZeroPixels": ${probe.alphaDeltaNonZeroPixels},
+              "rgbOnlyResidualPixels": ${probe.rgbOnlyResidualPixels},
+              "signedDeltaHistogram": ${signedDeltaHistogramToJson(probe.signedDeltaHistogram, indent = "              ")},
+              "residualCaseIds": [
+            ${probe.residualCaseIds.joinToString(",\n") { "                \"$it\"" }}
+              ],
+              "exactControlCaseIds": [
+            ${probe.exactControlCaseIds.joinToString(",\n") { "                \"$it\"" }}
+              ],
+              "stageIsolation": {
+                "appearsBeforeBitmapSampling": ${probe.appearsBeforeBitmapSampling},
+                "appearsDuringBitmapNearestPath": ${probe.appearsDuringBitmapNearestPath},
+                "onlyFinalPackOrStore": ${probe.onlyFinalPackOrStore},
+                "inferredProducer": "${probe.inferredProducer}",
+                "nextSubProblem": "${probe.nextSubProblem}"
+              },
+              "microCases": [
+            ${probe.microCases.joinToString(",\n") { it.toJson(indent = "                ") }}
+              ],
+              "interpretation": "The one-byte RGB tail appears in a source-color constant path before any bitmap sampling and also in bitmap-nearest texture sampling, while the generated linear-gradient control remains byte-exact. The evidence rules out Crop and a global final pack/store-only defect; the next bounded problem is input color normalization/rounding for legacy source-color uniforms and bitmap texel sampling/upload.",
+              "observationMethod": "test-side Skia reference PNG plus live WebGPU readback for the SimpleOffset source-color cell, and generated scene artifact skia.png/gpu.png comparisons for bitmap-nearest and linear-gradient controls; no renderer diagnostic property, no CPU/readback fallback in the render path",
+              "supportDecision": "${probe.supportDecision}",
+              "correctionApplied": false,
+              "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+            }
+            """.trimIndent() + "\n",
+        )
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -970,6 +1219,32 @@ class SimpleOffsetImageFilterWebGpuTest {
           "maxChannelDelta": $maxChannelDelta,
           "alphaDeltaNonZeroPixels": $alphaDeltaNonZeroPixels,
           "rgbOnlyResidualPixels": $rgbOnlyResidualPixels,
+          "signedDeltaHistogram": ${signedDeltaHistogramToJson(signedDeltaHistogram, indent = "$indent  ")},
+          "topColorPairs": [
+        ${topColorPairs.joinToString(",\n") { it.toJson(indent = "$indent    ") }}
+          ]
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun For253MicroCase.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "sceneId": "$sceneId",
+          "label": "$label",
+          "sourceKind": "$sourceKind",
+          "route": "$route",
+          "colorProductionStage": "$colorProductionStage",
+          "stageIsolation": "$stageIsolation",
+          "bounds": ${jsonArray(bounds)},
+          "totalPixels": $totalPixels,
+          "residualPixels": $residualPixels,
+          "maxChannelDelta": $maxChannelDelta,
+          "alphaDeltaNonZeroPixels": $alphaDeltaNonZeroPixels,
+          "rgbOnlyResidualPixels": $rgbOnlyResidualPixels,
+          "representativeReferenceRgba": ${jsonArray(representativeReferenceRgba)},
+          "representativeGpuRgba": ${jsonArray(representativeGpuRgba)},
+          "representativeSignedDeltaRgba": ${jsonArray(representativeSignedDeltaRgba)},
           "signedDeltaHistogram": ${signedDeltaHistogramToJson(signedDeltaHistogram, indent = "$indent  ")},
           "topColorPairs": [
         ${topColorPairs.joinToString(",\n") { it.toJson(indent = "$indent    ") }}
@@ -1265,4 +1540,48 @@ class SimpleOffsetImageFilterWebGpuTest {
         val samplesWithRgbByteResidual: List<String>,
         val samplesWithoutResidual: List<String>,
     )
+
+    private data class For253MicroCase(
+        val id: String,
+        val sceneId: String,
+        val label: String,
+        val sourceKind: String,
+        val route: String,
+        val colorProductionStage: String,
+        val stageIsolation: String,
+        val bounds: IntArray,
+        val totalPixels: Int,
+        val residualPixels: Int,
+        val maxChannelDelta: Int,
+        val alphaDeltaNonZeroPixels: Int,
+        val rgbOnlyResidualPixels: Int,
+        val signedDeltaHistogram: List<Map<Int, Int>>,
+        val topColorPairs: List<ColorPairGroup>,
+        val representativeReferenceRgba: IntArray,
+        val representativeGpuRgba: IntArray,
+        val representativeSignedDeltaRgba: IntArray,
+        val residualPixelDeltas: List<PixelDelta>,
+    )
+
+    private data class For253BitmapSourceRoundingAuditProbe(
+        val microCases: List<For253MicroCase>,
+        val totalPixels: Int,
+        val totalResidualPixels: Int,
+        val maxChannelDelta: Int,
+        val alphaDeltaNonZeroPixels: Int,
+        val rgbOnlyResidualPixels: Int,
+        val signedDeltaHistogram: List<Map<Int, Int>>,
+        val residualCaseIds: List<String>,
+        val exactControlCaseIds: List<String>,
+        val appearsBeforeBitmapSampling: Boolean,
+        val appearsDuringBitmapNearestPath: Boolean,
+        val onlyFinalPackOrStore: Boolean,
+    ) {
+        val microCaseCount: Int = microCases.size
+        val supportDecision: String = "KEEP_DIAGNOSTIC"
+        val inferredProducer: String =
+            "input color normalization/rounding before or at source-color uniform and bitmap texel sample, not Crop and not a global final pack/store-only stage"
+        val nextSubProblem: String =
+            "compare legacy source-color uniform packing and bitmap texture upload/sample rounding against generated solid/gradient exact controls"
+    }
 }
