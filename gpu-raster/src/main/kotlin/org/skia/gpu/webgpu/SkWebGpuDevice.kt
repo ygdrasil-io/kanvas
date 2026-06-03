@@ -5867,12 +5867,11 @@ public class SkWebGpuDevice(
                 cropNonNullOffsetPrePass.cropRect,
                 cropNonNullOffsetPrePass.cropTileMode,
             )
-            val ox = originX.toFloat()
-            val oy = originY.toFloat()
-            cropPacked[4] -= ox
-            cropPacked[5] -= oy
-            cropPacked[6] -= ox
-            cropPacked[7] -= oy
+            // The selected M38 shape runs under drawRect's implicit
+            // saveLayer. That saveLayer already shifts the CTM by the
+            // layer origin, so Crop(rect) is in layer-local pixels here.
+            // Subtracting originX/originY again double-compensates
+            // translated GM cells and incorrectly decals the crop output.
 
             val paintAlphaE = (paint?.alpha ?: 0xFF) / 255f
             pending.add(
