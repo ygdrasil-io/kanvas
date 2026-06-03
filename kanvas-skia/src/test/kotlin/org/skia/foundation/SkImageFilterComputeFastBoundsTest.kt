@@ -33,6 +33,17 @@ class SkImageFilterComputeFastBoundsTest {
     }
 
     @Test
+    fun `crop filter reports the crop output bounds`() {
+        val crop = SkRect.MakeLTRB(40f, 10f, 80f, 50f)
+        val f = SkImageFilters.Crop(crop, SkTileMode.kDecal, SkImageFilters.Offset(20f, 0f, null))
+        val out = f.computeFastBounds(rect)
+        assertEquals(40f, out.left)
+        assertEquals(10f, out.top)
+        assertEquals(80f, out.right)
+        assertEquals(50f, out.bottom)
+    }
+
+    @Test
     fun `blur filter inflates the bounds by 3-sigma per axis`() {
         val f = SkImageFilters.Blur(4f, 8f, SkTileMode.kClamp, null)!!
         val out = f.computeFastBounds(rect)
