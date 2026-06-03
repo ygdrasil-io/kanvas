@@ -14,15 +14,15 @@ WebGPU blur final composite. The route remains `webgpu.coverage.nested-rrect-cli
 
 | Measure | FOR-269 baseline | FOR-270 |
 |---|---:|---:|
-| GPU/reference similarity | 71.22 | 97.5 |
-| GPU >32 deltas in `outside_clip_removed_difference_oval` | 246288 | 573 |
-| GPU removed-oval share of >32 deltas | 92.912221% | 2.959558% |
+| GPU/reference similarity | 71.22 | 98.48 |
+| GPU >32 deltas in `outside_clip_removed_difference_oval` | 246288 | 36 |
+| GPU removed-oval share of >32 deltas | 92.912221% | 1.254793% |
 
 ## Residual
 
 | Comparison | Dominant >32 delta zone | Share | Max delta |
 |---|---|---:|---:|
-| GPU/reference | `blurred_content_envelope` | 100.0% | 203 |
+| GPU/reference | `blurred_content_envelope` | 100.0% | 57 |
 | CPU/reference | `blurred_content_envelope` | 100.0% | 237 |
 
 ## Validation
