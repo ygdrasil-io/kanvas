@@ -1,0 +1,906 @@
+{
+  "linear": "FOR-281",
+  "parent": "FOR-241",
+  "probe": "cpu-mask-filter-clip-coverage-trace",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/Reference/WebGPU",
+  "sourceAudits": {
+    "for278": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-boundary-layer-composite-fixture-for278.json",
+    "for279": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-layer-boundary-composite-for279.json",
+    "for280": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-aa-difference-clip-coverage-edge-for280.json"
+  },
+  "sourceImages": {
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png",
+    "cpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png",
+    "gpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png"
+  },
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "REFUSE_CORRECTION_PENDING_MASK_SOURCE_COLOR_FILTER_BLEND_PARITY",
+  "decisionRationale": "FOR-281 traces the four requested scalar values over the same FOR-278 windows. For all 89 CPU/reference >32 pixels, the reconstructed mask-filter alpha after blur is non-zero and the source alpha after final difference-clip modulation is also non-zero. The remaining mismatch is therefore not explained by a zero maskA, zero clipCoverage, or zero post-modulation alpha. A production correction now needs a bounded color-filter/SrcIn/blend parity fixture before changing renderer behavior.",
+  "route": {
+    "cpu": "cpu.coverage.nested-rrect-clip-oracle",
+    "gpu": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "coverageStrategy": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required"
+  },
+  "traceModel": {
+    "maskBounds": {
+      "left": 2,
+      "top": 2,
+      "right": 590,
+      "bottom": 590,
+      "margin": 5
+    },
+    "sigma": 1.366025,
+    "blurMargin": 5,
+    "paintAlpha": 255,
+    "maskAFormula": "source draw oval 4x4 coverage -> SkBlurMaskFilter(kNormal) separable Gaussian",
+    "srcAlphaBeforeClipFormula": "paintAlpha * maskA / 255 rounded",
+    "srcAlphaAfterClipFormula": "srcAlphaBeforeClip * clipCoverage / 255 rounded",
+    "clipCoverageFormula": "SkAAClip difference estimate: parentCoverage=255, pathCoverage=b => 255-b",
+    "instrumentationBoundary": "This is a deterministic test-visible replay of the same scalar formulas and scene geometry, not a production renderer patch."
+  },
+  "sourcePreservation": {
+    "for278RegeneratedMatchesSource": true,
+    "for279DecisionPreserved": true,
+    "for280DecisionPreserved": true
+  },
+  "windows": [
+    {
+      "name": "draw_oval_outer_boundary_max_cpu_reference_delta_window",
+      "subzone": "draw_oval_outer_boundary",
+      "bounds": {
+        "left": 94,
+        "top": 84,
+        "right": 105,
+        "bottom": 95
+      },
+      "maskPixels": 59,
+      "anchorTrace": {
+        "x": 99,
+        "y": 89,
+        "maskAAfterBlur": 250,
+        "clipCoverage": 255,
+        "srcAlphaBeforeClipModulation": 250,
+        "srcAlphaAfterClipModulation": 250,
+        "referenceRgba": [
+          203,
+          65,
+          31,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          52,
+          190,
+          224,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          -1,
+          -5,
+          -10,
+          0
+        ]
+      },
+      "metrics": {
+        "pixels": 59,
+        "cpuReferenceGreaterThanThirtyTwoPixels": 59,
+        "gpuReferenceGreaterThanThirtyTwoPixels": 11,
+        "cpuReferenceMaxChannelDelta": 224,
+        "gpuReferenceMaxChannelDelta": 41,
+        "maskAAfterBlurOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 59,
+            "full": 0
+          },
+          "min": 6,
+          "max": 251,
+          "mean": 158.694915
+        },
+        "clipCoverageOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 59
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "srcAlphaBeforeClipModulationOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 59,
+            "full": 0
+          },
+          "min": 6,
+          "max": 251,
+          "mean": 158.694915
+        },
+        "srcAlphaAfterClipModulationOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 59,
+            "full": 0
+          },
+          "min": 6,
+          "max": 251,
+          "mean": 158.694915
+        },
+        "zeroMaskAAndCpuReferenceGt32Pixels": 0,
+        "zeroSrcAlphaAfterClipAndCpuReferenceGt32Pixels": 0
+      }
+    },
+    {
+      "name": "difference_oval_inner_boundary_max_cpu_reference_delta_window",
+      "subzone": "difference_oval_inner_boundary",
+      "bounds": {
+        "left": 257,
+        "top": 12,
+        "right": 268,
+        "bottom": 23
+      },
+      "maskPixels": 67,
+      "anchorTrace": {
+        "x": 262,
+        "y": 17,
+        "maskAAfterBlur": 255,
+        "clipCoverage": 255,
+        "srcAlphaBeforeClipModulation": 255,
+        "srcAlphaAfterClipModulation": 255,
+        "referenceRgba": [
+          202,
+          59,
+          18,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          59,
+          19,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          196,
+          237,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          0,
+          0,
+          1,
+          0
+        ]
+      },
+      "metrics": {
+        "pixels": 67,
+        "cpuReferenceGreaterThanThirtyTwoPixels": 18,
+        "gpuReferenceGreaterThanThirtyTwoPixels": 0,
+        "cpuReferenceMaxChannelDelta": 237,
+        "gpuReferenceMaxChannelDelta": 19,
+        "maskAAfterBlurOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 18
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "clipCoverageOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 10,
+            "full": 8
+          },
+          "min": 32,
+          "max": 255,
+          "mean": 189.777778
+        },
+        "srcAlphaBeforeClipModulationOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 18
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "srcAlphaAfterClipModulationOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 10,
+            "full": 8
+          },
+          "min": 32,
+          "max": 255,
+          "mean": 189.777778
+        },
+        "zeroMaskAAndCpuReferenceGt32Pixels": 0,
+        "zeroSrcAlphaAfterClipAndCpuReferenceGt32Pixels": 0
+      }
+    },
+    {
+      "name": "halo_interior_max_cpu_reference_delta_window",
+      "subzone": "halo_interior",
+      "bounds": {
+        "left": 221,
+        "top": 16,
+        "right": 232,
+        "bottom": 27
+      },
+      "maskPixels": 22,
+      "anchorTrace": {
+        "x": 226,
+        "y": 21,
+        "maskAAfterBlur": 255,
+        "clipCoverage": 255,
+        "srcAlphaBeforeClipModulation": 255,
+        "srcAlphaAfterClipModulation": 255,
+        "referenceRgba": [
+          202,
+          60,
+          20,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          59,
+          19,
+          255
+        ],
+        "cpuMinusReferenceSignedRgba": [
+          53,
+          195,
+          235,
+          0
+        ],
+        "gpuMinusReferenceSignedRgba": [
+          0,
+          -1,
+          -1,
+          0
+        ]
+      },
+      "metrics": {
+        "pixels": 22,
+        "cpuReferenceGreaterThanThirtyTwoPixels": 12,
+        "gpuReferenceGreaterThanThirtyTwoPixels": 0,
+        "cpuReferenceMaxChannelDelta": 235,
+        "gpuReferenceMaxChannelDelta": 11,
+        "maskAAfterBlurOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 2,
+            "full": 10
+          },
+          "min": 254,
+          "max": 255,
+          "mean": 254.833333
+        },
+        "clipCoverageOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 0,
+            "full": 12
+          },
+          "min": 255,
+          "max": 255,
+          "mean": 255.0
+        },
+        "srcAlphaBeforeClipModulationOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 2,
+            "full": 10
+          },
+          "min": 254,
+          "max": 255,
+          "mean": 254.833333
+        },
+        "srcAlphaAfterClipModulationOnCpuReferenceGt32": {
+          "buckets": {
+            "zero": 0,
+            "partial": 2,
+            "full": 10
+          },
+          "min": 254,
+          "max": 255,
+          "mean": 254.833333
+        },
+        "zeroMaskAAndCpuReferenceGt32Pixels": 0,
+        "zeroSrcAlphaAfterClipAndCpuReferenceGt32Pixels": 0
+      }
+    }
+  ],
+  "combinedBoundaryFixture": {
+    "maskPixels": 148,
+    "metrics": {
+      "pixels": 148,
+      "cpuReferenceGreaterThanThirtyTwoPixels": 89,
+      "gpuReferenceGreaterThanThirtyTwoPixels": 11,
+      "cpuReferenceMaxChannelDelta": 237,
+      "gpuReferenceMaxChannelDelta": 41,
+      "maskAAfterBlurOnCpuReferenceGt32": {
+        "buckets": {
+          "zero": 0,
+          "partial": 61,
+          "full": 28
+        },
+        "min": 6,
+        "max": 255,
+        "mean": 191.134831
+      },
+      "clipCoverageOnCpuReferenceGt32": {
+        "buckets": {
+          "zero": 0,
+          "partial": 10,
+          "full": 79
+        },
+        "min": 32,
+        "max": 255,
+        "mean": 241.808989
+      },
+      "srcAlphaBeforeClipModulationOnCpuReferenceGt32": {
+        "buckets": {
+          "zero": 0,
+          "partial": 61,
+          "full": 28
+        },
+        "min": 6,
+        "max": 255,
+        "mean": 191.134831
+      },
+      "srcAlphaAfterClipModulationOnCpuReferenceGt32": {
+        "buckets": {
+          "zero": 0,
+          "partial": 71,
+          "full": 18
+        },
+        "min": 6,
+        "max": 255,
+        "mean": 177.94382
+      },
+      "zeroMaskAAndCpuReferenceGt32Pixels": 0,
+      "zeroSrcAlphaAfterClipAndCpuReferenceGt32Pixels": 0
+    }
+  },
+  "highDeltaTraceSamples": [
+    {
+      "x": 262,
+      "y": 17,
+      "maskAAfterBlur": 255,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "referenceRgba": [
+        202,
+        59,
+        18,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        53,
+        196,
+        237,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 237,
+      "subzone": "difference_oval_inner_boundary"
+    },
+    {
+      "x": 226,
+      "y": 21,
+      "maskAAfterBlur": 255,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "referenceRgba": [
+        202,
+        60,
+        20,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        53,
+        195,
+        235,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 235,
+      "subzone": "halo_interior"
+    },
+    {
+      "x": 222,
+      "y": 22,
+      "maskAAfterBlur": 255,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "referenceRgba": [
+        202,
+        60,
+        20,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        53,
+        195,
+        235,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 235,
+      "subzone": "halo_interior"
+    },
+    {
+      "x": 221,
+      "y": 22,
+      "maskAAfterBlur": 255,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "referenceRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        53,
+        195,
+        234,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        0,
+        -1,
+        -2,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 234,
+      "subzone": "halo_interior"
+    },
+    {
+      "x": 225,
+      "y": 21,
+      "maskAAfterBlur": 255,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "referenceRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        252,
+        252,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        53,
+        192,
+        231,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        0,
+        -1,
+        -2,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 231,
+      "subzone": "halo_interior"
+    },
+    {
+      "x": 261,
+      "y": 17,
+      "maskAAfterBlur": 255,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "referenceRgba": [
+        202,
+        59,
+        18,
+        255
+      ],
+      "cpuRgba": [
+        254,
+        249,
+        247,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        52,
+        190,
+        229,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 229,
+      "subzone": "difference_oval_inner_boundary"
+    },
+    {
+      "x": 263,
+      "y": 17,
+      "maskAAfterBlur": 255,
+      "clipCoverage": 240,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 240,
+      "referenceRgba": [
+        203,
+        64,
+        29,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "gpuRgba": [
+        203,
+        65,
+        31,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        52,
+        191,
+        226,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        0,
+        1,
+        2,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 226,
+      "subzone": "difference_oval_inner_boundary"
+    },
+    {
+      "x": 99,
+      "y": 89,
+      "maskAAfterBlur": 250,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 250,
+      "srcAlphaAfterClipModulation": 250,
+      "referenceRgba": [
+        203,
+        65,
+        31,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        52,
+        190,
+        224,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        -1,
+        -5,
+        -10,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 224,
+      "subzone": "draw_oval_outer_boundary"
+    },
+    {
+      "x": 98,
+      "y": 90,
+      "maskAAfterBlur": 251,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 251,
+      "srcAlphaAfterClipModulation": 251,
+      "referenceRgba": [
+        203,
+        65,
+        31,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        52,
+        190,
+        224,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        -1,
+        -5,
+        -10,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 224,
+      "subzone": "draw_oval_outer_boundary"
+    },
+    {
+      "x": 259,
+      "y": 17,
+      "maskAAfterBlur": 255,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "referenceRgba": [
+        202,
+        59,
+        18,
+        255
+      ],
+      "cpuRgba": [
+        252,
+        243,
+        241,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        50,
+        184,
+        223,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 223,
+      "subzone": "difference_oval_inner_boundary"
+    },
+    {
+      "x": 260,
+      "y": 17,
+      "maskAAfterBlur": 255,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 255,
+      "srcAlphaAfterClipModulation": 255,
+      "referenceRgba": [
+        202,
+        59,
+        18,
+        255
+      ],
+      "cpuRgba": [
+        252,
+        243,
+        241,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        59,
+        19,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        50,
+        184,
+        223,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 223,
+      "subzone": "difference_oval_inner_boundary"
+    },
+    {
+      "x": 102,
+      "y": 86,
+      "maskAAfterBlur": 249,
+      "clipCoverage": 255,
+      "srcAlphaBeforeClipModulation": 249,
+      "srcAlphaAfterClipModulation": 249,
+      "referenceRgba": [
+        203,
+        66,
+        33,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "cpuMinusReferenceSignedRgba": [
+        52,
+        189,
+        222,
+        0
+      ],
+      "gpuMinusReferenceSignedRgba": [
+        -1,
+        -6,
+        -12,
+        0
+      ],
+      "cpuReferenceMaxChannelDelta": 222,
+      "subzone": "draw_oval_outer_boundary"
+    }
+  ],
+  "fullSceneM60": {
+    "cpuSimilarity": 97.31,
+    "cpuMatchingPixels": 908439,
+    "cpuMaxChannelDelta": 237,
+    "cpuReferenceGreaterThanThirtyTwoPixels": 15726,
+    "gpuSimilarity": 98.48,
+    "gpuMatchingPixels": 919363,
+    "gpuMaxChannelDelta": 57,
+    "gpuReferenceGreaterThanThirtyTwoPixels": 2869
+  },
+  "nextAction": "TARGET_CPU_MASK_FILTER_COLOR_FILTER_SRCIN_BLEND_PARITY",
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuRendererChanged": false,
+    "gpuRendererChanged": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
