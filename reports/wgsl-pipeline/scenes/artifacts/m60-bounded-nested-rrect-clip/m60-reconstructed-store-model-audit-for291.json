@@ -1,0 +1,6946 @@
+{
+  "linear": "FOR-291",
+  "parent": "FOR-241",
+  "probe": "m60-reconstructed-store-model-audit",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/RGBA_8888/reconstruction-vs-runtime-root",
+  "sourceAudits": {
+    "for286": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-active-aa-difference-store-trace-for286.json",
+    "for288": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-store-order-audit-for288.json",
+    "for289": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-runtime-write-chronology-for289.json",
+    "for290": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-expanded-runtime-write-trace-for290.json"
+  },
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "RECONSTRUCTION_SOURCE_PAYLOAD_MISMATCH",
+  "exactGap": null,
+  "nextAction": "STOP_TREATING_RECONSTRUCTED_RED_STORE_AS_RUNTIME_ROOT_WRITE",
+  "route": {
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold",
+    "for286Decision": "NEXT_FIX_CPU_ACTIVE_AA_DIFFERENCE_CLIP_STORE_ORDER_NOT_SRCOVER_OR_PAYLOAD",
+    "for288PrimaryClassification": "OTHER_LATER_WRITE_AFTER_RECONSTRUCTED_RED_STORE",
+    "for289Decision": "PROOF_INSUFFICIENT_RUNTIME_WRITE_CHRONOLOGY_GAP",
+    "for290Decision": "NO_RUNTIME_RED_ROOT_STORE_FOUND",
+    "sourceNeedles": {
+      "for286ReconstructsA8SrcInPayloadBranch": true,
+      "for286ReconstructsKSrcOverStoreBranch": true,
+      "for290TraceBoundedToRootDimensions": true,
+      "for290IncludesBitmapDirectRootWrites": true
+    }
+  },
+  "assumptionUnderAudit": {
+    "name": "FOR-286 reconstructed A8 SrcIn payload store is a runtime root write",
+    "status": "rejected",
+    "why": "The same 59 root coordinates have 59/59 reconstructed red kSrcOver writes, but FOR-290 observes 59/59 root dispatch writes with white kSrc source payload and no red root stores."
+  },
+  "targetPixelCount": 59,
+  "comparisonSummary": {
+    "coordinateMatches": 59,
+    "reconstructedNonZeroMaskPixels": 59,
+    "reconstructedFullClipCoveragePixels": 59,
+    "coverageMatchesRuntimeDispatchPixels": 59,
+    "reconstructedRedWritePixels": 59,
+    "runtimeRedRootWriteEvents": 0,
+    "runtimeWhiteDispatchWritePixels": 59,
+    "sourcePayloadMismatches": 59,
+    "blendModeMismatches": 59,
+    "runtimeRootEvents": 118,
+    "runtimeTemporaryEvents": 0,
+    "reconstructedVsRuntimeDispatchWriteMaxDelta": 251
+  },
+  "runtimeCounts": {
+    "eventSources": {
+      "SkBitmap.eraseColor": 59,
+      "SkBitmapDevice.dispatchBlend": 59
+    },
+    "deviceKinds": {
+      "root": 118
+    },
+    "dispatchSources": {
+      "SkBitmapDevice.dispatchBlend": 59
+    },
+    "dispatchModes": {
+      "kSrc": 59
+    }
+  },
+  "modelInputsCompared": {
+    "sourceBlur": "FOR-286/FOR-288: 59/59 partial non-zero blur mask alpha on target pixels; FOR-290 root events do not carry blur-mask fields.",
+    "mask": "FOR-286/FOR-288: 59/59 non-zero mask support on the same target pixels.",
+    "coverageAndClip": "FOR-286/FOR-288: 59/59 full active-AA clip coverage; FOR-290 root dispatch coverage is also 255 for 59/59 pixels.",
+    "coordinates": "The derived 59 target root coordinates match exactly across FOR-286/FOR-288 and FOR-290.",
+    "blendMode": "FOR-286 reconstructs kSrcOver; FOR-290 root dispatch observes kSrc for 59/59 pixels.",
+    "sourcePayload": "FOR-286 reconstructs red SrcIn payload for 59/59 pixels; FOR-290 root dispatch observes white source payload for 59/59 pixels.",
+    "deviceLayer": "FOR-290 observed 118/118 events on root and 0 temporary events under its root-dimension trace; FOR-286 has no runtime device/layer evidence for the reconstructed red store."
+  },
+  "anchorComparison": {
+    "x": 99,
+    "y": 89,
+    "reconstructed": {
+      "subzone": "draw_oval_outer_boundary",
+      "maskAAfterBlur": 250,
+      "coverageAppliedInBlend": 255,
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        250
+      ],
+      "srcAfterActiveAaClipCoverageRgba": [
+        255,
+        0,
+        0,
+        250
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+      "valueWrittenRgba": [
+        255,
+        5,
+        5,
+        255
+      ],
+      "writeCarriesRedTint": true,
+      "referenceRgba": [
+        203,
+        65,
+        31,
+        255
+      ],
+      "cpuFinalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "gpuRgba": [
+        202,
+        60,
+        21,
+        255
+      ],
+      "deviceEvidence": "not captured by FOR-286 reconstruction"
+    },
+    "runtimeRoot": {
+      "eventCount": 2,
+      "rootEventCount": 2,
+      "temporaryEventCount": 0,
+      "dispatchEvent": {
+        "index": 106,
+        "x": 99,
+        "y": 89,
+        "bitmapWidth": 1164,
+        "bitmapHeight": 802,
+        "deviceKind": "root",
+        "rootDevice": true,
+        "source": "SkBitmapDevice.dispatchBlend",
+        "callsite": "SkBitmapDevice.blend",
+        "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+        "mode": "kSrc",
+        "coverage": 255,
+        "srcInputRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "srcAfterCoverageRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "valueBeforeRgba": [
+          198,
+          198,
+          198,
+          255
+        ],
+        "valueWrittenRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "valueReadAfterRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      "redRootWriteEvents": 0
+    },
+    "comparison": {
+      "sameRootCoordinate": true,
+      "coverageMatches": true,
+      "reconstructedMaskNonZero": true,
+      "reconstructedClipFull": true,
+      "sourcePayloadMatchesRuntimeRootDispatch": false,
+      "blendModeMatchesRuntimeRootDispatch": false,
+      "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 250,
+      "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+        0,
+        -250,
+        -250,
+        0
+      ]
+    }
+  },
+  "perPixelComparisons": [
+    {
+      "x": 96,
+      "y": 84,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 6,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          6
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          6
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          249,
+          249,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          242,
+          219,
+          217,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          253,
+          249,
+          249,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 59,
+          "x": 96,
+          "y": 84,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 6,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -6,
+          -6,
+          0
+        ]
+      }
+    },
+    {
+      "x": 97,
+      "y": 84,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 18,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          18
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          18
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          237,
+          237,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          236,
+          202,
+          198,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          249,
+          238,
+          237,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 60,
+          "x": 97,
+          "y": 84,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 18,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -18,
+          -18,
+          0
+        ]
+      }
+    },
+    {
+      "x": 98,
+      "y": 84,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 42,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          42
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          42
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          213,
+          213,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          229,
+          180,
+          175,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          240,
+          215,
+          213,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 61,
+          "x": 98,
+          "y": 84,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 42,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -42,
+          -42,
+          0
+        ]
+      }
+    },
+    {
+      "x": 99,
+      "y": 84,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 79,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          79
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          79
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          176,
+          176,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          221,
+          155,
+          147,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          228,
+          179,
+          173,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 62,
+          "x": 99,
+          "y": 84,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 79,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -79,
+          -79,
+          0
+        ]
+      }
+    },
+    {
+      "x": 100,
+      "y": 84,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 126,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          126
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          126
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          129,
+          129,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          215,
+          130,
+          119,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          215,
+          134,
+          123,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 63,
+          "x": 100,
+          "y": 84,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 126,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -126,
+          -126,
+          0
+        ]
+      }
+    },
+    {
+      "x": 101,
+      "y": 84,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 174,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          174
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          174
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          81,
+          81,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          210,
+          107,
+          92,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          207,
+          94,
+          75,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 64,
+          "x": 101,
+          "y": 84,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 174,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -174,
+          -174,
+          0
+        ]
+      }
+    },
+    {
+      "x": 102,
+      "y": 84,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 212,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          212
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          212
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          43,
+          43,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          207,
+          89,
+          68,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          203,
+          71,
+          41,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 65,
+          "x": 102,
+          "y": 84,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 212,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -212,
+          -212,
+          0
+        ]
+      }
+    },
+    {
+      "x": 103,
+      "y": 84,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 236,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          236
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          236
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          19,
+          19,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          204,
+          75,
+          49,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          62,
+          26,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 66,
+          "x": 103,
+          "y": 84,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 236,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -236,
+          -236,
+          0
+        ]
+      }
+    },
+    {
+      "x": 104,
+      "y": 84,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 248,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          248
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          248
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          7,
+          7,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          203,
+          67,
+          35,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 67,
+          "x": 104,
+          "y": 84,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 248,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -248,
+          -248,
+          0
+        ]
+      }
+    },
+    {
+      "x": 95,
+      "y": 85,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 6,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          6
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          6
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          249,
+          249,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          241,
+          218,
+          216,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          253,
+          249,
+          249,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 68,
+          "x": 95,
+          "y": 85,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 6,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -6,
+          -6,
+          0
+        ]
+      }
+    },
+    {
+      "x": 96,
+      "y": 85,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 18,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          18
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          18
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          237,
+          237,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          235,
+          200,
+          196,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          248,
+          238,
+          237,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 69,
+          "x": 96,
+          "y": 85,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 18,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -18,
+          -18,
+          0
+        ]
+      }
+    },
+    {
+      "x": 97,
+      "y": 85,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 43,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          43
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          43
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          212,
+          212,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          228,
+          178,
+          172,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          240,
+          214,
+          212,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 70,
+          "x": 97,
+          "y": 85,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 43,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -43,
+          -43,
+          0
+        ]
+      }
+    },
+    {
+      "x": 98,
+      "y": 85,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 83,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          83
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          83
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          172,
+          172,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          221,
+          154,
+          146,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          227,
+          177,
+          171,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 71,
+          "x": 98,
+          "y": 85,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 83,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -83,
+          -83,
+          0
+        ]
+      }
+    },
+    {
+      "x": 99,
+      "y": 85,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 131,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          131
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          131
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          124,
+          124,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          215,
+          128,
+          117,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          215,
+          132,
+          121,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 72,
+          "x": 99,
+          "y": 85,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 131,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -131,
+          -131,
+          0
+        ]
+      }
+    },
+    {
+      "x": 100,
+      "y": 85,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 178,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          178
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          178
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          77,
+          77,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          210,
+          107,
+          91,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          207,
+          93,
+          73,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 73,
+          "x": 100,
+          "y": 85,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 178,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -178,
+          -178,
+          0
+        ]
+      }
+    },
+    {
+      "x": 101,
+      "y": 85,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 215,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          215
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          215
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          40,
+          40,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          206,
+          88,
+          66,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          203,
+          70,
+          40,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 74,
+          "x": 101,
+          "y": 85,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 215,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -215,
+          -215,
+          0
+        ]
+      }
+    },
+    {
+      "x": 102,
+      "y": 85,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 237,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          237
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          237
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          18,
+          18,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          204,
+          74,
+          47,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          62,
+          25,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 75,
+          "x": 102,
+          "y": 85,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 237,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -237,
+          -237,
+          0
+        ]
+      }
+    },
+    {
+      "x": 103,
+      "y": 85,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 249,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          249
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          249
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          6,
+          6,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          203,
+          67,
+          35,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 76,
+          "x": 103,
+          "y": 85,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 249,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -249,
+          -249,
+          0
+        ]
+      }
+    },
+    {
+      "x": 94,
+      "y": 86,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 7,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          7
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          7
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          248,
+          248,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          241,
+          218,
+          216,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          253,
+          249,
+          249,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 77,
+          "x": 94,
+          "y": 86,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 7,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -7,
+          -7,
+          0
+        ]
+      }
+    },
+    {
+      "x": 95,
+      "y": 86,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 19,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          19
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          19
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          236,
+          236,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          235,
+          199,
+          195,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          248,
+          237,
+          236,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 78,
+          "x": 95,
+          "y": 86,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 19,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -19,
+          -19,
+          0
+        ]
+      }
+    },
+    {
+      "x": 96,
+      "y": 86,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 44,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          44
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          44
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          211,
+          211,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          228,
+          177,
+          171,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          239,
+          213,
+          211,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 79,
+          "x": 96,
+          "y": 86,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 44,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -44,
+          -44,
+          0
+        ]
+      }
+    },
+    {
+      "x": 97,
+      "y": 86,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 84,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          84
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          84
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          171,
+          171,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          221,
+          152,
+          144,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          227,
+          175,
+          170,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 80,
+          "x": 97,
+          "y": 86,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 84,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -84,
+          -84,
+          0
+        ]
+      }
+    },
+    {
+      "x": 98,
+      "y": 86,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 134,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          134
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          134
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          121,
+          121,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          214,
+          128,
+          116,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          215,
+          130,
+          119,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 81,
+          "x": 98,
+          "y": 86,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 134,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -134,
+          -134,
+          0
+        ]
+      }
+    },
+    {
+      "x": 99,
+      "y": 86,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 181,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          181
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          181
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          74,
+          74,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          210,
+          105,
+          89,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          207,
+          91,
+          72,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 82,
+          "x": 99,
+          "y": 86,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 181,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -181,
+          -181,
+          0
+        ]
+      }
+    },
+    {
+      "x": 100,
+      "y": 86,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 217,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          217
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          217
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          38,
+          38,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          206,
+          87,
+          65,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          203,
+          70,
+          39,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 83,
+          "x": 100,
+          "y": 86,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 217,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -217,
+          -217,
+          0
+        ]
+      }
+    },
+    {
+      "x": 101,
+      "y": 86,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 239,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          239
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          239
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          16,
+          16,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          204,
+          74,
+          46,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          62,
+          25,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 84,
+          "x": 101,
+          "y": 86,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 239,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -239,
+          -239,
+          0
+        ]
+      }
+    },
+    {
+      "x": 102,
+      "y": 86,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 249,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          249
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          249
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          6,
+          6,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          203,
+          66,
+          33,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 85,
+          "x": 102,
+          "y": 86,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 249,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -249,
+          -249,
+          0
+        ]
+      }
+    },
+    {
+      "x": 94,
+      "y": 87,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 20,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          20
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          20
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          235,
+          235,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          234,
+          198,
+          194,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          248,
+          237,
+          235,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 86,
+          "x": 94,
+          "y": 87,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 20,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -20,
+          -20,
+          0
+        ]
+      }
+    },
+    {
+      "x": 95,
+      "y": 87,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 45,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          45
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          45
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          210,
+          210,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          227,
+          175,
+          169,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          239,
+          212,
+          209,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 87,
+          "x": 95,
+          "y": 87,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 45,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -45,
+          -45,
+          0
+        ]
+      }
+    },
+    {
+      "x": 96,
+      "y": 87,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 85,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          85
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          85
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          170,
+          170,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          220,
+          151,
+          143,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          226,
+          174,
+          168,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 88,
+          "x": 96,
+          "y": 87,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 85,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -85,
+          -85,
+          0
+        ]
+      }
+    },
+    {
+      "x": 97,
+      "y": 87,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 134,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          134
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          134
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          121,
+          121,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          214,
+          126,
+          114,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          214,
+          129,
+          117,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 89,
+          "x": 97,
+          "y": 87,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 134,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -134,
+          -134,
+          0
+        ]
+      }
+    },
+    {
+      "x": 98,
+      "y": 87,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 183,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          183
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          183
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          72,
+          72,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          209,
+          103,
+          87,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          207,
+          90,
+          70,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 90,
+          "x": 98,
+          "y": 87,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 183,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -183,
+          -183,
+          0
+        ]
+      }
+    },
+    {
+      "x": 99,
+      "y": 87,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 219,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          219
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          219
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          36,
+          36,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          206,
+          86,
+          64,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          203,
+          69,
+          39,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 91,
+          "x": 99,
+          "y": 87,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 219,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -219,
+          -219,
+          0
+        ]
+      }
+    },
+    {
+      "x": 100,
+      "y": 87,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 240,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          240
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          240
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          15,
+          15,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          204,
+          73,
+          46,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          62,
+          25,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 92,
+          "x": 100,
+          "y": 87,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 240,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -240,
+          -240,
+          0
+        ]
+      }
+    },
+    {
+      "x": 101,
+      "y": 87,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 250,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          250
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          250
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          5,
+          5,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          203,
+          66,
+          33,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 93,
+          "x": 101,
+          "y": 87,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 250,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -250,
+          -250,
+          0
+        ]
+      }
+    },
+    {
+      "x": 94,
+      "y": 88,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 47,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          47
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          47
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          208,
+          208,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          227,
+          174,
+          168,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          238,
+          211,
+          208,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 94,
+          "x": 94,
+          "y": 88,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 47,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -47,
+          -47,
+          0
+        ]
+      }
+    },
+    {
+      "x": 95,
+      "y": 88,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 87,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          87
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          87
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          168,
+          168,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          220,
+          149,
+          141,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          226,
+          172,
+          166,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 95,
+          "x": 95,
+          "y": 88,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 87,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -87,
+          -87,
+          0
+        ]
+      }
+    },
+    {
+      "x": 96,
+      "y": 88,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 136,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          136
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          136
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          119,
+          119,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          214,
+          125,
+          113,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          214,
+          127,
+          115,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 96,
+          "x": 96,
+          "y": 88,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 136,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -136,
+          -136,
+          0
+        ]
+      }
+    },
+    {
+      "x": 97,
+      "y": 88,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 183,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          183
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          183
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          72,
+          72,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          209,
+          103,
+          86,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          206,
+          89,
+          69,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 97,
+          "x": 97,
+          "y": 88,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 183,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -183,
+          -183,
+          0
+        ]
+      }
+    },
+    {
+      "x": 98,
+      "y": 88,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 219,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          219
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          219
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          36,
+          36,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          206,
+          85,
+          63,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          203,
+          69,
+          38,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 98,
+          "x": 98,
+          "y": 88,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 219,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -219,
+          -219,
+          0
+        ]
+      }
+    },
+    {
+      "x": 99,
+      "y": 88,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 241,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          241
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          241
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          14,
+          14,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          204,
+          72,
+          44,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          62,
+          25,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 99,
+          "x": 99,
+          "y": 88,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 241,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -241,
+          -241,
+          0
+        ]
+      }
+    },
+    {
+      "x": 100,
+      "y": 88,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 250,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          250
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          250
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          5,
+          5,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          203,
+          66,
+          33,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 100,
+          "x": 100,
+          "y": 88,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 250,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -250,
+          -250,
+          0
+        ]
+      }
+    },
+    {
+      "x": 94,
+      "y": 89,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 91,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          91
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          91
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          164,
+          164,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          220,
+          148,
+          140,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          225,
+          170,
+          164,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 101,
+          "x": 94,
+          "y": 89,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 91,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -91,
+          -91,
+          0
+        ]
+      }
+    },
+    {
+      "x": 95,
+      "y": 89,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 140,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          140
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          140
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          115,
+          115,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          213,
+          123,
+          111,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          213,
+          125,
+          113,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 102,
+          "x": 95,
+          "y": 89,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 140,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -140,
+          -140,
+          0
+        ]
+      }
+    },
+    {
+      "x": 96,
+      "y": 89,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 185,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          185
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          185
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          70,
+          70,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          209,
+          101,
+          84,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          206,
+          88,
+          67,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 103,
+          "x": 96,
+          "y": 89,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 185,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -185,
+          -185,
+          0
+        ]
+      }
+    },
+    {
+      "x": 97,
+      "y": 89,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 220,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          220
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          220
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          35,
+          35,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          206,
+          84,
+          61,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          203,
+          68,
+          37,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 104,
+          "x": 97,
+          "y": 89,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 220,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -220,
+          -220,
+          0
+        ]
+      }
+    },
+    {
+      "x": 98,
+      "y": 89,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 241,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          241
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          241
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          14,
+          14,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          204,
+          72,
+          43,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          61,
+          24,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 105,
+          "x": 98,
+          "y": 89,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 241,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -241,
+          -241,
+          0
+        ]
+      }
+    },
+    {
+      "x": 99,
+      "y": 89,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 250,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          250
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          250
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          5,
+          5,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          203,
+          65,
+          31,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 106,
+          "x": 99,
+          "y": 89,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 250,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -250,
+          -250,
+          0
+        ]
+      }
+    },
+    {
+      "x": 94,
+      "y": 90,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 144,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          144
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          144
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          111,
+          111,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          213,
+          122,
+          110,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          213,
+          124,
+          111,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 107,
+          "x": 94,
+          "y": 90,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 144,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -144,
+          -144,
+          0
+        ]
+      }
+    },
+    {
+      "x": 95,
+      "y": 90,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 189,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          189
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          189
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          66,
+          66,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          209,
+          100,
+          83,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          206,
+          87,
+          65,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 108,
+          "x": 95,
+          "y": 90,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 189,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -189,
+          -189,
+          0
+        ]
+      }
+    },
+    {
+      "x": 96,
+      "y": 90,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 222,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          222
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          222
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          33,
+          33,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          206,
+          83,
+          60,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          203,
+          68,
+          36,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 109,
+          "x": 96,
+          "y": 90,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 222,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -222,
+          -222,
+          0
+        ]
+      }
+    },
+    {
+      "x": 97,
+      "y": 90,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 242,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          242
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          242
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          13,
+          13,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          204,
+          71,
+          43,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          61,
+          24,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 110,
+          "x": 97,
+          "y": 90,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 242,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -242,
+          -242,
+          0
+        ]
+      }
+    },
+    {
+      "x": 98,
+      "y": 90,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 251,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          251
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          251
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          4,
+          4,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          203,
+          65,
+          31,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          60,
+          21,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 111,
+          "x": 98,
+          "y": 90,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 251,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -251,
+          -251,
+          0
+        ]
+      }
+    },
+    {
+      "x": 94,
+      "y": 91,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 192,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          192
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          192
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          63,
+          63,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          209,
+          100,
+          82,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          206,
+          86,
+          64,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 112,
+          "x": 94,
+          "y": 91,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 192,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -192,
+          -192,
+          0
+        ]
+      }
+    },
+    {
+      "x": 95,
+      "y": 91,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 225,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          225
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          225
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          30,
+          30,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          206,
+          82,
+          59,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          203,
+          67,
+          35,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 113,
+          "x": 95,
+          "y": 91,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 225,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -225,
+          -225,
+          0
+        ]
+      }
+    },
+    {
+      "x": 96,
+      "y": 91,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 243,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          243
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          243
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          12,
+          12,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          204,
+          71,
+          42,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          61,
+          24,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 114,
+          "x": 96,
+          "y": 91,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 243,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -243,
+          -243,
+          0
+        ]
+      }
+    },
+    {
+      "x": 94,
+      "y": 92,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 226,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          226
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          226
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          29,
+          29,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          206,
+          82,
+          59,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          203,
+          67,
+          35,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 115,
+          "x": 94,
+          "y": 92,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 226,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -226,
+          -226,
+          0
+        ]
+      }
+    },
+    {
+      "x": 95,
+      "y": 92,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 244,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          244
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          244
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          11,
+          11,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          204,
+          71,
+          42,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          61,
+          24,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 116,
+          "x": 95,
+          "y": 92,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 244,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -244,
+          -244,
+          0
+        ]
+      }
+    },
+    {
+      "x": 94,
+      "y": 93,
+      "reconstructed": {
+        "subzone": "draw_oval_outer_boundary",
+        "maskAAfterBlur": 244,
+        "coverageAppliedInBlend": 255,
+        "dispatchInputMode": "SkBlendMode.kSrcOver",
+        "dispatchInputSrcRgba": [
+          255,
+          0,
+          0,
+          244
+        ],
+        "srcAfterActiveAaClipCoverageRgba": [
+          255,
+          0,
+          0,
+          244
+        ],
+        "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+        "valueWrittenRgba": [
+          255,
+          11,
+          11,
+          255
+        ],
+        "writeCarriesRedTint": true,
+        "referenceRgba": [
+          204,
+          71,
+          42,
+          255
+        ],
+        "cpuFinalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "gpuRgba": [
+          202,
+          61,
+          24,
+          255
+        ],
+        "deviceEvidence": "not captured by FOR-286 reconstruction"
+      },
+      "runtimeRoot": {
+        "eventCount": 2,
+        "rootEventCount": 2,
+        "temporaryEventCount": 0,
+        "dispatchEvent": {
+          "index": 117,
+          "x": 94,
+          "y": 93,
+          "bitmapWidth": 1164,
+          "bitmapHeight": 802,
+          "deviceKind": "root",
+          "rootDevice": true,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "redRootWriteEvents": 0
+      },
+      "comparison": {
+        "sameRootCoordinate": true,
+        "coverageMatches": true,
+        "reconstructedMaskNonZero": true,
+        "reconstructedClipFull": true,
+        "sourcePayloadMatchesRuntimeRootDispatch": false,
+        "blendModeMatchesRuntimeRootDispatch": false,
+        "reconstructedWriteVsRuntimeDispatchWriteMaxDelta": 244,
+        "reconstructedWriteMinusRuntimeDispatchWriteSignedRgba": [
+          0,
+          -244,
+          -244,
+          0
+        ]
+      }
+    }
+  ],
+  "sourcePreservation": {
+    "for286DecisionPreserved": true,
+    "for288ClassificationPreserved": true,
+    "for289DecisionPreserved": true,
+    "for290DecisionPreserved": true
+  },
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuRendererChanged": false,
+    "cpuInstrumentationAdded": false,
+    "gpuRendererChanged": false,
+    "globalBlendChanged": false,
+    "setPixelSemanticsChanged": false,
+    "for288ClassificationChanged": false,
+    "for289DecisionChanged": false,
+    "for290DecisionChanged": false,
+    "m60Promoted": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
