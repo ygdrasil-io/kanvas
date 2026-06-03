@@ -9,6 +9,8 @@
   "sampleRemap": "scratchPixel(p) samples childSource(p - offset)",
   "for247ScratchProbe": "scratch-probe-for247.json",
   "for247ProbeResult": "scratchPixel(45,5) == sourceLocal(5,5) == rgba(202,59,19,255)",
+  "for248FinalCropCompositeProbe": "final-crop-composite-probe-for248.json",
+  "for248ProbeResult": "final Crop composite sentinel reads scratchPixel(45,5) as rgba(202,59,19,102); normal final GM fragment observes rgba(220,153,145,255)",
   "finalComposite": "Crop(kDecal) UV remap against scratch texture",
   "supportDecision": "risk.fidelity-gap; no strict promotion",
   "unsupportedReasonRemoved": "image-filter.crop-input-nonnull-prepass-required",
