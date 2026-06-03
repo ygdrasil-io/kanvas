@@ -1855,6 +1855,14 @@ public class SkWebGpuDevice(
         // blurred coverage B with the sharp shape-mask alpha M per
         // the formulas in [SkBlurMaskFilter].
         val blurStyleOrdinal: Int,
+        // FOR-270 -- analytic clip shape applied by the final blur
+        // composite pass. The child shape-mask render stays unclipped
+        // so maskFilter expansion happens before the active clip is
+        // applied, matching the draw pipeline order.
+        val clipShapeBounds: FloatArray,
+        val clipShapeRx: Float,
+        val clipShapeRy: Float,
+        val clipKind: Float,
         // Phase MaskFilter-blur-cascade -- when sigma exceeds the
         // single-stage kernel reach (MAX_BLUR_RADIUS = 32 -> sigma
         // ~10.6), the dispatch builds an N-stage downsample chain +
@@ -1942,11 +1950,11 @@ public class SkWebGpuDevice(
      * buffer because the V pass reads scratchH after the H pass wrote
      * it ; we close them in [closeDrawResources] after submission.
      *
-     * The kernel weights, radius cap, and uniform layout mirror
-     * [BlurredPathDraw] exactly -- the host packs the same 192-byte
-     * uniform, only `paintColor` ships as zeros since the shaded layer
-     * already carries the final colour (no paint-colour fold in the
-     * shader). The bind-group layout is shared with the solid-paint
+     * The kernel weights and radius cap mirror [BlurredPathDraw] --
+     * the host packs the same blur-prefix fields, only `paintColor`
+     * ships as zeros since the shaded layer already carries the final
+     * colour (no paint-colour fold in the shader). The bind-group layout
+     * is shared with the solid-paint
      * variant so the two MaskFilter pipelines reuse a single
      * [blurBindGroupLayout].
      *
@@ -3533,7 +3541,7 @@ public class SkWebGpuDevice(
      * [blurCascadeCompositePipelineFor] after the upsample chain.
      *
      * Reuses [blurGaussianShader] / [blurBindGroupLayout] (same
-     * 192-byte uniform, same two-texture bind layout). Entry point
+     * blur uniform, same two-texture bind layout). Entry point
      * `fs_vertical_blur` -- the V-pass Gaussian convolution without
      * the style / paint / composite tail.
      */
@@ -9121,6 +9129,7 @@ public class SkWebGpuDevice(
             SkBlurStyle.kOuter -> 2
             SkBlurStyle.kInner -> 3
         }
+        val blurClip = packClipShape(activeClipShape)
 
         pending.add(
             BlurredPathDraw(
@@ -9135,6 +9144,10 @@ public class SkWebGpuDevice(
                 radius = finalRadius,
                 paintR = cr, paintG = cg, paintB = cb, paintA = ca,
                 blurStyleOrdinal = styleOrdinal,
+                clipShapeBounds = blurClip.bounds,
+                clipShapeRx = blurClip.rx,
+                clipShapeRy = blurClip.ry,
+                clipKind = blurClip.kind,
                 cascade = cascade,
                 r = 1f, g = 1f, b = 1f, a = 1f,
                 mode = paint.blendMode,
@@ -14955,6 +14968,7 @@ public class SkWebGpuDevice(
             for (k in 0..d.radius) {
                 vPacked[12 + k] = d.kernel[k]
             }
+            writeBlurClipShape(vPacked, d)
             context.queue.writeBuffer(vUniform, 0uL, ArrayBuffer.of(vPacked))
             val vBindGroup = context.device.createBindGroup(
                 BindGroupDescriptor(
@@ -15114,6 +15128,7 @@ public class SkWebGpuDevice(
         cPacked[6] = d.paintB; cPacked[7] = d.paintA
         cPacked[8] = 0f; cPacked[9] = 0f
         cPacked[10] = 0f; cPacked[11] = d.blurStyleOrdinal.toFloat()
+        writeBlurClipShape(cPacked, d)
         context.queue.writeBuffer(compositeUniform, 0uL, ArrayBuffer.of(cPacked))
         val compositeBindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -15157,6 +15172,13 @@ public class SkWebGpuDevice(
             cascadeTextures = cascadeTextures,
             cascadeViews = cascadeViews,
         )
+    }
+
+    private fun writeBlurClipShape(packed: FloatArray, d: BlurredPathDraw) {
+        val cb = d.clipShapeBounds
+        packed[48] = cb[0]; packed[49] = cb[1]; packed[50] = cb[2]; packed[51] = cb[3]
+        packed[52] = d.clipShapeRx; packed[53] = d.clipShapeRy
+        packed[54] = d.clipKind; packed[55] = 0f
     }
 
     /**
@@ -16691,11 +16713,13 @@ public class SkWebGpuDevice(
          *                                36 float slots ; indices 0..32
          *                                hold the symmetric half-kernel,
          *                                indices 33..35 are zeroed pad)
-         *   ------                       192 bytes
+         *   offset 192 : clipShapeBounds (vec4f -- l, t, r, b)
+         *   offset 208 : clipShapeRadiiKind (vec4f -- rx, ry, clipKind, _)
+         *   ------                       224 bytes
          */
-        const val BLUR_UNIFORM_SIZE: ULong = 192uL
-        /** Float count of [BLUR_UNIFORM_SIZE] for FloatArray packing : 48 floats. */
-        const val BLUR_UNIFORM_FLOATS: Int = 48
+        const val BLUR_UNIFORM_SIZE: ULong = 224uL
+        /** Float count of [BLUR_UNIFORM_SIZE] for FloatArray packing : 56 floats. */
+        const val BLUR_UNIFORM_FLOATS: Int = 56
         /**
          * Phase G-saveLayer-imageFilter-blur -- size of the per-pass
          * blur uniform for the ImageFilter blur shader. Layout (matches

@@ -1,17 +1,17 @@
 {
-  "linear": "FOR-269",
+  "linear": "FOR-270",
   "parent": "FOR-241",
   "probe": "nested-rrect-zone-mask-audit",
   "sceneId": "m60-bounded-nested-rrect-clip",
   "backend": "CPU/WebGPU",
-  "sourceReport": "reports/wgsl-pipeline/2026-06-01-m60-nested-clip-path-aa-promotion.md",
+  "sourceReport": "reports/wgsl-pipeline/2026-06-03-for-270-nested-rrect-difference-oval-mask.md",
   "sourceTest": "org.skia.gpu.webgpu.NestedClipSceneCaptureTest",
   "artifactRoot": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip",
   "supportThreshold": 99.95,
   "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
-  "nextAction": "SUPERSEDED_BY_FOR_270_BLURRED_CONTENT_ENVELOPE_RESIDUAL",
+  "nextAction": "BLURRED_CONTENT_ENVELOPE_RESIDUAL_REMAINS",
   "secondaryBlocker": "GPU_AND_CPU_REFERENCE_REMAIN_BELOW_STRICT_THRESHOLD",
-  "decisionRationale": "FOR-270 superseded the original FOR-269 removed-oval residual by applying the bounded WebGPU blur-composite analytic clip mask. Current artefacts are now dominated by the blurred content envelope, so the scene remains refused until GPU/reference and CPU/reference both reach the strict support threshold.",
+  "decisionRationale": "FOR-270 applies the bounded WebGPU blur-composite analytic clip mask to the nested clip difference oval. The removed-oval GPU residual drops below the FOR-269 dominant zone, but both GPU/reference and CPU/reference remain below the strict support threshold, dominated by the blurred content envelope.",
   "route": {
     "cpu": "cpu.coverage.nested-rrect-clip-oracle",
     "gpu": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
@@ -1152,5 +1152,17 @@
     "ganeshOrGraphiteAdded": false,
     "skSLCompilerAdded": false,
     "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required"
+  },
+  "sourceAudit": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/nested-rrect-zone-mask-audit-for269.json",
+  "for270Effect": {
+    "boundedFix": "webgpu.blur-composite-analytic-clip-shape",
+    "for269GpuSimilarity": 71.22,
+    "for270GpuSimilarity": 97.5,
+    "for269GpuRemovedOvalGreaterThanThirtyTwoPixels": 246288,
+    "for270GpuRemovedOvalGreaterThanThirtyTwoPixels": 573,
+    "for269GpuRemovedOvalDominantShare": 92.912221,
+    "for270GpuRemovedOvalShare": 2.959558,
+    "for270GpuDominantGreaterThanThirtyTwoZone": "blurred_content_envelope",
+    "for270CpuDominantGreaterThanThirtyTwoZone": "blurred_content_envelope"
   }
 }
