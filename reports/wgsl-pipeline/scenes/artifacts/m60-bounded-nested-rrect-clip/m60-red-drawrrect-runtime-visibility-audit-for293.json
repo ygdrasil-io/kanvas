@@ -1,0 +1,248 @@
+{
+  "linear": "FOR-293",
+  "parent": "FOR-241",
+  "probe": "m60-red-drawrrect-runtime-visibility-audit",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/RGBA_8888/reconstructed-red-domain-vs-target-filtered-runtime-root",
+  "sourceAudits": {
+    "for286": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-active-aa-difference-store-trace-for286.json",
+    "for288": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-store-order-audit-for288.json",
+    "for289": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-runtime-write-chronology-for289.json",
+    "for290": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-expanded-runtime-write-trace-for290.json",
+    "for291": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-reconstructed-store-model-audit-for291.json",
+    "for292": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-source-payload-derivation-audit-for292.json"
+  },
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "RED_DRAWRRECT_RUNTIME_VISIBILITY_STILL_AMBIGUOUS",
+  "exactGap": "FOR-290's runtime trace is target-filtered to exactly the 59 outer-boundary pixels; 22365 reconstructed red drawRRect store-candidate pixels outside those captured coordinates have no root runtime visibility yet.",
+  "firstDemonstratedDivergence": "The red drawRRect reconstructed domain is much wider than the 59 captured runtime coordinates, but the only runtime-root trace currently available is hard-filtered to exactly those 59 pixels.",
+  "route": {
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold",
+    "for286Decision": "NEXT_FIX_CPU_ACTIVE_AA_DIFFERENCE_CLIP_STORE_ORDER_NOT_SRCOVER_OR_PAYLOAD",
+    "for288PrimaryClassification": "OTHER_LATER_WRITE_AFTER_RECONSTRUCTED_RED_STORE",
+    "for289Decision": "PROOF_INSUFFICIENT_RUNTIME_WRITE_CHRONOLOGY_GAP",
+    "for290Decision": "NO_RUNTIME_RED_ROOT_STORE_FOUND",
+    "for291Decision": "RECONSTRUCTION_SOURCE_PAYLOAD_MISMATCH",
+    "for292Decision": "RECONSTRUCTED_PAYLOAD_DRAW_MAPPING_MISMATCH",
+    "sourceNeedles": {
+      "gmRedDrawRRectAfterWhiteDrawRect": true,
+      "gmRedDrawRRectUsesBlurMaskFilter": true,
+      "gmRedDrawRRectUsesSrcInColorFilter": true,
+      "gmHasNoSaveLayer": true,
+      "cpuA8SrcInPayloadTraceSourcePresent": true,
+      "cpuBlendTraceFiltersByTargetPixels": true,
+      "cpuTraceRecordFiltersByTargetPixels": true,
+      "for290TraceTestRequiresExactly59Targets": true,
+      "for290TraceTestUsesRootDimensions": true,
+      "for290TraceTestIncludesBitmapDirectWrites": true
+    }
+  },
+  "redDrawRRectDomain": {
+    "drawOvalDeviceBounds": [
+      8,
+      8,
+      584,
+      584
+    ],
+    "differenceOvalDeviceBounds": [
+      16,
+      16,
+      576,
+      576
+    ],
+    "maskFilterBounds": {
+      "left": 2,
+      "top": 2,
+      "right": 590,
+      "bottom": 590,
+      "margin": 5
+    },
+    "maskNonZeroPixels": 267896,
+    "maskNonZeroBounds": {
+      "left": 4,
+      "top": 4,
+      "right": 588,
+      "bottom": 588,
+      "rightInclusive": 587,
+      "bottomInclusive": 587
+    },
+    "storeCandidatePixelsAfterClip": 22424,
+    "storeCandidateBoundsAfterClip": {
+      "left": 4,
+      "top": 4,
+      "right": 588,
+      "bottom": 588,
+      "rightInclusive": 587,
+      "bottomInclusive": 587
+    },
+    "storeCandidatePixelsOutsideCapturedRuntimeCoordinates": 22365,
+    "storeCandidateSubzones": {
+      "difference_oval_inner_boundary": 6168,
+      "draw_oval_outer_boundary": 10856,
+      "halo_interior": 3568,
+      "removed_difference_oval_interior": 0,
+      "outside_draw_oval": 1832,
+      "blurred_content_envelope": 20592
+    }
+  },
+  "targetPixelComparison": {
+    "targetPixels": 59,
+    "targetBounds": {
+      "left": 94,
+      "top": 84,
+      "right": 105,
+      "bottom": 94,
+      "rightInclusive": 104,
+      "bottomInclusive": 93
+    },
+    "targetsInsideRedStoreCandidateDomain": 59,
+    "targetsWithNonZeroMask": 59,
+    "targetsWithZeroMask": 0,
+    "targetsWithFullClipCoverage": 59,
+    "targetsWithZeroClipCoverage": 0,
+    "targetsWithNonZeroAlphaAfterClip": 59,
+    "targetsWithZeroAlphaAfterClip": 0,
+    "targetsMappedToRedDrawRRectA8SrcInKSrcOver": 59,
+    "runtimeComparableRootDispatchPixels": 59,
+    "runtimeComparableWhiteKSrcPayloadPixels": 59
+  },
+  "runtimeRootVisibility": {
+    "eventCount": 118,
+    "rootEventCount": 118,
+    "rootDispatchEventCount": 59,
+    "eventCoordinateCount": 59,
+    "rootCoordinateCount": 59,
+    "targetCoordinateCount": 59,
+    "eventCoordinatesEqualTargets": true,
+    "rootCoordinatesEqualTargets": true,
+    "rootEventsOutsideTargets": 0,
+    "redOrKSrcOverRootEventsInCapturedTrace": 0,
+    "sourceCounts": {
+      "SkBitmap.eraseColor": 59,
+      "SkBitmapDevice.dispatchBlend": 59
+    },
+    "modeCounts": {
+      "direct": 59,
+      "kSrc": 59
+    },
+    "branchCounts": {
+      "SkBitmap.eraseColor.kRGBA_8888.fill": 59,
+      "SkBitmapDevice.blend.kSrc.setPixel(out)": 59
+    },
+    "bounds": {
+      "left": 94,
+      "top": 84,
+      "right": 105,
+      "bottom": 94,
+      "rightInclusive": 104,
+      "bottomInclusive": 93
+    }
+  },
+  "comparison": {
+    "redCandidateDomainContainsAllTargets": true,
+    "runtimeObservedOnlyTargetCoordinates": true,
+    "runtimeRootObservedOnlyTargetCoordinates": true,
+    "runtimeRedDrawRRectEventsOnCapturedTargets": 0,
+    "runtimeTraceCanAnswerElsewhereQuestion": false,
+    "reasonRuntimeElsewhereCannotBeAnswered": "For290M60ExpandedRuntimeWriteTraceTest asserts exactly 59 targets and SkCpuWriteChronologyTrace records only configured target pixels."
+  },
+  "anchorComparison": {
+    "x": 99,
+    "y": 89,
+    "redReconstructed": {
+      "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+      "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+      "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+      "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+      "maskAAfterBlur": 250,
+      "coverageAppliedInBlend": 255,
+      "dispatchInputMode": "SkBlendMode.kSrcOver",
+      "dispatchInputSrcRgba": [
+        255,
+        0,
+        0,
+        250
+      ],
+      "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+      "valueWrittenRgba": [
+        255,
+        5,
+        5,
+        255
+      ]
+    },
+    "runtimeRoot": {
+      "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+      "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+      "maskFilterBranch": null,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "rootDevice": true,
+      "deviceKind": "root"
+    },
+    "maskAAfterBlur": 250,
+    "clipCoverage": 255,
+    "alphaAfterClip": 250
+  },
+  "sourcePreservation": {
+    "for286DecisionPreserved": true,
+    "for288ClassificationPreserved": true,
+    "for289DecisionPreserved": true,
+    "for290DecisionPreserved": true,
+    "for291DecisionPreserved": true,
+    "for292DecisionPreserved": true
+  },
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuRendererChanged": false,
+    "cpuInstrumentationAdded": false,
+    "gpuRendererChanged": false,
+    "globalBlendChanged": false,
+    "setPixelSemanticsChanged": false,
+    "for288ClassificationChanged": false,
+    "for289DecisionChanged": false,
+    "for290DecisionChanged": false,
+    "for291DecisionChanged": false,
+    "for292DecisionChanged": false,
+    "m60Promoted": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
