@@ -172,6 +172,43 @@ class SimpleOffsetImageFilterWebGpuTest {
         }
     }
 
+    @Test
+    fun `FOR-251 color premul audit classifies SimpleOffset byte residual`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val gm = SimpleOffsetImageFilterGM()
+        val reference = TestUtils.loadReferenceBitmap(gm.name())
+        assertNotNull(reference, "original-888/${gm.name()}.png missing")
+
+        context!!.use { ctx ->
+            val gpu = WebGpuSink.draw(ctx, gm)
+            val probe = buildFor251ColorPremulAuditProbe(reference!!, gpu)
+            assertArrayEquals(
+                intArrayOf(6622),
+                intArrayOf(probe.totalResidualPixels),
+                "FOR-251: color audit must track the known FOR-250 byte-level residual population",
+            )
+            assertArrayEquals(
+                intArrayOf(1),
+                intArrayOf(probe.maxChannelDelta),
+                "FOR-251: residual should remain a 1-byte color tail",
+            )
+            assertArrayEquals(
+                intArrayOf(0),
+                intArrayOf(probe.alphaDeltaNonZeroPixels),
+                "FOR-251: alpha deltas would indicate a premultiplication/composite class change",
+            )
+            assertTrue(
+                probe.dominantCellAggregates.all { it.residualPixels > 0 && it.maxChannelDelta == 1 },
+                "FOR-251: dominant residual cells must stay byte-level and non-empty",
+            )
+            if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                writeFor251ColorPremulAuditJson(probe)
+            }
+        }
+    }
+
     private fun rgbaAt(bitmap: SkBitmap, x: Int, y: Int): IntArray {
         val pixel = bitmap.getPixel(x, y)
         return intArrayOf(
@@ -243,6 +280,61 @@ class SimpleOffsetImageFilterWebGpuTest {
         )
     }
 
+    private fun buildFor251ColorPremulAuditProbe(reference: SkBitmap, gpu: SkBitmap): For251ColorPremulAuditProbe {
+        require(reference.width == gpu.width && reference.height == gpu.height) {
+            "FOR-251 requires same-size reference/GPU bitmaps"
+        }
+        val residualPixels = mutableListOf<ClassifiedPixelDelta>()
+        var maxDelta = 0
+        var alphaDeltaNonZero = 0
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                val delta = pixelDelta(reference, gpu, x, y)
+                maxDelta = maxOf(maxDelta, delta.maxChannelDelta)
+                if (delta.maxChannelDelta > 0) {
+                    if (delta.signedDelta[3] != 0) {
+                        alphaDeltaNonZero += 1
+                    }
+                    residualPixels += ClassifiedPixelDelta(
+                        cellId = classifySimpleOffsetCell(x, y)?.id ?: OUTSIDE_CELLS_ID,
+                        pixel = delta,
+                    )
+                }
+            }
+        }
+        val globalHistograms = signedDeltaHistograms(residualPixels.map { it.pixel })
+        val dominantAggregates = DOMINANT_FOR251_CELL_IDS.map { cellId ->
+            val cell = SIMPLE_OFFSET_CELLS.first { it.id == cellId }
+            val pixels = residualPixels.filter { it.cellId == cellId }.map { it.pixel }
+            ColorPremulCellAggregate(
+                id = cell.id,
+                label = cell.label,
+                origin = intArrayOf(cell.originX, cell.originY),
+                bounds = intArrayOf(cell.originX, cell.originY, cell.originX + CELL_EXTENT, cell.originY + CELL_EXTENT),
+                case = cell.case,
+                residualPixels = pixels.size,
+                maxChannelDelta = pixels.maxOfOrNull { it.maxChannelDelta } ?: 0,
+                alphaDeltaNonZeroPixels = pixels.count { it.signedDelta[3] != 0 },
+                rgbOnlyResidualPixels = pixels.count { it.signedDelta[3] == 0 && it.maxChannelDelta > 0 },
+                signedDeltaHistogram = signedDeltaHistograms(pixels),
+                topColorPairs = topColorPairs(pixels, COLOR_PAIR_TOP_N),
+            )
+        }
+        return For251ColorPremulAuditProbe(
+            width = reference.width,
+            height = reference.height,
+            totalResidualPixels = residualPixels.size,
+            maxChannelDelta = maxDelta,
+            alphaDeltaNonZeroPixels = alphaDeltaNonZero,
+            rgbOnlyResidualPixels = residualPixels.count {
+                it.pixel.signedDelta[3] == 0 && it.pixel.maxChannelDelta > 0
+            },
+            signedDeltaHistogram = globalHistograms,
+            topColorPairs = topColorPairs(residualPixels.map { it.pixel }, COLOR_PAIR_TOP_N),
+            dominantCellAggregates = dominantAggregates,
+        )
+    }
+
     private fun buildCellAggregate(
         cell: SimpleOffsetCell,
         pixels: List<ClassifiedPixelDelta>,
@@ -306,6 +398,44 @@ class SimpleOffsetImageFilterWebGpuTest {
             gpu = gpuRgba,
             delta = delta,
         )
+    }
+
+    private fun signedDeltaHistograms(pixels: List<PixelDelta>): List<Map<Int, Int>> =
+        (0 until 4).map { channel ->
+            pixels
+                .groupingBy { it.signedDelta[channel] }
+                .eachCount()
+                .toSortedMap()
+        }
+
+    private fun topColorPairs(pixels: List<PixelDelta>, limit: Int): List<ColorPairGroup> {
+        val groups = linkedMapOf<String, ColorPairAccumulator>()
+        for (pixel in pixels) {
+            val key = "${jsonArray(pixel.reference)}->${jsonArray(pixel.gpu)}"
+            val accumulator = groups.getOrPut(key) {
+                ColorPairAccumulator(
+                    reference = pixel.reference,
+                    gpu = pixel.gpu,
+                    signedDelta = pixel.signedDelta,
+                )
+            }
+            accumulator.count += 1
+        }
+        return groups.values
+            .map {
+                ColorPairGroup(
+                    reference = it.reference,
+                    gpu = it.gpu,
+                    signedDelta = it.signedDelta,
+                    count = it.count,
+                )
+            }
+            .sortedWith(
+                compareByDescending<ColorPairGroup> { it.count }
+                    .thenBy { it.reference.joinToString(",") }
+                    .thenBy { it.gpu.joinToString(",") },
+            )
+            .take(limit)
     }
 
     private fun writeFor247ScratchProbeJson(sourceLocal: IntArray, scratch: IntArray) {
@@ -493,6 +623,45 @@ class SimpleOffsetImageFilterWebGpuTest {
         )
     }
 
+    private fun writeFor251ColorPremulAuditJson(probe: For251ColorPremulAuditProbe) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/generated/artifacts/crop-image-filter-nonnull-prepass",
+        ).apply { mkdirs() }
+        File(dir, "color-premul-audit-for251.json").writeText(
+            """
+            {
+              "backend": "WebGPU",
+              "referenceBackend": "skia-upstream",
+              "sceneId": "crop-image-filter-nonnull-prepass",
+              "linear": "FOR-251",
+              "probe": "color-premul-byte-residual-audit",
+              "imageSize": [${probe.width}, ${probe.height}],
+              "deltaDefinition": "signed channel delta is GPU minus reference",
+              "totalResidualPixels": ${probe.totalResidualPixels},
+              "maxChannelDelta": ${probe.maxChannelDelta},
+              "alphaDeltaNonZeroPixels": ${probe.alphaDeltaNonZeroPixels},
+              "rgbOnlyResidualPixels": ${probe.rgbOnlyResidualPixels},
+              "signedDeltaHistogram": ${signedDeltaHistogramToJson(probe.signedDeltaHistogram, indent = "              ")},
+              "topColorPairLimit": $COLOR_PAIR_TOP_N,
+              "topColorPairs": [
+            ${probe.topColorPairs.joinToString(",\n") { it.toJson(indent = "                ") }}
+              ],
+              "dominantCellIds": [
+            ${DOMINANT_FOR251_CELL_IDS.joinToString(",\n") { "                \"$it\"" }}
+              ],
+              "dominantCellAggregates": [
+            ${probe.dominantCellAggregates.joinToString(",\n") { it.toJson(indent = "                ") }}
+              ],
+              "interpretation": "The SimpleOffset residual is an RGB-only byte-rounding tail: every non-identical pixel has maxChannelDelta=1 and alphaDeltaNonZeroPixels=0. The dominant cells include an unfiltered source-only cell, so the evidence does not justify a bounded Crop renderer correction or a threshold change.",
+              "observationMethod": "test-side Skia reference PNG and normal WebGPU render readback; no renderer diagnostic property, no CPU/readback fallback in the render path",
+              "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+              "fallbackReason": "none",
+              "supportDecision": "KEEP_DIAGNOSTIC"
+            }
+            """.trimIndent() + "\n",
+        )
+    }
+
     private fun PixelDelta.toJson(indent: String): String =
         """
         {
@@ -504,6 +673,51 @@ class SimpleOffsetImageFilterWebGpuTest {
           "withinTolerance8": ${maxChannelDelta <= 8}
         }
         """.trimIndent().prependIndent(indent)
+
+    private fun ColorPairGroup.toJson(indent: String): String =
+        """
+        {
+          "referenceRgba": ${jsonArray(reference)},
+          "gpuRgba": ${jsonArray(gpu)},
+          "signedDeltaRgba": ${jsonArray(signedDelta)},
+          "count": $count
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun ColorPremulCellAggregate.toJson(indent: String): String =
+        """
+        {
+          "id": "$id",
+          "label": "$label",
+          "origin": ${jsonArray(origin)},
+          "bounds": ${jsonArray(bounds)},
+          "case": "$case",
+          "residualPixels": $residualPixels,
+          "maxChannelDelta": $maxChannelDelta,
+          "alphaDeltaNonZeroPixels": $alphaDeltaNonZeroPixels,
+          "rgbOnlyResidualPixels": $rgbOnlyResidualPixels,
+          "signedDeltaHistogram": ${signedDeltaHistogramToJson(signedDeltaHistogram, indent = "$indent  ")},
+          "topColorPairs": [
+        ${topColorPairs.joinToString(",\n") { it.toJson(indent = "$indent    ") }}
+          ]
+        }
+        """.trimIndent().prependIndent(indent)
+
+    private fun signedDeltaHistogramToJson(histogram: List<Map<Int, Int>>, indent: String): String {
+        val channels = listOf("r", "g", "b", "a")
+        return channels.indices.joinToString(
+            prefix = "{\n",
+            separator = ",\n",
+            postfix = "\n$indent}",
+        ) { index ->
+            val entries = histogram[index].entries.joinToString(
+                prefix = "[",
+                separator = ", ",
+                postfix = "]",
+            ) { entry -> """{"delta": ${entry.key}, "count": ${entry.value}}""" }
+            """$indent  "${channels[index]}": $entries"""
+        }
+    }
 
     private fun ClassifiedPixelDelta.toJson(indent: String): String =
         """
@@ -558,10 +772,16 @@ class SimpleOffsetImageFilterWebGpuTest {
         const val HIGH_DELTA_THRESHOLD: Int = 0
         const val STRICT_HIGH_DELTA_THRESHOLD: Int = 8
         const val HIGH_DELTA_TOP_N: Int = 20
+        const val COLOR_PAIR_TOP_N: Int = 16
         const val OUTSIDE_CELLS_ID: String = "outside-simple-offset-cells"
         const val FOR247_PROBE_PROPERTY: String = "kanvas.webgpu.for247.cropOffsetScratchProbe"
         const val FOR248_PROBE_PROPERTY: String = "kanvas.webgpu.for248.finalCropCompositeProbe"
         const val WRITE_EVIDENCE_PROPERTY: String = "kanvas.sceneEvidence.write"
+        val DOMINANT_FOR251_CELL_IDS: List<String> = listOf(
+            "row1-col0-no-filter",
+            "row1-col1-offset-no-crop",
+            "row2-col3-crop-clip-dst",
+        )
         val SIMPLE_OFFSET_CELLS: List<SimpleOffsetCell> = listOf(
             SimpleOffsetCell(
                 id = "row1-col0-no-filter",
@@ -652,6 +872,7 @@ class SimpleOffsetImageFilterWebGpuTest {
         val delta: IntArray,
     ) {
         val maxChannelDelta: Int = delta.maxOrNull() ?: 0
+        val signedDelta: IntArray = IntArray(4) { channel -> gpu[channel] - reference[channel] }
     }
 
     private data class NamedPixelDelta(
@@ -694,5 +915,45 @@ class SimpleOffsetImageFilterWebGpuTest {
         val maxChannelDelta: Int,
         val topPixels: List<ClassifiedPixelDelta>,
         val cellAggregates: List<SimpleOffsetResidualAggregate>,
+    )
+
+    private data class ColorPairAccumulator(
+        val reference: IntArray,
+        val gpu: IntArray,
+        val signedDelta: IntArray,
+        var count: Int = 0,
+    )
+
+    private data class ColorPairGroup(
+        val reference: IntArray,
+        val gpu: IntArray,
+        val signedDelta: IntArray,
+        val count: Int,
+    )
+
+    private data class ColorPremulCellAggregate(
+        val id: String,
+        val label: String,
+        val origin: IntArray,
+        val bounds: IntArray,
+        val case: String,
+        val residualPixels: Int,
+        val maxChannelDelta: Int,
+        val alphaDeltaNonZeroPixels: Int,
+        val rgbOnlyResidualPixels: Int,
+        val signedDeltaHistogram: List<Map<Int, Int>>,
+        val topColorPairs: List<ColorPairGroup>,
+    )
+
+    private data class For251ColorPremulAuditProbe(
+        val width: Int,
+        val height: Int,
+        val totalResidualPixels: Int,
+        val maxChannelDelta: Int,
+        val alphaDeltaNonZeroPixels: Int,
+        val rgbOnlyResidualPixels: Int,
+        val signedDeltaHistogram: List<Map<Int, Int>>,
+        val topColorPairs: List<ColorPairGroup>,
+        val dominantCellAggregates: List<ColorPremulCellAggregate>,
     )
 }
