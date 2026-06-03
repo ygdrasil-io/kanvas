@@ -1,0 +1,283 @@
+{
+  "backend": "WebGPU",
+  "referenceBackend": "skia-upstream",
+  "sceneId": "crop-image-filter-nonnull-prepass",
+  "linear": "FOR-249",
+  "probe": "reference-gpu-residual-window",
+  "targetCell": "crop == clip == dst",
+  "case": "Crop(kDecal, rect=(40,0,80,40), input=Offset(40,0,input=null))",
+  "origin": [340, 120],
+  "layerExtent": [80, 40],
+  "offset": [40, 0],
+  "cropRect": [40, 0, 80, 40],
+  "tileMode": "kDecal",
+  "targetFragment":               {
+    "xy": [385, 125],
+    "referenceRgba": [221, 153, 145, 255],
+    "gpuRgba": [220, 153, 145, 255],
+    "deltaRgba": [1, 0, 0, 0],
+    "maxChannelDelta": 1,
+    "withinTolerance8": true
+  },
+  "window": {
+    "center": [385, 125],
+    "radius": 2,
+    "boundsInclusive": [383, 123, 387, 127],
+    "maxChannelDelta": 1,
+    "allPixelsWithinTolerance8": true,
+    "pixels": [
+                  {
+        "xy": [383, 123],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [384, 123],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [385, 123],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [386, 123],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [387, 123],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [383, 124],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [384, 124],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [385, 124],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [386, 124],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [387, 124],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [383, 125],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [384, 125],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [385, 125],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [386, 125],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [387, 125],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [383, 126],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [384, 126],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [385, 126],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [386, 126],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [387, 126],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [383, 127],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [384, 127],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [385, 127],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [386, 127],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      },
+      {
+        "xy": [387, 127],
+        "referenceRgba": [221, 153, 145, 255],
+        "gpuRgba": [220, 153, 145, 255],
+        "deltaRgba": [1, 0, 0, 0],
+        "maxChannelDelta": 1,
+        "withinTolerance8": true
+      }
+    ]
+  },
+  "cellSamples": [
+                {
+      "name": "cellOrigin",
+      "sample": {
+                "xy": [340, 120],
+                "referenceRgba": [149, 144, 246, 255],
+                "gpuRgba": [149, 144, 246, 255],
+                "deltaRgba": [0, 0, 0, 0],
+                "maxChannelDelta": 0,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "name": "cropStartInside",
+      "sample": {
+                "xy": [380, 120],
+                "referenceRgba": [129, 84, 52, 255],
+                "gpuRgba": [129, 84, 52, 255],
+                "deltaRgba": [0, 0, 0, 0],
+                "maxChannelDelta": 0,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "name": "targetFragment",
+      "sample": {
+                "xy": [385, 125],
+                "referenceRgba": [221, 153, 145, 255],
+                "gpuRgba": [220, 153, 145, 255],
+                "deltaRgba": [1, 0, 0, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "name": "cropEndInside",
+      "sample": {
+                "xy": [399, 159],
+                "referenceRgba": [129, 84, 52, 255],
+                "gpuRgba": [129, 84, 52, 255],
+                "deltaRgba": [0, 0, 0, 0],
+                "maxChannelDelta": 0,
+                "withinTolerance8": true
+              }
+    }
+  ],
+  "maxObservedDelta": 1,
+  "interpretation": "The normal WebGPU fragment at (385,125) matches the Skia reference within 1 byte; the remaining scene-level residual is not explained by scratch materialization or final Crop UV remap and is outside this target 5x5 window.",
+  "observationMethod": "test-side Skia reference PNG and normal WebGPU render readback; no renderer diagnostic property, no CPU/readback fallback in the render path",
+  "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+  "fallbackReason": "none",
+  "supportDecision": "KEEP_DIAGNOSTIC"
+}

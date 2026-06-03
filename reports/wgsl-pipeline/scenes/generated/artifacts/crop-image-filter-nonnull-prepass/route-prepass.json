@@ -11,6 +11,8 @@
   "for247ProbeResult": "scratchPixel(45,5) == sourceLocal(5,5) == rgba(202,59,19,255)",
   "for248FinalCropCompositeProbe": "final-crop-composite-probe-for248.json",
   "for248ProbeResult": "final Crop composite sentinel reads scratchPixel(45,5) as rgba(202,59,19,102); normal final GM fragment observes rgba(220,153,145,255)",
+  "for249ReferenceGpuResidualProbe": "reference-gpu-residual-window-for249.json",
+  "for249ProbeResult": "normal WebGPU fragment window around (385,125) matches Skia reference within maxChannelDelta=1; remaining score residual is outside this local Crop composite target window",
   "finalComposite": "Crop(kDecal) UV remap against scratch texture",
   "supportDecision": "risk.fidelity-gap; no strict promotion",
   "unsupportedReasonRemoved": "image-filter.crop-input-nonnull-prepass-required",
