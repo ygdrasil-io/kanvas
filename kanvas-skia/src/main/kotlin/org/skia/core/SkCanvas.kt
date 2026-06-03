@@ -1226,7 +1226,7 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
                 sourceBounds.bottom,
             )
             layerBounds.join(filteredBounds)
-            saveLayer(layerBounds, layerPaint)
+            saveLayerForImageFilterSourceCapture(layerBounds, layerPaint)
             drawRect(rect, innerPaint)
             restoreToCount(restoreCount)
             return
@@ -3067,20 +3067,32 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
      */
     public open fun saveLayer(rec: SaveLayerRec): Int = saveLayer(rec, filters = null)
 
-    private fun saveLayer(rec: SaveLayerRec, filters: List<SkImageFilter?>?): Int {
+    private fun saveLayerForImageFilterSourceCapture(bounds: SkRect, paint: SkPaint): Int =
+        saveLayer(
+            SaveLayerRec(bounds = bounds, paint = paint, backdrop = null, flags = 0),
+            filters = null,
+            captureClipToCurrentClip = false,
+        )
+
+    private fun saveLayer(
+        rec: SaveLayerRec,
+        filters: List<SkImageFilter?>?,
+        captureClipToCurrentClip: Boolean = true,
+    ): Int {
         val bounds = rec.bounds
         val paint = rec.paint
         val backdrop = rec.backdrop
         val s = top
+        val captureClip = if (captureClipToCurrentClip) s.clip else s.device.deviceClipBounds()
         val layerBounds: SkIRect = if (bounds == null) {
-            s.clip
+            captureClip
         } else {
             val devBounds = s.matrix.mapRect(bounds)
             SkIRect.MakeLTRB(
-                maxOf(s.clip.left, kFloor(devBounds.left.toDouble()).toInt()),
-                maxOf(s.clip.top, kFloor(devBounds.top.toDouble()).toInt()),
-                minOf(s.clip.right, kCeil(devBounds.right.toDouble()).toInt()),
-                minOf(s.clip.bottom, kCeil(devBounds.bottom.toDouble()).toInt()),
+                maxOf(captureClip.left, kFloor(devBounds.left.toDouble()).toInt()),
+                maxOf(captureClip.top, kFloor(devBounds.top.toDouble()).toInt()),
+                minOf(captureClip.right, kCeil(devBounds.right.toDouble()).toInt()),
+                minOf(captureClip.bottom, kCeil(devBounds.bottom.toDouble()).toInt()),
             )
         }
 
@@ -3169,10 +3181,10 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         val newState = State(
             matrix = layerMatrix,
             clip = SkIRect.MakeLTRB(
-                maxOf(0, s.clip.left - originX),
-                maxOf(0, s.clip.top - originY),
-                minOf(w, s.clip.right - originX),
-                minOf(h, s.clip.bottom - originY),
+                maxOf(0, captureClip.left - originX),
+                maxOf(0, captureClip.top - originY),
+                minOf(w, captureClip.right - originX),
+                minOf(h, captureClip.bottom - originY),
             ),
             device = layerDevice,
             layer = Layer(s.device, originX, originY, paint, filters),
