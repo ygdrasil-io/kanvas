@@ -340,6 +340,40 @@ public class SkWebGpuDevice(
         val resourceCacheEntryCount: Int,
     )
 
+    public data class RawColorSentinelSnapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val rectUniformColorWrites: List<RawRectUniformColorWrite>,
+        val rgba8TextureUploads: List<RawRgba8TextureUpload>,
+    )
+
+    public data class RawRectUniformColorWrite(
+        val route: String,
+        val drawIndex: Int,
+        val scissor: IntArray,
+        val outerBounds: FloatArray,
+        val normalizedRgba: FloatArray,
+        val rawColorWordBits: IntArray,
+        val rawColorWordHex: List<String>,
+        val sourceRgba8: IntArray,
+        val blendMode: String,
+    )
+
+    public data class RawRgba8TextureUpload(
+        val uploadIndex: Int,
+        val width: Int,
+        val height: Int,
+        val byteCount: Int,
+        val format: String,
+        val texelSamples: List<RawRgba8TexelSample>,
+    )
+
+    public data class RawRgba8TexelSample(
+        val x: Int,
+        val y: Int,
+        val rgba: IntArray,
+    )
+
     internal data class SolidRectMigrationDiagnostics(
         val shaderFamily: String,
         val selectedPath: String?,
@@ -386,6 +420,10 @@ public class SkWebGpuDevice(
     )
 
     private val cacheCounters: CacheCounters = CacheCounters()
+    private val rawColorSentinelDiagnosticsEnabled: Boolean =
+        System.getProperty(RAW_COLOR_SENTINELS_PROPERTY, "false").toBoolean()
+    private val rawRectUniformColorWrites: MutableList<RawRectUniformColorWrite> = mutableListOf()
+    private val rawRgba8TextureUploads: MutableList<RawRgba8TextureUpload> = mutableListOf()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
         PipelineKeyedCache("generated shader modules")
@@ -424,6 +462,13 @@ public class SkWebGpuDevice(
         shaderModuleCount = shaderModuleCache.size + generatedShaderModuleCache.size,
         pipelineCacheEntryCount = pipelineCacheEntryCount(),
         resourceCacheEntryCount = imageTextureCache.size + bitmapSamplerCache.size,
+    )
+
+    public fun rawColorSentinelSnapshot(): RawColorSentinelSnapshot = RawColorSentinelSnapshot(
+        propertyName = RAW_COLOR_SENTINELS_PROPERTY,
+        enabled = rawColorSentinelDiagnosticsEnabled,
+        rectUniformColorWrites = rawRectUniformColorWrites.toList(),
+        rgba8TextureUploads = rawRgba8TextureUploads.toList(),
     )
 
     public fun buildPipelineKeyIdentityForDiagnostics(axes: Map<String, String>): PipelineKey =
@@ -569,6 +614,55 @@ public class SkWebGpuDevice(
             g = g,
             b = b,
             a = SkColorGetA(srgbArgb) / 255.0,
+        )
+    }
+
+    private fun recordRawRectUniformColorWrite(d: RectDraw, packed: FloatArray) {
+        if (!rawColorSentinelDiagnosticsEnabled) return
+        val colorWords = IntArray(4) { index -> packed[index].toRawBits() }
+        rawRectUniformColorWrites += RawRectUniformColorWrite(
+            route = "webgpu.canvas.draw-rect.src-over",
+            drawIndex = rawRectUniformColorWrites.size,
+            scissor = intArrayOf(d.x, d.y, d.w, d.h),
+            outerBounds = floatArrayOf(d.ol, d.ot, d.or, d.ob),
+            normalizedRgba = floatArrayOf(packed[0], packed[1], packed[2], packed[3]),
+            rawColorWordBits = colorWords,
+            rawColorWordHex = colorWords.map { word -> word.toUInt().toString(16).padStart(8, '0') },
+            sourceRgba8 = intArrayOf(
+                ((packed[0] * 255f) + 0.5f).toInt().coerceIn(0, 255),
+                ((packed[1] * 255f) + 0.5f).toInt().coerceIn(0, 255),
+                ((packed[2] * 255f) + 0.5f).toInt().coerceIn(0, 255),
+                ((packed[3] * 255f) + 0.5f).toInt().coerceIn(0, 255),
+            ),
+            blendMode = d.mode.name,
+        )
+    }
+
+    private fun recordRawRgba8TextureUpload(width: Int, height: Int, bytes: ByteArray) {
+        if (!rawColorSentinelDiagnosticsEnabled) return
+        val samples = ArrayList<RawRgba8TexelSample>()
+        val seen = LinkedHashSet<String>()
+        for (i in 0 until width * height) {
+            val base = i * 4
+            val rgba = intArrayOf(
+                bytes[base].toInt() and 0xFF,
+                bytes[base + 1].toInt() and 0xFF,
+                bytes[base + 2].toInt() and 0xFF,
+                bytes[base + 3].toInt() and 0xFF,
+            )
+            val key = rgba.joinToString(",")
+            if (seen.add(key)) {
+                samples += RawRgba8TexelSample(x = i % width, y = i / width, rgba = rgba)
+                if (samples.size >= RAW_COLOR_SENTINEL_TEXEL_SAMPLE_LIMIT) break
+            }
+        }
+        rawRgba8TextureUploads += RawRgba8TextureUpload(
+            uploadIndex = rawRgba8TextureUploads.size,
+            width = width,
+            height = height,
+            byteCount = bytes.size,
+            format = "RGBA8Unorm",
+            texelSamples = samples,
         )
     }
 
@@ -3729,6 +3823,7 @@ public class SkWebGpuDevice(
                 bytes[i * 4 + 2] = SkColorGetB(c).toByte()
                 bytes[i * 4 + 3] = SkColorGetA(c).toByte()
             }
+            recordRawRgba8TextureUpload(w, h, bytes)
             context.queue.writeTexture(
                 destination = TexelCopyTextureInfo(texture = tex),
                 data = ArrayBuffer.of(bytes),
@@ -13757,6 +13852,7 @@ public class SkWebGpuDevice(
         // are zero and the shader's fast path stays warm.
         System.arraycopy(d.colorFilterPacked, 0, packed, 20, 24)
         packed[22] = targetColorSpaceBlendFlag()
+        recordRawRectUniformColorWrite(d, packed)
         context.queue.writeBuffer(buf, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -15979,6 +16075,9 @@ public class SkWebGpuDevice(
     }
 
     private companion object {
+        const val RAW_COLOR_SENTINELS_PROPERTY: String = "kanvas.webgpu.rawColorSentinels"
+        const val RAW_COLOR_SENTINEL_TEXEL_SAMPLE_LIMIT: Int = 16
+
         private val SUPPORTED_RUNTIME_EFFECT_WGSL_IDS = setOf(
             "wgsl/runtime_linear_gradient_rt",
             "wgsl/runtime_simple_rt",

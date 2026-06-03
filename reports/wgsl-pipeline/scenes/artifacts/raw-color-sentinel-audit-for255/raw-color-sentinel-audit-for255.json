@@ -1,0 +1,64 @@
+{
+  "backend": "WebGPU",
+  "referenceBackend": "mixed skia-upstream and artifact oracle PNGs",
+  "linear": "FOR-255",
+  "probe": "raw-color-sentinel-boundary-audit",
+  "deltaDefinition": "signed channel delta is GPU minus reference",
+  "propertyName": "kanvas.webgpu.rawColorSentinels",
+  "defaultEnabled": false,
+  "runtimeSnapshotsEnabled": true,
+  "observedBoundaries": {
+    "hostObserved": true,
+    "uploadWriteObserved": true,
+    "shaderObserved": "notCaptured",
+    "outputReferenceGpuObserved": true
+  },
+  "legacySourceUniform": {
+    "id": "legacy-source-color-uniform.simple-offset-row1-col0",
+    "hostObservedRgba8": [255, 0, 0, 102],
+    "hostObservedNormalizedRgba": [1.0, 0.0, 0.0, 0.4],
+    "rawWriteObservedRgba8": [255, 0, 0, 102],
+    "rawUniformWordBits": [1065353216, 0, 0, 1053609165],
+    "rawUniformWordHex": [
+                    "3f800000",
+            "00000000",
+            "00000000",
+            "3ecccccd"
+    ],
+    "scissor": [40, 40, 40, 40],
+    "outputReferenceGpu": {
+            "xy": [40, 40],
+            "referenceRgba": [158, 90, 139, 255],
+            "gpuRgba": [157, 90, 138, 255],
+            "deltaRgba": [1, 0, 1, 0],
+            "maxChannelDelta": 1,
+            "withinTolerance8": true
+          },
+    "verdict": "raw uniform write matches host-normalized legacy source color; the 1-byte RGB tail remains after uniform consumption/blend/reference comparison"
+  },
+  "bitmapTexelUpload": {
+    "id": "bitmap-texel-upload-sample.bitmap-rect-nearest",
+    "hostObservedRgba8": [149, 193, 207, 255],
+    "rawUploadObservedRgba8": [149, 193, 207, 255],
+    "uploadSize": [1, 1],
+    "uploadTexelXy": [0, 0],
+    "outputReferenceGpu": {
+            "xy": [8, 24],
+            "referenceRgba": [149, 193, 207, 255],
+            "gpuRgba": [148, 193, 207, 255],
+            "deltaRgba": [1, 0, 0, 0],
+            "maxChannelDelta": 1,
+            "withinTolerance8": true
+          },
+    "verdict": "raw RGBA8 upload bytes match the representative bitmap texel; the 1-byte RGB tail remains after texture normalization/sample/reference comparison"
+  },
+  "shaderObserved": {
+    "status": "notCaptured",
+    "reason": "Capturing pre-blend shader values would require a diagnostic WGSL/storage-buffer or alternate render target path. That would change pipeline layout/shader code for this ticket; FOR-255 keeps normal rendering unchanged and records only already-computed host/write/upload sentinels."
+  },
+  "interpretation": "The raw legacy source-color uniform words match the host-normalized RGBA input and the raw bitmap upload bytes match the representative RGBA8 texel. The remaining RGB-only 1-byte tail is therefore downstream of host packing/upload, or in reference/output comparison, but FOR-255 does not capture shader-observed pre-blend values without changing shader/pipeline layout.",
+  "observationMethod": "opt-in SkWebGpuDevice raw sentinels enabled only by kanvas.webgpu.rawColorSentinels; records already-computed uniform floats before queue.writeBuffer and RGBA8 bytes before queue.writeTexture; normal render path, shaders, thresholds, fallback policy and CPU/readback behavior are unchanged",
+  "supportDecision": "KEEP_DIAGNOSTIC",
+  "correctionApplied": false,
+  "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+}
