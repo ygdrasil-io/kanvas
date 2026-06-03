@@ -83,6 +83,10 @@ public object SkCpuWriteChronologyTrace {
         public val index: Int,
         public val x: Int,
         public val y: Int,
+        public val bitmapWidth: Int,
+        public val bitmapHeight: Int,
+        public val deviceKind: String,
+        public val rootDevice: Boolean,
         public val source: String,
         public val callsite: String,
         public val branch: String,
@@ -102,13 +106,21 @@ public object SkCpuWriteChronologyTrace {
     private var targetPixels: Set<Target> = emptySet()
     private var targetWidth: Int? = null
     private var targetHeight: Int? = null
+    private var includeBitmapDirectWrites: Boolean = false
     private val events = mutableListOf<Event>()
+    private val bitmapWriteTraceSuppression = ThreadLocal.withInitial { 0 }
 
-    public fun configureForTargets(targets: Set<Target>, width: Int? = null, height: Int? = null) {
+    public fun configureForTargets(
+        targets: Set<Target>,
+        width: Int? = null,
+        height: Int? = null,
+        includeBitmapDirectWrites: Boolean = false,
+    ) {
         synchronized(lock) {
             targetPixels = targets
             targetWidth = width
             targetHeight = height
+            this.includeBitmapDirectWrites = includeBitmapDirectWrites
             events.clear()
             enabled = targets.isNotEmpty()
         }
@@ -120,6 +132,7 @@ public object SkCpuWriteChronologyTrace {
             targetPixels = emptySet()
             targetWidth = null
             targetHeight = null
+            includeBitmapDirectWrites = false
             events.clear()
         }
     }
@@ -139,6 +152,56 @@ public object SkCpuWriteChronologyTrace {
         }
     }
 
+    internal fun shouldTraceBitmapDirectWrite(x: Int, y: Int, width: Int, height: Int): Boolean {
+        if (!enabled) return false
+        if ((bitmapWriteTraceSuppression.get() ?: 0) > 0) return false
+        return synchronized(lock) {
+            if (!enabled || !includeBitmapDirectWrites || Target(x, y) !in targetPixels) return false
+            val expectedWidth = targetWidth
+            val expectedHeight = targetHeight
+            (expectedWidth == null || expectedWidth == width) &&
+                (expectedHeight == null || expectedHeight == height)
+        }
+    }
+
+    internal fun bitmapDirectWriteTargets(width: Int, height: Int): List<Target> {
+        if (!enabled) return emptyList()
+        if ((bitmapWriteTraceSuppression.get() ?: 0) > 0) return emptyList()
+        return synchronized(lock) {
+            if (!enabled || !includeBitmapDirectWrites) return emptyList()
+            val expectedWidth = targetWidth
+            val expectedHeight = targetHeight
+            if ((expectedWidth != null && expectedWidth != width) ||
+                (expectedHeight != null && expectedHeight != height)
+            ) {
+                emptyList()
+            } else {
+                targetPixels
+                    .filter { it.x in 0 until width && it.y in 0 until height }
+                    .sortedWith(compareBy<Target> { it.y }.thenBy { it.x })
+            }
+        }
+    }
+
+    internal fun bitmapDirectWriteTracingActive(): Boolean {
+        if (!enabled) return false
+        return synchronized(lock) { enabled && includeBitmapDirectWrites }
+    }
+
+    internal inline fun <T> withBitmapDirectWriteTraceSuppressed(block: () -> T): T {
+        val previous = bitmapWriteTraceSuppression.get() ?: 0
+        bitmapWriteTraceSuppression.set(previous + 1)
+        try {
+            return block()
+        } finally {
+            if (previous == 0) {
+                bitmapWriteTraceSuppression.remove()
+            } else {
+                bitmapWriteTraceSuppression.set(previous)
+            }
+        }
+    }
+
     internal fun record(
         x: Int,
         y: Int,
@@ -153,13 +216,24 @@ public object SkCpuWriteChronologyTrace {
         valueBefore: SkColor,
         valueWritten: SkColor,
         valueReadAfter: SkColor,
+        bitmapWidth: Int? = null,
+        bitmapHeight: Int? = null,
     ) {
         synchronized(lock) {
             if (!enabled || Target(x, y) !in targetPixels) return
+            val eventBitmapWidth = bitmapWidth ?: targetWidth ?: -1
+            val eventBitmapHeight = bitmapHeight ?: targetHeight ?: -1
+            val root =
+                (targetWidth == null || targetWidth == eventBitmapWidth) &&
+                    (targetHeight == null || targetHeight == eventBitmapHeight)
             events += Event(
                 index = events.size,
                 x = x,
                 y = y,
+                bitmapWidth = eventBitmapWidth,
+                bitmapHeight = eventBitmapHeight,
+                deviceKind = if (root) "root" else "temporary",
+                rootDevice = root,
                 source = source,
                 callsite = callsite,
                 branch = branch,
@@ -168,6 +242,47 @@ public object SkCpuWriteChronologyTrace {
                 coverage = coverage,
                 srcInput = srcInput,
                 srcAfterCoverage = srcAfterCoverage,
+                valueBefore = valueBefore,
+                valueWritten = valueWritten,
+                valueReadAfter = valueReadAfter,
+            )
+        }
+    }
+
+    internal fun recordBitmapDirectWrite(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        source: String,
+        branch: String,
+        valueBefore: SkColor,
+        valueWritten: SkColor,
+        valueReadAfter: SkColor,
+    ) {
+        synchronized(lock) {
+            if (!enabled || !includeBitmapDirectWrites || Target(x, y) !in targetPixels) return
+            val expectedWidth = targetWidth
+            val expectedHeight = targetHeight
+            val root =
+                (expectedWidth == null || expectedWidth == width) &&
+                    (expectedHeight == null || expectedHeight == height)
+            events += Event(
+                index = events.size,
+                x = x,
+                y = y,
+                bitmapWidth = width,
+                bitmapHeight = height,
+                deviceKind = if (root) "root" else "temporary",
+                rootDevice = root,
+                source = source,
+                callsite = source,
+                branch = branch,
+                mode = "direct",
+                blender = "n/a",
+                coverage = 255,
+                srcInput = valueWritten,
+                srcAfterCoverage = valueWritten,
                 valueBefore = valueBefore,
                 valueWritten = valueWritten,
                 valueReadAfter = valueReadAfter,
@@ -2905,11 +3020,11 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         valueBefore: SkColor? = null,
     ) {
         if (!SkCpuWriteChronologyTrace.shouldTrace(x, y, width, height)) {
-            bitmap.setPixel(x, y, value)
+            setPixelWithBitmapDirectTraceSuppressedIfNeeded(x, y, value)
             return
         }
         val before = valueBefore ?: bitmap.getPixel(x, y)
-        bitmap.setPixel(x, y, value)
+        setPixelWithBitmapDirectTraceSuppressedIfNeeded(x, y, value)
         val after = bitmap.getPixel(x, y)
         SkCpuWriteChronologyTrace.record(
             x = x,
@@ -2925,7 +3040,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             valueBefore = before,
             valueWritten = value,
             valueReadAfter = after,
+            bitmapWidth = width,
+            bitmapHeight = height,
         )
+    }
+
+    private fun setPixelWithBitmapDirectTraceSuppressedIfNeeded(x: Int, y: Int, value: SkColor) {
+        if (SkCpuWriteChronologyTrace.bitmapDirectWriteTracingActive()) {
+            SkCpuWriteChronologyTrace.withBitmapDirectWriteTraceSuppressed {
+                bitmap.setPixel(x, y, value)
+            }
+        } else {
+            bitmap.setPixel(x, y, value)
+        }
     }
 
     private fun blend(
