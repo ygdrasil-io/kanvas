@@ -1,0 +1,173 @@
+{
+  "backend": "WebGPU",
+  "referenceBackend": "mixed skia-upstream and generated-scene oracle",
+  "linear": "FOR-253",
+  "probe": "bitmap-source-rounding-stage-audit",
+  "deltaDefinition": "signed channel delta is GPU minus reference",
+  "microCaseCount": 3,
+  "totalPixels": 14592,
+  "totalResidualPixels": 1904,
+  "maxChannelDelta": 1,
+  "alphaDeltaNonZeroPixels": 0,
+  "rgbOnlyResidualPixels": 1904,
+  "signedDeltaHistogram": {
+    "r": [{"delta": -1, "count": 1696}, {"delta": 0, "count": 208}],
+    "g": [{"delta": -1, "count": 112}, {"delta": 0, "count": 1792}],
+    "b": [{"delta": -1, "count": 1696}, {"delta": 0, "count": 208}],
+    "a": [{"delta": 0, "count": 1904}]
+  },
+  "residualCaseIds": [
+                "source-color-constant.simple-offset-row1-col0",
+    "bitmap-nearest.generated-whole-scene"
+  ],
+  "exactControlCaseIds": [
+                "linear-gradient.generated-whole-scene"
+  ],
+  "stageIsolation": {
+    "appearsBeforeBitmapSampling": true,
+    "appearsDuringBitmapNearestPath": true,
+    "onlyFinalPackOrStore": false,
+    "inferredProducer": "input color normalization/rounding before or at source-color uniform and bitmap texel sample, not Crop and not a global final pack/store-only stage",
+    "nextSubProblem": "compare legacy source-color uniform packing and bitmap texture upload/sample rounding against generated solid/gradient exact controls"
+  },
+  "microCases": [
+                {
+      "id": "source-color-constant.simple-offset-row1-col0",
+      "sceneId": "simple-offsetimagefilter",
+      "label": "source-color constant through SimpleOffset row1 col0",
+      "sourceKind": "skia-upstream-reference-vs-live-webgpu",
+      "route": "webgpu.canvas.draw-rect.src-over",
+      "colorProductionStage": "source-color constant path before any bitmap sampling",
+      "stageIsolation": "appears-before-bitmap-sampling",
+      "bounds": [40, 40, 120, 120],
+      "totalPixels": 6400,
+      "residualPixels": 1600,
+      "maxChannelDelta": 1,
+      "alphaDeltaNonZeroPixels": 0,
+      "rgbOnlyResidualPixels": 1600,
+      "representativeReferenceRgba": [158, 90, 139, 255],
+      "representativeGpuRgba": [157, 90, 138, 255],
+      "representativeSignedDeltaRgba": [-1, 0, -1, 0],
+      "signedDeltaHistogram": {
+                "r": [{"delta": -1, "count": 1600}],
+                "g": [{"delta": 0, "count": 1600}],
+                "b": [{"delta": -1, "count": 1600}],
+                "a": [{"delta": 0, "count": 1600}]
+              },
+      "topColorPairs": [
+                        {
+                  "referenceRgba": [158, 90, 139, 255],
+                  "gpuRgba": [157, 90, 138, 255],
+                  "signedDeltaRgba": [-1, 0, -1, 0],
+                  "count": 1600
+                }
+      ]
+    },
+    {
+      "id": "bitmap-nearest.generated-whole-scene",
+      "sceneId": "bitmap-rect-nearest",
+      "label": "bitmap nearest strict sampling generated scene",
+      "sourceKind": "generated-scene-artifact-reference-vs-gpu",
+      "route": "webgpu.image-rect.strict-nearest",
+      "colorProductionStage": "bitmap texture sample and source texel normalization",
+      "stageIsolation": "appears-during-bitmap-nearest-path",
+      "bounds": [0, 0, 64, 64],
+      "totalPixels": 4096,
+      "residualPixels": 304,
+      "maxChannelDelta": 1,
+      "alphaDeltaNonZeroPixels": 0,
+      "rgbOnlyResidualPixels": 304,
+      "representativeReferenceRgba": [149, 193, 207, 255],
+      "representativeGpuRgba": [148, 193, 207, 255],
+      "representativeSignedDeltaRgba": [-1, 0, 0, 0],
+      "signedDeltaHistogram": {
+                "r": [{"delta": -1, "count": 96}, {"delta": 0, "count": 208}],
+                "g": [{"delta": -1, "count": 112}, {"delta": 0, "count": 192}],
+                "b": [{"delta": -1, "count": 96}, {"delta": 0, "count": 208}],
+                "a": [{"delta": 0, "count": 304}]
+              },
+      "topColorPairs": [
+                        {
+                  "referenceRgba": [149, 193, 207, 255],
+                  "gpuRgba": [148, 193, 207, 255],
+                  "signedDeltaRgba": [-1, 0, 0, 0],
+                  "count": 64
+                },
+                {
+                  "referenceRgba": [69, 20, 208, 255],
+                  "gpuRgba": [69, 20, 207, 255],
+                  "signedDeltaRgba": [0, 0, -1, 0],
+                  "count": 64
+                },
+                {
+                  "referenceRgba": [125, 159, 143, 255],
+                  "gpuRgba": [125, 159, 142, 255],
+                  "signedDeltaRgba": [0, 0, -1, 0],
+                  "count": 32
+                },
+                {
+                  "referenceRgba": [154, 109, 216, 255],
+                  "gpuRgba": [153, 109, 216, 255],
+                  "signedDeltaRgba": [-1, 0, 0, 0],
+                  "count": 32
+                },
+                {
+                  "referenceRgba": [83, 143, 70, 255],
+                  "gpuRgba": [83, 142, 70, 255],
+                  "signedDeltaRgba": [0, -1, 0, 0],
+                  "count": 32
+                },
+                {
+                  "referenceRgba": [93, 97, 171, 255],
+                  "gpuRgba": [93, 96, 171, 255],
+                  "signedDeltaRgba": [0, -1, 0, 0],
+                  "count": 32
+                },
+                {
+                  "referenceRgba": [94, 134, 97, 255],
+                  "gpuRgba": [94, 133, 97, 255],
+                  "signedDeltaRgba": [0, -1, 0, 0],
+                  "count": 32
+                },
+                {
+                  "referenceRgba": [143, 44, 14, 255],
+                  "gpuRgba": [143, 43, 14, 255],
+                  "signedDeltaRgba": [0, -1, 0, 0],
+                  "count": 16
+                }
+      ]
+    },
+    {
+      "id": "linear-gradient.generated-whole-scene",
+      "sceneId": "linear-gradient-rect",
+      "label": "linear gradient generated WGSL control scene",
+      "sourceKind": "generated-scene-artifact-reference-vs-gpu",
+      "route": "webgpu.generated.linear-gradient.rect",
+      "colorProductionStage": "generated gradient arithmetic plus final render-target store control",
+      "stageIsolation": "exact-final-pack-store-control",
+      "bounds": [0, 0, 64, 64],
+      "totalPixels": 4096,
+      "residualPixels": 0,
+      "maxChannelDelta": 0,
+      "alphaDeltaNonZeroPixels": 0,
+      "rgbOnlyResidualPixels": 0,
+      "representativeReferenceRgba": [],
+      "representativeGpuRgba": [],
+      "representativeSignedDeltaRgba": [],
+      "signedDeltaHistogram": {
+                "r": [],
+                "g": [],
+                "b": [],
+                "a": []
+              },
+      "topColorPairs": [
+    
+      ]
+    }
+  ],
+  "interpretation": "The one-byte RGB tail appears in a source-color constant path before any bitmap sampling and also in bitmap-nearest texture sampling, while the generated linear-gradient control remains byte-exact. The evidence rules out Crop and a global final pack/store-only defect; the next bounded problem is input color normalization/rounding for legacy source-color uniforms and bitmap texel sampling/upload.",
+  "observationMethod": "test-side Skia reference PNG plus live WebGPU readback for the SimpleOffset source-color cell, and generated scene artifact skia.png/gpu.png comparisons for bitmap-nearest and linear-gradient controls; no renderer diagnostic property, no CPU/readback fallback in the render path",
+  "supportDecision": "KEEP_DIAGNOSTIC",
+  "correctionApplied": false,
+  "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+}
