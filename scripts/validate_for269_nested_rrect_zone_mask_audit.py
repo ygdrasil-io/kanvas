@@ -19,6 +19,7 @@ SCENE_DIR = PROJECT_ROOT / "reports/wgsl-pipeline/scenes/artifacts" / SCENE_ID
 AUDIT_NAME = "nested-rrect-zone-mask-audit-for269.json"
 AUDIT = SCENE_DIR / AUDIT_NAME
 REPORT = PROJECT_ROOT / "reports/wgsl-pipeline/2026-06-03-for-269-nested-rrect-zone-mask-audit.md"
+FOR270_AUDIT = SCENE_DIR / "nested-rrect-zone-mask-audit-for270.json"
 SOURCE_REPORT = PROJECT_ROOT / "reports/wgsl-pipeline/2026-06-01-m60-nested-clip-path-aa-promotion.md"
 TEST = PROJECT_ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/NestedClipSceneCaptureTest.kt"
 
@@ -27,6 +28,7 @@ CPU_ROUTE = "cpu.coverage.nested-rrect-clip-oracle"
 FALLBACK_REASON = "coverage.nested-clip-visual-parity-below-threshold"
 CROP_FALLBACK_REASON = "image-filter.crop-input-nonnull-prepass-required"
 SUPPORT_THRESHOLD = 99.95
+FOR270_REMOVED_OVAL_GT32_BOUND = 1_000
 
 
 def fail(message: str) -> None:
@@ -255,6 +257,25 @@ def generate_audit() -> dict[str, Any]:
     geometry, masks = make_masks(width, height)
     cpu_audit = comparison_audit("cpu_vs_reference", reference, cpu, masks)
     gpu_audit = comparison_audit("gpu_vs_reference", reference, gpu, masks)
+    gpu_dominant = gpu_audit["dominantGreaterThanThirtyTwoZone"]
+    if gpu_dominant == "outside_clip_removed_difference_oval":
+        next_action = "BOUNDED_CLIP_MASK_CORRECTION_FIRST"
+        secondary_blocker = "CPU_REFERENCE_RESIDUAL_REMAINS_BELOW_STRICT_THRESHOLD"
+        decision_rationale = (
+            "GPU/reference high-delta pixels are dominated by the oval removed by "
+            "clipRRect(kDifference), while CPU/reference high-delta pixels are localized "
+            "to the blurred content envelope. The scene therefore remains refused until "
+            "a bounded clip-mask correction and follow-up CPU/reference proof exist."
+        )
+    else:
+        next_action = "SUPERSEDED_BY_FOR_270_BLURRED_CONTENT_ENVELOPE_RESIDUAL"
+        secondary_blocker = "GPU_AND_CPU_REFERENCE_REMAIN_BELOW_STRICT_THRESHOLD"
+        decision_rationale = (
+            "FOR-270 superseded the original FOR-269 removed-oval residual by applying "
+            "the bounded WebGPU blur-composite analytic clip mask. Current artefacts are "
+            "now dominated by the blurred content envelope, so the scene remains refused "
+            "until GPU/reference and CPU/reference both reach the strict support threshold."
+        )
 
     audit = {
         "linear": LINEAR_ID,
@@ -267,14 +288,9 @@ def generate_audit() -> dict[str, Any]:
         "artifactRoot": str(SCENE_DIR.relative_to(PROJECT_ROOT)),
         "supportThreshold": SUPPORT_THRESHOLD,
         "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
-        "nextAction": "BOUNDED_CLIP_MASK_CORRECTION_FIRST",
-        "secondaryBlocker": "CPU_REFERENCE_RESIDUAL_REMAINS_BELOW_STRICT_THRESHOLD",
-        "decisionRationale": (
-            "GPU/reference high-delta pixels are dominated by the oval removed by "
-            "clipRRect(kDifference), while CPU/reference high-delta pixels are localized "
-            "to the blurred content envelope. The scene therefore remains refused until "
-            "a bounded clip-mask correction and follow-up CPU/reference proof exist."
-        ),
+        "nextAction": next_action,
+        "secondaryBlocker": secondary_blocker,
+        "decisionRationale": decision_rationale,
         "route": {
             "cpu": route_cpu.get("selectedRoute"),
             "gpu": route_gpu.get("selectedRoute"),
@@ -324,6 +340,19 @@ def write_report(audit: dict[str, Any]) -> None:
     gpu_removed = gpu["zones"]["outside_clip_removed_difference_oval"]
     cpu_blur = cpu["zones"]["blurred_content_envelope"]
     route = audit["route"]
+    superseded = gpu["dominantGreaterThanThirtyTwoZone"] != "outside_clip_removed_difference_oval"
+    superseded_section = ""
+    if superseded:
+        superseded_section = f"""
+## Superseded By FOR-270
+
+This generated FOR-269 audit now reflects post-FOR-270 artefacts. The original
+FOR-269 baseline found the GPU/reference high-delta residual dominated by
+`outside_clip_removed_difference_oval`; FOR-270 reduced that zone and moved the
+dominant residual to `{gpu["dominantGreaterThanThirtyTwoZone"]}`. The original
+baseline values are preserved in
+`reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/nested-rrect-zone-mask-audit-for270.json`.
+"""
     report = f"""# FOR-269 Nested RRect Zone/Mask Audit
 
 Linear: `{LINEAR_ID}`
@@ -366,6 +395,7 @@ bar even after the GPU clip-mask issue is isolated.
 
 The zone masks are analytic and non-exclusive. Their counters isolate likely
 failure hypotheses and must not be summed as a partition of the image.
+{superseded_section}
 
 ## Machine Artifact
 
@@ -400,8 +430,11 @@ def validate_audit(audit: dict[str, Any]) -> None:
         fail("support threshold changed")
     if audit.get("supportDecision") != "KEEP_EXPECTED_UNSUPPORTED":
         fail("support decision must keep expected-unsupported")
-    if audit.get("nextAction") != "BOUNDED_CLIP_MASK_CORRECTION_FIRST":
-        fail("next action must remain bounded clip-mask correction first")
+    if audit.get("nextAction") not in (
+        "BOUNDED_CLIP_MASK_CORRECTION_FIRST",
+        "SUPERSEDED_BY_FOR_270_BLURRED_CONTENT_ENVELOPE_RESIDUAL",
+    ):
+        fail("next action must remain bounded clip-mask correction first or FOR-270 superseded")
 
     route = audit.get("route", {})
     if route.get("cpu") != CPU_ROUTE:
@@ -444,10 +477,23 @@ def validate_audit(audit: dict[str, Any]) -> None:
     cpu = comparisons.get("cpu_vs_reference")
     if not isinstance(gpu, dict) or not isinstance(cpu, dict):
         fail("missing GPU/CPU comparisons")
-    if gpu.get("dominantGreaterThanThirtyTwoZone") != "outside_clip_removed_difference_oval":
-        fail("GPU high deltas must be dominated by removed difference oval")
-    if gpu.get("dominantGreaterThanThirtyTwoZoneShare", 0) < 90.0:
-        fail("GPU removed-oval high-delta share must stay above 90%")
+    gpu_dominant = gpu.get("dominantGreaterThanThirtyTwoZone")
+    if gpu_dominant == "outside_clip_removed_difference_oval":
+        if gpu.get("dominantGreaterThanThirtyTwoZoneShare", 0) < 90.0:
+            fail("GPU removed-oval high-delta share must stay above 90%")
+    elif gpu_dominant == "blurred_content_envelope":
+        if not FOR270_AUDIT.is_file():
+            fail("post-FOR-270 GPU dominance requires FOR-270 audit evidence")
+        for270 = load_json(FOR270_AUDIT)
+        effect = for270.get("for270Effect")
+        if not isinstance(effect, dict):
+            fail("FOR-270 audit must include for270Effect")
+        if effect.get("for270GpuDominantGreaterThanThirtyTwoZone") != "blurred_content_envelope":
+            fail("FOR-270 audit must explain the blurred-envelope GPU residual")
+        if effect.get("for270GpuRemovedOvalGreaterThanThirtyTwoPixels", FOR270_REMOVED_OVAL_GT32_BOUND + 1) > FOR270_REMOVED_OVAL_GT32_BOUND:
+            fail("FOR-270 removed-oval residual must stay bounded")
+    else:
+        fail(f"unexpected GPU high-delta dominant zone `{gpu_dominant}`")
     if cpu.get("dominantGreaterThanThirtyTwoZone") != "blurred_content_envelope":
         fail("CPU high deltas must be dominated by blurred content envelope")
 
@@ -493,10 +539,11 @@ def validate_audit(audit: dict[str, Any]) -> None:
         [
             "FOR-269 Nested RRect Zone/Mask Audit",
             "Decision: `KEEP_EXPECTED_UNSUPPORTED`",
-            "Next action: `BOUNDED_CLIP_MASK_CORRECTION_FIRST`",
+            f"Next action: `{audit.get('nextAction')}`",
             FALLBACK_REASON,
             CROP_FALLBACK_REASON,
             "non-exclusive",
+            audit.get("nextAction", ""),
             AUDIT_NAME,
         ],
     )
@@ -507,11 +554,19 @@ def main() -> None:
     SCENE_DIR.mkdir(parents=True, exist_ok=True)
     AUDIT.write_text(json_dump(audit))
     write_report(audit)
-    validate_audit(load_json(AUDIT))
+    written = load_json(AUDIT)
+    validate_audit(written)
+    gpu = {item["comparison"]: item for item in written["comparisons"]}["gpu_vs_reference"]
+    dominance = gpu["dominantGreaterThanThirtyTwoZone"]
+    state = (
+        "removed difference oval remains dominant"
+        if dominance == "outside_clip_removed_difference_oval"
+        else "FOR-270 supersedes removed-oval dominance; blurred content envelope is now dominant"
+    )
     print(
         "FOR-269 validation passed: nested RRect clip residual is isolated by "
-        "zone/mask, GPU high deltas are dominated by the removed difference oval, "
-        "CPU residual remains in the blurred envelope, and support stays expected-unsupported."
+        f"zone/mask, {state}, CPU residual remains in the blurred envelope, "
+        "and support stays expected-unsupported."
     )
 
 
