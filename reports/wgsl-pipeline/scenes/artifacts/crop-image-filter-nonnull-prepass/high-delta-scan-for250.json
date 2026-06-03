@@ -1,0 +1,676 @@
+{
+  "backend": "WebGPU",
+  "referenceBackend": "skia-upstream",
+  "sceneId": "crop-image-filter-nonnull-prepass",
+  "linear": "FOR-250",
+  "probe": "high-delta-scene-scan",
+  "threshold": {
+    "metric": "max absolute RGBA channel delta",
+    "operator": ">",
+    "value": 0
+  },
+  "strictHighDeltaThreshold": {
+    "metric": "max absolute RGBA channel delta",
+    "operator": ">",
+    "value": 8,
+    "totalPixelsAboveThreshold": 0
+  },
+  "imageSize": [640, 200],
+  "totalPixelsAboveThreshold": 6622,
+  "maxChannelDelta": 1,
+  "topPixelLimit": 20,
+  "topPixels": [
+                {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [40, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [41, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [42, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [43, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [44, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [45, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [46, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [47, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [48, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [49, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [50, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [51, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [52, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [53, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [54, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [55, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [56, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [57, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [58, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    },
+    {
+      "cellId": "row1-col0-no-filter",
+      "pixel": {
+                "xy": [59, 40],
+                "referenceRgba": [158, 90, 139, 255],
+                "gpuRgba": [157, 90, 138, 255],
+                "deltaRgba": [1, 0, 1, 0],
+                "maxChannelDelta": 1,
+                "withinTolerance8": true
+              }
+    }
+  ],
+  "simpleOffsetCellClassifier": {
+    "source": "SimpleOffsetImageFilterGM explicit translate grid",
+    "cellExtent": [80, 80],
+    "fallbackCell": "outside-simple-offset-cells"
+  },
+  "cellAggregates": [
+                {
+      "id": "row1-col0-no-filter",
+      "label": "row 1 col 0: blue source only",
+      "origin": [40, 40],
+      "bounds": [40, 40, 120, 120],
+      "case": "no image filter",
+      "pixelsAboveThreshold": 1600,
+      "maxChannelDelta": 1,
+      "topPixels": [
+                        {
+                  "cellId": "row1-col0-no-filter",
+                  "pixel": {
+                                "xy": [40, 40],
+                                "referenceRgba": [158, 90, 139, 255],
+                                "gpuRgba": [157, 90, 138, 255],
+                                "deltaRgba": [1, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col0-no-filter",
+                  "pixel": {
+                                "xy": [41, 40],
+                                "referenceRgba": [158, 90, 139, 255],
+                                "gpuRgba": [157, 90, 138, 255],
+                                "deltaRgba": [1, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col0-no-filter",
+                  "pixel": {
+                                "xy": [42, 40],
+                                "referenceRgba": [158, 90, 139, 255],
+                                "gpuRgba": [157, 90, 138, 255],
+                                "deltaRgba": [1, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                }
+      ]
+    },
+    {
+      "id": "row1-col1-offset-no-crop",
+      "label": "row 1 col 1: Offset(20,20), no crop, no clip",
+      "origin": [140, 40],
+      "bounds": [140, 40, 220, 120],
+      "case": "Offset(20,20,input=null)",
+      "pixelsAboveThreshold": 1600,
+      "maxChannelDelta": 1,
+      "topPixels": [
+                        {
+                  "cellId": "row1-col1-offset-no-crop",
+                  "pixel": {
+                                "xy": [160, 60],
+                                "referenceRgba": [158, 90, 139, 255],
+                                "gpuRgba": [157, 90, 138, 255],
+                                "deltaRgba": [1, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col1-offset-no-crop",
+                  "pixel": {
+                                "xy": [161, 60],
+                                "referenceRgba": [158, 90, 139, 255],
+                                "gpuRgba": [157, 90, 138, 255],
+                                "deltaRgba": [1, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col1-offset-no-crop",
+                  "pixel": {
+                                "xy": [162, 60],
+                                "referenceRgba": [158, 90, 139, 255],
+                                "gpuRgba": [157, 90, 138, 255],
+                                "deltaRgba": [1, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                }
+      ]
+    },
+    {
+      "id": "row1-col2-offset-crop-src",
+      "label": "row 1 col 2: Offset(20,20), crop == src",
+      "origin": [240, 40],
+      "bounds": [240, 40, 320, 120],
+      "case": "Offset(20,20,input=null,cropRect=src)",
+      "pixelsAboveThreshold": 517,
+      "maxChannelDelta": 1,
+      "topPixels": [
+                        {
+                  "cellId": "row1-col2-offset-crop-src",
+                  "pixel": {
+                                "xy": [240, 40],
+                                "referenceRgba": [132, 87, 244, 255],
+                                "gpuRgba": [132, 87, 243, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col2-offset-crop-src",
+                  "pixel": {
+                                "xy": [241, 40],
+                                "referenceRgba": [132, 87, 244, 255],
+                                "gpuRgba": [132, 87, 243, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col2-offset-crop-src",
+                  "pixel": {
+                                "xy": [242, 40],
+                                "referenceRgba": [132, 87, 244, 255],
+                                "gpuRgba": [132, 87, 243, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                }
+      ]
+    },
+    {
+      "id": "row1-col3-offset-clip-src",
+      "label": "row 1 col 3: Offset(20,20), clip == src",
+      "origin": [340, 40],
+      "bounds": [340, 40, 420, 120],
+      "case": "Offset(20,20,input=null), clip=src",
+      "pixelsAboveThreshold": 400,
+      "maxChannelDelta": 1,
+      "topPixels": [
+                        {
+                  "cellId": "row1-col3-offset-clip-src",
+                  "pixel": {
+                                "xy": [360, 60],
+                                "referenceRgba": [158, 90, 139, 255],
+                                "gpuRgba": [157, 90, 138, 255],
+                                "deltaRgba": [1, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col3-offset-clip-src",
+                  "pixel": {
+                                "xy": [361, 60],
+                                "referenceRgba": [158, 90, 139, 255],
+                                "gpuRgba": [157, 90, 138, 255],
+                                "deltaRgba": [1, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col3-offset-clip-src",
+                  "pixel": {
+                                "xy": [362, 60],
+                                "referenceRgba": [158, 90, 139, 255],
+                                "gpuRgba": [157, 90, 138, 255],
+                                "deltaRgba": [1, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                }
+      ]
+    },
+    {
+      "id": "row1-col4-offset-crop-20x20",
+      "label": "row 1 col 4: Offset(20,20), crop 20x20",
+      "origin": [440, 40],
+      "bounds": [440, 40, 520, 120],
+      "case": "Offset(20,20,input=null,cropRect=20x20)",
+      "pixelsAboveThreshold": 76,
+      "maxChannelDelta": 1,
+      "topPixels": [
+                        {
+                  "cellId": "row1-col4-offset-crop-20x20",
+                  "pixel": {
+                                "xy": [440, 40],
+                                "referenceRgba": [132, 87, 244, 255],
+                                "gpuRgba": [132, 87, 243, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col4-offset-crop-20x20",
+                  "pixel": {
+                                "xy": [441, 40],
+                                "referenceRgba": [132, 87, 244, 255],
+                                "gpuRgba": [132, 87, 243, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col4-offset-crop-20x20",
+                  "pixel": {
+                                "xy": [442, 40],
+                                "referenceRgba": [132, 87, 244, 255],
+                                "gpuRgba": [132, 87, 243, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                }
+      ]
+    },
+    {
+      "id": "row1-col5-offset-clip-dst",
+      "label": "row 1 col 5: Offset(20,20), clip == dst",
+      "origin": [540, 40],
+      "bounds": [540, 40, 620, 120],
+      "case": "Offset(20,20,input=null), clip=dst",
+      "pixelsAboveThreshold": 517,
+      "maxChannelDelta": 1,
+      "topPixels": [
+                        {
+                  "cellId": "row1-col5-offset-clip-dst",
+                  "pixel": {
+                                "xy": [580, 80],
+                                "referenceRgba": [107, 138, 32, 255],
+                                "gpuRgba": [107, 138, 33, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col5-offset-clip-dst",
+                  "pixel": {
+                                "xy": [581, 80],
+                                "referenceRgba": [107, 138, 32, 255],
+                                "gpuRgba": [107, 138, 33, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row1-col5-offset-clip-dst",
+                  "pixel": {
+                                "xy": [582, 80],
+                                "referenceRgba": [107, 138, 32, 255],
+                                "gpuRgba": [107, 138, 33, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                }
+      ]
+    },
+    {
+      "id": "row2-col0-crop-clip-src",
+      "label": "row 2 col 0: crop == clip == src",
+      "origin": [40, 120],
+      "bounds": [40, 120, 120, 200],
+      "case": "Offset(40,0,input=null,cropRect=src), clip=src",
+      "pixelsAboveThreshold": 0,
+      "maxChannelDelta": 0,
+      "topPixels": [
+    
+      ]
+    },
+    {
+      "id": "row2-col1-crop-src-clip-dst",
+      "label": "row 2 col 1: crop == src, clip == dst",
+      "origin": [140, 120],
+      "bounds": [140, 120, 220, 200],
+      "case": "Offset(40,0,input=null,cropRect=src), clip=dst",
+      "pixelsAboveThreshold": 312,
+      "maxChannelDelta": 1,
+      "topPixels": [
+                        {
+                  "cellId": "row2-col1-crop-src-clip-dst",
+                  "pixel": {
+                                "xy": [140, 120],
+                                "referenceRgba": [132, 87, 244, 255],
+                                "gpuRgba": [132, 87, 243, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row2-col1-crop-src-clip-dst",
+                  "pixel": {
+                                "xy": [141, 120],
+                                "referenceRgba": [132, 87, 244, 255],
+                                "gpuRgba": [132, 87, 243, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row2-col1-crop-src-clip-dst",
+                  "pixel": {
+                                "xy": [142, 120],
+                                "referenceRgba": [132, 87, 244, 255],
+                                "gpuRgba": [132, 87, 243, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                }
+      ]
+    },
+    {
+      "id": "row2-col2-crop-dst-clip-src",
+      "label": "row 2 col 2: crop == dst, clip == src",
+      "origin": [240, 120],
+      "bounds": [240, 120, 320, 200],
+      "case": "Offset(40,0,input=null,cropRect=dst), clip=src",
+      "pixelsAboveThreshold": 156,
+      "maxChannelDelta": 1,
+      "topPixels": [
+                        {
+                  "cellId": "row2-col2-crop-dst-clip-src",
+                  "pixel": {
+                                "xy": [280, 120],
+                                "referenceRgba": [225, 155, 248, 255],
+                                "gpuRgba": [225, 155, 247, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row2-col2-crop-dst-clip-src",
+                  "pixel": {
+                                "xy": [281, 120],
+                                "referenceRgba": [225, 155, 248, 255],
+                                "gpuRgba": [225, 155, 247, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row2-col2-crop-dst-clip-src",
+                  "pixel": {
+                                "xy": [282, 120],
+                                "referenceRgba": [225, 155, 248, 255],
+                                "gpuRgba": [225, 155, 247, 255],
+                                "deltaRgba": [0, 0, 1, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                }
+      ]
+    },
+    {
+      "id": "row2-col3-crop-clip-dst",
+      "label": "row 2 col 3: crop == clip == dst",
+      "origin": [340, 120],
+      "bounds": [340, 120, 420, 200],
+      "case": "Offset(40,0,input=null,cropRect=dst), clip=dst",
+      "pixelsAboveThreshold": 1444,
+      "maxChannelDelta": 1,
+      "topPixels": [
+                        {
+                  "cellId": "row2-col3-crop-clip-dst",
+                  "pixel": {
+                                "xy": [381, 121],
+                                "referenceRgba": [221, 153, 145, 255],
+                                "gpuRgba": [220, 153, 145, 255],
+                                "deltaRgba": [1, 0, 0, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row2-col3-crop-clip-dst",
+                  "pixel": {
+                                "xy": [382, 121],
+                                "referenceRgba": [221, 153, 145, 255],
+                                "gpuRgba": [220, 153, 145, 255],
+                                "deltaRgba": [1, 0, 0, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                },
+                {
+                  "cellId": "row2-col3-crop-clip-dst",
+                  "pixel": {
+                                "xy": [383, 121],
+                                "referenceRgba": [221, 153, 145, 255],
+                                "gpuRgba": [220, 153, 145, 255],
+                                "deltaRgba": [1, 0, 0, 0],
+                                "maxChannelDelta": 1,
+                                "withinTolerance8": true
+                              }
+                }
+      ]
+    },
+    {
+      "id": "outside-simple-offset-cells",
+      "label": "outside SimpleOffset inferred 80x80 cells",
+      "origin": [0, 0],
+      "bounds": [0, 0, 640, 200],
+      "case": "background or unclassified GM area",
+      "pixelsAboveThreshold": 0,
+      "maxChannelDelta": 0,
+      "topPixels": [
+    
+      ]
+    }
+  ],
+  "interpretation": "The scene-level residual has no >8 high-delta pixels; the remaining score loss is a diffuse byte-level tail. FOR-250 records the non-identical pixel distribution by inferred SimpleOffset cell and keeps the renderer unchanged until a bounded error is proven.",
+  "observationMethod": "test-side Skia reference PNG and normal WebGPU render readback; no renderer diagnostic property, no CPU/readback fallback in the render path",
+  "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+  "fallbackReason": "none",
+  "supportDecision": "KEEP_DIAGNOSTIC"
+}

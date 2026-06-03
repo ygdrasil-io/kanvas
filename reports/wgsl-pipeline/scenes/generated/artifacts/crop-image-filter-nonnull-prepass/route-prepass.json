@@ -13,6 +13,8 @@
   "for248ProbeResult": "final Crop composite sentinel reads scratchPixel(45,5) as rgba(202,59,19,102); normal final GM fragment observes rgba(220,153,145,255)",
   "for249ReferenceGpuResidualProbe": "reference-gpu-residual-window-for249.json",
   "for249ProbeResult": "normal WebGPU fragment window around (385,125) matches Skia reference within maxChannelDelta=1; remaining score residual is outside this local Crop composite target window",
+  "for250HighDeltaScanProbe": "high-delta-scan-for250.json",
+  "for250ProbeResult": "no pixel exceeds maxChannelDelta>8; all non-identical pixels are byte-level maxChannelDelta=1, concentrated in row1-col0, row1-col1, and row2-col3",
   "finalComposite": "Crop(kDecal) UV remap against scratch texture",
   "supportDecision": "risk.fidelity-gap; no strict promotion",
   "unsupportedReasonRemoved": "image-filter.crop-input-nonnull-prepass-required",
