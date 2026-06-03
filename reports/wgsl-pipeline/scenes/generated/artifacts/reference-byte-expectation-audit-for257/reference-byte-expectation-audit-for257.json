@@ -1,0 +1,122 @@
+{
+  "backend": "WebGPU",
+  "referenceBackend": "mixed skia-upstream and artifact oracle PNGs",
+  "linear": "FOR-257",
+  "probe": "reference-byte-expectation-audit",
+  "deltaDefinition": "signed channel delta is GPU/readback minus reference",
+  "newRendererProperty": "none",
+  "reusedRuntimeProperties": [
+                "kanvas.webgpu.rawColorSentinels",
+    "kanvas.webgpu.for256.outputReadbackBoundary"
+  ],
+  "defaultEnabled": false,
+  "runtimeSnapshotsEnabled": true,
+  "normalRenderingChanged": false,
+  "shaderLayoutChanged": false,
+  "observedBoundaries": {
+    "for255HostObserved": true,
+    "for255WriteUploadObserved": true,
+    "for256OutputReadbackObserved": true,
+    "referenceOracleReconstructed": true,
+    "shaderObserved": "notCaptured"
+  },
+  "legacySourceUniform": {
+    "id": "legacy-source-color-uniform.simple-offset-row1-col0",
+    "route": "webgpu.canvas.draw-rect.src-over",
+    "previousHostBoundaryRgba8": [255, 0, 0, 102],
+    "previousWriteOrUploadBoundaryRgba8": [255, 0, 0, 102],
+    "outputXy": [40, 40],
+    "outputReferenceRgba": [158, 90, 139, 255],
+    "outputGpuReadbackRgba": [157, 90, 138, 255],
+    "outputSignedDeltaRgba": [-1, 0, -1, 0],
+    "outputMaxChannelDelta": 1,
+    "referenceOracleRgba": [158, 90, 139, 255],
+    "referenceOracleMatchesComparison": true,
+    "referenceByteExpectationExplainsResidual": false,
+    "reconstructions": [
+                    {
+              "name": "skia-upstream-reference-png-sample",
+              "source": "original-888/simple-offsetimagefilter.png",
+              "xy": [40, 40],
+              "reconstructedRgba": [158, 90, 139, 255],
+              "matchesReferenceBytes": true,
+              "matchesGpuReadbackBytes": false,
+              "interpretation": "Existing upstream PNG oracle byte at the comparison sample; this reconstructs the reference expectation used by the current test harness."
+            },
+            {
+              "name": "reference-byte-roundtrip-quantization",
+              "source": "round(referenceByte / 255 * 255)",
+              "xy": [40, 40],
+              "reconstructedRgba": [158, 90, 139, 255],
+              "matchesReferenceBytes": true,
+              "matchesGpuReadbackBytes": false,
+              "interpretation": "Deterministic byte round-trip of the already-quantized reference oracle; proves stable reference bytes but does not explain why GPU readback is one byte lower."
+            },
+            {
+              "name": "local-source-over-present-formula",
+              "source": "host RGBA8 source-over white, then local sRGB-to-Rec2020 present conversion",
+              "xy": [40, 40],
+              "reconstructedRgba": [220, 153, 145, 255],
+              "matchesReferenceBytes": false,
+              "matchesGpuReadbackBytes": false,
+              "interpretation": "A visible local formula does not reproduce the upstream reference byte, so it is not a valid correction oracle for this ticket."
+            }
+    ],
+    "priorBoundarySummary": "FOR-255 host/raw uniform bytes match [255,0,0,102]; FOR-256 readback matches GPU comparison bytes at [40,40].",
+    "verdict": "Reference oracle bytes are stable and reconstructable, but they match the reference side rather than the lower GPU/readback bytes; no reference-byte correction is justified."
+  },
+  "bitmapTexelUpload": {
+    "id": "bitmap-texel-upload-sample.bitmap-rect-nearest",
+    "route": "webgpu.image-rect.strict-nearest",
+    "previousHostBoundaryRgba8": [149, 193, 207, 255],
+    "previousWriteOrUploadBoundaryRgba8": [149, 193, 207, 255],
+    "outputXy": [8, 24],
+    "outputReferenceRgba": [149, 193, 207, 255],
+    "outputGpuReadbackRgba": [148, 193, 207, 255],
+    "outputSignedDeltaRgba": [-1, 0, 0, 0],
+    "outputMaxChannelDelta": 1,
+    "referenceOracleRgba": [149, 193, 207, 255],
+    "referenceOracleMatchesComparison": true,
+    "referenceByteExpectationExplainsResidual": false,
+    "reconstructions": [
+                    {
+              "name": "bitmap-nearest-reference-png-sample",
+              "source": "reports/wgsl-pipeline/scenes/generated/artifacts/bitmap-rect-nearest/skia.png",
+              "xy": [8, 24],
+              "reconstructedRgba": [149, 193, 207, 255],
+              "matchesReferenceBytes": true,
+              "matchesGpuReadbackBytes": false,
+              "interpretation": "Generated Skia artifact oracle byte at the strict-nearest representative sample."
+            },
+            {
+              "name": "nearest-upload-texel-reference-expectation",
+              "source": "FOR-255 raw uploaded RGBA8 texel under strict-nearest sampling",
+              "xy": [8, 24],
+              "reconstructedRgba": [149, 193, 207, 255],
+              "matchesReferenceBytes": true,
+              "matchesGpuReadbackBytes": false,
+              "interpretation": "The strict-nearest reference expectation equals the uploaded representative texel; GPU readback is still one red byte lower."
+            },
+            {
+              "name": "reference-byte-roundtrip-quantization",
+              "source": "round(referenceByte / 255 * 255)",
+              "xy": [8, 24],
+              "reconstructedRgba": [149, 193, 207, 255],
+              "matchesReferenceBytes": true,
+              "matchesGpuReadbackBytes": false,
+              "interpretation": "Deterministic byte round-trip of the artifact oracle; stable reference bytes remain higher than GPU readback."
+            }
+    ],
+    "priorBoundarySummary": "FOR-255 raw upload bytes match [149,193,207,255]; FOR-256 readback matches GPU comparison bytes at [8,24].",
+    "verdict": "Reference oracle bytes are stable and reconstructable, but they match the reference side rather than the lower GPU/readback bytes; no reference-byte correction is justified."
+  },
+  "referenceByteExpectationFinding": "not_proven: reconstructed reference/oracle bytes match the reference side for both cases, not the lower GPU/readback bytes",
+  "admissibleCorrection": "none_applied: a reference-byte correction would rewrite stable Skia/oracle expectations without shader-side proof",
+  "shaderSideProbeRequiredNext": true,
+  "remainingBoundary": "shader-consumption/blend-store/present-quantization",
+  "interpretation": "FOR-257 reconstructs stable reference/oracle bytes for both residual cases and compares them with FOR-255 host/write-upload boundaries plus FOR-256 readback bytes. The reconstructed reference bytes match the reference side, not the lower GPU/readback side, so the -1 RGB tail is not proven to be an admissible reference-byte expectation correction. A separate shader-side probe with an isolated diagnostic layout is the next bounded boundary if this residual must be root-caused further.",
+  "observationMethod": "test-side reference/oracle PNG byte reconstruction plus existing opt-in FOR-255/FOR-256 snapshots; no new renderer property, no shader/pipeline layout change, no threshold change, no Crop correction, and no normal CPU/readback fallback",
+  "supportDecision": "KEEP_DIAGNOSTIC",
+  "correctionApplied": false,
+  "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+}
