@@ -1,0 +1,635 @@
+{
+  "backend": "WebGPU",
+  "referenceBackend": "Skia CPU GM reference and live test-only WebGPU experimental stroke cap/join renders",
+  "linear": "FOR-266",
+  "probe": "stroke-cap-join-aa-residual-after-targetColorSpaceBlend",
+  "sceneId": "m60-bounded-stroke-cap-join",
+  "deltaDefinition": "signed channel delta is live WebGPU byte output minus Skia CPU reference",
+  "newRendererProperty": "none",
+  "defaultEnabled": false,
+  "runtimeSnapshotsEnabled": false,
+  "normalRenderingChanged": false,
+  "normalShadersChanged": false,
+  "normalThresholdsChanged": false,
+  "cropPolicyChanged": false,
+  "fallbackPolicyChanged": false,
+  "intermediateFormatPolicyChanged": false,
+  "targetColorSpaceBlendGloballyEnabled": false,
+  "currentPolicy": "targetColorSpaceBlend=false with normal RGBA16Float intermediate",
+  "adapter": "Apple M2 Max",
+  "productionRoute": "webgpu.coverage.refuse",
+  "productionRefusal": "SkWebGpuDevice.filled-path refused coverage selection: WebGpuCoverageSelection(v1)\ndrawKind=filled-path\nstrategy=RefuseDiagnostic\nroute=webgpu.coverage.refuse\ncoverage=PathCoverage(fillType=Winding,aa=true,inverse=false)\nclip=DeviceRect(0,0,192,128)\npathAaBudgets=pathVerbCount=9/96;coverageEdgeCount=8/256;cubicMaxSegmentsPerCubic=n/a/16;dashIntervalCount=n/a/8;clipStackDepth=n/a/4;deviceBounds=14.464466,38.464466,93.53554,81.53554;deviceBoundsMaxSize=79.071075/2048.0;strokeWidth=10.0;strokeCaps=butt;strokeJoins=bevel\npipelineAxes=preimage=pipeline.key v=1 layout=[] code=[coverageKind=pathAaStrokeCapJoinBlocked] state=[pathFillRule=winding,topology=triangleList];hash=238697d06d385ff6fda449ad7ebf5d8c83514c411190f9544a549fbfff35dc6e;uniformFacts=[]\ndiagnostic=backend=GPU,reason=coverage.stroke-cap-join-visual-parity-below-threshold,action=RefuseDiagnostic(coverage.stroke-cap-join-visual-parity-below-threshold)",
+  "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+  "policyCount": 2,
+  "supportThreshold": 99.95,
+  "policies": [
+                        {
+              "policy": "targetBlend-false-rgba16float",
+              "evaluationKind": "whole-scene-reference-vs-live-webgpu-experimental-stroke-cap-join",
+              "targetColorSpaceBlend": false,
+              "intermediateFormat": "RGBA16Float",
+              "totalPixels": 24576,
+              "matchingPixels": 22019,
+              "exactSimilarity": 89.59554036458333,
+              "maxDelta": 39,
+              "representativePixel": {
+      "x": 9,
+      "y": 27,
+      "referenceRgba": [192, 192, 192, 255],
+      "gpuRgba": [184, 184, 184, 255],
+      "signedDeltaRgba": [-8, -8, -8, 0],
+      "maxChannelDelta": 8
+    },
+              "routeDiagnostics": "webgpu.coverage.stroke-cap-join.experimental-render",
+              "normalRoute": "webgpu.coverage.refuse",
+              "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+              "routeDiagnosticsRationale": "Live WebGPU render with test-only experimental stroke cap/join path; targetColorSpaceBlend=false, intermediateFormat=RGBA16Float, no production default or fallback policy changed.",
+              "residual": {
+            "boundaryClassification": "color-space.target-blend-required-plus-coverage.stroke-cap-join-aa-residual",
+            "mismatchPixels": 2557,
+            "oneUnitMismatchPixels": 794,
+            "greaterThanEightPixels": 1738,
+            "greaterThanThirtyTwoPixels": 8,
+            "maxChannelDelta": 39,
+            "dominantRegion": "square-bevel",
+            "regions": [
+              {
+        "id": "butt-bevel",
+        "description": "left band: butt cap with bevel join",
+        "mismatchPixels": 734,
+        "oneUnitMismatchPixels": 387,
+        "greaterThanEightPixels": 345,
+        "greaterThanThirtyTwoPixels": 1,
+        "maxChannelDelta": 38,
+        "bounds": {"left": 9, "top": 27, "right": 47, "bottom": 92}
+      },
+      {
+        "id": "round-round",
+        "description": "middle band: round cap with round join",
+        "mismatchPixels": 879,
+        "oneUnitMismatchPixels": 407,
+        "greaterThanEightPixels": 453,
+        "greaterThanThirtyTwoPixels": 7,
+        "maxChannelDelta": 39,
+        "bounds": {"left": 48, "top": 27, "right": 95, "bottom": 92}
+      },
+      {
+        "id": "square-bevel",
+        "description": "right band: square cap with bevel join",
+        "mismatchPixels": 944,
+        "oneUnitMismatchPixels": 0,
+        "greaterThanEightPixels": 940,
+        "greaterThanThirtyTwoPixels": 0,
+        "maxChannelDelta": 22,
+        "bounds": {"left": 96, "top": 27, "right": 191, "bottom": 92}
+      }
+            ],
+            "representativeSamples": [
+              {
+        "x": 9,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [192, 192, 192, 255],
+        "gpuRgba": [184, 184, 184, 255],
+        "signedDeltaRgba": [-8, -8, -8, 0],
+        "maxChannelDelta": 8
+      },
+      {
+        "x": 10,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      },
+      {
+        "x": 11,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      },
+      {
+        "x": 12,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      },
+      {
+        "x": 13,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      },
+      {
+        "x": 14,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      },
+      {
+        "x": 15,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      },
+      {
+        "x": 16,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      },
+      {
+        "x": 17,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      },
+      {
+        "x": 18,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      },
+      {
+        "x": 19,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      },
+      {
+        "x": 20,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [128, 128, 128, 255],
+        "gpuRgba": [115, 115, 115, 255],
+        "signedDeltaRgba": [-13, -13, -13, 0],
+        "maxChannelDelta": 13
+      }
+            ],
+            "highDeltaSamples": [
+              {
+        "x": 92,
+        "y": 75,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [168, 189, 229, 255],
+        "signedDeltaRgba": [35, 39, 15, 0],
+        "maxChannelDelta": 39
+      },
+      {
+        "x": 91,
+        "y": 76,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [168, 189, 229, 255],
+        "signedDeltaRgba": [35, 39, 15, 0],
+        "maxChannelDelta": 39
+      },
+      {
+        "x": 90,
+        "y": 77,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [168, 189, 229, 255],
+        "signedDeltaRgba": [35, 39, 15, 0],
+        "maxChannelDelta": 39
+      },
+      {
+        "x": 89,
+        "y": 78,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [168, 189, 229, 255],
+        "signedDeltaRgba": [35, 39, 15, 0],
+        "maxChannelDelta": 39
+      },
+      {
+        "x": 88,
+        "y": 79,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [168, 189, 229, 255],
+        "signedDeltaRgba": [35, 39, 15, 0],
+        "maxChannelDelta": 39
+      },
+      {
+        "x": 87,
+        "y": 80,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [168, 189, 229, 255],
+        "signedDeltaRgba": [35, 39, 15, 0],
+        "maxChannelDelta": 39
+      },
+      {
+        "x": 21,
+        "y": 81,
+        "region": "butt-bevel",
+        "referenceRgba": [206, 213, 239, 255],
+        "gpuRgba": [168, 189, 229, 255],
+        "signedDeltaRgba": [-38, -24, -10, 0],
+        "maxChannelDelta": 38
+      },
+      {
+        "x": 69,
+        "y": 81,
+        "region": "round-round",
+        "referenceRgba": [209, 222, 209, 255],
+        "gpuRgba": [171, 202, 182, 255],
+        "signedDeltaRgba": [-38, -20, -27, 0],
+        "maxChannelDelta": 38
+      },
+      {
+        "x": 125,
+        "y": 59,
+        "region": "square-bevel",
+        "referenceRgba": [111, 83, 33, 255],
+        "gpuRgba": [89, 76, 25, 255],
+        "signedDeltaRgba": [-22, -7, -8, 0],
+        "maxChannelDelta": 22
+      },
+      {
+        "x": 124,
+        "y": 60,
+        "region": "square-bevel",
+        "referenceRgba": [111, 83, 33, 255],
+        "gpuRgba": [89, 76, 25, 255],
+        "signedDeltaRgba": [-22, -7, -8, 0],
+        "maxChannelDelta": 22
+      },
+      {
+        "x": 123,
+        "y": 61,
+        "region": "square-bevel",
+        "referenceRgba": [111, 83, 33, 255],
+        "gpuRgba": [89, 76, 25, 255],
+        "signedDeltaRgba": [-22, -7, -8, 0],
+        "maxChannelDelta": 22
+      },
+      {
+        "x": 122,
+        "y": 62,
+        "region": "square-bevel",
+        "referenceRgba": [111, 83, 33, 255],
+        "gpuRgba": [89, 76, 25, 255],
+        "signedDeltaRgba": [-22, -7, -8, 0],
+        "maxChannelDelta": 22
+      },
+      {
+        "x": 121,
+        "y": 63,
+        "region": "square-bevel",
+        "referenceRgba": [111, 83, 33, 255],
+        "gpuRgba": [89, 76, 25, 255],
+        "signedDeltaRgba": [-22, -7, -8, 0],
+        "maxChannelDelta": 22
+      },
+      {
+        "x": 120,
+        "y": 64,
+        "region": "square-bevel",
+        "referenceRgba": [111, 83, 33, 255],
+        "gpuRgba": [89, 76, 25, 255],
+        "signedDeltaRgba": [-22, -7, -8, 0],
+        "maxChannelDelta": 22
+      },
+      {
+        "x": 119,
+        "y": 65,
+        "region": "square-bevel",
+        "referenceRgba": [111, 83, 33, 255],
+        "gpuRgba": [89, 76, 25, 255],
+        "signedDeltaRgba": [-22, -7, -8, 0],
+        "maxChannelDelta": 22
+      },
+      {
+        "x": 132,
+        "y": 66,
+        "region": "square-bevel",
+        "referenceRgba": [111, 83, 33, 255],
+        "gpuRgba": [89, 76, 25, 255],
+        "signedDeltaRgba": [-22, -7, -8, 0],
+        "maxChannelDelta": 22
+      }
+            ],
+            "boundedCoverageCorrectionPlausibility": "NOT_PROVEN",
+            "nextMissingCondition": "missing_cpu_gpu_coverage_equivalence_for_round_cap_join_boundary_cells"
+          },
+              "supportDecision": "REFUSED_INSUFFICIENT_PARITY"
+            },
+            {
+              "policy": "targetBlend-true-rgba16float",
+              "evaluationKind": "whole-scene-reference-vs-live-webgpu-experimental-stroke-cap-join",
+              "targetColorSpaceBlend": true,
+              "intermediateFormat": "RGBA16Float",
+              "totalPixels": 24576,
+              "matchingPixels": 23572,
+              "exactSimilarity": 95.91471354166667,
+              "maxDelta": 48,
+              "representativePixel": {
+      "x": 9,
+      "y": 27,
+      "referenceRgba": [192, 192, 192, 255],
+      "gpuRgba": [191, 191, 191, 255],
+      "signedDeltaRgba": [-1, -1, -1, 0],
+      "maxChannelDelta": 1
+    },
+              "routeDiagnostics": "webgpu.coverage.stroke-cap-join.experimental-render",
+              "normalRoute": "webgpu.coverage.refuse",
+              "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+              "routeDiagnosticsRationale": "Live WebGPU render with test-only experimental stroke cap/join path; targetColorSpaceBlend=true, intermediateFormat=RGBA16Float, no production default or fallback policy changed.",
+              "residual": {
+            "boundaryClassification": "coverage.stroke-cap-join-aa-residual-after-targetColorSpaceBlend",
+            "mismatchPixels": 1004,
+            "oneUnitMismatchPixels": 994,
+            "greaterThanEightPixels": 10,
+            "greaterThanThirtyTwoPixels": 6,
+            "maxChannelDelta": 48,
+            "dominantRegion": "round-round",
+            "regions": [
+              {
+        "id": "butt-bevel",
+        "description": "left band: butt cap with bevel join",
+        "mismatchPixels": 394,
+        "oneUnitMismatchPixels": 392,
+        "greaterThanEightPixels": 2,
+        "greaterThanThirtyTwoPixels": 0,
+        "maxChannelDelta": 25,
+        "bounds": {"left": 9, "top": 27, "right": 47, "bottom": 92}
+      },
+      {
+        "id": "round-round",
+        "description": "middle band: round cap with round join",
+        "mismatchPixels": 523,
+        "oneUnitMismatchPixels": 515,
+        "greaterThanEightPixels": 8,
+        "greaterThanThirtyTwoPixels": 6,
+        "maxChannelDelta": 48,
+        "bounds": {"left": 48, "top": 38, "right": 95, "bottom": 81}
+      },
+      {
+        "id": "square-bevel",
+        "description": "right band: square cap with bevel join",
+        "mismatchPixels": 87,
+        "oneUnitMismatchPixels": 87,
+        "greaterThanEightPixels": 0,
+        "greaterThanThirtyTwoPixels": 0,
+        "maxChannelDelta": 1,
+        "bounds": {"left": 96, "top": 37, "right": 153, "bottom": 82}
+      }
+            ],
+            "representativeSamples": [
+              {
+        "x": 9,
+        "y": 27,
+        "region": "butt-bevel",
+        "referenceRgba": [192, 192, 192, 255],
+        "gpuRgba": [191, 191, 191, 255],
+        "signedDeltaRgba": [-1, -1, -1, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 99,
+        "y": 37,
+        "region": "square-bevel",
+        "referenceRgba": [209, 222, 209, 255],
+        "gpuRgba": [208, 221, 208, 255],
+        "signedDeltaRgba": [-1, -1, -1, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 104,
+        "y": 37,
+        "region": "square-bevel",
+        "referenceRgba": [209, 222, 209, 255],
+        "gpuRgba": [208, 221, 208, 255],
+        "signedDeltaRgba": [-1, -1, -1, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 50,
+        "y": 38,
+        "region": "round-round",
+        "referenceRgba": [170, 181, 227, 255],
+        "gpuRgba": [169, 181, 226, 255],
+        "signedDeltaRgba": [-1, 0, -1, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 51,
+        "y": 38,
+        "region": "round-round",
+        "referenceRgba": [157, 171, 223, 255],
+        "gpuRgba": [157, 170, 222, 255],
+        "signedDeltaRgba": [0, -1, -1, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 52,
+        "y": 38,
+        "region": "round-round",
+        "referenceRgba": [157, 171, 223, 255],
+        "gpuRgba": [157, 170, 222, 255],
+        "signedDeltaRgba": [0, -1, -1, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 53,
+        "y": 38,
+        "region": "round-round",
+        "referenceRgba": [157, 171, 223, 255],
+        "gpuRgba": [157, 170, 222, 255],
+        "signedDeltaRgba": [0, -1, -1, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 54,
+        "y": 38,
+        "region": "round-round",
+        "referenceRgba": [157, 171, 223, 255],
+        "gpuRgba": [157, 170, 222, 255],
+        "signedDeltaRgba": [0, -1, -1, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 55,
+        "y": 38,
+        "region": "round-round",
+        "referenceRgba": [157, 171, 223, 255],
+        "gpuRgba": [157, 170, 222, 255],
+        "signedDeltaRgba": [0, -1, -1, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 56,
+        "y": 38,
+        "region": "round-round",
+        "referenceRgba": [157, 171, 223, 255],
+        "gpuRgba": [157, 170, 222, 255],
+        "signedDeltaRgba": [0, -1, -1, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 57,
+        "y": 38,
+        "region": "round-round",
+        "referenceRgba": [85, 90, 113, 255],
+        "gpuRgba": [84, 90, 113, 255],
+        "signedDeltaRgba": [-1, 0, 0, 0],
+        "maxChannelDelta": 1
+      },
+      {
+        "x": 146,
+        "y": 38,
+        "region": "square-bevel",
+        "referenceRgba": [132, 98, 77, 255],
+        "gpuRgba": [131, 98, 77, 255],
+        "signedDeltaRgba": [-1, 0, 0, 0],
+        "maxChannelDelta": 1
+      }
+            ],
+            "highDeltaSamples": [
+              {
+        "x": 92,
+        "y": 75,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [181, 191, 230, 255],
+        "signedDeltaRgba": [48, 41, 16, 0],
+        "maxChannelDelta": 48
+      },
+      {
+        "x": 91,
+        "y": 76,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [181, 191, 230, 255],
+        "signedDeltaRgba": [48, 41, 16, 0],
+        "maxChannelDelta": 48
+      },
+      {
+        "x": 90,
+        "y": 77,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [181, 191, 230, 255],
+        "signedDeltaRgba": [48, 41, 16, 0],
+        "maxChannelDelta": 48
+      },
+      {
+        "x": 89,
+        "y": 78,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [181, 191, 230, 255],
+        "signedDeltaRgba": [48, 41, 16, 0],
+        "maxChannelDelta": 48
+      },
+      {
+        "x": 88,
+        "y": 79,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [181, 191, 230, 255],
+        "signedDeltaRgba": [48, 41, 16, 0],
+        "maxChannelDelta": 48
+      },
+      {
+        "x": 87,
+        "y": 80,
+        "region": "round-round",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [181, 191, 230, 255],
+        "signedDeltaRgba": [48, 41, 16, 0],
+        "maxChannelDelta": 48
+      },
+      {
+        "x": 21,
+        "y": 81,
+        "region": "butt-bevel",
+        "referenceRgba": [206, 213, 239, 255],
+        "gpuRgba": [181, 191, 230, 255],
+        "signedDeltaRgba": [-25, -22, -9, 0],
+        "maxChannelDelta": 25
+      },
+      {
+        "x": 93,
+        "y": 74,
+        "region": "round-round",
+        "referenceRgba": [182, 192, 231, 255],
+        "gpuRgba": [206, 213, 238, 255],
+        "signedDeltaRgba": [24, 21, 7, 0],
+        "maxChannelDelta": 24
+      },
+      {
+        "x": 17,
+        "y": 77,
+        "region": "butt-bevel",
+        "referenceRgba": [133, 150, 214, 255],
+        "gpuRgba": [157, 170, 222, 255],
+        "signedDeltaRgba": [24, 20, 8, 0],
+        "maxChannelDelta": 24
+      },
+      {
+        "x": 69,
+        "y": 81,
+        "region": "round-round",
+        "referenceRgba": [209, 222, 209, 255],
+        "gpuRgba": [185, 204, 185, 255],
+        "signedDeltaRgba": [-24, -18, -24, 0],
+        "maxChannelDelta": 24
+      }
+            ],
+            "boundedCoverageCorrectionPlausibility": "PLAUSIBLE_BUT_NOT_PROVEN",
+            "nextMissingCondition": "missing_cpu_gpu_coverage_equivalence_for_round_cap_join_boundary_cells"
+          },
+              "supportDecision": "REFUSED_INSUFFICIENT_PARITY"
+            }
+  ],
+  "summary": {
+    "targetBlendFalseObserved": true,
+    "targetBlendTrueObserved": true,
+    "rgba16FloatIntermediateObserved": true,
+    "targetBlendTrueImprovesSimilarity": true,
+    "targetBlendTrueStillBelowThreshold": true,
+    "residualLocalizedToCapJoinRegions": true,
+    "safeCoverageCorrectionProven": false
+  },
+  "finding": "targetColorSpaceBlend_reduces_m60_stroke_cap_join_residual_but_cap_join_aa_boundary_remains_below_threshold",
+  "admissibleCorrection": "none_applied: bounded coverage correction is plausible only as a diagnostic hypothesis after targetColorSpaceBlend=true, but FOR-266 does not prove CPU/GPU coverage equivalence for the affected cap/join boundary cells; the scene remains refused",
+  "missingCondition": "missing_cpu_gpu_coverage_equivalence_for_round_cap_join_boundary_cells",
+  "remainingBoundary": "coverage.stroke-cap-join-aa-residual",
+  "interpretation": "FOR-266 narrows the FOR-263 stroke cap/join signal to the normal RGBA16Float intermediate with targetColorSpaceBlend=false and targetColorSpaceBlend=true. The target-blend policy improves similarity, but residual pixels remain below the strict support threshold and the high-delta tail is still localized to cap/join AA boundary cells.",
+  "observationMethod": "test-only SkWebGpuDevice construction with kanvas.webgpu.strokeCapJoin.experimentalRender scoped to this test, targetColorSpaceBlend toggled per policy, and intermediateFormat fixed to RGBA16Float; no renderer default, shader, threshold, Crop, fallback policy, quantization policy, or production stroke support changed",
+  "supportDecision": "KEEP_DIAGNOSTIC",
+  "correctionApplied": false,
+  "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+}
