@@ -1,0 +1,1156 @@
+{
+  "linear": "FOR-269",
+  "parent": "FOR-241",
+  "probe": "nested-rrect-zone-mask-audit",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/WebGPU",
+  "sourceReport": "reports/wgsl-pipeline/2026-06-01-m60-nested-clip-path-aa-promotion.md",
+  "sourceTest": "org.skia.gpu.webgpu.NestedClipSceneCaptureTest",
+  "artifactRoot": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip",
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "nextAction": "BOUNDED_CLIP_MASK_CORRECTION_FIRST",
+  "secondaryBlocker": "CPU_REFERENCE_RESIDUAL_REMAINS_BELOW_STRICT_THRESHOLD",
+  "decisionRationale": "GPU/reference high-delta pixels are dominated by the oval removed by clipRRect(kDifference), while CPU/reference high-delta pixels are localized to the blurred content envelope. The scene therefore remains refused until a bounded clip-mask correction and follow-up CPU/reference proof exist.",
+  "route": {
+    "cpu": "cpu.coverage.nested-rrect-clip-oracle",
+    "gpu": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "coverageStrategy": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported"
+  },
+  "reportedStats": {
+    "cpuSimilarity": 97.31,
+    "gpuSimilarity": 71.22,
+    "threshold": 99.95,
+    "cpuMatchingPixels": 908439,
+    "gpuMatchingPixels": 664874,
+    "cpuMaxChannelDelta": 237,
+    "gpuMaxChannelDelta": 255
+  },
+  "geometry": {
+    "sourceScene": "BlurredClippedCircleGM",
+    "deviceSize": {
+      "width": 1164,
+      "height": 802
+    },
+    "canvasScale": 2,
+    "sourceClipStack": [
+      {
+        "kind": "clipRect",
+        "op": "intersect",
+        "localBounds": [
+          0,
+          0,
+          1164,
+          802
+        ]
+      },
+      {
+        "kind": "clipRect",
+        "op": "intersect",
+        "localBounds": [
+          0,
+          0,
+          1164,
+          802
+        ]
+      },
+      {
+        "kind": "clipRRect",
+        "shape": "oval",
+        "op": "difference",
+        "localBounds": [
+          8,
+          8,
+          288,
+          288
+        ]
+      }
+    ],
+    "deviceClipRects": [
+      {
+        "kind": "clipRect",
+        "op": "intersect",
+        "deviceBounds": [
+          0,
+          0,
+          2328,
+          1604
+        ]
+      },
+      {
+        "kind": "clipRect",
+        "op": "intersect",
+        "deviceBounds": [
+          0,
+          0,
+          2328,
+          1604
+        ]
+      }
+    ],
+    "differenceOvalDeviceBounds": [
+      16,
+      16,
+      576,
+      576
+    ],
+    "drawOvalDeviceBounds": [
+      8,
+      8,
+      584,
+      584
+    ],
+    "boundaryBandDevicePixels": 3,
+    "note": "The two intersected clip rects cover the whole 1164x802 surface after scale(2); the strict final-clip exterior is the oval removed by clipRRect(kDifference)."
+  },
+  "zoneDefinitions": {
+    "accounting": "Masks are analytic and intentionally non-exclusive; zone counts isolate hypotheses and must not be summed as a partition.",
+    "intersected_rectangles": "Pixels inside both scaled clipRect intersections; this covers the full captured surface for this GM.",
+    "outside_clip_removed_difference_oval": "Pixels inside the device-space oval removed by clipRRect(kDifference), i.e. outside the final surviving clip for the draw.",
+    "intersected_rectangles_surviving_difference": "Pixels inside the intersected rect clips and outside the removed oval.",
+    "difference_rrect_oval_boundary": "Three-device-pixel band around the removed oval boundary.",
+    "blurred_content_envelope": "Outer draw oval annulus plus three-device-pixel bands around the inner difference oval and outer draw oval.",
+    "outside_draw_oval": "Pixels outside the device-space draw oval."
+  },
+  "comparisons": [
+    {
+      "comparison": "gpu_vs_reference",
+      "totalPixels": 933528,
+      "exactMatchingPixels": 661208,
+      "exactSimilarity": 70.828941,
+      "exactMismatchPixels": 272320,
+      "toleranceOneMismatchPixels": 271217,
+      "greaterThanEightPixels": 268654,
+      "greaterThanThirtyTwoPixels": 265076,
+      "maxChannelDelta": 255,
+      "dominantGreaterThanThirtyTwoZone": "outside_clip_removed_difference_oval",
+      "dominantGreaterThanThirtyTwoZoneShare": 92.912221,
+      "zones": {
+        "intersected_rectangles": {
+          "pixels": 933528,
+          "bounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "exactMismatchPixels": 272320,
+          "exactMatchPixels": 661208,
+          "toleranceOneMismatchPixels": 271217,
+          "greaterThanEightPixels": 268654,
+          "greaterThanThirtyTwoPixels": 265076,
+          "maxChannelDelta": 255,
+          "meanMaxChannelDelta": 70.485544
+        },
+        "outside_clip_removed_difference_oval": {
+          "pixels": 246288,
+          "bounds": {
+            "left": 16,
+            "top": 16,
+            "right": 576,
+            "bottom": 576
+          },
+          "exactMismatchPixels": 246288,
+          "exactMatchPixels": 0,
+          "toleranceOneMismatchPixels": 246288,
+          "greaterThanEightPixels": 246288,
+          "greaterThanThirtyTwoPixels": 246288,
+          "maxChannelDelta": 255,
+          "meanMaxChannelDelta": 254.915997
+        },
+        "intersected_rectangles_surviving_difference": {
+          "pixels": 687240,
+          "bounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "exactMismatchPixels": 26032,
+          "exactMatchPixels": 661208,
+          "toleranceOneMismatchPixels": 24929,
+          "greaterThanEightPixels": 22366,
+          "greaterThanThirtyTwoPixels": 18788,
+          "maxChannelDelta": 217,
+          "meanMaxChannelDelta": 4.390719
+        },
+        "difference_rrect_oval_boundary": {
+          "pixels": 10584,
+          "bounds": {
+            "left": 13,
+            "top": 13,
+            "right": 579,
+            "bottom": 579
+          },
+          "exactMismatchPixels": 10584,
+          "exactMatchPixels": 0,
+          "toleranceOneMismatchPixels": 10584,
+          "greaterThanEightPixels": 10584,
+          "greaterThanThirtyTwoPixels": 10584,
+          "maxChannelDelta": 255,
+          "meanMaxChannelDelta": 226.520597
+        },
+        "blurred_content_envelope": {
+          "pixels": 25008,
+          "bounds": {
+            "left": 5,
+            "top": 5,
+            "right": 587,
+            "bottom": 587
+          },
+          "exactMismatchPixels": 25008,
+          "exactMatchPixels": 0,
+          "toleranceOneMismatchPixels": 25008,
+          "greaterThanEightPixels": 25008,
+          "greaterThanThirtyTwoPixels": 24020,
+          "maxChannelDelta": 255,
+          "meanMaxChannelDelta": 170.924424
+        },
+        "outside_draw_oval": {
+          "pixels": 672928,
+          "bounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "exactMismatchPixels": 11720,
+          "exactMatchPixels": 661208,
+          "toleranceOneMismatchPixels": 10617,
+          "greaterThanEightPixels": 8054,
+          "greaterThanThirtyTwoPixels": 4476,
+          "maxChannelDelta": 98,
+          "meanMaxChannelDelta": 0.440809
+        }
+      },
+      "highDeltaSamples": [
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 294,
+          "y": 16,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 295,
+          "y": 16,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 296,
+          "y": 16,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 297,
+          "y": 16,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 272,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 273,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 274,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 275,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 276,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 277,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 278,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 279,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 280,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 281,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 282,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        },
+        {
+          "comparison": "gpu_vs_reference",
+          "x": 283,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualRgba": [
+            0,
+            0,
+            0,
+            255
+          ],
+          "signedDeltaRgba": [
+            -255,
+            -255,
+            -255,
+            0
+          ],
+          "maxChannelDelta": 255
+        }
+      ]
+    },
+    {
+      "comparison": "cpu_vs_reference",
+      "totalPixels": 933528,
+      "exactMatchingPixels": 906764,
+      "exactSimilarity": 97.133027,
+      "exactMismatchPixels": 26764,
+      "toleranceOneMismatchPixels": 25089,
+      "greaterThanEightPixels": 21335,
+      "greaterThanThirtyTwoPixels": 15726,
+      "maxChannelDelta": 237,
+      "dominantGreaterThanThirtyTwoZone": "blurred_content_envelope",
+      "dominantGreaterThanThirtyTwoZoneShare": 100.0,
+      "zones": {
+        "intersected_rectangles": {
+          "pixels": 933528,
+          "bounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "exactMismatchPixels": 26764,
+          "exactMatchPixels": 906764,
+          "toleranceOneMismatchPixels": 25089,
+          "greaterThanEightPixels": 21335,
+          "greaterThanThirtyTwoPixels": 15726,
+          "maxChannelDelta": 237,
+          "meanMaxChannelDelta": 2.813417
+        },
+        "outside_clip_removed_difference_oval": {
+          "pixels": 246288,
+          "bounds": {
+            "left": 16,
+            "top": 16,
+            "right": 576,
+            "bottom": 576
+          },
+          "exactMismatchPixels": 1106,
+          "exactMatchPixels": 245182,
+          "toleranceOneMismatchPixels": 1061,
+          "greaterThanEightPixels": 948,
+          "greaterThanThirtyTwoPixels": 697,
+          "maxChannelDelta": 168,
+          "meanMaxChannelDelta": 0.261028
+        },
+        "intersected_rectangles_surviving_difference": {
+          "pixels": 687240,
+          "bounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "exactMismatchPixels": 25658,
+          "exactMatchPixels": 661582,
+          "toleranceOneMismatchPixels": 24028,
+          "greaterThanEightPixels": 20387,
+          "greaterThanThirtyTwoPixels": 15029,
+          "maxChannelDelta": 237,
+          "meanMaxChannelDelta": 3.728124
+        },
+        "difference_rrect_oval_boundary": {
+          "pixels": 10584,
+          "bounds": {
+            "left": 13,
+            "top": 13,
+            "right": 579,
+            "bottom": 579
+          },
+          "exactMismatchPixels": 6084,
+          "exactMatchPixels": 4500,
+          "toleranceOneMismatchPixels": 5569,
+          "greaterThanEightPixels": 5456,
+          "greaterThanThirtyTwoPixels": 5201,
+          "maxChannelDelta": 237,
+          "meanMaxChannelDelta": 102.169596
+        },
+        "blurred_content_envelope": {
+          "pixels": 25008,
+          "bounds": {
+            "left": 5,
+            "top": 5,
+            "right": 587,
+            "bottom": 587
+          },
+          "exactMismatchPixels": 20508,
+          "exactMatchPixels": 4500,
+          "toleranceOneMismatchPixels": 19936,
+          "greaterThanEightPixels": 18745,
+          "greaterThanThirtyTwoPixels": 15726,
+          "maxChannelDelta": 237,
+          "meanMaxChannelDelta": 102.650872
+        },
+        "outside_draw_oval": {
+          "pixels": 672928,
+          "bounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "exactMismatchPixels": 11720,
+          "exactMatchPixels": 661208,
+          "toleranceOneMismatchPixels": 10617,
+          "greaterThanEightPixels": 8054,
+          "greaterThanThirtyTwoPixels": 4925,
+          "maxChannelDelta": 136,
+          "meanMaxChannelDelta": 0.552316
+        }
+      },
+      "highDeltaSamples": [
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 262,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 329,
+          "y": 17,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 250,
+          "y": 18,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 251,
+          "y": 18,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 252,
+          "y": 18,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 253,
+          "y": 18,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 254,
+          "y": 18,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 337,
+          "y": 18,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 338,
+          "y": 18,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 339,
+          "y": 18,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 340,
+          "y": 18,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 341,
+          "y": 18,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 242,
+          "y": 19,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 243,
+          "y": 19,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 244,
+          "y": 19,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        },
+        {
+          "comparison": "cpu_vs_reference",
+          "x": 245,
+          "y": 19,
+          "region": "difference_rrect_oval_boundary",
+          "referenceRgba": [
+            202,
+            59,
+            18,
+            255
+          ],
+          "actualRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "signedDeltaRgba": [
+            53,
+            196,
+            237,
+            0
+          ],
+          "maxChannelDelta": 237
+        }
+      ]
+    }
+  ],
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required"
+  }
+}
