@@ -1,0 +1,3548 @@
+{
+  "linear": "FOR-289",
+  "parent": "FOR-241",
+  "probe": "m60-outer-boundary-runtime-write-chronology",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/RGBA_8888/runtime",
+  "sourceAudits": {
+    "for288": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-store-order-audit-for288.json"
+  },
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "PROOF_INSUFFICIENT_RUNTIME_WRITE_CHRONOLOGY_GAP",
+  "nextAction": "EXPAND_RUNTIME_TRACE_BEYOND_SKBITMAPDEVICE_DISPATCHBLEND",
+  "proofGap": "The root-device-bounded trace observed only the initial white kSrc output writes on the 59 target pixels. No runtime write with source SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload wrote a red-tinted value to those root pixels, so the FOR-286 reconstructed red store is not yet proven to be an actual output-device write.",
+  "route": {
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold",
+    "for288PrimaryClassification": "OTHER_LATER_WRITE_AFTER_RECONSTRUCTED_RED_STORE"
+  },
+  "targetPixelCount": 59,
+  "eventCount": 59,
+  "traceScope": {
+    "device": "root SkBitmapDevice only",
+    "rootWidth": 1164,
+    "rootHeight": 802,
+    "temporaryMaskDevicesExcluded": true
+  },
+  "sourceCounts": {
+    "SkBitmapDevice.dispatchBlend": 59
+  },
+  "branchCounts": {
+    "SkBitmapDevice.blend.kSrc.setPixel(out)": 59
+  },
+  "eventCountsByPixel": {
+    "96,84": 1,
+    "97,84": 1,
+    "98,84": 1,
+    "99,84": 1,
+    "100,84": 1,
+    "101,84": 1,
+    "102,84": 1,
+    "103,84": 1,
+    "104,84": 1,
+    "95,85": 1,
+    "96,85": 1,
+    "97,85": 1,
+    "98,85": 1,
+    "99,85": 1,
+    "100,85": 1,
+    "101,85": 1,
+    "102,85": 1,
+    "103,85": 1,
+    "94,86": 1,
+    "95,86": 1,
+    "96,86": 1,
+    "97,86": 1,
+    "98,86": 1,
+    "99,86": 1,
+    "100,86": 1,
+    "101,86": 1,
+    "102,86": 1,
+    "94,87": 1,
+    "95,87": 1,
+    "96,87": 1,
+    "97,87": 1,
+    "98,87": 1,
+    "99,87": 1,
+    "100,87": 1,
+    "101,87": 1,
+    "94,88": 1,
+    "95,88": 1,
+    "96,88": 1,
+    "97,88": 1,
+    "98,88": 1,
+    "99,88": 1,
+    "100,88": 1,
+    "94,89": 1,
+    "95,89": 1,
+    "96,89": 1,
+    "97,89": 1,
+    "98,89": 1,
+    "99,89": 1,
+    "94,90": 1,
+    "95,90": 1,
+    "96,90": 1,
+    "97,90": 1,
+    "98,90": 1,
+    "94,91": 1,
+    "95,91": 1,
+    "96,91": 1,
+    "94,92": 1,
+    "95,92": 1,
+    "94,93": 1
+  },
+  "summary": {
+    "targetsWithRuntimeRedStore": 0,
+    "targetsWithLaterWhiteLayerWrite": 0,
+    "finalReadbackWhiteLayerTargets": 59,
+    "firstRuntimeRedStore": null,
+    "firstLaterWhiteLayerWriteAfterFirstRed": null
+  },
+  "targetPixels": [
+    {
+      "x": 96,
+      "y": 84,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 97,
+      "y": 84,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 98,
+      "y": 84,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 99,
+      "y": 84,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 100,
+      "y": 84,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 101,
+      "y": 84,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 102,
+      "y": 84,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 103,
+      "y": 84,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 104,
+      "y": 84,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 95,
+      "y": 85,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 96,
+      "y": 85,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 97,
+      "y": 85,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 98,
+      "y": 85,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 99,
+      "y": 85,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 100,
+      "y": 85,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 101,
+      "y": 85,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 102,
+      "y": 85,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 103,
+      "y": 85,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 94,
+      "y": 86,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 95,
+      "y": 86,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 96,
+      "y": 86,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 97,
+      "y": 86,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 98,
+      "y": 86,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 99,
+      "y": 86,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 100,
+      "y": 86,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 101,
+      "y": 86,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 102,
+      "y": 86,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 94,
+      "y": 87,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 95,
+      "y": 87,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 96,
+      "y": 87,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 97,
+      "y": 87,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 98,
+      "y": 87,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 99,
+      "y": 87,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 100,
+      "y": 87,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 101,
+      "y": 87,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 94,
+      "y": 88,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 95,
+      "y": 88,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 96,
+      "y": 88,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 97,
+      "y": 88,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 98,
+      "y": 88,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 99,
+      "y": 88,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 100,
+      "y": 88,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 94,
+      "y": 89,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 95,
+      "y": 89,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 96,
+      "y": 89,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 97,
+      "y": 89,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 98,
+      "y": 89,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 99,
+      "y": 89,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 94,
+      "y": 90,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 95,
+      "y": 90,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 96,
+      "y": 90,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 97,
+      "y": 90,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 98,
+      "y": 90,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 94,
+      "y": 91,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 95,
+      "y": 91,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 96,
+      "y": 91,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 94,
+      "y": 92,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 95,
+      "y": 92,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "x": 94,
+      "y": 93,
+      "finalReadbackRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    }
+  ],
+  "perPixelChronology": [
+    {
+      "x": 96,
+      "y": 84,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 97,
+      "y": 84,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 98,
+      "y": 84,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 99,
+      "y": 84,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 100,
+      "y": 84,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 101,
+      "y": 84,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 102,
+      "y": 84,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 103,
+      "y": 84,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 104,
+      "y": 84,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 95,
+      "y": 85,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 96,
+      "y": 85,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 97,
+      "y": 85,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 98,
+      "y": 85,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 99,
+      "y": 85,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 100,
+      "y": 85,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 101,
+      "y": 85,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 102,
+      "y": 85,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 103,
+      "y": 85,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 94,
+      "y": 86,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 95,
+      "y": 86,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 96,
+      "y": 86,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 97,
+      "y": 86,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 98,
+      "y": 86,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 99,
+      "y": 86,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 100,
+      "y": 86,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 101,
+      "y": 86,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 102,
+      "y": 86,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 94,
+      "y": 87,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 95,
+      "y": 87,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 96,
+      "y": 87,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 97,
+      "y": 87,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 98,
+      "y": 87,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 99,
+      "y": 87,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 100,
+      "y": 87,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 101,
+      "y": 87,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 94,
+      "y": 88,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 95,
+      "y": 88,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 96,
+      "y": 88,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 97,
+      "y": 88,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 98,
+      "y": 88,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 99,
+      "y": 88,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 100,
+      "y": 88,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 94,
+      "y": 89,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 95,
+      "y": 89,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 96,
+      "y": 89,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 97,
+      "y": 89,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 98,
+      "y": 89,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 99,
+      "y": 89,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 94,
+      "y": 90,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 95,
+      "y": 90,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 96,
+      "y": 90,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 97,
+      "y": 90,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 98,
+      "y": 90,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 94,
+      "y": 91,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 95,
+      "y": 91,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 96,
+      "y": 91,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 94,
+      "y": 92,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 95,
+      "y": 92,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    },
+    {
+      "x": 94,
+      "y": 93,
+      "eventCount": 1,
+      "firstRedRuntimeWrite": null,
+      "firstLaterWhiteLayerWrite": null
+    }
+  ],
+  "events": [
+    {
+      "index": 0,
+      "x": 96,
+      "y": 84,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 1,
+      "x": 97,
+      "y": 84,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 2,
+      "x": 98,
+      "y": 84,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 3,
+      "x": 99,
+      "y": 84,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 4,
+      "x": 100,
+      "y": 84,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 5,
+      "x": 101,
+      "y": 84,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 6,
+      "x": 102,
+      "y": 84,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 7,
+      "x": 103,
+      "y": 84,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 8,
+      "x": 104,
+      "y": 84,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 9,
+      "x": 95,
+      "y": 85,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 10,
+      "x": 96,
+      "y": 85,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 11,
+      "x": 97,
+      "y": 85,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 12,
+      "x": 98,
+      "y": 85,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 13,
+      "x": 99,
+      "y": 85,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 14,
+      "x": 100,
+      "y": 85,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 15,
+      "x": 101,
+      "y": 85,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 16,
+      "x": 102,
+      "y": 85,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 17,
+      "x": 103,
+      "y": 85,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 18,
+      "x": 94,
+      "y": 86,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 19,
+      "x": 95,
+      "y": 86,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 20,
+      "x": 96,
+      "y": 86,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 21,
+      "x": 97,
+      "y": 86,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 22,
+      "x": 98,
+      "y": 86,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 23,
+      "x": 99,
+      "y": 86,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 24,
+      "x": 100,
+      "y": 86,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 25,
+      "x": 101,
+      "y": 86,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 26,
+      "x": 102,
+      "y": 86,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 27,
+      "x": 94,
+      "y": 87,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 28,
+      "x": 95,
+      "y": 87,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 29,
+      "x": 96,
+      "y": 87,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 30,
+      "x": 97,
+      "y": 87,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 31,
+      "x": 98,
+      "y": 87,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 32,
+      "x": 99,
+      "y": 87,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 33,
+      "x": 100,
+      "y": 87,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 34,
+      "x": 101,
+      "y": 87,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 35,
+      "x": 94,
+      "y": 88,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 36,
+      "x": 95,
+      "y": 88,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 37,
+      "x": 96,
+      "y": 88,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 38,
+      "x": 97,
+      "y": 88,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 39,
+      "x": 98,
+      "y": 88,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 40,
+      "x": 99,
+      "y": 88,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 41,
+      "x": 100,
+      "y": 88,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 42,
+      "x": 94,
+      "y": 89,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 43,
+      "x": 95,
+      "y": 89,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 44,
+      "x": 96,
+      "y": 89,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 45,
+      "x": 97,
+      "y": 89,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 46,
+      "x": 98,
+      "y": 89,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 47,
+      "x": 99,
+      "y": 89,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 48,
+      "x": 94,
+      "y": 90,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 49,
+      "x": 95,
+      "y": 90,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 50,
+      "x": 96,
+      "y": 90,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 51,
+      "x": 97,
+      "y": 90,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 52,
+      "x": 98,
+      "y": 90,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 53,
+      "x": 94,
+      "y": 91,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 54,
+      "x": 95,
+      "y": 91,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 55,
+      "x": 96,
+      "y": 91,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 56,
+      "x": 94,
+      "y": 92,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 57,
+      "x": 95,
+      "y": 92,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "index": 58,
+      "x": 94,
+      "y": 93,
+      "source": "SkBitmapDevice.dispatchBlend",
+      "callsite": "SkBitmapDevice.blend",
+      "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+      "mode": "kSrc",
+      "blender": "null",
+      "coverage": 255,
+      "srcInputRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "srcAfterCoverageRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueBeforeRgba": [
+        198,
+        198,
+        198,
+        255
+      ],
+      "valueWrittenRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "valueReadAfterRgba": [
+        255,
+        255,
+        255,
+        255
+      ]
+    }
+  ],
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuInstrumentationAddedDisabledByDefault": true,
+    "gpuRendererChanged": false,
+    "globalBlendChanged": false,
+    "setPixelChanged": false,
+    "m60Promoted": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}

@@ -76,6 +76,106 @@ private const val CPU_DESCRIPTOR_AA_CLIP_REASON: String = "coverage.cpu-descript
 private const val CPU_DESCRIPTOR_CLIP_SHADER_REASON: String = "coverage.cpu-descriptor-clip-shader-unsupported"
 private const val CPU_DESCRIPTOR_LOWERING_UNSUPPORTED_REASON: String = "coverage.cpu-descriptor-lowering-unsupported"
 
+public object SkCpuWriteChronologyTrace {
+    public data class Target(public val x: Int, public val y: Int)
+
+    public data class Event(
+        public val index: Int,
+        public val x: Int,
+        public val y: Int,
+        public val source: String,
+        public val callsite: String,
+        public val branch: String,
+        public val mode: String,
+        public val blender: String,
+        public val coverage: Int,
+        public val srcInput: SkColor,
+        public val srcAfterCoverage: SkColor,
+        public val valueBefore: SkColor,
+        public val valueWritten: SkColor,
+        public val valueReadAfter: SkColor,
+    )
+
+    private val lock = Any()
+    @Volatile
+    private var enabled: Boolean = false
+    private var targetPixels: Set<Target> = emptySet()
+    private var targetWidth: Int? = null
+    private var targetHeight: Int? = null
+    private val events = mutableListOf<Event>()
+
+    public fun configureForTargets(targets: Set<Target>, width: Int? = null, height: Int? = null) {
+        synchronized(lock) {
+            targetPixels = targets
+            targetWidth = width
+            targetHeight = height
+            events.clear()
+            enabled = targets.isNotEmpty()
+        }
+    }
+
+    public fun reset() {
+        synchronized(lock) {
+            enabled = false
+            targetPixels = emptySet()
+            targetWidth = null
+            targetHeight = null
+            events.clear()
+        }
+    }
+
+    public fun snapshot(): List<Event> = synchronized(lock) { events.toList() }
+
+    public fun configuredTargetCount(): Int = synchronized(lock) { targetPixels.size }
+
+    internal fun shouldTrace(x: Int, y: Int, width: Int, height: Int): Boolean {
+        if (!enabled) return false
+        return synchronized(lock) {
+            if (!enabled || Target(x, y) !in targetPixels) return false
+            val expectedWidth = targetWidth
+            val expectedHeight = targetHeight
+            (expectedWidth == null || expectedWidth == width) &&
+                (expectedHeight == null || expectedHeight == height)
+        }
+    }
+
+    internal fun record(
+        x: Int,
+        y: Int,
+        source: String,
+        callsite: String,
+        branch: String,
+        mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender?,
+        coverage: Int,
+        srcInput: SkColor,
+        srcAfterCoverage: SkColor,
+        valueBefore: SkColor,
+        valueWritten: SkColor,
+        valueReadAfter: SkColor,
+    ) {
+        synchronized(lock) {
+            if (!enabled || Target(x, y) !in targetPixels) return
+            events += Event(
+                index = events.size,
+                x = x,
+                y = y,
+                source = source,
+                callsite = callsite,
+                branch = branch,
+                mode = mode.name,
+                blender = blender?.javaClass?.simpleName ?: "null",
+                coverage = coverage,
+                srcInput = srcInput,
+                srcAfterCoverage = srcAfterCoverage,
+                valueBefore = valueBefore,
+                valueWritten = valueWritten,
+                valueReadAfter = valueReadAfter,
+            )
+        }
+    }
+}
+
 internal object SkBitmapDescriptorCoverageLowering {
     var lower: (CoveragePlan) -> CoverageLoweringResult = CoveragePlanAdapter::lower
 }
@@ -871,7 +971,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 var effective = if (paintAlpha == 0xFF) sample else applyAlpha(sample, paintAlpha)
                 effective = applyColorFilter(colorFilter, effective)
                 if (effective ushr 24 == 0 && !mustBlendZero) continue
-                dispatchBlend(x, y, effective, mode, blender)
+                dispatchBlend(x, y, effective, mode, blender, "SkBitmapDevice.compositeFrom")
             }
         }
     }
@@ -1656,7 +1756,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                             val finalA = (effA * maskA + 127) / 255
                             if (finalA == 0 && !mustBlendZero) continue
                             val rgb = s and 0x00FFFFFF
-                            dispatchBlend(devX, devY, (finalA shl 24) or rgb, mode, blender)
+                            dispatchBlend(
+                                devX,
+                                devY,
+                                (finalA shl 24) or rgb,
+                                mode,
+                                blender,
+                                "SkBitmapDevice.drawPathWithMaskFilter.A8.shader",
+                            )
                         }
                     }
                 } else {
@@ -1669,7 +1776,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                             if (!filterMaskPayloadAfterMask) {
                                 val effA = (paintA * maskA + 127) / 255
                                 if (effA == 0 && !mustBlendZero) continue
-                                dispatchBlend(devX, devY, (effA shl 24) or rgb, mode, blender)
+                                dispatchBlend(
+                                    devX,
+                                    devY,
+                                    (effA shl 24) or rgb,
+                                    mode,
+                                    blender,
+                                    "SkBitmapDevice.drawPathWithMaskFilter.A8.solid",
+                                )
                             } else {
                                 val baseA = SkColorGetA(paint.color)
                                 val maskedA = (baseA * maskA + 127) / 255
@@ -1677,7 +1791,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                                 val src = transformPaintColor(
                                     applyColorFilter(colorFilter, (maskedA shl 24) or (paint.color and 0x00FFFFFF)),
                                 )
-                                dispatchBlend(devX, devY, src, mode, blender)
+                                dispatchBlend(
+                                    devX,
+                                    devY,
+                                    src,
+                                    mode,
+                                    blender,
+                                    "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+                                )
                             }
                         }
                     }
@@ -2770,7 +2891,51 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
      * the GMs in scope barely exercise; full F16 support for the rest of
      * the 9-mode slice is a Phase 6b task.
      */
-    private fun blend(x: Int, y: Int, srcIn: SkColor, mode: SkBlendMode) {
+    private fun tracedSetPixel(
+        x: Int,
+        y: Int,
+        value: SkColor,
+        source: String,
+        branch: String,
+        mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender?,
+        coverage: Int,
+        srcInput: SkColor,
+        srcAfterCoverage: SkColor,
+        valueBefore: SkColor? = null,
+    ) {
+        if (!SkCpuWriteChronologyTrace.shouldTrace(x, y, width, height)) {
+            bitmap.setPixel(x, y, value)
+            return
+        }
+        val before = valueBefore ?: bitmap.getPixel(x, y)
+        bitmap.setPixel(x, y, value)
+        val after = bitmap.getPixel(x, y)
+        SkCpuWriteChronologyTrace.record(
+            x = x,
+            y = y,
+            source = source,
+            callsite = "SkBitmapDevice.blend",
+            branch = branch,
+            mode = mode,
+            blender = blender,
+            coverage = coverage,
+            srcInput = srcInput,
+            srcAfterCoverage = srcAfterCoverage,
+            valueBefore = before,
+            valueWritten = value,
+            valueReadAfter = after,
+        )
+    }
+
+    private fun blend(
+        x: Int,
+        y: Int,
+        srcIn: SkColor,
+        mode: SkBlendMode,
+        traceSource: String,
+        traceBlender: org.skia.foundation.SkBlender?,
+    ) {
         // Phase 7q — clipPath / clipRRect alpha-mask modulation. When a
         // non-rect clip is active we modulate `src.alpha` by the mask
         // coverage at this pixel before any blend dispatch.
@@ -2811,7 +2976,18 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         if (mode == SkBlendMode.kSrcOver) {
             val sa = SkColorGetA(src)
             if (sa == 0xFF) {
-                bitmap.setPixel(x, y, src)
+                tracedSetPixel(
+                    x = x,
+                    y = y,
+                    value = src,
+                    source = traceSource,
+                    branch = "SkBitmapDevice.blend.kSrcOver.opaqueSrc.setPixel(src)",
+                    mode = mode,
+                    blender = traceBlender,
+                    coverage = cov,
+                    srcInput = srcIn,
+                    srcAfterCoverage = src,
+                )
                 return
             }
             if (sa == 0) return
@@ -2820,7 +2996,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             val invSa = 255 - sa
             val outA = sa + (da * invSa + 127) / 255
             if (outA == 0) {
-                bitmap.setPixel(x, y, 0)
+                tracedSetPixel(
+                    x = x,
+                    y = y,
+                    value = 0,
+                    source = traceSource,
+                    branch = "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(transparent)",
+                    mode = mode,
+                    blender = traceBlender,
+                    coverage = cov,
+                    srcInput = srcIn,
+                    srcAfterCoverage = src,
+                    valueBefore = dst,
+                )
                 return
             }
             val sr = SkColorGetR(src); val sg = SkColorGetG(src); val sb = SkColorGetB(src)
@@ -2828,13 +3016,37 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             val outR = (sr * sa + dr * da * invSa / 255 + outA / 2) / outA
             val outG = (sg * sa + dg * da * invSa / 255 + outA / 2) / outA
             val outB = (sb * sa + db * da * invSa / 255 + outA / 2) / outA
-            bitmap.setPixel(x, y, SkColorSetARGB(outA, outR, outG, outB))
+            tracedSetPixel(
+                x = x,
+                y = y,
+                value = SkColorSetARGB(outA, outR, outG, outB),
+                source = traceSource,
+                branch = "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+                mode = mode,
+                blender = traceBlender,
+                coverage = cov,
+                srcInput = srcIn,
+                srcAfterCoverage = src,
+                valueBefore = dst,
+            )
             return
         }
 
         val dst = bitmap.getPixel(x, y)
         val out = blendPixel(src, dst, mode)
-        bitmap.setPixel(x, y, out)
+        tracedSetPixel(
+            x = x,
+            y = y,
+            value = out,
+            source = traceSource,
+            branch = "SkBitmapDevice.blend.${mode.name}.setPixel(out)",
+            mode = mode,
+            blender = traceBlender,
+            coverage = cov,
+            srcInput = srcIn,
+            srcAfterCoverage = src,
+            valueBefore = dst,
+        )
     }
 
     /**
@@ -2858,11 +3070,12 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         src: SkColor,
         mode: SkBlendMode,
         blender: org.skia.foundation.SkBlender?,
+        traceSource: String = "SkBitmapDevice.dispatchBlend",
     ) {
         when (blender) {
-            null -> blend(x, y, src, mode)
-            is org.skia.foundation.SkBlendModeBlender -> blend(x, y, src, blender.mode)
-            else -> blendCustom(x, y, src, blender)
+            null -> blend(x, y, src, mode, traceSource, null)
+            is org.skia.foundation.SkBlendModeBlender -> blend(x, y, src, blender.mode, traceSource, blender)
+            else -> blendCustom(x, y, src, blender, traceSource)
         }
     }
 
@@ -2887,6 +3100,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         y: Int,
         srcIn: SkColor,
         blender: org.skia.foundation.SkBlender,
+        traceSource: String,
     ) {
         // AA-clip + clipShader modulation parity with [blend].
         var cov = 255
@@ -2915,7 +3129,19 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         val src4f = org.graphiks.math.SkColor4f.FromColor(srcByte)
         val dst4f = org.graphiks.math.SkColor4f.FromColor(dstByte)
         val out4f = blender.blend(src4f, dst4f)
-        bitmap.setPixel(x, y, out4f.toSkColor())
+        tracedSetPixel(
+            x = x,
+            y = y,
+            value = out4f.toSkColor(),
+            source = traceSource,
+            branch = "SkBitmapDevice.blendCustom.setPixel(out)",
+            mode = SkBlendMode.kSrcOver,
+            blender = blender,
+            coverage = cov,
+            srcInput = srcIn,
+            srcAfterCoverage = srcByte,
+            valueBefore = dstByte,
+        )
     }
 
     /**
