@@ -1,0 +1,145 @@
+{
+  "backend": "CPU/WebGPU",
+  "linear": "FOR-268",
+  "parent": "FOR-241",
+  "probe": "raw-coverage-plan-access-audit",
+  "sceneId": "m60-bounded-stroke-cap-join",
+  "date": "2026-06-03",
+  "decision": "RAW_COVERAGE_CAPTURE_NOT_AVAILABLE",
+  "rawCoverageCaptureAvailable": false,
+  "supportDecision": "KEEP_DIAGNOSTIC",
+  "productionRoute": "webgpu.coverage.refuse",
+  "diagnosticRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
+  "experimentalRenderProperty": "kanvas.webgpu.strokeCapJoin.experimentalRender",
+  "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+  "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required",
+  "remainingBoundary": "coverage.stroke-cap-join-aa-residual",
+  "nextMissingCondition": "missing_raw_cpu_gpu_coverage_plane_capture_for_round_cap_join_boundary_cells",
+  "normalRenderingChanged": false,
+  "normalShadersChanged": false,
+  "normalThresholdsChanged": false,
+  "cropPolicyChanged": false,
+  "fallbackPolicyChanged": false,
+  "targetColorSpaceBlendGloballyEnabled": false,
+  "productionStrokePromotionChanged": false,
+  "cpuReadbackFallbackAdded": false,
+  "auditedEntryPoints": [
+    {
+      "module": "CoveragePlan",
+      "path": "render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt",
+      "finding": "CoveragePlan is a semantic descriptor. PathCoverage stores fillType, aa, and inverse only; it does not carry per-cell or per-pixel coverage samples.",
+      "rawCoverageAccess": "not-available"
+    },
+    {
+      "module": "PathCoverage",
+      "path": "render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt",
+      "finding": "CoveragePlanAdapter lowers PathCoverage to CoverageBackendStrategy.CpuSpanPath. The lowered strategy names the CPU span route but does not expose span alpha values or sampled coverage.",
+      "rawCoverageAccess": "not-available"
+    },
+    {
+      "module": "GeometryCoverageMigrationHarness",
+      "path": "render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageMigrationHarness.kt",
+      "finding": "comparePathCoverageAgainstOracle accepts a test-supplied coverageAlpha ByteArray and composites descriptor pixels from it. The harness does not extract raw stroke cap/join coverage from the CPU rasterizer.",
+      "rawCoverageAccess": "cpu-test-input-only"
+    },
+    {
+      "module": "CPU raster",
+      "path": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+      "finding": "The CPU raster path remains the rendered oracle, but current FOR-266/FOR-267 evidence reads final image bytes. There is no public test-only snapshot API for stroke cap/join coverage cells before paint/color blending.",
+      "rawCoverageAccess": "not-available"
+    },
+    {
+      "module": "aa_stencil_cover.wgsl",
+      "path": "gpu-raster/src/main/resources/shaders/aa_stencil_cover.wgsl",
+      "finding": "The shader computes supersampled_path_cov in fs_inside/fs_outside, multiplies clip coverage, premultiplies source color, and returns RGBA. It has no storage buffer, coverage attachment, or raw coverage readback output.",
+      "rawCoverageAccess": "shader-local-only"
+    },
+    {
+      "module": "SkWebGpuDevice",
+      "path": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+      "finding": "The experimental property only permits rendering after the stroke cap/join refusal for diagnostic comparison. The device records route diagnostics and final readback bytes, not raw coverage planes.",
+      "rawCoverageAccess": "not-available"
+    },
+    {
+      "module": "WebGpuCoveragePlanSelector",
+      "path": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt",
+      "finding": "The selector records path facts, budgets, pipeline axes, and the stable refusal for stroke style facts. It does not materialize CPU or WebGPU coverage samples.",
+      "rawCoverageAccess": "not-available"
+    },
+    {
+      "module": "kanvas.webgpu.strokeCapJoin.experimentalRender",
+      "path": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+      "finding": "This route is diagnostic-only and scoped to tests. It bypasses the refusal but does not add raw coverage capture or change production behavior.",
+      "rawCoverageAccess": "diagnostic-render-only"
+    }
+  ],
+  "cpuFacts": {
+    "coveragePlan": "PathCoverage(fillType=Winding,aa=true,inverse=false)",
+    "descriptorLowering": "CoverageBackendStrategy.CpuSpanPath(fillType=Winding,aa=true,inverse=false)",
+    "currentEvidenceKind": "rendered CPU oracle bytes and byte-derived coverage proxies",
+    "rawCoverageCellsAvailable": false,
+    "limitation": "No test-only extractor currently returns the CPU stroke cap/join coverage alpha plane or selected boundary-cell coverage before paint blending."
+  },
+  "webgpuFacts": {
+    "normalRoute": "webgpu.coverage.refuse",
+    "diagnosticRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
+    "coverageShader": "aa_stencil_cover.wgsl",
+    "currentEvidenceKind": "route diagnostics, pipeline axes, budget facts, final RGBA readback, and byte-derived coverage proxies",
+    "rawCoverageCellsAvailable": false,
+    "limitation": "Coverage is a fragment-local float consumed by the color output; no storage/readback path records the raw coverage plane."
+  },
+  "precisionLimits": [
+    "FOR-267 coverageProxy values are reconstructed from final bytes and target source/white colors; they are diagnostic proxies, not raw coverage samples.",
+    "Premultiplication, color-filter handling, target colorspace policy, RGBA16Float intermediate storage, fixed-function blend, and final RGBA8 present/readback can all affect byte-derived coverage proxies.",
+    "The FOR-266 high-delta cell overlaps a round region with a butt-cap boundary, so it is not a clean raw round cap/join coverage sample."
+  ],
+  "routeDiagnostics": {
+    "productionRefusalContains": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "coveragePlanDump": "PathCoverage(fillType=Winding,aa=true,inverse=false)",
+    "pathAaBudgetsContains": "strokeCaps=butt;strokeJoins=bevel",
+    "pipelineAxesContains": "coverageKind=pathAaStrokeCapJoinBlocked"
+  },
+  "missingInstrumentation": [
+    {
+      "id": "cpu-raw-coverage-extractor",
+      "modules": [
+        "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+        "render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageMigrationHarness.kt"
+      ],
+      "missing": "A test-only API that returns the CPU stroke outline coverage alpha plane or bounded cell samples before paint and blend.",
+      "invasiveIfAddedNow": true
+    },
+    {
+      "id": "webgpu-raw-coverage-output",
+      "modules": [
+        "gpu-raster/src/main/resources/shaders/aa_stencil_cover.wgsl",
+        "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
+      ],
+      "missing": "An opt-in coverage-only attachment, storage buffer, or dedicated readback shader path for fs_inside/fs_outside coverage values.",
+      "invasiveIfAddedNow": true
+    },
+    {
+      "id": "shared-cell-sampling-schema",
+      "modules": [
+        "reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json"
+      ],
+      "missing": "A shared CPU/WebGPU raw coverage cell schema that stores sample coordinates, raw alpha values, coverage model, and route provenance.",
+      "invasiveIfAddedNow": false
+    },
+    {
+      "id": "coverage-plane-provenance",
+      "modules": [
+        "WebGpuCoveragePlanSelector",
+        "GeometryCoverageMigrationHarness"
+      ],
+      "missing": "A provenance field proving that compared values came from raw coverage generation rather than reconstructed RGBA bytes.",
+      "invasiveIfAddedNow": false
+    }
+  ],
+  "nextRealisticOption": {
+    "decision": "future-ticket",
+    "summary": "Add a separately gated, test-only raw coverage probe that captures CPU A8 coverage and WebGPU coverage-only output for the same bounded cells, then compare raw alpha/coverage values before paint, blend, colorspace, quantization, or present.",
+    "productionBehaviorRequired": "unchanged"
+  },
+  "noKotlinTestReason": "A Kotlin render test would currently reproduce FOR-266/FOR-267 byte/proxy evidence. Because raw capture is unavailable, a validator plus stable JSON/report is the useful FOR-268 evidence."
+}
