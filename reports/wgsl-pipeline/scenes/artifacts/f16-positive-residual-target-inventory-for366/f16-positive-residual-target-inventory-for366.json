@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-366",
+  "sceneId": "f16-positive-residual-target-inventory-for366",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-positive-residual-target-inventory-after-for-365",
+  "sourceFindings": [
+    "global/kanvas/findings/for-365-rejects-covered-source-alpha-f16-candidate-by-current-guards",
+    "global/kanvas/findings/for-364-captures-independent-comparable-f16-arc-evidence",
+    "global/kanvas/findings/for-363-constrained-f16-candidate-search-matrix-ready"
+  ],
+  "decision": "F16_POSITIVE_RESIDUAL_TARGET_INVENTORY_READY",
+  "allowedDecisions": [
+    "F16_POSITIVE_RESIDUAL_TARGET_INVENTORY_READY"
+  ],
+  "decisionReason": "FOR-366 inventories current positive F16 residual targets after FOR-365 rejected a candidate that worsened every mandatory guard.",
+  "inputValidation": {
+    "for365Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-constrained-candidate-evaluation-for365/f16-constrained-candidate-evaluation-for365.json",
+    "for365Decision": "F16_CONSTRAINED_CANDIDATE_REJECTED_BY_CURRENT_GUARDS",
+    "for365RequiredDecision": "F16_CONSTRAINED_CANDIDATE_REJECTED_BY_CURRENT_GUARDS",
+    "for344Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-broader-non-arc-color-policy-for344/f16-broader-non-arc-color-policy-for344.json",
+    "for344Decision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "for344RequiredDecision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "for357Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-additional-non-arc-comparable-row-for357/f16-additional-non-arc-comparable-row-for357.json",
+    "for357Decision": "F16_ADDITIONAL_NON_ARC_COMPARABLE_ROW_PARTIAL_INSUFFICIENT_REFERENCE",
+    "for357RequiredDecision": "F16_ADDITIONAL_NON_ARC_COMPARABLE_ROW_PARTIAL_INSUFFICIENT_REFERENCE"
+  },
+  "rejectedCandidateBoundaries": [
+    {
+      "source": "FOR-355",
+      "policyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+      "selectableForFutureWork": false,
+      "reason": "closed after independent FOR-361 evidence"
+    },
+    {
+      "source": "FOR-365",
+      "policyId": "covered_source_alpha_src_over_white_without_non_arc_guard_probe",
+      "selectableForFutureWork": false,
+      "reason": "worsened all mandatory FOR-365 guards"
+    }
+  ],
+  "guardRows": [
+    {
+      "source": "FOR-345",
+      "rowId": "non-arc-rec2020-f16-src-over-rect",
+      "rowKind": "non-arc",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+      "currentResidual": 0,
+      "for365CandidateResidual": 111,
+      "for365CandidateWorsened": true,
+      "classification": "mandatory-zero-guard",
+      "mustRemainStable": true
+    },
+    {
+      "source": "FOR-358",
+      "rowId": "for358-non-arc-rec2020-f16-src-over-green-rect",
+      "rowKind": "non-arc",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-real-additional-non-arc-row-for358/f16-real-additional-non-arc-row-for358.json",
+      "currentResidual": 3,
+      "for365CandidateResidual": 150,
+      "for365CandidateWorsened": true,
+      "classification": "low-positive-mandatory-guard",
+      "mustRemainStable": true
+    },
+    {
+      "source": "FOR-361",
+      "rowId": "for361-bounded-independent-round-cap-arc-rec2020-f16",
+      "rowKind": "arc",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/f16-bounded-independent-arc-capture-for361.json",
+      "currentResidual": 0,
+      "for365CandidateResidual": 74,
+      "for365CandidateWorsened": true,
+      "classification": "mandatory-zero-guard",
+      "mustRemainStable": true
+    },
+    {
+      "source": "FOR-364",
+      "rowId": "for364-independent-butt-cap-arc-rec2020-f16",
+      "rowKind": "arc",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-independent-comparable-arc-evidence-for364/f16-independent-comparable-arc-evidence-for364.json",
+      "currentResidual": 0,
+      "for365CandidateResidual": 92,
+      "for365CandidateWorsened": true,
+      "classification": "mandatory-zero-guard",
+      "mustRemainStable": true
+    }
+  ],
+  "positiveResidualRows": [
+    {
+      "source": "FOR-344",
+      "rowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+      "family": "bounded-stroke-cap-join",
+      "sceneId": "m60-bounded-stroke-cap-join",
+      "rowKind": "non-arc",
+      "sourceKind": "non-arc-target-colorspace-blend-diagnostic",
+      "currentResidual": 856,
+      "referenceCurrentCandidateComparable": false,
+      "referenceStatus": "reference-rgba-high-delta-samples-available",
+      "currentStatus": "current-gpu-rgba-high-delta-samples-available",
+      "candidateStatus": "missing-for-f16-policy-candidate",
+      "sampleCount": 10,
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+        "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json"
+      ],
+      "guardRisk": "evidence-target-before-candidate",
+      "nextUse": "capture-comparable-reference-current-candidate-evidence-first"
+    },
+    {
+      "source": "FOR-344",
+      "rowId": "arc-prerequisite-for342-adjacent-cells",
+      "family": "circular-arcs-stroke-butt",
+      "sceneId": "circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342",
+      "rowKind": "arc",
+      "sourceKind": "arc-adjacent-old-current-actual-new-candidate",
+      "currentResidual": 375,
+      "referenceCurrentCandidateComparable": true,
+      "referenceStatus": "isolated-skia-over-white-reference-available",
+      "currentStatus": "old-current-and-actual-new-renderer-match-unchanged",
+      "candidateStatus": "computed-policy-samples-available-not-applied",
+      "sampleCount": 12,
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342.json"
+      ],
+      "guardRisk": "high",
+      "nextUse": "candidate-evaluation-target"
+    },
+    {
+      "source": "FOR-344",
+      "rowId": "non-arc-m60-target-colorspace-neutral-aa-substitute-refused",
+      "family": "target-colorspace-neutral-aa",
+      "sceneId": "m60-target-colorspace-neutral-aa",
+      "rowKind": "non-arc",
+      "sourceKind": "isolated-target-colorspace-blend-diagnostic-fixture",
+      "currentResidual": 13,
+      "referenceCurrentCandidateComparable": false,
+      "referenceStatus": "single-channel-cpu-reference-sample-available",
+      "currentStatus": "post-present-red-sample-available",
+      "candidateStatus": "targetColorSpaceBlend-red-sample-available-not-f16-policy-candidate",
+      "sampleCount": 1,
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/scenes/artifacts/m60-target-colorspace-neutral-aa/stats.json"
+      ],
+      "guardRisk": "metadata-gap",
+      "nextUse": "capture-comparable-reference-current-candidate-evidence-first"
+    }
+  ],
+  "rankingPolicy": {
+    "sort": [
+      "currentResidual descending",
+      "non-arc before arc",
+      "rowId ascending"
+    ],
+    "fields": [
+      "currentResidual",
+      "rowKind",
+      "referenceCurrentCandidateComparable",
+      "referenceStatus",
+      "currentStatus",
+      "candidateStatus",
+      "guardRisk"
+    ]
+  },
+  "proposedNextEvidenceTarget": {
+    "familyId": "m60-bounded-stroke-cap-join-positive-residual-evidence-target",
+    "selectedRowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+    "selectedFamily": "bounded-stroke-cap-join",
+    "currentResidual": 856,
+    "nextTicketType": "capture-comparable-reference-current-candidate-evidence-first",
+    "candidateImplementationAuthorized": false,
+    "scoreIncreaseAuthorized": false,
+    "reason": "The selected row has the largest non-arc positive residual in the committed F16 evidence, but it lacks a comparable reference/current/candidate row. The next safe move is to capture comparable evidence, not to implement a color policy."
+  },
+  "criteriaEvaluation": {
+    "sourceMemoryRecorded": true,
+    "for365DecisionCaptured": true,
+    "guardsSeparatedFromTargets": true,
+    "positiveResidualRowsRanked": true,
+    "for355CandidateExcluded": true,
+    "for365CandidateExcluded": true,
+    "exactlyOneNextEvidenceTargetProposed": true,
+    "candidateImplementationAuthorized": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "selectableCandidateDefined": false,
+    "implementationPlanAuthorized": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+      "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+      "rtk python3 scripts/validate_for364_f16_independent_comparable_arc_evidence.py",
+      "rtk python3 scripts/validate_for363_f16_constrained_candidate_search.py",
+      "rtk python3 scripts/validate_for362_f16_rejected_candidate_closeout.py",
+      "rtk python3 scripts/validate_for361_f16_bounded_independent_arc_capture.py",
+      "rtk python3 scripts/validate_for358_f16_real_additional_non_arc_row.py",
+      "rtk python3 scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk python3 -m py_compile scripts/validate_for366_f16_positive_residual_target_inventory.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
