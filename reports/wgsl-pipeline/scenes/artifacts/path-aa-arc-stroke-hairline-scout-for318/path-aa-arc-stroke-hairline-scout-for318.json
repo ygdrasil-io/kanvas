@@ -1,0 +1,480 @@
+{
+  "linear": "FOR-318",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-path-aa-arc-stroke-hairline-subdivision-scout-ticket",
+  "decision": "PATH_AA_ARC_STROKE_HAIRLINE_SCOUT_APPLIED",
+  "follows": {
+    "for307": {
+      "artifact": "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-candidate-selection-for307/path-aa-edge-budget-candidate-selection-for307.json",
+      "report": "reports/wgsl-pipeline/2026-06-04-for-307-path-aa-edge-budget-candidate-selection.md",
+      "selectedCandidate": "arc-stroke-hairline-subdivision-scout",
+      "candidateStatus": "candidate-only",
+      "supportDecision": "KEEP_EXPECTED_UNSUPPORTED_UNTIL_ROW_LOCAL_PROOF"
+    },
+    "m37": "reports/wgsl-pipeline/2026-05-28-m37-path-aa-breadth-audit.md"
+  },
+  "sourceReports": {
+    "m37": "reports/wgsl-pipeline/2026-05-28-m37-path-aa-breadth-audit.md",
+    "m60FeatureSpec": ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    "fidelitySpec": ".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md"
+  },
+  "selectedCandidate": "arc-stroke-hairline-subdivision-scout",
+  "scoutStatus": "reporting-only",
+  "supportGuard": {
+    "supportDecision": "MICRO_TARGET_SELECTED_SUPPORT_BLOCKED_UNTIL_ROW_LOCAL_PROOF",
+    "currentSupportClaim": "none",
+    "unsafeDecision": "PATH_AA_ARC_STROKE_HAIRLINE_UNSAFE_SUPPORT_CLAIM_FOUND",
+    "requiredCompleteProof": [
+      "row-specific geometry",
+      "Skia/reference artifact",
+      "CPU artifact",
+      "adapter-backed GPU artifact",
+      "CPU/GPU diff and stats",
+      "route diagnostics with edge-count and fallback fields",
+      "fallback policy preserving refusals outside the selected row",
+      "no global edge-budget increase",
+      "no threshold weakening"
+    ],
+    "supportedStatusesThatRequireCompleteProof": [
+      "gpu-supported",
+      "pass",
+      "promoted",
+      "support-promoted",
+      "supported"
+    ]
+  },
+  "budgetPolicy": {
+    "webgpuAaEdgeBudget": 256,
+    "edgeBudgetMayIncrease": false,
+    "strokeWidthBudget": {
+      "minPx": 0.5,
+      "maxPx": 64.0
+    },
+    "hairlineStrokeWidth0Supported": false,
+    "fallbackWeakeningAllowed": false,
+    "thresholdWeakeningAllowed": false,
+    "rendererOrShaderChangeAllowed": false,
+    "releaseGateChangeAllowed": false,
+    "readinessScoreChangeAllowed": false,
+    "preservedFallbackReasons": [
+      "coverage.edge-count-exceeded",
+      "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "coverage.stroke-outline-edge-count-exceeded"
+    ]
+  },
+  "candidateRows": [
+    {
+      "id": "addarc-webgpu",
+      "test": "org.skia.gpu.webgpu.AddArcWebGpuTest#AddArcGM renders close to reference PNG on the GPU backend()",
+      "gm": "AddArcGM",
+      "sourceRoute": "WebGPU GM",
+      "currentFallbackReason": "coverage.edge-count-exceeded",
+      "currentSupportStatus": "expected-unsupported",
+      "referenceKind": "skia-upstream",
+      "referenceProvenance": "CPU/reference PNG oracle for WebGPU GM from M37 inventory.",
+      "classifications": [
+        "arc subdivision",
+        "cap/join behavior",
+        "edge budget",
+        "reference provenance"
+      ],
+      "scoutDisposition": "blocked-broad-gm-row",
+      "reason": "AddArcGM remains a broad arc row; it does not isolate cap behavior or edge count.",
+      "promotionProof": {
+        "row-specific geometry": false,
+        "Skia/reference artifact": false,
+        "CPU artifact": false,
+        "adapter-backed GPU artifact": false,
+        "CPU/GPU diff and stats": false,
+        "route diagnostics with edge-count and fallback fields": false,
+        "fallback policy preserving refusals outside the selected row": false,
+        "no global edge-budget increase": false,
+        "no threshold weakening": false
+      }
+    },
+    {
+      "id": "circular-arcs-hairline-webgpu",
+      "test": "org.skia.gpu.webgpu.CircularArcsHairlineWebGpuTest#CircularArcsHairlineGM renders close to reference PNG on the GPU backend()",
+      "gm": "CircularArcsHairlineGM",
+      "sourceRoute": "WebGPU GM",
+      "currentFallbackReason": "coverage.edge-count-exceeded",
+      "currentSupportStatus": "expected-unsupported",
+      "referenceKind": "skia-upstream",
+      "referenceProvenance": "CPU/reference PNG oracle for WebGPU GM from M37 inventory.",
+      "classifications": [
+        "arc subdivision",
+        "hairline strokeWidth=0",
+        "edge budget",
+        "reference provenance"
+      ],
+      "scoutDisposition": "blocked-by-m60-stroke-width-floor",
+      "reason": "Hairline strokeWidth=0 is outside the M60 0.5 px to 64 px stroke-width budget.",
+      "promotionProof": {
+        "row-specific geometry": false,
+        "Skia/reference artifact": false,
+        "CPU artifact": false,
+        "adapter-backed GPU artifact": false,
+        "CPU/GPU diff and stats": false,
+        "route diagnostics with edge-count and fallback fields": false,
+        "fallback policy preserving refusals outside the selected row": false,
+        "no global edge-budget increase": false,
+        "no threshold weakening": false
+      }
+    },
+    {
+      "id": "circular-arcs-stroke-butt-webgpu",
+      "test": "org.skia.gpu.webgpu.CircularArcsStrokeButtWebGpuTest#CircularArcsStrokeButtGM renders close to reference PNG on the GPU backend()",
+      "gm": "CircularArcsStrokeButtGM",
+      "sourceRoute": "WebGPU GM",
+      "currentFallbackReason": "coverage.edge-count-exceeded",
+      "currentSupportStatus": "expected-unsupported",
+      "referenceKind": "skia-upstream",
+      "referenceProvenance": "CPU/reference PNG oracle for WebGPU GM from M37 inventory.",
+      "classifications": [
+        "arc subdivision",
+        "cap/join behavior",
+        "edge budget",
+        "reference provenance"
+      ],
+      "scoutDisposition": "selected-future-micro-target-source",
+      "reason": "Butt-cap circular arcs are the narrowest named non-hairline arc stroke row in M37.",
+      "promotionProof": {
+        "row-specific geometry": false,
+        "Skia/reference artifact": false,
+        "CPU artifact": false,
+        "adapter-backed GPU artifact": false,
+        "CPU/GPU diff and stats": false,
+        "route diagnostics with edge-count and fallback fields": false,
+        "fallback policy preserving refusals outside the selected row": false,
+        "no global edge-budget increase": false,
+        "no threshold weakening": false
+      }
+    },
+    {
+      "id": "circular-arcs-stroke-round-webgpu",
+      "test": "org.skia.gpu.webgpu.CircularArcsStrokeRoundWebGpuTest#CircularArcsStrokeRoundGM renders close to reference PNG on the GPU backend()",
+      "gm": "CircularArcsStrokeRoundGM",
+      "sourceRoute": "WebGPU GM",
+      "currentFallbackReason": "coverage.edge-count-exceeded",
+      "currentSupportStatus": "expected-unsupported",
+      "referenceKind": "skia-upstream",
+      "referenceProvenance": "CPU/reference PNG oracle for WebGPU GM from M37 inventory.",
+      "classifications": [
+        "arc subdivision",
+        "cap/join behavior",
+        "edge budget",
+        "reference provenance"
+      ],
+      "scoutDisposition": "defer-cap-join-risk",
+      "reason": "Round cap behavior should wait until the butt-cap subdivision probe has proof.",
+      "promotionProof": {
+        "row-specific geometry": false,
+        "Skia/reference artifact": false,
+        "CPU artifact": false,
+        "adapter-backed GPU artifact": false,
+        "CPU/GPU diff and stats": false,
+        "route diagnostics with edge-count and fallback fields": false,
+        "fallback policy preserving refusals outside the selected row": false,
+        "no global edge-budget increase": false,
+        "no threshold weakening": false
+      }
+    },
+    {
+      "id": "circular-arcs-stroke-square-webgpu",
+      "test": "org.skia.gpu.webgpu.CircularArcsStrokeSquareWebGpuTest#CircularArcsStrokeSquareGM renders close to reference PNG on the GPU backend()",
+      "gm": "CircularArcsStrokeSquareGM",
+      "sourceRoute": "WebGPU GM",
+      "currentFallbackReason": "coverage.edge-count-exceeded",
+      "currentSupportStatus": "expected-unsupported",
+      "referenceKind": "skia-upstream",
+      "referenceProvenance": "CPU/reference PNG oracle for WebGPU GM from M37 inventory.",
+      "classifications": [
+        "arc subdivision",
+        "cap/join behavior",
+        "edge budget",
+        "reference provenance"
+      ],
+      "scoutDisposition": "defer-cap-join-risk",
+      "reason": "Square cap inflation should not be mixed into the first arc subdivision probe.",
+      "promotionProof": {
+        "row-specific geometry": false,
+        "Skia/reference artifact": false,
+        "CPU artifact": false,
+        "adapter-backed GPU artifact": false,
+        "CPU/GPU diff and stats": false,
+        "route diagnostics with edge-count and fallback fields": false,
+        "fallback policy preserving refusals outside the selected row": false,
+        "no global edge-budget increase": false,
+        "no threshold weakening": false
+      }
+    },
+    {
+      "id": "crbug1472747-webgpu",
+      "test": "org.skia.gpu.webgpu.Crbug1472747WebGpuTest#Crbug1472747GM renders close to reference PNG on the GPU backend()",
+      "gm": "Crbug1472747GM",
+      "sourceRoute": "WebGPU GM",
+      "currentFallbackReason": "coverage.edge-count-exceeded",
+      "currentSupportStatus": "expected-unsupported",
+      "referenceKind": "skia-upstream",
+      "referenceProvenance": "CPU/reference PNG oracle for WebGPU GM from M37 inventory.",
+      "classifications": [
+        "arc subdivision",
+        "edge budget",
+        "reference provenance"
+      ],
+      "scoutDisposition": "blocked-regression-fixture",
+      "reason": "Regression GM is useful evidence but too broad for the first micro-target.",
+      "promotionProof": {
+        "row-specific geometry": false,
+        "Skia/reference artifact": false,
+        "CPU artifact": false,
+        "adapter-backed GPU artifact": false,
+        "CPU/GPU diff and stats": false,
+        "route diagnostics with edge-count and fallback fields": false,
+        "fallback policy preserving refusals outside the selected row": false,
+        "no global edge-budget increase": false,
+        "no threshold weakening": false
+      }
+    },
+    {
+      "id": "addarc-crossbackend",
+      "test": "org.skia.gpu.webgpu.crossbackend.AddArcCrossBackendTest#AddArcGM matches reference on raster and GPU backends()",
+      "gm": "AddArcGM",
+      "sourceRoute": "cross-backend",
+      "currentFallbackReason": "coverage.edge-count-exceeded",
+      "currentSupportStatus": "expected-unsupported",
+      "referenceKind": "skia-upstream",
+      "referenceProvenance": "Raster CPU backend in cross-backend oracle from M37 inventory.",
+      "classifications": [
+        "arc subdivision",
+        "cap/join behavior",
+        "edge budget",
+        "reference provenance"
+      ],
+      "scoutDisposition": "blocked-broad-gm-row",
+      "reason": "Cross-backend AddArc confirms provenance but not a bounded support slice.",
+      "promotionProof": {
+        "row-specific geometry": false,
+        "Skia/reference artifact": false,
+        "CPU artifact": false,
+        "adapter-backed GPU artifact": false,
+        "CPU/GPU diff and stats": false,
+        "route diagnostics with edge-count and fallback fields": false,
+        "fallback policy preserving refusals outside the selected row": false,
+        "no global edge-budget increase": false,
+        "no threshold weakening": false
+      }
+    },
+    {
+      "id": "circular-arcs-hairline-crossbackend",
+      "test": "org.skia.gpu.webgpu.crossbackend.CircularArcsHairlineCrossBackendTest#CircularArcsHairlineGM matches reference on raster and GPU backends()",
+      "gm": "CircularArcsHairlineGM",
+      "sourceRoute": "cross-backend",
+      "currentFallbackReason": "coverage.edge-count-exceeded",
+      "currentSupportStatus": "expected-unsupported",
+      "referenceKind": "skia-upstream",
+      "referenceProvenance": "Raster CPU backend in cross-backend oracle from M37 inventory.",
+      "classifications": [
+        "arc subdivision",
+        "hairline strokeWidth=0",
+        "edge budget",
+        "reference provenance"
+      ],
+      "scoutDisposition": "blocked-by-m60-stroke-width-floor",
+      "reason": "Cross-backend hairline evidence remains outside the selected bounded stroke-width policy.",
+      "promotionProof": {
+        "row-specific geometry": false,
+        "Skia/reference artifact": false,
+        "CPU artifact": false,
+        "adapter-backed GPU artifact": false,
+        "CPU/GPU diff and stats": false,
+        "route diagnostics with edge-count and fallback fields": false,
+        "fallback policy preserving refusals outside the selected row": false,
+        "no global edge-budget increase": false,
+        "no threshold weakening": false
+      }
+    },
+    {
+      "id": "crbug1472747-crossbackend",
+      "test": "org.skia.gpu.webgpu.crossbackend.Crbug1472747CrossBackendTest#Crbug1472747GM matches reference on raster and GPU backends()",
+      "gm": "Crbug1472747GM",
+      "sourceRoute": "cross-backend",
+      "currentFallbackReason": "coverage.edge-count-exceeded",
+      "currentSupportStatus": "expected-unsupported",
+      "referenceKind": "skia-upstream",
+      "referenceProvenance": "Raster CPU backend in cross-backend oracle from M37 inventory.",
+      "classifications": [
+        "arc subdivision",
+        "edge budget",
+        "reference provenance"
+      ],
+      "scoutDisposition": "blocked-regression-fixture",
+      "reason": "Cross-backend regression row is not isolated enough for first implementation.",
+      "promotionProof": {
+        "row-specific geometry": false,
+        "Skia/reference artifact": false,
+        "CPU artifact": false,
+        "adapter-backed GPU artifact": false,
+        "CPU/GPU diff and stats": false,
+        "route diagnostics with edge-count and fallback fields": false,
+        "fallback policy preserving refusals outside the selected row": false,
+        "no global edge-budget increase": false,
+        "no threshold weakening": false
+      }
+    }
+  ],
+  "riskClassifications": [
+    {
+      "label": "arc subdivision",
+      "decision": "requires-isolated-subdivision-bound",
+      "rowIds": [
+        "addarc-webgpu",
+        "circular-arcs-hairline-webgpu",
+        "circular-arcs-stroke-butt-webgpu",
+        "circular-arcs-stroke-round-webgpu",
+        "circular-arcs-stroke-square-webgpu",
+        "crbug1472747-webgpu",
+        "addarc-crossbackend",
+        "circular-arcs-hairline-crossbackend",
+        "crbug1472747-crossbackend"
+      ],
+      "reason": "Every M37 arc/hairline row exceeds the current edge budget through arc subdivision breadth."
+    },
+    {
+      "label": "cap/join behavior",
+      "decision": "split-before-round-or-square-cap-promotion",
+      "rowIds": [
+        "addarc-webgpu",
+        "circular-arcs-stroke-butt-webgpu",
+        "circular-arcs-stroke-round-webgpu",
+        "circular-arcs-stroke-square-webgpu",
+        "addarc-crossbackend"
+      ],
+      "reason": "Butt, round, and square cap rows must not be promoted as one broad cap/join claim."
+    },
+    {
+      "label": "hairline strokeWidth=0",
+      "decision": "blocked-by-current-m60-stroke-width-budget",
+      "rowIds": [
+        "circular-arcs-hairline-webgpu",
+        "circular-arcs-hairline-crossbackend"
+      ],
+      "reason": "M60 starts at strokeWidth >= 0.5 px, so hairline remains explicit future scope."
+    },
+    {
+      "label": "edge budget",
+      "decision": "preserve-256-edge-budget-and-current-refusals",
+      "rowIds": [
+        "addarc-webgpu",
+        "circular-arcs-hairline-webgpu",
+        "circular-arcs-stroke-butt-webgpu",
+        "circular-arcs-stroke-round-webgpu",
+        "circular-arcs-stroke-square-webgpu",
+        "crbug1472747-webgpu",
+        "addarc-crossbackend",
+        "circular-arcs-hairline-crossbackend",
+        "crbug1472747-crossbackend"
+      ],
+      "reason": "FOR-318 is reporting-only and cannot increase the WebGPU AA edge budget."
+    },
+    {
+      "label": "reference provenance",
+      "decision": "requires-skia-reference-plus-cpu-and-adapter-backed-gpu-proof",
+      "rowIds": [
+        "addarc-webgpu",
+        "circular-arcs-hairline-webgpu",
+        "circular-arcs-stroke-butt-webgpu",
+        "circular-arcs-stroke-round-webgpu",
+        "circular-arcs-stroke-square-webgpu",
+        "crbug1472747-webgpu",
+        "addarc-crossbackend",
+        "circular-arcs-hairline-crossbackend",
+        "crbug1472747-crossbackend"
+      ],
+      "reason": "Skia-like fidelity movement requires row-local reference, CPU, GPU, diff, stats, and route artifacts."
+    }
+  ],
+  "futureMicroTarget": {
+    "id": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "status": "selected-future-micro-target",
+    "supportStatus": "not-supported",
+    "scope": [
+      "single bounded circular arc stroke derived from CircularArcsStrokeButtGM",
+      "non-hairline strokeWidth within 0.5 px to 64 px",
+      "butt cap only; round and square cap behavior deferred",
+      "coverageEdgeCount must stay <= 256 before any support ticket starts"
+    ],
+    "blockedUntil": [
+      "row-specific geometry",
+      "Skia/reference artifact",
+      "CPU artifact",
+      "adapter-backed GPU artifact",
+      "CPU/GPU diff and stats",
+      "route diagnostics with edge-count and fallback fields",
+      "fallback policy preserving refusals outside the selected row",
+      "no global edge-budget increase",
+      "no threshold weakening"
+    ],
+    "stableFallbackIfNotIsolated": "coverage.edge-count-exceeded",
+    "reason": "This is the narrowest named non-hairline arc stroke source in M37; it can become an implementation ticket only after a bounded fixture proves edge count, reference provenance, CPU/GPU rendering, diff/stats, and routes."
+  },
+  "preservedFallbackEvidence": [
+    {
+      "id": "path-aa-stroke-outline-fallback",
+      "source": "reports/wgsl-pipeline/scenes/data/scenes.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.stroke-outline-edge-count-exceeded"
+    },
+    {
+      "id": "path-aa-edge-budget-boundary",
+      "source": "reports/wgsl-pipeline/scenes/data/scenes.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "path-aa-convexpaths-edge-budget",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "path-aa-dashing-edge-budget",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "m52-closed-capped-hairlines-edge-budget",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "m54-dash-circle-boundary",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "m66-path-aa-dashing-edge-budget-refusal",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    }
+  ],
+  "nonChanges": [
+    "no renderer or shader code changed",
+    "no scene status changed",
+    "no fallback reason changed",
+    "no edge budget changed",
+    "no visual threshold changed",
+    "no readiness score changed",
+    "no release gate changed",
+    "no arc/hairline support claimed"
+  ],
+  "alternateDecisions": {
+    "blocked": "PATH_AA_ARC_STROKE_HAIRLINE_SCOUT_BLOCKED",
+    "unsafe": "PATH_AA_ARC_STROKE_HAIRLINE_UNSAFE_SUPPORT_CLAIM_FOUND"
+  }
+}
