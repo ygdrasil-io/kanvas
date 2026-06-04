@@ -1,0 +1,151 @@
+{
+  "linear": "FOR-307",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-path-aa-edge-budget-candidate-selection-ticket",
+  "decision": "PATH_AA_EDGE_BUDGET_CANDIDATE_SELECTED",
+  "selectedCandidate": "arc-stroke-hairline-subdivision-scout",
+  "candidateStatus": "candidate-only",
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED_UNTIL_ROW_LOCAL_PROOF",
+  "sourceReports": {
+    "m37": "reports/wgsl-pipeline/2026-05-28-m37-path-aa-breadth-audit.md",
+    "m44": "reports/wgsl-pipeline/2026-05-28-m44-path-aa-dashboard-evidence.md",
+    "m49": "reports/wgsl-pipeline/2026-05-31-m49-dashboard-gate-invariants.md",
+    "for304": "reports/wgsl-pipeline/2026-06-04-for-304-renderer-feature-conversion-wave-closeout.md"
+  },
+  "familyRanking": [
+    {
+      "rank": 1,
+      "family": "Stroke rectangle/circle",
+      "disposition": "already-promoted",
+      "reason": "M44 promoted path-aa-stroke-primitive for StrokeRectGM and StrokeCircleGM."
+    },
+    {
+      "rank": 2,
+      "family": "Arc stroke/hairline",
+      "disposition": "selected-candidate",
+      "candidate": "arc-stroke-hairline-subdivision-scout",
+      "reason": "M37 ranks arc stroke/hairline directly after primitive strokes; it is narrower than dash/fill/composition packs but still needs curve-subdivision evidence."
+    },
+    {
+      "rank": 3,
+      "family": "General stroke/dash",
+      "disposition": "rejected-for-this-ticket",
+      "reason": "Dash/cap/join expansion combines unrelated behavior and must be split first."
+    },
+    {
+      "rank": 4,
+      "family": "Fill/convex/path pack",
+      "disposition": "rejected-for-this-ticket",
+      "reason": "Broad GM packs include many shapes, convexity cases, and fill rules."
+    },
+    {
+      "rank": 5,
+      "family": "Filter/shader over path",
+      "disposition": "rejected-for-this-ticket",
+      "reason": "Composition must wait for a stable base path coverage route."
+    },
+    {
+      "rank": 6,
+      "family": "Benchmark stress",
+      "disposition": "rejected-for-this-ticket",
+      "reason": "Stress rows are performance signals, not support conversion candidates."
+    }
+  ],
+  "preservedFallbackEvidence": [
+    {
+      "id": "path-aa-stroke-outline-fallback",
+      "source": "reports/wgsl-pipeline/scenes/data/scenes.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.stroke-outline-edge-count-exceeded"
+    },
+    {
+      "id": "path-aa-edge-budget-boundary",
+      "source": "reports/wgsl-pipeline/scenes/data/scenes.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "path-aa-convexpaths-edge-budget",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "path-aa-dashing-edge-budget",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "m52-closed-capped-hairlines-edge-budget",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "m54-dash-circle-boundary",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "m66-path-aa-dashing-edge-budget-refusal",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    }
+  ],
+  "policyCases": [
+    {
+      "name": "FOR-307 selection-only arc stroke/hairline candidate",
+      "decision": "candidate-only",
+      "allowed": true,
+      "reason": "Candidate selection is allowed because it preserves all current refusals and claims no support."
+    },
+    {
+      "name": "Global edge-budget increase is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Policy changes to budget, threshold, fallback, or scene status are forbidden here."
+    },
+    {
+      "name": "Broad convex/fill/dash pack selection is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Broad Path AA packs cannot be selected before a narrower route is proven."
+    },
+    {
+      "name": "Arc selection before primitive promotion is ambiguous",
+      "decision": "ambiguous",
+      "allowed": false,
+      "reason": "Arc stroke/hairline is only next after primitive stroke promotion is verified."
+    },
+    {
+      "name": "Rendered proof remains future implementation scope",
+      "decision": "future-promotion-candidate",
+      "allowed": true,
+      "reason": "Complete rendered proof belongs in a future implementation ticket, not this selection ticket."
+    }
+  ],
+  "requiredFuturePromotionProof": [
+    "row-specific geometry",
+    "Skia/reference artifact",
+    "CPU artifact",
+    "adapter-backed GPU artifact",
+    "CPU/GPU diff and stats",
+    "route diagnostics with edge-count and fallback fields",
+    "fallback policy preserving refusals outside the selected row",
+    "no global edge-budget increase",
+    "no threshold weakening"
+  ],
+  "forbiddenChanges": [
+    "global edge-budget increase",
+    "similarity-threshold weakening",
+    "renderer/shader change in this selection ticket",
+    "fallback reason or scene status relabel",
+    "broad GM pack support claim"
+  ],
+  "alternateDecisions": {
+    "unsafe": "PATH_AA_EDGE_BUDGET_POLICY_UNSAFE_PROMOTION_FOUND",
+    "ambiguous": "PATH_AA_EDGE_BUDGET_CANDIDATE_SELECTION_AMBIGUOUS"
+  }
+}
