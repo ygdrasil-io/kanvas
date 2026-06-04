@@ -1201,6 +1201,41 @@ tasks.register("pipelineGeneratedSceneExport") {
             ).firstOrNull { it.isFile || (allowDirectory && it.isDirectory) }
         }
 
+        fun performanceTrendFromRawMetrics(sceneId: String, lane: String, owner: Map<*, *>): Map<*, *>? {
+            val trend = owner["performanceTrend"] as? Map<*, *> ?: return null
+            val rawMetrics = trend["rawMetrics"] as? String ?: return trend
+            val sourceFile = generatedArtifactSource(rawMetrics)
+            if (sourceFile == null || !sourceFile.isFile) return trend
+            val payload = JsonSlurper().parse(sourceFile) as? Map<*, *>
+                ?: throw GradleException("$sceneId: `$lane.performanceTrend.rawMetrics` must be a JSON object: ${sourceFile.relativeTo(rootDir)}")
+            val payloadSceneId = payload["sceneId"] as? String
+            if (payloadSceneId != null && payloadSceneId != sceneId) {
+                return trend
+            }
+            val payloadLane = payload["lane"] as? String
+            val expectedLane = if (lane == "gpu") "GPU" else "CPU"
+            if (payloadLane != null && payloadLane != expectedLane) {
+                validationErrors += "$sceneId: `$lane.performanceTrend.rawMetrics` lane '$payloadLane' does not match $expectedLane"
+            }
+            return payload
+        }
+
+        fun sceneWithFreshPerformanceTrends(sceneId: String, rawScene: Map<*, *>): Map<String, Any?> {
+            val normalized = linkedMapOf<String, Any?>()
+            rawScene.forEach { (key, value) -> normalized[key.toString()] = value }
+            listOf("cpu", "gpu").forEach { lane ->
+                val owner = rawScene[lane] as? Map<*, *> ?: return@forEach
+                val ownerCopy = linkedMapOf<String, Any?>()
+                owner.forEach { (key, value) -> ownerCopy[key.toString()] = value }
+                val freshTrend = performanceTrendFromRawMetrics(sceneId, lane, owner)
+                if (freshTrend != null) {
+                    ownerCopy["performanceTrend"] = freshTrend
+                }
+                normalized[lane] = ownerCopy
+            }
+            return normalized
+        }
+
         val root = if (manifest.isFile) {
             JsonSlurper().parse(manifest) as? Map<*, *>
                 ?: throw GradleException("Generated scene manifest root must be a JSON object: ${manifest.relativeTo(rootDir)}")
@@ -1357,7 +1392,7 @@ tasks.register("pipelineGeneratedSceneExport") {
                     }
                 }
             }
-            normalizedScenes += rawScene
+            normalizedScenes += sceneWithFreshPerformanceTrends(sceneId, rawScene)
         }
 
         if (validationErrors.isNotEmpty()) {
@@ -1400,6 +1435,8 @@ tasks.register("pipelineMeasuredCpuPerformance") {
         outputRoot.file("solid-rect/cpu-performance.json"),
         outputRoot.file("linear-gradient-rect/cpu-performance.json"),
         outputRoot.file("m54-simple-aa-clip/cpu-performance.json"),
+        outputRoot.file("clip-rect-difference/cpu-performance.json"),
+        outputRoot.file("runtime-effect-simple/cpu-performance.json"),
     )
     outputs.upToDateWhen { false }
 
@@ -1538,6 +1575,50 @@ tasks.register("pipelineMeasuredCpuPerformance") {
             return pixels.fold(0) { acc, value -> acc * 31 + value }
         }
 
+        fun clipRectDifferenceWorkload(): Int {
+            val width = 512
+            val height = 256
+            val pixels = IntArray(width * height)
+            val src = 0xcc44aaee.toInt()
+            val left = 48
+            val top = 32
+            val right = 464
+            val bottom = 224
+            val cx = 256.0
+            val cy = 128.0
+            val rx = 130.0
+            val ry = 72.0
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    val inRect = x in left until right && y in top until bottom
+                    val dx = (x + 0.5 - cx) / rx
+                    val dy = (y + 0.5 - cy) / ry
+                    val inDifferencePath = dx * dx + dy * dy <= 1.0
+                    if (inRect && !inDifferencePath) {
+                        val offset = y * width + x
+                        pixels[offset] = srcOver(src, pixels[offset])
+                    }
+                }
+            }
+            return pixels.fold(0) { acc, value -> acc * 31 + value }
+        }
+
+        fun runtimeEffectSimpleWorkload(): Int {
+            val width = 64
+            val pixels = IntArray(width * width)
+            for (y in 0 until width) {
+                for (x in 0 until width) {
+                    val t = ((x xor y) and 0x3f) * 4
+                    val src = (0xff shl 24) or
+                        ((0x30 + (t / 2)).coerceAtMost(255) shl 16) or
+                        ((0x60 + t).coerceAtMost(255) shl 8) or
+                        (0xcc - (t / 3)).coerceIn(0, 255)
+                    pixels[y * width + x] = srcOver(src, pixels[y * width + x])
+                }
+            }
+            return pixels.fold(0) { acc, value -> acc * 31 + value }
+        }
+
         fun measure(samples: Int, warmups: Int, workload: () -> Int): CpuMeasurement {
             var checksum = 0
             repeat(warmups) { checksum = checksum xor workload() }
@@ -1621,6 +1702,28 @@ tasks.register("pipelineMeasuredCpuPerformance") {
                 ),
                 workload = ::simpleAaClipWorkload,
             ),
+            CpuSceneBenchmark(
+                sceneId = "clip-rect-difference",
+                route = "cpu.coverage.clip-rect-difference",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pixels" to 131072,
+                    "clipOps" to 2,
+                    "coveragePlanCount" to 2,
+                ),
+                workload = ::clipRectDifferenceWorkload,
+            ),
+            CpuSceneBenchmark(
+                sceneId = "runtime-effect-simple",
+                route = "cpu.runtime-effect.descriptor.simple_rt",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pixels" to 4096,
+                    "runtimeDescriptors" to 1,
+                    "coveragePlanCount" to 1,
+                ),
+                workload = ::runtimeEffectSimpleWorkload,
+            ),
         )
 
         benchmarks.forEach { benchmark ->
@@ -1679,6 +1782,8 @@ tasks.register("pipelineMeasuredGpuPerformance") {
         outputRoot.file("solid-rect/gpu-performance.json"),
         outputRoot.file("linear-gradient-rect/gpu-performance.json"),
         outputRoot.file("m54-simple-aa-clip/gpu-performance.json"),
+        outputRoot.file("clip-rect-difference/gpu-performance.json"),
+        outputRoot.file("runtime-effect-simple/gpu-performance.json"),
     )
     outputs.upToDateWhen { false }
 
@@ -1771,6 +1876,30 @@ tasks.register("pipelineMeasuredGpuPerformance") {
                 sceneId = "m54-simple-aa-clip",
                 route = "webgpu.coverage.simple-aa-clip.bounded",
                 pipelineKey = "clip=simpleAA coverage=analyticConvex budget=current source=SimpleAaclipGM",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pipelineCacheHits" to 29,
+                    "pipelineCacheMisses" to 1,
+                    "bindGroupCount" to 1,
+                    "resourceBytes" to 4096,
+                ),
+            ),
+            GpuCacheBenchmark(
+                sceneId = "clip-rect-difference",
+                route = "webgpu.coverage.clip-difference.analytic-rrect-mask",
+                pipelineKey = "clipOp=kDifference shape=rect+rrect maskFilter=blur",
+                counters = mapOf(
+                    "routeInvocations" to 1,
+                    "pipelineCacheHits" to 29,
+                    "pipelineCacheMisses" to 1,
+                    "bindGroupCount" to 2,
+                    "resourceBytes" to 131072,
+                ),
+            ),
+            GpuCacheBenchmark(
+                sceneId = "runtime-effect-simple",
+                route = "webgpu.runtime-effect.descriptor.simple_rt",
+                pipelineKey = "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
                 counters = mapOf(
                     "routeInvocations" to 1,
                     "pipelineCacheHits" to 29,
