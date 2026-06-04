@@ -1,0 +1,840 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-341",
+  "sceneId": "circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-340-circular-arcs-stroke-butt-adjacent-f16-skia-reference-captured-finding"
+  ],
+  "inputValidation": {
+    "for339Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-runtime-trace-for339/circular-arcs-stroke-butt-adjacent-f16-runtime-trace-for339.json",
+    "for339Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_RUNTIME_TRACE_PARTIAL_REQUIRES_REFERENCE_SOURCE",
+    "for339RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_RUNTIME_TRACE_PARTIAL_REQUIRES_REFERENCE_SOURCE",
+    "for340Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/circular-arcs-stroke-butt-adjacent-f16-reference-for340.json",
+    "for340Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_REFERENCE_CAPTURED",
+    "for340RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_REFERENCE_CAPTURED",
+    "for340ReferenceBoundaryAccessible": true,
+    "for339RuntimeExportAcceptedAsSkiaReference": false
+  },
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION",
+    "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_PARTIAL_REQUIRES_MORE_EVIDENCE",
+    "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_INPUT_INVALID"
+  ],
+  "decisionReason": "FOR-340 supplies isolated upstream Skia references for both exact adjacent cells. The raw transparent PNG residual is rejected as an implementation basis because FOR-339 export samples are opaque. On the Skia-over-white basis, all ten stroke samples match the existing FOR-339 straight_srgb_quantized_alpha_src_over_white candidate exactly, reducing the current over-white residual from 375 to 0.",
+  "policyDecision": {
+    "implementationAllowedNow": true,
+    "codeChangeAllowedInThisTicket": false,
+    "futureTicketRequired": true,
+    "selectedCandidatePolicyId": "adjacent_circular_arcs_stroke_butt_f16_straight_srgb_quantized_alpha_src_over_white",
+    "sourceCandidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "candidatePolicyDescription": "For these adjacent CircularArcsStrokeButt F16 stroke samples, compare and implement the color result as straight sRGB source channels with rounded covered alpha, SrcOver composited over white, matching the isolated Skia over-white reference.",
+    "rawTransparentPngBasisAcceptedForImplementation": false,
+    "skiaOverWhiteBasisAcceptedForImplementation": true,
+    "affectedCells": [
+      "adjacent_arc_stroke_start0_sweep45_target",
+      "adjacent_arc_stroke_start0_sweep130_target"
+    ],
+    "requiredFutureGuards": [
+      "Keep the implementation scoped to the two FOR-339/FOR-340 adjacent cells unless new evidence expands it.",
+      "Add old/new pixel evidence for every sample listed in this artifact.",
+      "Keep SkBitmap.getPixel as the internal renderer/test oracle unless an explicit oracle migration is approved.",
+      "Keep SkBitmap.getPixelAsSrgb as the encoded export boundary unless an explicit export migration is approved.",
+      "Do not change geometry, coverage, GPU/WGSL, thresholds, fallback policy, Kadre, promotion, or score."
+    ]
+  },
+  "residualTotals": {
+    "sampleCount": 12,
+    "strokeSampleCount": 10,
+    "currentVsRawResidual": 7065,
+    "currentVsOverWhiteResidual": 375,
+    "candidateVsOverWhiteResidual": 0,
+    "currentOverWhiteResidualReductionIfCandidateApplied": 375,
+    "residualBasis": [
+      "raw Skia transparent PNG RGBA compared to current FOR-339 getPixelAsSrgb export RGBA",
+      "Skia PNG alpha-composited over white compared to current FOR-339 getPixelAsSrgb export RGBA",
+      "FOR-339 straight_srgb_quantized_alpha_src_over_white candidate compared to Skia-over-white RGBA"
+    ]
+  },
+  "targetCells": [
+    {
+      "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+      "cell": {
+        "fixtureId": "circular-arcs-stroke-butt-start0-sweep45-usecenter-false-aa-true",
+        "sourceGm": "CircularArcsStrokeButtGM",
+        "rowIndex": 0,
+        "columnIndex": 1,
+        "startDegrees": 0,
+        "sweepDegrees": 45,
+        "strokeCap": "kButt_Cap",
+        "aa": true,
+        "paintAlpha": 100
+      },
+      "reference": {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep45-skia.png",
+        "provenancePath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/skia-reference-provenance.json",
+        "present": true,
+        "accepted": true,
+        "status": "available-isolated-skia-adjacent-cell-render",
+        "dimensions": {
+          "width": 80,
+          "height": 80
+        },
+        "sha256": "217e3d4661411db1bb940ef2297be497b4254c8501c17204e84a50013c673c0c",
+        "sourceType": "isolated-skia-adjacent-cell-render",
+        "fullGmCrop": false,
+        "selectedCellExtrapolationUsed": false,
+        "for327SelectedCellReferenceAcceptedAsAdjacent": false,
+        "transparentBackground": true
+      },
+      "sampleCount": 6,
+      "strokeSampleCount": 5,
+      "currentVsRawResidual": 3532,
+      "currentVsOverWhiteResidual": 187,
+      "candidateVsOverWhiteResidual": 0,
+      "candidateStrokeVsOverWhiteResidual": 0,
+      "currentOverWhiteResidualReductionIfCandidateApplied": 187,
+      "samples": [
+        {
+          "name": "sweep45_background_top_left",
+          "zone": "background",
+          "localX": 0,
+          "localY": 0,
+          "currentFor339ExportRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "currentVsRawSumAbsDelta": 1020,
+          "currentVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 0,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": false,
+          "candidatePolicyRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        },
+        {
+          "name": "sweep45_blue_top_stroke_center",
+          "zone": "stroke-center",
+          "localX": 40,
+          "localY": 20,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            180,
+            167,
+            0,
+            155
+          ],
+          "currentVsRawSumAbsDelta": 502,
+          "currentVsOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 37,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": true,
+          "candidatePolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        },
+        {
+          "name": "sweep45_blue_left_stroke_center",
+          "zone": "stroke-center",
+          "localX": 20,
+          "localY": 40,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            180,
+            167,
+            0,
+            155
+          ],
+          "currentVsRawSumAbsDelta": 502,
+          "currentVsOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 37,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": true,
+          "candidatePolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        },
+        {
+          "name": "sweep45_red_right_stroke_center",
+          "zone": "stroke-center",
+          "localX": 60,
+          "localY": 40,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            0,
+            179,
+            169,
+            155
+          ],
+          "currentVsRawSumAbsDelta": 503,
+          "currentVsOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 38,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": true,
+          "candidatePolicyRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        },
+        {
+          "name": "sweep45_red_inner_sweep_stroke_center",
+          "zone": "stroke-center",
+          "localX": 59,
+          "localY": 45,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            0,
+            179,
+            169,
+            155
+          ],
+          "currentVsRawSumAbsDelta": 503,
+          "currentVsOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 38,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": true,
+          "candidatePolicyRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        },
+        {
+          "name": "sweep45_blue_bottom_stroke_center",
+          "zone": "stroke-center",
+          "localX": 40,
+          "localY": 60,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            180,
+            167,
+            0,
+            155
+          ],
+          "currentVsRawSumAbsDelta": 502,
+          "currentVsOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 37,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": true,
+          "candidatePolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        }
+      ]
+    },
+    {
+      "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+      "cell": {
+        "fixtureId": "circular-arcs-stroke-butt-start0-sweep130-usecenter-false-aa-true",
+        "sourceGm": "CircularArcsStrokeButtGM",
+        "rowIndex": 0,
+        "columnIndex": 3,
+        "startDegrees": 0,
+        "sweepDegrees": 130,
+        "strokeCap": "kButt_Cap",
+        "aa": true,
+        "paintAlpha": 100
+      },
+      "reference": {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep130-skia.png",
+        "provenancePath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/skia-reference-provenance.json",
+        "present": true,
+        "accepted": true,
+        "status": "available-isolated-skia-adjacent-cell-render",
+        "dimensions": {
+          "width": 80,
+          "height": 80
+        },
+        "sha256": "fa255283c907d90470211ff22fdfe93bd051e8220f565d9527c70fe39c2d1ac3",
+        "sourceType": "isolated-skia-adjacent-cell-render",
+        "fullGmCrop": false,
+        "selectedCellExtrapolationUsed": false,
+        "for327SelectedCellReferenceAcceptedAsAdjacent": false,
+        "transparentBackground": true
+      },
+      "sampleCount": 6,
+      "strokeSampleCount": 5,
+      "currentVsRawResidual": 3533,
+      "currentVsOverWhiteResidual": 188,
+      "candidateVsOverWhiteResidual": 0,
+      "candidateStrokeVsOverWhiteResidual": 0,
+      "currentOverWhiteResidualReductionIfCandidateApplied": 188,
+      "samples": [
+        {
+          "name": "sweep130_background_top_left",
+          "zone": "background",
+          "localX": 0,
+          "localY": 0,
+          "currentFor339ExportRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "currentVsRawSumAbsDelta": 1020,
+          "currentVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 0,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": false,
+          "candidatePolicyRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        },
+        {
+          "name": "sweep130_blue_top_stroke_center",
+          "zone": "stroke-center",
+          "localX": 40,
+          "localY": 20,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            180,
+            167,
+            0,
+            155
+          ],
+          "currentVsRawSumAbsDelta": 502,
+          "currentVsOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 37,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": true,
+          "candidatePolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        },
+        {
+          "name": "sweep130_red_right_stroke_center",
+          "zone": "stroke-center",
+          "localX": 60,
+          "localY": 40,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            0,
+            179,
+            169,
+            155
+          ],
+          "currentVsRawSumAbsDelta": 503,
+          "currentVsOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 38,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": true,
+          "candidatePolicyRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        },
+        {
+          "name": "sweep130_red_bottom_stroke_center",
+          "zone": "stroke-center",
+          "localX": 40,
+          "localY": 60,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            0,
+            179,
+            169,
+            155
+          ],
+          "currentVsRawSumAbsDelta": 503,
+          "currentVsOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 38,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": true,
+          "candidatePolicyRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        },
+        {
+          "name": "sweep130_red_inner_sweep_stroke_center",
+          "zone": "stroke-center",
+          "localX": 33,
+          "localY": 58,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            0,
+            179,
+            169,
+            155
+          ],
+          "currentVsRawSumAbsDelta": 503,
+          "currentVsOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 38,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": true,
+          "candidatePolicyRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        },
+        {
+          "name": "sweep130_blue_left_stroke_center",
+          "zone": "stroke-center",
+          "localX": 20,
+          "localY": 40,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "currentVsRawDeltaAbs": [
+            180,
+            167,
+            0,
+            155
+          ],
+          "currentVsRawSumAbsDelta": 502,
+          "currentVsOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "currentVsOverWhiteSumAbsDelta": 37,
+          "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+          "candidatePolicyApplicable": true,
+          "candidatePolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "candidateVsOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateVsOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true
+        }
+      ]
+    }
+  ],
+  "rejectedSources": {
+    "selectedCellFor327": {
+      "accepted": false,
+      "reason": "FOR-327 is the selected 90-degree cell, not either adjacent FOR-339/FOR-340 cell."
+    },
+    "fullGmPng": {
+      "accepted": false,
+      "reason": "full-GM PNG is not an isolated adjacent-cell render."
+    },
+    "fullGmCrop": {
+      "accepted": false,
+      "reason": "crop-based adjacent reference is forbidden."
+    },
+    "for339RuntimeExport": {
+      "acceptedAsSkiaReference": false,
+      "reason": "FOR-339 is Kanvas runtime export data and is only the current comparison side."
+    }
+  },
+  "implementation": {
+    "rendererBehaviorChanged": false,
+    "evidenceOnly": true,
+    "selectedCellExtrapolationUsed": false,
+    "for327SubstitutionUsed": false,
+    "cropEvidenceUsed": false
+  },
+  "nonGoalsPreserved": {
+    "colorToF16Premul": true,
+    "blendF16PremulMode": true,
+    "skBitmapGetPixelInternalOracle": true,
+    "skBitmapGetPixelAsSrgbExportBoundary": true,
+    "geometry": true,
+    "coveragePolicy": true,
+    "gpu": true,
+    "wgsl": true,
+    "thresholds": true,
+    "fallbacks": true,
+    "kadre": true,
+    "promotion": true,
+    "score": true,
+    "historicalArtifactsFOR329ToFOR340Rewritten": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for341_circular_arcs_stroke_butt_adjacent_f16_color_policy_decision.py",
+      "rtk python3 scripts/validate_for340_circular_arcs_stroke_butt_adjacent_f16_reference.py",
+      "rtk python3 scripts/validate_for339_circular_arcs_stroke_butt_adjacent_f16_runtime_trace.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
