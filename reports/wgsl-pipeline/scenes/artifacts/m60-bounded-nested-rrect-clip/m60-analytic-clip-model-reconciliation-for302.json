@@ -1,0 +1,2740 @@
+{
+  "linear": "FOR-302",
+  "parent": "FOR-241",
+  "probe": "m60-analytic-clip-model-reconciliation",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/RGBA_8888/audit-only-runtime-reconciled-clip-model",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-m60-analytic-clip-model-reconciliation-ticket",
+  "sourceAudits": {
+    "for292": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-source-payload-derivation-audit-for292.json",
+    "for293": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-drawrrect-runtime-visibility-audit-for293.json",
+    "for295": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-domain-vs-white-targets-for295.json",
+    "for300": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-active-aa-clip-coverage-for300.json",
+    "for301": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-skaaclip-band-trace-for301.json"
+  },
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "M60_ANALYTIC_MODEL_RECONCILED_RUNTIME_IS_CORRECT",
+  "decisions": {
+    "M60_ANALYTIC_MODEL_CLIP_POLARITY_FIX_APPLIED": true,
+    "M60_ANALYTIC_MODEL_PIXEL_CENTER_FIX_APPLIED": false,
+    "M60_ANALYTIC_MODEL_CTM_OR_BOUNDS_FIX_APPLIED": false,
+    "M60_ANALYTIC_MODEL_RECONCILED_RUNTIME_IS_CORRECT": true,
+    "M60_ANALYTIC_RUNTIME_CONTRADICTION_STILL_AMBIGUOUS": false
+  },
+  "exactGap": "FOR-293 treated the analytic surviving difference-clip coverage as enough for red root visibility. FOR-301 proves that the runtime `SkAAClip` path operand is full over the 59 original targets, so `kDifference` computes zero result coverage there.",
+  "localAuditModelCorrection": {
+    "applied": true,
+    "decision": "M60_ANALYTIC_MODEL_CLIP_POLARITY_FIX_APPLIED",
+    "scope": "FOR-302 validator/report only; normal renderer and historical FOR-293 artifacts are unchanged.",
+    "before": "FOR-293 compared red store candidates against an analytic ellipse-derived surviving clip.",
+    "after": "FOR-302 reconciles by applying the runtime SkAAClip formula parent * (255 - pathCoverage) / 255 and treating FOR-301 pathCoverage as the audited path operand.",
+    "why": "The runtime formula matches every probed pixel in the original targets, candidate-minus-runtime-002, and red-runtime-* groups."
+  },
+  "hypothesisResults": {
+    "clipPolarity": {
+      "classification": "audit-model-fix-applied",
+      "evidence": "The runtime result is explained by subtracting the traced path operand from the full parent clip."
+    },
+    "pixelCenter": {
+      "classification": "rejected",
+      "evidence": "Center and top-left binary ellipse variants keep all 59 original pixels nonzero under the traced inner bounds."
+    },
+    "ctmOrBounds": {
+      "classification": "rejected",
+      "evidence": "FOR-301 trace reports CTM scale sx=2.0, sy=2.0 and path bounds {'left': 16, 'top': 16, 'right': 576, 'bottom': 576}."
+    },
+    "rounding": {
+      "classification": "rejected-as-primary-cause",
+      "evidence": "The original 59 pixels differ by full coverage: FOR-293=255, runtime path=255, runtime result=0."
+    },
+    "runtimeContradiction": {
+      "classification": "reconciled",
+      "evidence": "The runtime SkAAClip result is internally consistent with parent/path/result probes and the kDifference alpha formula."
+    }
+  },
+  "traceEvent": {
+    "index": 0,
+    "op": "kDifference",
+    "doAntiAlias": true,
+    "stateClipBounds": {
+      "left": 0,
+      "top": 0,
+      "right": 1164,
+      "bottom": 802
+    },
+    "matrix": {
+      "sx": 2.0,
+      "kx": 0.0,
+      "tx": 0.0,
+      "ky": 0.0,
+      "sy": 2.0,
+      "ty": 0.0,
+      "persp0": 0.0,
+      "persp1": 0.0,
+      "persp2": 1.0
+    },
+    "parent": {
+      "bounds": {
+        "left": 0,
+        "top": 0,
+        "right": 1164,
+        "bottom": 802
+      },
+      "isEmpty": false,
+      "isRect": true,
+      "rowCount": 1,
+      "runCount": 1,
+      "lineProbeCount": 469,
+      "coverageProbeCount": 12381
+    },
+    "path": {
+      "bounds": {
+        "left": 16,
+        "top": 16,
+        "right": 576,
+        "bottom": 576
+      },
+      "isEmpty": false,
+      "isRect": false,
+      "rowCount": 489,
+      "runCount": 2889,
+      "lineProbeCount": 469,
+      "coverageProbeCount": 12381
+    },
+    "result": {
+      "bounds": {
+        "left": 0,
+        "top": 0,
+        "right": 1164,
+        "bottom": 802
+      },
+      "isEmpty": false,
+      "isRect": false,
+      "rowCount": 491,
+      "runCount": 2915,
+      "lineProbeCount": 469,
+      "coverageProbeCount": 12381
+    }
+  },
+  "route": {
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "for293Decision": "RED_DRAWRRECT_RUNTIME_VISIBILITY_STILL_AMBIGUOUS",
+    "for300Decision": "A8_ACTIVE_CLIP_CAUSE_BOUNDED_NO_SAFE_FIX",
+    "for301Decision": "SKAACLIP_DIFFERENCE_OP_ALPHA_MERGE_CAUSES_TARGET_HOLE"
+  },
+  "comparison": {
+    "originalTargets": {
+      "id": "original-59-targets",
+      "pixels": 59,
+      "bounds": {
+        "left": 94,
+        "top": 84,
+        "right": 105,
+        "bottom": 94,
+        "rightInclusive": 104,
+        "bottomInclusive": 93
+      },
+      "runtimeParentCoverage": {
+        "pixels": 59,
+        "min": 255,
+        "max": 255,
+        "average": 255.0,
+        "zeroPixels": 0,
+        "nonZeroPixels": 59,
+        "fullPixels": 59,
+        "topValues": [
+          {
+            "value": 255,
+            "pixels": 59
+          }
+        ]
+      },
+      "runtimeDifferencePathCoverage": {
+        "pixels": 59,
+        "min": 255,
+        "max": 255,
+        "average": 255.0,
+        "zeroPixels": 0,
+        "nonZeroPixels": 59,
+        "fullPixels": 59,
+        "topValues": [
+          {
+            "value": 255,
+            "pixels": 59
+          }
+        ]
+      },
+      "runtimeDifferenceResultCoverage": {
+        "pixels": 59,
+        "min": 0,
+        "max": 0,
+        "average": 0.0,
+        "zeroPixels": 59,
+        "nonZeroPixels": 0,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 0,
+            "pixels": 59
+          }
+        ]
+      },
+      "runtimeFormulaResultCoverage": {
+        "pixels": 59,
+        "min": 0,
+        "max": 0,
+        "average": 0.0,
+        "zeroPixels": 59,
+        "nonZeroPixels": 0,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 0,
+            "pixels": 59
+          }
+        ]
+      },
+      "for293SurvivingClipCoverage": {
+        "pixels": 59,
+        "min": 255,
+        "max": 255,
+        "average": 255.0,
+        "zeroPixels": 0,
+        "nonZeroPixels": 59,
+        "fullPixels": 59,
+        "topValues": [
+          {
+            "value": 255,
+            "pixels": 59
+          }
+        ]
+      },
+      "for293ImpliedDifferencePathCoverage": {
+        "pixels": 59,
+        "min": 0,
+        "max": 0,
+        "average": 0.0,
+        "zeroPixels": 59,
+        "nonZeroPixels": 0,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 0,
+            "pixels": 59
+          }
+        ]
+      },
+      "naivePolarityInvertedFor293ResultCoverage": {
+        "pixels": 59,
+        "min": 0,
+        "max": 0,
+        "average": 0.0,
+        "zeroPixels": 59,
+        "nonZeroPixels": 0,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 0,
+            "pixels": 59
+          }
+        ]
+      },
+      "for293SurvivingClipVsRuntimeResult": {
+        "pixels": 59,
+        "exactMatches": 0,
+        "mismatches": 59,
+        "modelNonZeroRuntimeZero": 59,
+        "modelZeroRuntimeNonZero": 0,
+        "bothNonZeroDifferent": 0,
+        "zeroNonZeroClassificationMatches": 0
+      },
+      "for293ImpliedPathVsRuntimePath": {
+        "pixels": 59,
+        "exactMatches": 0,
+        "mismatches": 59,
+        "modelNonZeroRuntimeZero": 0,
+        "modelZeroRuntimeNonZero": 59,
+        "bothNonZeroDifferent": 0,
+        "zeroNonZeroClassificationMatches": 0
+      },
+      "runtimeFormulaVsRuntimeResult": {
+        "pixels": 59,
+        "exactMatches": 59,
+        "mismatches": 0,
+        "modelNonZeroRuntimeZero": 0,
+        "modelZeroRuntimeNonZero": 0,
+        "bothNonZeroDifferent": 0,
+        "zeroNonZeroClassificationMatches": 59
+      },
+      "naivePolarityInversionVsRuntimeResult": {
+        "pixels": 59,
+        "exactMatches": 59,
+        "mismatches": 0,
+        "modelNonZeroRuntimeZero": 0,
+        "modelZeroRuntimeNonZero": 0,
+        "bothNonZeroDifferent": 0,
+        "zeroNonZeroClassificationMatches": 59
+      },
+      "sample": [
+        {
+          "x": 96,
+          "y": 84,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 97,
+          "y": 84,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 98,
+          "y": 84,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 99,
+          "y": 84,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 100,
+          "y": 84,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 101,
+          "y": 84,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 102,
+          "y": 84,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 103,
+          "y": 84,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 104,
+          "y": 84,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 95,
+          "y": 85,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 96,
+          "y": 85,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 97,
+          "y": 85,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        }
+      ]
+    },
+    "candidateMinusRuntime002": {
+      "id": "candidate-minus-runtime-002",
+      "pixels": 3293,
+      "bounds": {
+        "left": 18,
+        "top": 18,
+        "right": 262,
+        "bottom": 262,
+        "rightInclusive": 261,
+        "bottomInclusive": 261
+      },
+      "runtimeParentCoverage": {
+        "pixels": 3293,
+        "min": 255,
+        "max": 255,
+        "average": 255.0,
+        "zeroPixels": 0,
+        "nonZeroPixels": 3293,
+        "fullPixels": 3293,
+        "topValues": [
+          {
+            "value": 255,
+            "pixels": 3293
+          }
+        ]
+      },
+      "runtimeDifferencePathCoverage": {
+        "pixels": 3293,
+        "min": 31,
+        "max": 255,
+        "average": 254.71819,
+        "zeroPixels": 0,
+        "nonZeroPixels": 3293,
+        "fullPixels": 3281,
+        "topValues": [
+          {
+            "value": 255,
+            "pixels": 3281
+          },
+          {
+            "value": 239,
+            "pixels": 4
+          },
+          {
+            "value": 31,
+            "pixels": 2
+          },
+          {
+            "value": 143,
+            "pixels": 2
+          },
+          {
+            "value": 191,
+            "pixels": 2
+          },
+          {
+            "value": 223,
+            "pixels": 2
+          }
+        ]
+      },
+      "runtimeDifferenceResultCoverage": {
+        "pixels": 3293,
+        "min": 0,
+        "max": 224,
+        "average": 0.28181,
+        "zeroPixels": 3281,
+        "nonZeroPixels": 12,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 0,
+            "pixels": 3281
+          },
+          {
+            "value": 16,
+            "pixels": 4
+          },
+          {
+            "value": 224,
+            "pixels": 2
+          },
+          {
+            "value": 112,
+            "pixels": 2
+          },
+          {
+            "value": 64,
+            "pixels": 2
+          },
+          {
+            "value": 32,
+            "pixels": 2
+          }
+        ]
+      },
+      "runtimeFormulaResultCoverage": {
+        "pixels": 3293,
+        "min": 0,
+        "max": 224,
+        "average": 0.28181,
+        "zeroPixels": 3281,
+        "nonZeroPixels": 12,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 0,
+            "pixels": 3281
+          },
+          {
+            "value": 16,
+            "pixels": 4
+          },
+          {
+            "value": 224,
+            "pixels": 2
+          },
+          {
+            "value": 112,
+            "pixels": 2
+          },
+          {
+            "value": 64,
+            "pixels": 2
+          },
+          {
+            "value": 32,
+            "pixels": 2
+          }
+        ]
+      },
+      "for293SurvivingClipCoverage": {
+        "pixels": 3293,
+        "min": 16,
+        "max": 255,
+        "average": 240.901002,
+        "zeroPixels": 0,
+        "nonZeroPixels": 3293,
+        "fullPixels": 2937,
+        "topValues": [
+          {
+            "value": 255,
+            "pixels": 2937
+          },
+          {
+            "value": 16,
+            "pixels": 44
+          },
+          {
+            "value": 192,
+            "pixels": 32
+          },
+          {
+            "value": 64,
+            "pixels": 32
+          },
+          {
+            "value": 160,
+            "pixels": 32
+          },
+          {
+            "value": 208,
+            "pixels": 28
+          },
+          {
+            "value": 96,
+            "pixels": 26
+          },
+          {
+            "value": 240,
+            "pixels": 26
+          }
+        ]
+      },
+      "for293ImpliedDifferencePathCoverage": {
+        "pixels": 3293,
+        "min": 0,
+        "max": 239,
+        "average": 14.098998,
+        "zeroPixels": 2937,
+        "nonZeroPixels": 356,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 0,
+            "pixels": 2937
+          },
+          {
+            "value": 239,
+            "pixels": 44
+          },
+          {
+            "value": 63,
+            "pixels": 32
+          },
+          {
+            "value": 191,
+            "pixels": 32
+          },
+          {
+            "value": 95,
+            "pixels": 32
+          },
+          {
+            "value": 47,
+            "pixels": 28
+          },
+          {
+            "value": 159,
+            "pixels": 26
+          },
+          {
+            "value": 15,
+            "pixels": 26
+          }
+        ]
+      },
+      "naivePolarityInvertedFor293ResultCoverage": {
+        "pixels": 3293,
+        "min": 0,
+        "max": 239,
+        "average": 14.098998,
+        "zeroPixels": 2937,
+        "nonZeroPixels": 356,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 0,
+            "pixels": 2937
+          },
+          {
+            "value": 239,
+            "pixels": 44
+          },
+          {
+            "value": 63,
+            "pixels": 32
+          },
+          {
+            "value": 191,
+            "pixels": 32
+          },
+          {
+            "value": 95,
+            "pixels": 32
+          },
+          {
+            "value": 47,
+            "pixels": 28
+          },
+          {
+            "value": 159,
+            "pixels": 26
+          },
+          {
+            "value": 15,
+            "pixels": 26
+          }
+        ]
+      },
+      "for293SurvivingClipVsRuntimeResult": {
+        "pixels": 3293,
+        "exactMatches": 0,
+        "mismatches": 3293,
+        "modelNonZeroRuntimeZero": 3281,
+        "modelZeroRuntimeNonZero": 0,
+        "bothNonZeroDifferent": 12,
+        "zeroNonZeroClassificationMatches": 12
+      },
+      "for293ImpliedPathVsRuntimePath": {
+        "pixels": 3293,
+        "exactMatches": 0,
+        "mismatches": 3293,
+        "modelNonZeroRuntimeZero": 0,
+        "modelZeroRuntimeNonZero": 2937,
+        "bothNonZeroDifferent": 356,
+        "zeroNonZeroClassificationMatches": 356
+      },
+      "runtimeFormulaVsRuntimeResult": {
+        "pixels": 3293,
+        "exactMatches": 3293,
+        "mismatches": 0,
+        "modelNonZeroRuntimeZero": 0,
+        "modelZeroRuntimeNonZero": 0,
+        "bothNonZeroDifferent": 0,
+        "zeroNonZeroClassificationMatches": 3293
+      },
+      "naivePolarityInversionVsRuntimeResult": {
+        "pixels": 3293,
+        "exactMatches": 2925,
+        "mismatches": 368,
+        "modelNonZeroRuntimeZero": 356,
+        "modelZeroRuntimeNonZero": 12,
+        "bothNonZeroDifferent": 0,
+        "zeroNonZeroClassificationMatches": 2925
+      },
+      "sample": [
+        {
+          "x": 250,
+          "y": 18,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 251,
+          "y": 18,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 252,
+          "y": 18,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 253,
+          "y": 18,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 254,
+          "y": 18,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 255,
+          "y": 18,
+          "for293SurvivingClipCoverage": 255,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 256,
+          "y": 18,
+          "for293SurvivingClipCoverage": 192,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 257,
+          "y": 18,
+          "for293SurvivingClipCoverage": 176,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 258,
+          "y": 18,
+          "for293SurvivingClipCoverage": 128,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 259,
+          "y": 18,
+          "for293SurvivingClipCoverage": 96,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 260,
+          "y": 18,
+          "for293SurvivingClipCoverage": 64,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        },
+        {
+          "x": 261,
+          "y": 18,
+          "for293SurvivingClipCoverage": 32,
+          "runtimeDifferencePathCoverage": 255,
+          "runtimeDifferenceResultCoverage": 0
+        }
+      ]
+    },
+    "redRuntimeComponents": [
+      {
+        "id": "red-runtime-000",
+        "pixels": 2275,
+        "bounds": {
+          "left": 158,
+          "top": 4,
+          "right": 434,
+          "bottom": 39,
+          "rightInclusive": 433,
+          "bottomInclusive": 38
+        },
+        "runtimeParentCoverage": {
+          "pixels": 2275,
+          "min": 255,
+          "max": 255,
+          "average": 255.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 2275,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2275
+            }
+          ]
+        },
+        "runtimeDifferencePathCoverage": {
+          "pixels": 2275,
+          "min": 0,
+          "max": 239,
+          "average": 12.867692,
+          "zeroPixels": 2045,
+          "nonZeroPixels": 230,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2045
+            },
+            {
+              "value": 191,
+              "pixels": 38
+            },
+            {
+              "value": 127,
+              "pixels": 30
+            },
+            {
+              "value": 63,
+              "pixels": 22
+            },
+            {
+              "value": 207,
+              "pixels": 20
+            },
+            {
+              "value": 111,
+              "pixels": 15
+            },
+            {
+              "value": 15,
+              "pixels": 13
+            },
+            {
+              "value": 47,
+              "pixels": 13
+            }
+          ]
+        },
+        "runtimeDifferenceResultCoverage": {
+          "pixels": 2275,
+          "min": 16,
+          "max": 255,
+          "average": 242.132308,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 2045,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2045
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 144,
+              "pixels": 15
+            },
+            {
+              "value": 240,
+              "pixels": 13
+            },
+            {
+              "value": 208,
+              "pixels": 13
+            }
+          ]
+        },
+        "runtimeFormulaResultCoverage": {
+          "pixels": 2275,
+          "min": 16,
+          "max": 255,
+          "average": 242.132308,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 2045,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2045
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 144,
+              "pixels": 15
+            },
+            {
+              "value": 240,
+              "pixels": 13
+            },
+            {
+              "value": 208,
+              "pixels": 13
+            }
+          ]
+        },
+        "for293SurvivingClipCoverage": {
+          "pixels": 2275,
+          "min": 64,
+          "max": 255,
+          "average": 253.757802,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 2253,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2253
+            },
+            {
+              "value": 192,
+              "pixels": 6
+            },
+            {
+              "value": 128,
+              "pixels": 6
+            },
+            {
+              "value": 64,
+              "pixels": 6
+            },
+            {
+              "value": 144,
+              "pixels": 2
+            },
+            {
+              "value": 96,
+              "pixels": 2
+            }
+          ]
+        },
+        "for293ImpliedDifferencePathCoverage": {
+          "pixels": 2275,
+          "min": 0,
+          "max": 191,
+          "average": 1.242198,
+          "zeroPixels": 2253,
+          "nonZeroPixels": 22,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2253
+            },
+            {
+              "value": 63,
+              "pixels": 6
+            },
+            {
+              "value": 127,
+              "pixels": 6
+            },
+            {
+              "value": 191,
+              "pixels": 6
+            },
+            {
+              "value": 111,
+              "pixels": 2
+            },
+            {
+              "value": 159,
+              "pixels": 2
+            }
+          ]
+        },
+        "naivePolarityInvertedFor293ResultCoverage": {
+          "pixels": 2275,
+          "min": 0,
+          "max": 191,
+          "average": 1.242198,
+          "zeroPixels": 2253,
+          "nonZeroPixels": 22,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2253
+            },
+            {
+              "value": 63,
+              "pixels": 6
+            },
+            {
+              "value": 127,
+              "pixels": 6
+            },
+            {
+              "value": 191,
+              "pixels": 6
+            },
+            {
+              "value": 111,
+              "pixels": 2
+            },
+            {
+              "value": 159,
+              "pixels": 2
+            }
+          ]
+        },
+        "for293SurvivingClipVsRuntimeResult": {
+          "pixels": 2275,
+          "exactMatches": 2051,
+          "mismatches": 224,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 0,
+          "bothNonZeroDifferent": 224,
+          "zeroNonZeroClassificationMatches": 2275
+        },
+        "for293ImpliedPathVsRuntimePath": {
+          "pixels": 2275,
+          "exactMatches": 2051,
+          "mismatches": 224,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 208,
+          "bothNonZeroDifferent": 16,
+          "zeroNonZeroClassificationMatches": 2067
+        },
+        "runtimeFormulaVsRuntimeResult": {
+          "pixels": 2275,
+          "exactMatches": 2275,
+          "mismatches": 0,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 0,
+          "bothNonZeroDifferent": 0,
+          "zeroNonZeroClassificationMatches": 2275
+        },
+        "naivePolarityInversionVsRuntimeResult": {
+          "pixels": 2275,
+          "exactMatches": 0,
+          "mismatches": 2275,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 2253,
+          "bothNonZeroDifferent": 22,
+          "zeroNonZeroClassificationMatches": 22
+        },
+        "sample": [
+          {
+            "x": 279,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 280,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 281,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 282,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 283,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 284,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 285,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 286,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 287,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 288,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 289,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 290,
+            "y": 4,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          }
+        ]
+      },
+      {
+        "id": "red-runtime-001",
+        "pixels": 2275,
+        "bounds": {
+          "left": 158,
+          "top": 553,
+          "right": 434,
+          "bottom": 588,
+          "rightInclusive": 433,
+          "bottomInclusive": 587
+        },
+        "runtimeParentCoverage": {
+          "pixels": 2275,
+          "min": 255,
+          "max": 255,
+          "average": 255.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 2275,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2275
+            }
+          ]
+        },
+        "runtimeDifferencePathCoverage": {
+          "pixels": 2275,
+          "min": 0,
+          "max": 239,
+          "average": 12.867692,
+          "zeroPixels": 2045,
+          "nonZeroPixels": 230,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2045
+            },
+            {
+              "value": 191,
+              "pixels": 38
+            },
+            {
+              "value": 127,
+              "pixels": 30
+            },
+            {
+              "value": 63,
+              "pixels": 22
+            },
+            {
+              "value": 207,
+              "pixels": 20
+            },
+            {
+              "value": 111,
+              "pixels": 15
+            },
+            {
+              "value": 15,
+              "pixels": 13
+            },
+            {
+              "value": 95,
+              "pixels": 13
+            }
+          ]
+        },
+        "runtimeDifferenceResultCoverage": {
+          "pixels": 2275,
+          "min": 16,
+          "max": 255,
+          "average": 242.132308,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 2045,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2045
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 144,
+              "pixels": 15
+            },
+            {
+              "value": 240,
+              "pixels": 13
+            },
+            {
+              "value": 160,
+              "pixels": 13
+            }
+          ]
+        },
+        "runtimeFormulaResultCoverage": {
+          "pixels": 2275,
+          "min": 16,
+          "max": 255,
+          "average": 242.132308,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 2045,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2045
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 144,
+              "pixels": 15
+            },
+            {
+              "value": 240,
+              "pixels": 13
+            },
+            {
+              "value": 160,
+              "pixels": 13
+            }
+          ]
+        },
+        "for293SurvivingClipCoverage": {
+          "pixels": 2275,
+          "min": 64,
+          "max": 255,
+          "average": 253.757802,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 2253,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2253
+            },
+            {
+              "value": 192,
+              "pixels": 6
+            },
+            {
+              "value": 128,
+              "pixels": 6
+            },
+            {
+              "value": 64,
+              "pixels": 6
+            },
+            {
+              "value": 144,
+              "pixels": 2
+            },
+            {
+              "value": 96,
+              "pixels": 2
+            }
+          ]
+        },
+        "for293ImpliedDifferencePathCoverage": {
+          "pixels": 2275,
+          "min": 0,
+          "max": 191,
+          "average": 1.242198,
+          "zeroPixels": 2253,
+          "nonZeroPixels": 22,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2253
+            },
+            {
+              "value": 63,
+              "pixels": 6
+            },
+            {
+              "value": 127,
+              "pixels": 6
+            },
+            {
+              "value": 191,
+              "pixels": 6
+            },
+            {
+              "value": 111,
+              "pixels": 2
+            },
+            {
+              "value": 159,
+              "pixels": 2
+            }
+          ]
+        },
+        "naivePolarityInvertedFor293ResultCoverage": {
+          "pixels": 2275,
+          "min": 0,
+          "max": 191,
+          "average": 1.242198,
+          "zeroPixels": 2253,
+          "nonZeroPixels": 22,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2253
+            },
+            {
+              "value": 63,
+              "pixels": 6
+            },
+            {
+              "value": 127,
+              "pixels": 6
+            },
+            {
+              "value": 191,
+              "pixels": 6
+            },
+            {
+              "value": 111,
+              "pixels": 2
+            },
+            {
+              "value": 159,
+              "pixels": 2
+            }
+          ]
+        },
+        "for293SurvivingClipVsRuntimeResult": {
+          "pixels": 2275,
+          "exactMatches": 2051,
+          "mismatches": 224,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 0,
+          "bothNonZeroDifferent": 224,
+          "zeroNonZeroClassificationMatches": 2275
+        },
+        "for293ImpliedPathVsRuntimePath": {
+          "pixels": 2275,
+          "exactMatches": 2051,
+          "mismatches": 224,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 208,
+          "bothNonZeroDifferent": 16,
+          "zeroNonZeroClassificationMatches": 2067
+        },
+        "runtimeFormulaVsRuntimeResult": {
+          "pixels": 2275,
+          "exactMatches": 2275,
+          "mismatches": 0,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 0,
+          "bothNonZeroDifferent": 0,
+          "zeroNonZeroClassificationMatches": 2275
+        },
+        "naivePolarityInversionVsRuntimeResult": {
+          "pixels": 2275,
+          "exactMatches": 0,
+          "mismatches": 2275,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 2253,
+          "bothNonZeroDifferent": 22,
+          "zeroNonZeroClassificationMatches": 22
+        },
+        "sample": [
+          {
+            "x": 158,
+            "y": 553,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 15,
+            "runtimeDifferenceResultCoverage": 240
+          },
+          {
+            "x": 159,
+            "y": 553,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 95,
+            "runtimeDifferenceResultCoverage": 160
+          },
+          {
+            "x": 160,
+            "y": 553,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 207,
+            "runtimeDifferenceResultCoverage": 48
+          },
+          {
+            "x": 431,
+            "y": 553,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 207,
+            "runtimeDifferenceResultCoverage": 48
+          },
+          {
+            "x": 432,
+            "y": 553,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 95,
+            "runtimeDifferenceResultCoverage": 160
+          },
+          {
+            "x": 433,
+            "y": 553,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 15,
+            "runtimeDifferenceResultCoverage": 240
+          },
+          {
+            "x": 160,
+            "y": 554,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 161,
+            "y": 554,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 31,
+            "runtimeDifferenceResultCoverage": 224
+          },
+          {
+            "x": 162,
+            "y": 554,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 143,
+            "runtimeDifferenceResultCoverage": 112
+          },
+          {
+            "x": 163,
+            "y": 554,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 239,
+            "runtimeDifferenceResultCoverage": 16
+          },
+          {
+            "x": 428,
+            "y": 554,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 239,
+            "runtimeDifferenceResultCoverage": 16
+          },
+          {
+            "x": 429,
+            "y": 554,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 143,
+            "runtimeDifferenceResultCoverage": 112
+          }
+        ]
+      },
+      {
+        "id": "red-runtime-002",
+        "pixels": 2270,
+        "bounds": {
+          "left": 4,
+          "top": 158,
+          "right": 39,
+          "bottom": 434,
+          "rightInclusive": 38,
+          "bottomInclusive": 433
+        },
+        "runtimeParentCoverage": {
+          "pixels": 2270,
+          "min": 255,
+          "max": 255,
+          "average": 255.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2270,
+          "fullPixels": 2270,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2270
+            }
+          ]
+        },
+        "runtimeDifferencePathCoverage": {
+          "pixels": 2270,
+          "min": 0,
+          "max": 239,
+          "average": 12.952423,
+          "zeroPixels": 2040,
+          "nonZeroPixels": 230,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2040
+            },
+            {
+              "value": 191,
+              "pixels": 38
+            },
+            {
+              "value": 127,
+              "pixels": 30
+            },
+            {
+              "value": 63,
+              "pixels": 22
+            },
+            {
+              "value": 207,
+              "pixels": 20
+            },
+            {
+              "value": 111,
+              "pixels": 16
+            },
+            {
+              "value": 31,
+              "pixels": 14
+            },
+            {
+              "value": 15,
+              "pixels": 12
+            }
+          ]
+        },
+        "runtimeDifferenceResultCoverage": {
+          "pixels": 2270,
+          "min": 16,
+          "max": 255,
+          "average": 242.047577,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2270,
+          "fullPixels": 2040,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2040
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 144,
+              "pixels": 16
+            },
+            {
+              "value": 224,
+              "pixels": 14
+            },
+            {
+              "value": 240,
+              "pixels": 12
+            }
+          ]
+        },
+        "runtimeFormulaResultCoverage": {
+          "pixels": 2270,
+          "min": 16,
+          "max": 255,
+          "average": 242.047577,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2270,
+          "fullPixels": 2040,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2040
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 144,
+              "pixels": 16
+            },
+            {
+              "value": 224,
+              "pixels": 14
+            },
+            {
+              "value": 240,
+              "pixels": 12
+            }
+          ]
+        },
+        "for293SurvivingClipCoverage": {
+          "pixels": 2270,
+          "min": 64,
+          "max": 255,
+          "average": 253.755066,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2270,
+          "fullPixels": 2248,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2248
+            },
+            {
+              "value": 192,
+              "pixels": 6
+            },
+            {
+              "value": 128,
+              "pixels": 6
+            },
+            {
+              "value": 64,
+              "pixels": 6
+            },
+            {
+              "value": 144,
+              "pixels": 2
+            },
+            {
+              "value": 96,
+              "pixels": 2
+            }
+          ]
+        },
+        "for293ImpliedDifferencePathCoverage": {
+          "pixels": 2270,
+          "min": 0,
+          "max": 191,
+          "average": 1.244934,
+          "zeroPixels": 2248,
+          "nonZeroPixels": 22,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2248
+            },
+            {
+              "value": 63,
+              "pixels": 6
+            },
+            {
+              "value": 127,
+              "pixels": 6
+            },
+            {
+              "value": 191,
+              "pixels": 6
+            },
+            {
+              "value": 111,
+              "pixels": 2
+            },
+            {
+              "value": 159,
+              "pixels": 2
+            }
+          ]
+        },
+        "naivePolarityInvertedFor293ResultCoverage": {
+          "pixels": 2270,
+          "min": 0,
+          "max": 191,
+          "average": 1.244934,
+          "zeroPixels": 2248,
+          "nonZeroPixels": 22,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2248
+            },
+            {
+              "value": 63,
+              "pixels": 6
+            },
+            {
+              "value": 127,
+              "pixels": 6
+            },
+            {
+              "value": 191,
+              "pixels": 6
+            },
+            {
+              "value": 111,
+              "pixels": 2
+            },
+            {
+              "value": 159,
+              "pixels": 2
+            }
+          ]
+        },
+        "for293SurvivingClipVsRuntimeResult": {
+          "pixels": 2270,
+          "exactMatches": 2046,
+          "mismatches": 224,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 0,
+          "bothNonZeroDifferent": 224,
+          "zeroNonZeroClassificationMatches": 2270
+        },
+        "for293ImpliedPathVsRuntimePath": {
+          "pixels": 2270,
+          "exactMatches": 2046,
+          "mismatches": 224,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 208,
+          "bothNonZeroDifferent": 16,
+          "zeroNonZeroClassificationMatches": 2062
+        },
+        "runtimeFormulaVsRuntimeResult": {
+          "pixels": 2270,
+          "exactMatches": 2270,
+          "mismatches": 0,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 0,
+          "bothNonZeroDifferent": 0,
+          "zeroNonZeroClassificationMatches": 2270
+        },
+        "naivePolarityInversionVsRuntimeResult": {
+          "pixels": 2270,
+          "exactMatches": 0,
+          "mismatches": 2270,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 2248,
+          "bothNonZeroDifferent": 22,
+          "zeroNonZeroClassificationMatches": 22
+        },
+        "sample": [
+          {
+            "x": 38,
+            "y": 158,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 15,
+            "runtimeDifferenceResultCoverage": 240
+          },
+          {
+            "x": 38,
+            "y": 159,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 95,
+            "runtimeDifferenceResultCoverage": 160
+          },
+          {
+            "x": 37,
+            "y": 160,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 38,
+            "y": 160,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 207,
+            "runtimeDifferenceResultCoverage": 48
+          },
+          {
+            "x": 37,
+            "y": 161,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 31,
+            "runtimeDifferenceResultCoverage": 224
+          },
+          {
+            "x": 36,
+            "y": 162,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 37,
+            "y": 162,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 143,
+            "runtimeDifferenceResultCoverage": 112
+          },
+          {
+            "x": 36,
+            "y": 163,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 37,
+            "y": 163,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 239,
+            "runtimeDifferenceResultCoverage": 16
+          },
+          {
+            "x": 35,
+            "y": 164,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 36,
+            "y": 164,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 79,
+            "runtimeDifferenceResultCoverage": 176
+          },
+          {
+            "x": 35,
+            "y": 165,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          }
+        ]
+      },
+      {
+        "id": "red-runtime-003",
+        "pixels": 2268,
+        "bounds": {
+          "left": 553,
+          "top": 158,
+          "right": 588,
+          "bottom": 434,
+          "rightInclusive": 587,
+          "bottomInclusive": 433
+        },
+        "runtimeParentCoverage": {
+          "pixels": 2268,
+          "min": 255,
+          "max": 255,
+          "average": 255.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2268,
+          "fullPixels": 2268,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2268
+            }
+          ]
+        },
+        "runtimeDifferencePathCoverage": {
+          "pixels": 2268,
+          "min": 0,
+          "max": 239,
+          "average": 12.85097,
+          "zeroPixels": 2038,
+          "nonZeroPixels": 230,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2038
+            },
+            {
+              "value": 191,
+              "pixels": 38
+            },
+            {
+              "value": 127,
+              "pixels": 30
+            },
+            {
+              "value": 63,
+              "pixels": 22
+            },
+            {
+              "value": 207,
+              "pixels": 20
+            },
+            {
+              "value": 15,
+              "pixels": 14
+            },
+            {
+              "value": 95,
+              "pixels": 14
+            },
+            {
+              "value": 47,
+              "pixels": 14
+            }
+          ]
+        },
+        "runtimeDifferenceResultCoverage": {
+          "pixels": 2268,
+          "min": 16,
+          "max": 255,
+          "average": 242.14903,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2268,
+          "fullPixels": 2038,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2038
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 240,
+              "pixels": 14
+            },
+            {
+              "value": 160,
+              "pixels": 14
+            },
+            {
+              "value": 208,
+              "pixels": 14
+            }
+          ]
+        },
+        "runtimeFormulaResultCoverage": {
+          "pixels": 2268,
+          "min": 16,
+          "max": 255,
+          "average": 242.14903,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2268,
+          "fullPixels": 2038,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2038
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 240,
+              "pixels": 14
+            },
+            {
+              "value": 160,
+              "pixels": 14
+            },
+            {
+              "value": 208,
+              "pixels": 14
+            }
+          ]
+        },
+        "for293SurvivingClipCoverage": {
+          "pixels": 2268,
+          "min": 64,
+          "max": 255,
+          "average": 253.753968,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2268,
+          "fullPixels": 2246,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2246
+            },
+            {
+              "value": 192,
+              "pixels": 6
+            },
+            {
+              "value": 128,
+              "pixels": 6
+            },
+            {
+              "value": 64,
+              "pixels": 6
+            },
+            {
+              "value": 144,
+              "pixels": 2
+            },
+            {
+              "value": 96,
+              "pixels": 2
+            }
+          ]
+        },
+        "for293ImpliedDifferencePathCoverage": {
+          "pixels": 2268,
+          "min": 0,
+          "max": 191,
+          "average": 1.246032,
+          "zeroPixels": 2246,
+          "nonZeroPixels": 22,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2246
+            },
+            {
+              "value": 63,
+              "pixels": 6
+            },
+            {
+              "value": 127,
+              "pixels": 6
+            },
+            {
+              "value": 191,
+              "pixels": 6
+            },
+            {
+              "value": 111,
+              "pixels": 2
+            },
+            {
+              "value": 159,
+              "pixels": 2
+            }
+          ]
+        },
+        "naivePolarityInvertedFor293ResultCoverage": {
+          "pixels": 2268,
+          "min": 0,
+          "max": 191,
+          "average": 1.246032,
+          "zeroPixels": 2246,
+          "nonZeroPixels": 22,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2246
+            },
+            {
+              "value": 63,
+              "pixels": 6
+            },
+            {
+              "value": 127,
+              "pixels": 6
+            },
+            {
+              "value": 191,
+              "pixels": 6
+            },
+            {
+              "value": 111,
+              "pixels": 2
+            },
+            {
+              "value": 159,
+              "pixels": 2
+            }
+          ]
+        },
+        "for293SurvivingClipVsRuntimeResult": {
+          "pixels": 2268,
+          "exactMatches": 2044,
+          "mismatches": 224,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 0,
+          "bothNonZeroDifferent": 224,
+          "zeroNonZeroClassificationMatches": 2268
+        },
+        "for293ImpliedPathVsRuntimePath": {
+          "pixels": 2268,
+          "exactMatches": 2044,
+          "mismatches": 224,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 208,
+          "bothNonZeroDifferent": 16,
+          "zeroNonZeroClassificationMatches": 2060
+        },
+        "runtimeFormulaVsRuntimeResult": {
+          "pixels": 2268,
+          "exactMatches": 2268,
+          "mismatches": 0,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 0,
+          "bothNonZeroDifferent": 0,
+          "zeroNonZeroClassificationMatches": 2268
+        },
+        "naivePolarityInversionVsRuntimeResult": {
+          "pixels": 2268,
+          "exactMatches": 0,
+          "mismatches": 2268,
+          "modelNonZeroRuntimeZero": 0,
+          "modelZeroRuntimeNonZero": 2246,
+          "bothNonZeroDifferent": 22,
+          "zeroNonZeroClassificationMatches": 22
+        },
+        "sample": [
+          {
+            "x": 553,
+            "y": 158,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 15,
+            "runtimeDifferenceResultCoverage": 240
+          },
+          {
+            "x": 553,
+            "y": 159,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 95,
+            "runtimeDifferenceResultCoverage": 160
+          },
+          {
+            "x": 553,
+            "y": 160,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 207,
+            "runtimeDifferenceResultCoverage": 48
+          },
+          {
+            "x": 554,
+            "y": 160,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 554,
+            "y": 161,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 47,
+            "runtimeDifferenceResultCoverage": 208
+          },
+          {
+            "x": 554,
+            "y": 162,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 143,
+            "runtimeDifferenceResultCoverage": 112
+          },
+          {
+            "x": 555,
+            "y": 162,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 554,
+            "y": 163,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 239,
+            "runtimeDifferenceResultCoverage": 16
+          },
+          {
+            "x": 555,
+            "y": 163,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 555,
+            "y": 164,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 79,
+            "runtimeDifferenceResultCoverage": 176
+          },
+          {
+            "x": 556,
+            "y": 164,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 0,
+            "runtimeDifferenceResultCoverage": 255
+          },
+          {
+            "x": 555,
+            "y": 165,
+            "for293SurvivingClipCoverage": 255,
+            "runtimeDifferencePathCoverage": 175,
+            "runtimeDifferenceResultCoverage": 80
+          }
+        ]
+      }
+    ]
+  },
+  "analyticVariantChecks": {
+    "original-59-targets": {
+      "innerBoundsFor2934x4": {
+        "rect": [
+          16,
+          16,
+          576,
+          576
+        ],
+        "sampling": "for293-4x4",
+        "resultCoverage": {
+          "pixels": 59,
+          "min": 255,
+          "max": 255,
+          "average": 255.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 59,
+          "fullPixels": 59,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 59
+            }
+          ]
+        }
+      },
+      "innerBoundsCenterBinary": {
+        "rect": [
+          16,
+          16,
+          576,
+          576
+        ],
+        "sampling": "center-binary",
+        "resultCoverage": {
+          "pixels": 59,
+          "min": 255,
+          "max": 255,
+          "average": 255.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 59,
+          "fullPixels": 59,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 59
+            }
+          ]
+        }
+      },
+      "innerBoundsTopLeftBinary": {
+        "rect": [
+          16,
+          16,
+          576,
+          576
+        ],
+        "sampling": "top-left-binary",
+        "resultCoverage": {
+          "pixels": 59,
+          "min": 255,
+          "max": 255,
+          "average": 255.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 59,
+          "fullPixels": 59,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 59
+            }
+          ]
+        }
+      },
+      "outerDrawBoundsFor2934x4Control": {
+        "rect": [
+          8,
+          8,
+          584,
+          584
+        ],
+        "sampling": "for293-4x4",
+        "resultCoverage": {
+          "pixels": 59,
+          "min": 0,
+          "max": 255,
+          "average": 88.661017,
+          "zeroPixels": 34,
+          "nonZeroPixels": 25,
+          "fullPixels": 17,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 34
+            },
+            {
+              "value": 255,
+              "pixels": 17
+            },
+            {
+              "value": 96,
+              "pixels": 4
+            },
+            {
+              "value": 144,
+              "pixels": 1
+            },
+            {
+              "value": 240,
+              "pixels": 1
+            },
+            {
+              "value": 80,
+              "pixels": 1
+            },
+            {
+              "value": 48,
+              "pixels": 1
+            }
+          ]
+        }
+      }
+    },
+    "candidate-minus-runtime-002": {
+      "innerBoundsFor2934x4": {
+        "rect": [
+          16,
+          16,
+          576,
+          576
+        ],
+        "sampling": "for293-4x4",
+        "resultCoverage": {
+          "pixels": 3293,
+          "min": 16,
+          "max": 255,
+          "average": 240.901002,
+          "zeroPixels": 0,
+          "nonZeroPixels": 3293,
+          "fullPixels": 2937,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2937
+            },
+            {
+              "value": 16,
+              "pixels": 44
+            },
+            {
+              "value": 192,
+              "pixels": 32
+            },
+            {
+              "value": 64,
+              "pixels": 32
+            },
+            {
+              "value": 160,
+              "pixels": 32
+            },
+            {
+              "value": 208,
+              "pixels": 28
+            },
+            {
+              "value": 96,
+              "pixels": 26
+            },
+            {
+              "value": 240,
+              "pixels": 26
+            }
+          ]
+        }
+      },
+      "innerBoundsCenterBinary": {
+        "rect": [
+          16,
+          16,
+          576,
+          576
+        ],
+        "sampling": "center-binary",
+        "resultCoverage": {
+          "pixels": 3293,
+          "min": 0,
+          "max": 255,
+          "average": 241.216216,
+          "zeroPixels": 178,
+          "nonZeroPixels": 3115,
+          "fullPixels": 3115,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 3115
+            },
+            {
+              "value": 0,
+              "pixels": 178
+            }
+          ]
+        }
+      },
+      "innerBoundsTopLeftBinary": {
+        "rect": [
+          16,
+          16,
+          576,
+          576
+        ],
+        "sampling": "top-left-binary",
+        "resultCoverage": {
+          "pixels": 3293,
+          "min": 255,
+          "max": 255,
+          "average": 255.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 3293,
+          "fullPixels": 3293,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 3293
+            }
+          ]
+        }
+      },
+      "outerDrawBoundsFor2934x4Control": {
+        "rect": [
+          8,
+          8,
+          584,
+          584
+        ],
+        "sampling": "for293-4x4",
+        "resultCoverage": {
+          "pixels": 3293,
+          "min": 0,
+          "max": 255,
+          "average": 58.70665,
+          "zeroPixels": 2421,
+          "nonZeroPixels": 872,
+          "fullPixels": 647,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 2421
+            },
+            {
+              "value": 255,
+              "pixels": 647
+            },
+            {
+              "value": 16,
+              "pixels": 32
+            },
+            {
+              "value": 240,
+              "pixels": 28
+            },
+            {
+              "value": 96,
+              "pixels": 22
+            },
+            {
+              "value": 64,
+              "pixels": 20
+            },
+            {
+              "value": 208,
+              "pixels": 18
+            },
+            {
+              "value": 48,
+              "pixels": 17
+            }
+          ]
+        }
+      }
+    },
+    "red-runtime-union": {
+      "innerBoundsFor2934x4": {
+        "rect": [
+          16,
+          16,
+          576,
+          576
+        ],
+        "sampling": "for293-4x4",
+        "resultCoverage": {
+          "pixels": 9088,
+          "min": 64,
+          "max": 255,
+          "average": 253.756162,
+          "zeroPixels": 0,
+          "nonZeroPixels": 9088,
+          "fullPixels": 9000,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 9000
+            },
+            {
+              "value": 192,
+              "pixels": 24
+            },
+            {
+              "value": 128,
+              "pixels": 24
+            },
+            {
+              "value": 64,
+              "pixels": 24
+            },
+            {
+              "value": 144,
+              "pixels": 8
+            },
+            {
+              "value": 96,
+              "pixels": 8
+            }
+          ]
+        }
+      },
+      "innerBoundsCenterBinary": {
+        "rect": [
+          16,
+          16,
+          576,
+          576
+        ],
+        "sampling": "center-binary",
+        "resultCoverage": {
+          "pixels": 9088,
+          "min": 0,
+          "max": 255,
+          "average": 253.653169,
+          "zeroPixels": 48,
+          "nonZeroPixels": 9040,
+          "fullPixels": 9040,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 9040
+            },
+            {
+              "value": 0,
+              "pixels": 48
+            }
+          ]
+        }
+      },
+      "innerBoundsTopLeftBinary": {
+        "rect": [
+          16,
+          16,
+          576,
+          576
+        ],
+        "sampling": "top-left-binary",
+        "resultCoverage": {
+          "pixels": 9088,
+          "min": 0,
+          "max": 255,
+          "average": 253.540933,
+          "zeroPixels": 52,
+          "nonZeroPixels": 9036,
+          "fullPixels": 9036,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 9036
+            },
+            {
+              "value": 0,
+              "pixels": 52
+            }
+          ]
+        }
+      },
+      "outerDrawBoundsFor2934x4Control": {
+        "rect": [
+          8,
+          8,
+          584,
+          584
+        ],
+        "sampling": "for293-4x4",
+        "resultCoverage": {
+          "pixels": 9088,
+          "min": 0,
+          "max": 255,
+          "average": 118.479313,
+          "zeroPixels": 4484,
+          "nonZeroPixels": 4604,
+          "fullPixels": 3836,
+          "topValues": [
+            {
+              "value": 0,
+              "pixels": 4484
+            },
+            {
+              "value": 255,
+              "pixels": 3836
+            },
+            {
+              "value": 64,
+              "pixels": 128
+            },
+            {
+              "value": 160,
+              "pixels": 88
+            },
+            {
+              "value": 128,
+              "pixels": 80
+            },
+            {
+              "value": 192,
+              "pixels": 64
+            },
+            {
+              "value": 224,
+              "pixels": 48
+            },
+            {
+              "value": 80,
+              "pixels": 48
+            }
+          ]
+        }
+      }
+    }
+  },
+  "sourcePreservation": {
+    "for293DecisionPreserved": true,
+    "for300DecisionPreserved": true,
+    "for301DecisionPreserved": true,
+    "m60ExpectedUnsupportedPreserved": true,
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  },
+  "strictPreservation": {
+    "productionRenderingChanged": false,
+    "normalRendererChanged": false,
+    "skAAClipOpChanged": false,
+    "ctmChanged": false,
+    "blendChanged": false,
+    "setPixelChanged": false,
+    "gpuOrWebGpuChanged": false,
+    "thresholdChanged": false,
+    "m60Promoted": false
+  }
+}
