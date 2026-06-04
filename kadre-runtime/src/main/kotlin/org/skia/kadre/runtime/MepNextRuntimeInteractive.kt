@@ -169,8 +169,16 @@ internal data class MepNextRuntimeInteractiveEvidence(
         put("ciEvidence", buildJsonObject {
             put("nativeWindow", false)
             put("optIn", false)
-            put("command", "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive")
+            put("command", "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive")
             put("usesKadreNativeSubmodule", false)
+            put("validatesCheckedInArtifacts", true)
+        })
+        put("optionalDirectRuntimeRefresh", buildJsonObject {
+            put("nativeWindow", false)
+            put("optIn", true)
+            put("command", "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive")
+            put("ciGate", false)
+            put("submodulePrecondition", "git submodule update --init --recursive external/poc-koreos or provide local org.graphiks.kadre artifacts")
         })
     }
 
@@ -274,7 +282,8 @@ internal data class MepNextRuntimeInteractiveEvidence(
         appendLine("|---|---:|---|---|")
         appendLine("| demo | yes, opt-in | `rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive` | PM manual window that stays alive until close or configured cap. |")
         appendLine("| benchmark | yes, opt-in | `rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeBenchmark -PkadreMepNextFrames=300 -PkadreMepNextWarmupFrames=120` | Reporting-only native timing sample. |")
-        appendLine("| CI evidence | no | `rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive` | Headless JSON/Markdown proof. |")
+        appendLine("| checked-in validation | no | `rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive` | Headless validation of checked-in JSON/Markdown proof. |")
+        appendLine("| optional direct refresh | no | `rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive` | Optional/provisioned refresh after `external/poc-koreos` or local `org.graphiks.kadre` artifacts are available. |")
         appendLine()
         appendLine("## FOR-193 Durable Loop")
         appendLine()
@@ -328,12 +337,23 @@ internal data class MepNextRuntimeInteractiveEvidence(
         appendLine("## Validation")
         appendLine()
         appendLine("```bash")
-        appendLine("rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive")
+        appendLine("rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive")
         appendLine("python3 -m json.tool $MEP_NEXT_OUTPUT/evidence.json >/dev/null")
         appendLine("python3 -m json.tool $MEP_NEXT_OUTPUT/telemetry-live.json >/dev/null")
         appendLine("python3 -m json.tool $MEP_NEXT_OUTPUT/scene-switching.json >/dev/null")
         appendLine("rtk git diff --check")
         appendLine("```")
+        appendLine()
+        appendLine("Optional/provisioned evidence refresh:")
+        appendLine()
+        appendLine("```bash")
+        appendLine("git submodule update --init --recursive external/poc-koreos")
+        appendLine("rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive")
+        appendLine("```")
+        appendLine()
+        appendLine("The direct Kadre refresh may resolve `org.graphiks.kadre:*` and is not a")
+        appendLine("required headless validation gate when Kadre source substitution or local")
+        appendLine("artifacts are unavailable.")
     }
 }
 
