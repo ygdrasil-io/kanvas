@@ -1,0 +1,169 @@
+{
+  "linear": "FOR-310",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-m90-runtime-telemetry-classification-guard-ticket",
+  "decision": "M90_RUNTIME_TELEMETRY_CLASSIFICATION_GUARD_APPLIED",
+  "claimDecision": "KEEP_M90_RUNTIME_TELEMETRY_BOUNDED_AND_REPORTING_ONLY",
+  "requiredArtifacts": {
+    "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json": "present",
+    "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json": "present",
+    "reports/wgsl-pipeline/m90-runtime-interactive/scene-switching.json": "present",
+    "reports/wgsl-pipeline/m90-runtime-interactive/pm-report.md": "present",
+    "reports/wgsl-pipeline/2026-06-02-mep-next-runtime-interactive.md": "present"
+  },
+  "sourceReports": {
+    "reports/wgsl-pipeline/2026-06-02-mep-next-runtime-interactive.md": "verified",
+    "reports/wgsl-pipeline/m90-runtime-interactive/pm-report.md": "verified",
+    ".upstream/specs/skia-like-realtime/05-pm-demo-and-release-candidate.md": "verified",
+    ".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md": "verified"
+  },
+  "claimScope": {
+    "status": "pass",
+    "claimLevel": "bounded-kadre-runtime-interactive-evidence",
+    "linearIssues": [
+      "FOR-193",
+      "FOR-194",
+      "FOR-195",
+      "FOR-196"
+    ]
+  },
+  "modes": {
+    "demo": {
+      "nativeWindow": true,
+      "optIn": true,
+      "opensLongWindowInCi": false,
+      "command": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive"
+    },
+    "benchmark": {
+      "nativeWindow": true,
+      "optIn": true,
+      "gatePhase": "candidate-reporting-only",
+      "releaseBlocking": false,
+      "command": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeBenchmark -PkadreMepNextFrames=300 -PkadreMepNextWarmupFrames=120"
+    },
+    "ciEvidence": {
+      "nativeWindow": false,
+      "optIn": false,
+      "usesKadreNativeSubmodule": false,
+      "command": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive"
+    }
+  },
+  "telemetrySourceClassification": {
+    "nativeFrameTiming": "observed",
+    "nativeRouteAllocations": "observed-partial",
+    "cacheHitsMisses": "derived",
+    "resizeInvalidation": "deterministic-derived"
+  },
+  "resourcePolicy": {
+    "status": "reporting-only",
+    "observedRuntimeTelemetry": {
+      "source": "mep-next.cache-observed-partial-native-route",
+      "shaderModuleCreates": 180,
+      "pipelineCreates": 180,
+      "limitationCount": 2
+    },
+    "derivedLedger": {
+      "source": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+      "pipelineCacheHits": 179,
+      "pipelineCacheMisses": 1,
+      "resourceGenerationCount": 3,
+      "invalidResourceReuseCount": 0
+    },
+    "liveRouteCounters": {
+      "classification": "observed-partial",
+      "missingCounterReason": "mep-next.native-cache-counter-unavailable",
+      "pipelineCacheHits": 0,
+      "pipelineCacheMisses": 180,
+      "shaderModuleCreates": 180,
+      "pipelineCreates": 180
+    },
+    "resizeSwitchHealth": {
+      "switchCount": 4,
+      "resizeReconfigureCount": 2,
+      "invalidResourceReuseCount": 0,
+      "boundedGrowth": true
+    }
+  },
+  "performanceLane": {
+    "lane": "frame.kadre-windowed",
+    "gatePhase": "candidate-reporting-only",
+    "releaseBlocking": false,
+    "frameCount": 3,
+    "droppedFrameCount": 1,
+    "p50Ms": 17.1,
+    "p95Ms": 34.4
+  },
+  "inputPolicy": {
+    "realOsEventInjectionClaimed": false,
+    "realOsEventInjectionReason": "mep-next.real-os-event-injection-not-claimed",
+    "pointerEventCount": 2,
+    "keyboardEventCount": 4
+  },
+  "sceneSwitching": {
+    "sceneCount": 5,
+    "renderableSceneCount": 4,
+    "unsupportedSceneCount": 1,
+    "unsupportedFallbackReason": "mep-next.scene-switch.expected-unsupported",
+    "unsupportedCandidate": {
+      "id": "m73-nested-rrect-clip-refusal-v1",
+      "status": "expected-unsupported",
+      "renderedByKadre": false,
+      "fallbackReasons": [
+        "nested-rrect-difference-clip"
+      ]
+    },
+    "telemetryScene": {
+      "switchCount": 4,
+      "fallbackReason": "nested-rrect-difference-clip"
+    }
+  },
+  "policyCases": [
+    {
+      "name": "Current M90 classification is allowed",
+      "decision": "allowed-guarded",
+      "allowed": true,
+      "reason": "M90 claims stay bounded by observed, observed-partial, derived, and unavailable sources."
+    },
+    {
+      "name": "Derived cache hits claimed as observed is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Cache hits/misses are derived from M85, not fully observed on the native route."
+    },
+    {
+      "name": "Native window required in CI is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "CI evidence must stay headless and must not require a native window."
+    },
+    {
+      "name": "M90 reporting lane as release blocking is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "M90 frame.kadre-windowed timing remains candidate/reporting-only."
+    },
+    {
+      "name": "Real OS event injection claim is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "M90 does not claim real OS/window-manager event injection."
+    },
+    {
+      "name": "Dropping unsupported scene boundary is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Scene switching must preserve the expected unsupported nested-rrect fallback."
+    }
+  ],
+  "validationPolicy": {
+    "requiredHeadlessValidator": "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+    "optionalDirectRuntimeRefresh": {
+      "command": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+      "requiredForThisGuard": false,
+      "reason": "The checked-in guard validates existing M90 evidence; direct regeneration may require Kadre local source substitution or unpublished artifacts."
+    }
+  },
+  "alternateDecisions": {
+    "unsafe": "M90_RUNTIME_TELEMETRY_UNSAFE_OBSERVED_CLAIM_FOUND",
+    "ambiguous": "M90_RUNTIME_TELEMETRY_CLASSIFICATION_AMBIGUOUS"
+  }
+}
