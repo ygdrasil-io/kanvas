@@ -19,7 +19,8 @@
       "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json": "verified",
       "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json": "verified",
       "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json": "verified",
-      "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json": "verified"
+      "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json": "verified",
+      "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json": "verified"
     }
   },
   "kanvasHeadlessWebGpuObservedCandidate": {
@@ -105,8 +106,26 @@
       ],
       "uses": "SkWebGpuDevice.cacheTelemetrySnapshot()"
     },
+    "observedEvidenceBridge": {
+      "linearIssue": "FOR-315",
+      "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+      "sourceClass": "kanvas-headless-webgpu-observed",
+      "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+      "backend": "WebGPU",
+      "executionMode": "headless",
+      "adapter": "Apple M2 Max",
+      "coldPipelineCacheMisses": 1,
+      "coldPipelineCacheHits": 0,
+      "warmPipelineCacheHits": 1,
+      "notKadreNativeCallbacks": true,
+      "broadKadreWgpu4kCallbacksClaimed": false,
+      "releaseGate": false,
+      "readinessGateChanged": false,
+      "nonClaim": "Kanvas headless WebGPU observed evidence, not a broad Kadre/wgpu4k native cache callback."
+    },
     "bridgeRequirements": [
       "Route cacheTelemetrySnapshot() counters into checked-in runtime evidence from a headless WebGPU execution artifact.",
+      "FOR-315 satisfies the named observed artifact requirement with reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json.",
       "Keep Kadre/wgpu4k native callbacks separate from Kanvas-owned headless counters.",
       "Do not count the candidate as broad Kadre native cache telemetry until the runtime evidence names an observed source artifact."
     ]
@@ -328,6 +347,11 @@
       "id": "for314.observed-source-artifact-guard",
       "status": "pass",
       "assertion": "Derived or observed-partial cache counters cannot be reclassified as observed without a named observed source artifact."
+    },
+    {
+      "id": "for314.for315-headless-observed-bridge",
+      "status": "pass",
+      "assertion": "FOR-315 provides the named Kanvas headless WebGPU observed artifact for cacheTelemetrySnapshot() without changing Kadre/wgpu4k native callback claims."
     }
   ]
 }

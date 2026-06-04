@@ -25,6 +25,7 @@ M85_EVIDENCE = PROJECT_ROOT / "reports/wgsl-pipeline/m85-resource-lifetime-cache
 M90_EVIDENCE = PROJECT_ROOT / "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json"
 M90_TELEMETRY = PROJECT_ROOT / "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json"
 M92_CLASSIFICATION = PROJECT_ROOT / "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json"
+FOR315_ARTIFACT = PROJECT_ROOT / "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json"
 
 ARTIFACT = PROJECT_ROOT / "reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json"
 REPORT = PROJECT_ROOT / "reports/wgsl-pipeline/2026-06-04-for-314-runtime-cache-counter-source-map.md"
@@ -299,6 +300,75 @@ def validate_warm_cache_test() -> dict[str, Any]:
             "the generated solid rect path remains selected",
         ],
         "uses": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+    }
+
+
+def validate_for315_observed_artifact() -> dict[str, Any]:
+    evidence = load_json(FOR315_ARTIFACT)
+    expected = {
+        "linearIssue": "FOR-315",
+        "status": "pass",
+        "sourceClass": "kanvas-headless-webgpu-observed",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "notKadreNativeCallbacks": True,
+        "broadKadreWgpu4kCallbacksClaimed": False,
+        "releaseGate": False,
+        "readinessGateChanged": False,
+    }
+    for field, value in expected.items():
+        if evidence.get(field) != value:
+            fail(f"FOR-315 evidence expected {field}={value!r}, got {evidence.get(field)!r}")
+
+    cold = require_object(evidence, "coldSnapshot", FOR315_ARTIFACT)
+    warm = require_object(evidence, "warmSnapshot", FOR315_ARTIFACT)
+    cold_misses = cold.get("pipelineCacheMisses")
+    cold_hits = cold.get("pipelineCacheHits")
+    warm_hits = warm.get("pipelineCacheHits")
+    for owner, value in {
+        "coldSnapshot.pipelineCacheMisses": cold_misses,
+        "coldSnapshot.pipelineCacheHits": cold_hits,
+        "warmSnapshot.pipelineCacheHits": warm_hits,
+    }.items():
+        if not isinstance(value, int):
+            fail(f"FOR-315 {owner} must be an integer")
+    if cold_misses < 1:
+        fail("FOR-315 cold pipelineCacheMisses must be at least 1")
+    if warm_hits <= cold_hits:
+        fail("FOR-315 warm pipelineCacheHits must increase over cold")
+
+    non_changes = require_object(evidence, "nonChanges", FOR315_ARTIFACT)
+    for field in [
+        "rendererBehavior",
+        "gradle",
+        "shaders",
+        "thresholds",
+        "sceneStatus",
+        "readiness",
+        "releaseGateStatus",
+        "fallbacks",
+        "kadreNativeBehavior",
+    ]:
+        if non_changes.get(field) != "unchanged":
+            fail(f"FOR-315 nonChanges.{field} must remain unchanged")
+
+    return {
+        "linearIssue": "FOR-315",
+        "sourceArtifact": rel(FOR315_ARTIFACT),
+        "sourceClass": evidence["sourceClass"],
+        "sourceApi": evidence["sourceApi"],
+        "backend": evidence["backend"],
+        "executionMode": evidence["executionMode"],
+        "adapter": evidence.get("adapter"),
+        "coldPipelineCacheMisses": cold_misses,
+        "coldPipelineCacheHits": cold_hits,
+        "warmPipelineCacheHits": warm_hits,
+        "notKadreNativeCallbacks": evidence["notKadreNativeCallbacks"],
+        "broadKadreWgpu4kCallbacksClaimed": evidence["broadKadreWgpu4kCallbacksClaimed"],
+        "releaseGate": evidence["releaseGate"],
+        "readinessGateChanged": evidence["readinessGateChanged"],
+        "nonClaim": "Kanvas headless WebGPU observed evidence, not a broad Kadre/wgpu4k native cache callback.",
     }
 
 
@@ -590,6 +660,7 @@ def build_artifact() -> dict[str, Any]:
     docs = validate_docs()
     snapshot = validate_webgpu_snapshot()
     warm_cache = validate_warm_cache_test()
+    for315 = validate_for315_observed_artifact()
     m85 = validate_m85()
     m90 = validate_m90()
     m92 = validate_m92()
@@ -613,13 +684,16 @@ def build_artifact() -> dict[str, Any]:
                 rel(M90_EVIDENCE): "verified",
                 rel(M90_TELEMETRY): "verified",
                 rel(M92_CLASSIFICATION): "verified",
+                rel(FOR315_ARTIFACT): "verified",
             },
         },
         "kanvasHeadlessWebGpuObservedCandidate": {
             **snapshot,
             "warmPipelineReuseEvidence": warm_cache,
+            "observedEvidenceBridge": for315,
             "bridgeRequirements": [
                 "Route cacheTelemetrySnapshot() counters into checked-in runtime evidence from a headless WebGPU execution artifact.",
+                "FOR-315 satisfies the named observed artifact requirement with reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json.",
                 "Keep Kadre/wgpu4k native callbacks separate from Kanvas-owned headless counters.",
                 "Do not count the candidate as broad Kadre native cache telemetry until the runtime evidence names an observed source artifact.",
             ],
@@ -676,6 +750,11 @@ def build_artifact() -> dict[str, Any]:
                 "status": "pass",
                 "assertion": "Derived or observed-partial cache counters cannot be reclassified as observed without a named observed source artifact.",
             },
+            {
+                "id": "for314.for315-headless-observed-bridge",
+                "status": "pass",
+                "assertion": "FOR-315 provides the named Kanvas headless WebGPU observed artifact for cacheTelemetrySnapshot() without changing Kadre/wgpu4k native callback claims.",
+            },
         ],
     }
 
@@ -702,17 +781,19 @@ def write_report(artifact: dict[str, Any]) -> None:
         "",
         "| Bucket | Class | Source artifact | Gate meaning |",
         "|---|---|---|---|",
-        f"| Kanvas headless WebGPU | `{kanvas['sourceClass']}` | `{kanvas['sourceArtifact']}` and `{kanvas['warmPipelineReuseEvidence']['sourceArtifact']}` | Candidate source for future checked-in observed runtime evidence, not a Kadre native callback claim. |",
+        f"| Kanvas headless WebGPU | `{kanvas['sourceClass']}` bridged by `{kanvas['observedEvidenceBridge']['sourceClass']}` | `{kanvas['sourceArtifact']}`, `{kanvas['warmPipelineReuseEvidence']['sourceArtifact']}`, and `{kanvas['observedEvidenceBridge']['sourceArtifact']}` | FOR-315 names checked-in observed Kanvas headless WebGPU evidence; not a Kadre native callback claim. |",
         f"| M85 ledger | `{m85['sourceClass']}` | `{m85['sourceArtifact']}` | Deterministic selected-scene ledger only; not observed WebGPU runtime cache telemetry. |",
         f"| M90 native route | `{m90['sourceClass']}` | {m90_sources} | Native route creation/churn is observed-partial; cache hits/misses stay derived from M85. |",
         f"| M92 Kadre blockers | `{m92['sourceClass']}` | `{m92['sourceArtifact']}` | Broad Kadre/wgpu4k callbacks and native resource lifetime snapshots remain blocked. |",
         "",
-        "## Kanvas Headless Candidate",
+        "## Kanvas Headless Candidate And FOR-315 Bridge",
         "",
         f"- Snapshot API: `{kanvas['snapshotType']}` via `{kanvas['snapshotFunction']}`.",
         "- Counter families: shader module, pipeline, resource, creation, and entry-count counters.",
         f"- Warm reuse source: `{kanvas['warmPipelineReuseEvidence']['testName']}` in `{kanvas['warmPipelineReuseEvidence']['sourceArtifact']}`.",
-        "- Bridge requirement: future runtime evidence must route these counters through a named checked-in observed source artifact before claiming `observed` cache telemetry.",
+        f"- Observed bridge artifact: `{kanvas['observedEvidenceBridge']['sourceArtifact']}` with source class `{kanvas['observedEvidenceBridge']['sourceClass']}` and source API `{kanvas['observedEvidenceBridge']['sourceApi']}`.",
+        f"- Observed bridge counters: cold `pipelineCacheMisses={kanvas['observedEvidenceBridge']['coldPipelineCacheMisses']}`, cold `pipelineCacheHits={kanvas['observedEvidenceBridge']['coldPipelineCacheHits']}`, warm `pipelineCacheHits={kanvas['observedEvidenceBridge']['warmPipelineCacheHits']}`.",
+        "- Non-claim: the FOR-315 bridge is Kanvas headless WebGPU evidence, not a broad Kadre/wgpu4k native cache callback claim.",
         "",
         "## Existing Runtime Evidence",
         "",

@@ -13,17 +13,19 @@ No renderer behavior, Gradle task, shader, threshold, scene status, fallback pol
 
 | Bucket | Class | Source artifact | Gate meaning |
 |---|---|---|---|
-| Kanvas headless WebGPU | `kanvas-headless-webgpu-observed-candidate` | `gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt` and `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt` | Candidate source for future checked-in observed runtime evidence, not a Kadre native callback claim. |
+| Kanvas headless WebGPU | `kanvas-headless-webgpu-observed-candidate` bridged by `kanvas-headless-webgpu-observed` | `gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt`, `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt`, and `reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json` | FOR-315 names checked-in observed Kanvas headless WebGPU evidence; not a Kadre native callback claim. |
 | M85 ledger | `derived` | `reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json` | Deterministic selected-scene ledger only; not observed WebGPU runtime cache telemetry. |
 | M90 native route | `observed-partial-native-route-with-derived-ledger` | `reports/wgsl-pipeline/m90-runtime-interactive/evidence.json`, `reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json` | Native route creation/churn is observed-partial; cache hits/misses stay derived from M85. |
 | M92 Kadre blockers | `not-observable-kadre-blockers-with-observed-partial-creation-rows` | `reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json` | Broad Kadre/wgpu4k callbacks and native resource lifetime snapshots remain blocked. |
 
-## Kanvas Headless Candidate
+## Kanvas Headless Candidate And FOR-315 Bridge
 
 - Snapshot API: `SkWebGpuDevice.GpuCacheTelemetrySnapshot` via `SkWebGpuDevice.cacheTelemetrySnapshot()`.
 - Counter families: shader module, pipeline, resource, creation, and entry-count counters.
 - Warm reuse source: `generated solid color rect reuses warm pipeline cache` in `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt`.
-- Bridge requirement: future runtime evidence must route these counters through a named checked-in observed source artifact before claiming `observed` cache telemetry.
+- Observed bridge artifact: `reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json` with source class `kanvas-headless-webgpu-observed` and source API `SkWebGpuDevice.cacheTelemetrySnapshot()`.
+- Observed bridge counters: cold `pipelineCacheMisses=1`, cold `pipelineCacheHits=0`, warm `pipelineCacheHits=1`.
+- Non-claim: the FOR-315 bridge is Kanvas headless WebGPU evidence, not a broad Kadre/wgpu4k native cache callback claim.
 
 ## Existing Runtime Evidence
 
