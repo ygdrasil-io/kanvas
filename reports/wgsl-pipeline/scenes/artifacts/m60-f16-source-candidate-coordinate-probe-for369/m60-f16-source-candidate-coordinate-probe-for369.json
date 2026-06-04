@@ -1,0 +1,727 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-369",
+  "sceneId": "m60-f16-source-candidate-coordinate-probe-for369",
+  "sourceSceneId": "m60-bounded-stroke-cap-join",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-source-et-candidate-coordinate-probe-apres-for-368",
+  "sourceFinding": "global/kanvas/findings/for-368-confirme-que-les-metadonnees-candidate-m60-f16-restent-absentes-des-artefacts-commites",
+  "decision": "M60_F16_SOURCE_CANDIDATE_PROBE_CAPTURE_PATH_STILL_MISSING_SOURCE_METADATA",
+  "classification": "capture-path-still-missing-source-metadata",
+  "allowedClassifications": [
+    "ready-for-candidate-evaluation",
+    "capture-path-still-missing-source-metadata",
+    "candidate-probe-refused-by-ambiguous-coverage"
+  ],
+  "decisionReason": "FOR-369 inspected the M60 residual capture path after FOR-368 and found that the producer records reference/current residual samples only. It cannot expose candidatePolicyRgba, source/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs without changing the capture producer or renderer path.",
+  "inputValidation": {
+    "for365Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-constrained-candidate-evaluation-for365/f16-constrained-candidate-evaluation-for365.json",
+    "for365Decision": "F16_CONSTRAINED_CANDIDATE_REJECTED_BY_CURRENT_GUARDS",
+    "for365RequiredDecision": "F16_CONSTRAINED_CANDIDATE_REJECTED_BY_CURRENT_GUARDS",
+    "for366Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-positive-residual-target-inventory-for366/f16-positive-residual-target-inventory-for366.json",
+    "for366Decision": "F16_POSITIVE_RESIDUAL_TARGET_INVENTORY_READY",
+    "for366RequiredDecision": "F16_POSITIVE_RESIDUAL_TARGET_INVENTORY_READY",
+    "for367Artifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join-comparable-f16-evidence-for367/m60-bounded-stroke-cap-join-comparable-f16-evidence-for367.json",
+    "for367Decision": "M60_BOUNDED_STROKE_CAP_JOIN_COMPARABLE_F16_EVIDENCE_RECORDED",
+    "for367RequiredDecision": "M60_BOUNDED_STROKE_CAP_JOIN_COMPARABLE_F16_EVIDENCE_RECORDED",
+    "for367Classification": "still-missing-comparable-metadata",
+    "for367RequiredClassification": "still-missing-comparable-metadata",
+    "for367RowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+    "for367CurrentResidual": 856,
+    "for368Artifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-candidate-metadata-capture-for368/m60-f16-candidate-metadata-capture-for368.json",
+    "for368Decision": "M60_F16_CANDIDATE_METADATA_STILL_MISSING",
+    "for368RequiredDecision": "M60_F16_CANDIDATE_METADATA_STILL_MISSING",
+    "for368Classification": "candidate-metadata-still-missing",
+    "for368RequiredClassification": "candidate-metadata-still-missing",
+    "for368CurrentResidual": 856
+  },
+  "sourceArtifacts": {
+    "aaResidualDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+    "stats": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json",
+    "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+    "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+    "experimentalGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/experimental-gpu-diagnostic.json",
+    "jsonKeyPresence": {
+      "aaResidualDiagnostic": {
+        "candidatePolicyRgba": false,
+        "sourceRawRgba": false,
+        "sourceInputRgba": false,
+        "rawF16Premul": false,
+        "rawF16Unpremul": false,
+        "sourceCoverage": false,
+        "sourceColor": false
+      },
+      "stats": {
+        "candidatePolicyRgba": false,
+        "sourceRawRgba": false,
+        "sourceInputRgba": false,
+        "rawF16Premul": false,
+        "rawF16Unpremul": false,
+        "sourceCoverage": false,
+        "sourceColor": false
+      },
+      "routeCpu": {
+        "candidatePolicyRgba": false,
+        "sourceRawRgba": false,
+        "sourceInputRgba": false,
+        "rawF16Premul": false,
+        "rawF16Unpremul": false,
+        "sourceCoverage": false,
+        "sourceColor": false
+      },
+      "routeGpu": {
+        "candidatePolicyRgba": false,
+        "sourceRawRgba": false,
+        "sourceInputRgba": false,
+        "rawF16Premul": false,
+        "rawF16Unpremul": false,
+        "sourceCoverage": false,
+        "sourceColor": false
+      },
+      "experimentalGpuDiagnostic": {
+        "candidatePolicyRgba": false,
+        "sourceRawRgba": false,
+        "sourceInputRgba": false,
+        "rawF16Premul": false,
+        "rawF16Unpremul": false,
+        "sourceCoverage": false,
+        "sourceColor": false
+      }
+    },
+    "diagnosticStatus": "diagnostic-only",
+    "targetColorSpaceBlend": true,
+    "gpuStatus": "expected-unsupported",
+    "routeGpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
+    "experimentalStatus": "diagnostic-only"
+  },
+  "captureProducerInspection": {
+    "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+    "producerMentionsCandidatePolicy": false,
+    "entryPoint": {
+      "line": 105,
+      "finding": "The M60 residual artifact is produced from strokeResidualStats with only the experimental GPU bitmap and the Skia reference bitmap."
+    },
+    "sampleConstruction": {
+      "classifyResidualLine": 422,
+      "gpuPixelLine": 438,
+      "referencePixelLine": 439,
+      "highDeltaSampleLine": 449,
+      "residualSampleClassLine": 695,
+      "fromDeltaReferenceLine": 453,
+      "fromDeltaGpuLine": 454,
+      "finding": "ResidualSample is built from getPixel(reference) and getPixel(gpu) only; source/input/raw RGBA, candidatePolicyRgba, and raw F16 premul/blend inputs are not available to the sample object."
+    },
+    "serialization": {
+      "toJsonLine": 702,
+      "referenceRgbaLine": 707,
+      "gpuRgbaLine": 708,
+      "finding": "ResidualSample.toJson serializes x/y/maxChannelDelta/referenceRgba/gpuRgba only."
+    },
+    "policyProbe": {
+      "targetBlendTrueLine": 39,
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "finding": "The existing M60 probe policy is a targetColorSpaceBlend diagnostic toggle, not the straight_srgb_quantized_alpha_src_over_white candidate policy."
+    }
+  },
+  "probeLine": {
+    "rowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+    "familyId": "m60-bounded-stroke-cap-join-positive-residual-evidence-target",
+    "sourceKind": "non-arc-target-colorspace-blend-diagnostic",
+    "rowKind": "non-arc",
+    "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "currentResidual": 856,
+    "computedResidual": 856,
+    "sampleCount": 10,
+    "sampleCoordinatesPreservedFromFor367": true,
+    "referenceCurrentComparable": true,
+    "referenceCurrentCandidateComparable": false,
+    "classification": "capture-path-still-missing-source-metadata",
+    "readyForCandidateEvaluation": false,
+    "blocker": {
+      "status": "capture-path-still-missing-source-metadata",
+      "point": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+      "candidatePolicyRgba": "not-produced-by-current-m60-capture-path",
+      "sourceRawRgba": "not-exposed-by-current-m60-capture-path",
+      "sourceCoverageOrColor": "not-exposed-by-current-m60-capture-path",
+      "premulBlendAssumptions": "not-exposed-by-current-m60-capture-path"
+    },
+    "samples": [
+      {
+        "index": 1,
+        "x": 92,
+        "y": 75,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "not-produced-by-current-m60-capture-path",
+        "candidatePolicyRgbaProbeResult": "refused-before-candidate-evaluation",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceCoverage": null,
+        "sourceCoverageStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceColor": null,
+        "sourceColorStatus": "not-exposed-by-current-m60-capture-path",
+        "premulBlendAssumptionStatus": "not-exposed-by-current-m60-capture-path",
+        "probeRefusalReason": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+        "artifactOnlyValueProduced": false,
+        "rendererAppliedCandidate": false,
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 2,
+        "x": 91,
+        "y": 76,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "not-produced-by-current-m60-capture-path",
+        "candidatePolicyRgbaProbeResult": "refused-before-candidate-evaluation",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceCoverage": null,
+        "sourceCoverageStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceColor": null,
+        "sourceColorStatus": "not-exposed-by-current-m60-capture-path",
+        "premulBlendAssumptionStatus": "not-exposed-by-current-m60-capture-path",
+        "probeRefusalReason": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+        "artifactOnlyValueProduced": false,
+        "rendererAppliedCandidate": false,
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 3,
+        "x": 90,
+        "y": 77,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "not-produced-by-current-m60-capture-path",
+        "candidatePolicyRgbaProbeResult": "refused-before-candidate-evaluation",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceCoverage": null,
+        "sourceCoverageStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceColor": null,
+        "sourceColorStatus": "not-exposed-by-current-m60-capture-path",
+        "premulBlendAssumptionStatus": "not-exposed-by-current-m60-capture-path",
+        "probeRefusalReason": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+        "artifactOnlyValueProduced": false,
+        "rendererAppliedCandidate": false,
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 4,
+        "x": 89,
+        "y": 78,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "not-produced-by-current-m60-capture-path",
+        "candidatePolicyRgbaProbeResult": "refused-before-candidate-evaluation",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceCoverage": null,
+        "sourceCoverageStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceColor": null,
+        "sourceColorStatus": "not-exposed-by-current-m60-capture-path",
+        "premulBlendAssumptionStatus": "not-exposed-by-current-m60-capture-path",
+        "probeRefusalReason": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+        "artifactOnlyValueProduced": false,
+        "rendererAppliedCandidate": false,
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 5,
+        "x": 88,
+        "y": 79,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "not-produced-by-current-m60-capture-path",
+        "candidatePolicyRgbaProbeResult": "refused-before-candidate-evaluation",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceCoverage": null,
+        "sourceCoverageStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceColor": null,
+        "sourceColorStatus": "not-exposed-by-current-m60-capture-path",
+        "premulBlendAssumptionStatus": "not-exposed-by-current-m60-capture-path",
+        "probeRefusalReason": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+        "artifactOnlyValueProduced": false,
+        "rendererAppliedCandidate": false,
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 6,
+        "x": 87,
+        "y": 80,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "not-produced-by-current-m60-capture-path",
+        "candidatePolicyRgbaProbeResult": "refused-before-candidate-evaluation",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceCoverage": null,
+        "sourceCoverageStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceColor": null,
+        "sourceColorStatus": "not-exposed-by-current-m60-capture-path",
+        "premulBlendAssumptionStatus": "not-exposed-by-current-m60-capture-path",
+        "probeRefusalReason": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+        "artifactOnlyValueProduced": false,
+        "rendererAppliedCandidate": false,
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 7,
+        "x": 21,
+        "y": 81,
+        "region": {
+          "id": "butt-bevel",
+          "description": "left band: butt cap with bevel join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          206,
+          213,
+          239,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "signedCurrentMinusReferenceDelta": [
+          -25,
+          -22,
+          -9,
+          0
+        ],
+        "absoluteChannelDelta": [
+          25,
+          22,
+          9,
+          0
+        ],
+        "sampleResidual": 56,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "not-produced-by-current-m60-capture-path",
+        "candidatePolicyRgbaProbeResult": "refused-before-candidate-evaluation",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceCoverage": null,
+        "sourceCoverageStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceColor": null,
+        "sourceColorStatus": "not-exposed-by-current-m60-capture-path",
+        "premulBlendAssumptionStatus": "not-exposed-by-current-m60-capture-path",
+        "probeRefusalReason": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+        "artifactOnlyValueProduced": false,
+        "rendererAppliedCandidate": false,
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 8,
+        "x": 93,
+        "y": 74,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          182,
+          192,
+          231,
+          255
+        ],
+        "currentRgba": [
+          206,
+          213,
+          238,
+          255
+        ],
+        "signedCurrentMinusReferenceDelta": [
+          24,
+          21,
+          7,
+          0
+        ],
+        "absoluteChannelDelta": [
+          24,
+          21,
+          7,
+          0
+        ],
+        "sampleResidual": 52,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "not-produced-by-current-m60-capture-path",
+        "candidatePolicyRgbaProbeResult": "refused-before-candidate-evaluation",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceCoverage": null,
+        "sourceCoverageStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceColor": null,
+        "sourceColorStatus": "not-exposed-by-current-m60-capture-path",
+        "premulBlendAssumptionStatus": "not-exposed-by-current-m60-capture-path",
+        "probeRefusalReason": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+        "artifactOnlyValueProduced": false,
+        "rendererAppliedCandidate": false,
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 9,
+        "x": 17,
+        "y": 77,
+        "region": {
+          "id": "butt-bevel",
+          "description": "left band: butt cap with bevel join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          157,
+          170,
+          222,
+          255
+        ],
+        "signedCurrentMinusReferenceDelta": [
+          24,
+          20,
+          8,
+          0
+        ],
+        "absoluteChannelDelta": [
+          24,
+          20,
+          8,
+          0
+        ],
+        "sampleResidual": 52,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "not-produced-by-current-m60-capture-path",
+        "candidatePolicyRgbaProbeResult": "refused-before-candidate-evaluation",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceCoverage": null,
+        "sourceCoverageStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceColor": null,
+        "sourceColorStatus": "not-exposed-by-current-m60-capture-path",
+        "premulBlendAssumptionStatus": "not-exposed-by-current-m60-capture-path",
+        "probeRefusalReason": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+        "artifactOnlyValueProduced": false,
+        "rendererAppliedCandidate": false,
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 10,
+        "x": 69,
+        "y": 81,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          209,
+          222,
+          209,
+          255
+        ],
+        "currentRgba": [
+          185,
+          204,
+          185,
+          255
+        ],
+        "signedCurrentMinusReferenceDelta": [
+          -24,
+          -18,
+          -24,
+          0
+        ],
+        "absoluteChannelDelta": [
+          24,
+          18,
+          24,
+          0
+        ],
+        "sampleResidual": 66,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "not-produced-by-current-m60-capture-path",
+        "candidatePolicyRgbaProbeResult": "refused-before-candidate-evaluation",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceCoverage": null,
+        "sourceCoverageStatus": "not-exposed-by-current-m60-capture-path",
+        "sourceColor": null,
+        "sourceColorStatus": "not-exposed-by-current-m60-capture-path",
+        "premulBlendAssumptionStatus": "not-exposed-by-current-m60-capture-path",
+        "probeRefusalReason": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs.",
+        "artifactOnlyValueProduced": false,
+        "rendererAppliedCandidate": false,
+        "readyForCandidateEvaluation": false
+      }
+    ]
+  },
+  "candidateProbeReadiness": {
+    "classification": "capture-path-still-missing-source-metadata",
+    "readyForCandidateEvaluation": false,
+    "candidatePolicyRgbaProduced": false,
+    "artifactOnlyCandidateValuesProduced": false,
+    "ambiguousCoverageRefusal": false,
+    "missingMetadata": [
+      "candidatePolicyRgba for straight_srgb_quantized_alpha_src_over_white",
+      "source/input/raw RGBA at the same 10 coordinates",
+      "source coverage/color sufficient to compute the candidate externally",
+      "explicit F16 premul/blend assumptions for the diagnostic calculation"
+    ],
+    "blockingCapturePath": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:422 and gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt:702 build and serialize residual samples from reference/current bitmap deltas only; the capture path does not carry candidatePolicyRgba, source/input/raw RGBA, source coverage/color, or explicit F16 premul/blend inputs."
+  },
+  "nonGoalsPreserved": {
+    "rendererBehaviorChanged": false,
+    "scoreIncreased": false,
+    "thresholdChanged": false,
+    "candidateImplementationAuthorized": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "kadreChanged": false,
+    "f16PremulBlendRuntimeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "rendererSceneBranchAdded": false,
+    "rendererCoordinateBranchAdded": false,
+    "rendererSelectedCellBranchAdded": false,
+    "fixtureOnlyPathAdded": false,
+    "fullGmCropPathAdded": false
+  },
+  "criteriaEvaluation": {
+    "sourceMemoryRecorded": true,
+    "sourceFindingRecorded": true,
+    "for368DecisionRequired": true,
+    "for368ClassificationRequired": true,
+    "sameTenCoordinatesPreserved": true,
+    "currentResidualKeptAt856": true,
+    "sourceCapturePathInspected": true,
+    "candidatePolicyRgbaStatusRecordedForEachSample": true,
+    "sourceRawRgbaStatusRecordedForEachSample": true,
+    "premulBlendAssumptionStatusRecordedForEachSample": true,
+    "blockingCapturePointRecorded": true,
+    "noValuesInvented": true,
+    "rendererBehaviorChanged": false,
+    "scoreIncreased": false,
+    "thresholdChanged": false,
+    "candidateImplementationAuthorized": false
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "selectableCandidateDefined": false,
+    "implementationPlanAuthorized": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+      "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+      "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+      "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+      "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+      "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for369-pycache python3 -m py_compile scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
