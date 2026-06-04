@@ -1,0 +1,90 @@
+{
+  "linear": "FOR-311",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-m92-rc-headless-kadre-dependency-policy-guard-ticket",
+  "decision": "M92_RC_HEADLESS_KADRE_DEPENDENCY_POLICY_GUARD_APPLIED",
+  "dependencyDecision": "KEEP_M92_RC_REQUIRED_VALIDATION_HEADLESS_AND_CHECKED_IN",
+  "m92Evidence": {
+    "claimLevel": "rc-kadre-runtime-product-like-evidence-with-observed-derived-not-observable-telemetry",
+    "headlessEvidence": {
+      "command": "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+      "ciGate": true,
+      "nativeWindow": false,
+      "usesKadreNativeSubmodule": false,
+      "validatesCheckedInArtifacts": true
+    },
+    "optionalDirectRuntimeRefresh": {
+      "command": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+      "ciGate": false,
+      "precondition": "git submodule update --init --recursive external/poc-koreos or provide local org.graphiks.kadre artifacts"
+    },
+    "singleNativeRcDemo": {
+      "command": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive",
+      "ciGate": false,
+      "nativeWindow": true
+    },
+    "telemetrySummary": {
+      "observedCount": 5,
+      "derivedCount": 4,
+      "notObservableCount": 4,
+      "expectedUnsupportedCount": 2,
+      "releaseBlockingPerformanceGate": false,
+      "readinessDelta": "0.00%"
+    }
+  },
+  "classification": {
+    "counts": {
+      "observed": 5,
+      "observed-partial": 2,
+      "derived": 4,
+      "not-observable": 4,
+      "expected-unsupported": 2
+    },
+    "blockers": [
+      "kadre-runtime.native-cache-counter-unavailable",
+      "kadre-runtime.resource-lifetime-observation-partial"
+    ],
+    "releaseGatedRows": []
+  },
+  "reportChecks": {
+    "reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md": "verified",
+    "reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md": "verified",
+    "scripts/validate_mep_rc_runtime.py": "verified",
+    "build.gradle.kts": "verified"
+  },
+  "policyCases": [
+    {
+      "name": "Current M92 required validation is allowed",
+      "decision": "allowed-guarded",
+      "allowed": true,
+      "reason": "M92 required validation stays headless and checked-in; Kadre refresh remains optional/provisioned."
+    },
+    {
+      "name": "Direct Kadre task as CI gate is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Direct Kadre runtime refresh may resolve unpublished Kadre artifacts and must not be a CI gate."
+    },
+    {
+      "name": "Direct Kadre task before optional section is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Direct Kadre runtime task must appear only in optional/provisioned sections."
+    },
+    {
+      "name": "Native demo as CI gate is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Native window demo must remain opt-in and outside CI."
+    },
+    {
+      "name": "Unknown headless command is ambiguous",
+      "decision": "ambiguous",
+      "allowed": false,
+      "reason": "Headless evidence must name the checked-in MEP-NEXT runtime validator."
+    }
+  ],
+  "alternateDecisions": {
+    "unsafe": "M92_RC_HEADLESS_KADRE_DIRECT_TASK_REQUIRED",
+    "ambiguous": "M92_RC_HEADLESS_KADRE_POLICY_AMBIGUOUS"
+  }
+}

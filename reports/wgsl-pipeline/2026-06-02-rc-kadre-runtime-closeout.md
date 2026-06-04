@@ -27,8 +27,12 @@ source.
 Headless validation command:
 
 ```bash
+rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive
 python3 scripts/validate_mep_rc_runtime.py .
 ```
+
+This validates checked-in runtime evidence and does not resolve Kadre native
+runtime dependencies.
 
 ## Product-Like Runtime Evidence
 
@@ -90,9 +94,20 @@ python3 -m json.tool reports/wgsl-pipeline/m92-kadre-runtime-rc/evidence.json >/
 python3 -m json.tool reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json >/dev/null
 ```
 
-Native fallback if the demo machine cannot open Kadre:
+Native-unavailable fallback if the demo machine cannot open Kadre:
 
 ```bash
-rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive
+rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive
 python3 scripts/validate_mep_rc_runtime.py .
 ```
+
+Optional/provisioned evidence refresh:
+
+```bash
+git submodule update --init --recursive external/poc-koreos
+rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive
+```
+
+The direct Kadre runtime refresh may resolve `org.graphiks.kadre:*` and is not
+a required headless RC gate when Kadre source substitution or local artifacts
+are unavailable.
