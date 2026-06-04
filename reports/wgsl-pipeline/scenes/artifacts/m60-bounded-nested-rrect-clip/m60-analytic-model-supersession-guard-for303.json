@@ -1,0 +1,1015 @@
+{
+  "linear": "FOR-303",
+  "parent": "FOR-241",
+  "probe": "m60-analytic-model-supersession-guard",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "audit-only-text-scan",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-m60-analytic-model-supersession-guard-ticket",
+  "sourceMemoryPath": "/Users/chaos/.codex/basic-memory/global/global/kanvas/ticket-drafts/Draft FOR next M60 analytic model supersession guard ticket.md",
+  "sourceMemoryStatus": "verified",
+  "sourceAudits": {
+    "for293": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-drawrrect-runtime-visibility-audit-for293.json",
+    "for301": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-skaaclip-band-trace-for301.json",
+    "for302": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-analytic-clip-model-reconciliation-for302.json"
+  },
+  "decision": "M60_ANALYTIC_MODEL_SUPERSESSION_GUARD_APPLIED",
+  "decisions": {
+    "M60_ANALYTIC_MODEL_SUPERSESSION_GUARD_APPLIED": true,
+    "M60_ANALYTIC_MODEL_UNSAFE_CONSUMER_FOUND": false,
+    "M60_ANALYTIC_MODEL_SUPERSESSION_GUARD_AMBIGUOUS": false
+  },
+  "policy": {
+    "historicalAllowedThrough": "FOR-300",
+    "runtimeSupersessionEvidence": [
+      "FOR-301",
+      "FOR-302"
+    ],
+    "forbiddenRule": "A future M60 promotion/support consumer must not use FOR-293 red_draw_runtime_domain, clip_coverage, or difference_clip_coverage evidence unless it references both FOR-301 and FOR-302 supersession evidence.",
+    "guardScope": "audit-only; normal renderer, SkAAClip.op, CTM, blend, setPixel, GPU/WebGPU, thresholds, fallbacks, and M60 support status are unchanged."
+  },
+  "supersessionEvidence": {
+    "for293Decision": "RED_DRAWRRECT_RUNTIME_VISIBILITY_STILL_AMBIGUOUS",
+    "for301Decision": "SKAACLIP_DIFFERENCE_OP_ALPHA_MERGE_CAUSES_TARGET_HOLE",
+    "for302Decision": "M60_ANALYTIC_MODEL_RECONCILED_RUNTIME_IS_CORRECT",
+    "for302ClipPolarityFixApplied": true,
+    "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+    "originalTargetPixels": 59,
+    "originalFor293NonZero": 59,
+    "originalRuntimePathFull": 59,
+    "originalRuntimeResultZero": 59,
+    "originalFor293RuntimeMismatches": 59,
+    "originalRuntimeFormulaMatches": 59,
+    "candidateMinusRuntimePixels": 3293,
+    "candidateMinusRuntimeResultZero": 3281,
+    "redRuntimeComponentPixels": [
+      2275,
+      2275,
+      2270,
+      2268
+    ]
+  },
+  "inventory": {
+    "scannedRoots": [
+      "scripts",
+      "reports/wgsl-pipeline"
+    ],
+    "excludedGeneratedOutputs": [
+      "reports/wgsl-pipeline/2026-06-04-for-303-m60-analytic-model-supersession-guard.md",
+      "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-analytic-model-supersession-guard-for303.json"
+    ],
+    "consumerCount": 34,
+    "classificationCounts": {
+      "historical": 6,
+      "historical-comparison": 21,
+      "runtime-reconciliation": 6,
+      "supersession-guard": 1
+    },
+    "markerCounts": {
+      "clip_coverage": 72,
+      "difference_clip_coverage": 11,
+      "for293_artifact": 13,
+      "for293_predicate": 6,
+      "for293_symbol": 74,
+      "for293_text": 116,
+      "red_draw_runtime_domain": 11
+    },
+    "unsafeConsumerCount": 0,
+    "ambiguousConsumerCount": 0,
+    "consumers": [
+      {
+        "path": "scripts/validate_for280_cpu_aa_difference_clip_coverage_edge.py",
+        "forNumber": 280,
+        "classification": "historical",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 3,
+          "for293_symbol": 0,
+          "for293_text": 0,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 4,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 3,
+          "support_decision": 4,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical analytic model source or pre-FOR-293 foundation; preserved as evidence only."
+      },
+      {
+        "path": "scripts/validate_for281_cpu_mask_filter_clip_coverage_trace.py",
+        "forNumber": 281,
+        "classification": "historical",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 5,
+          "difference_clip_coverage": 1,
+          "for293_symbol": 0,
+          "for293_text": 0,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 4,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 3,
+          "support_decision": 4,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical analytic model source or pre-FOR-293 foundation; preserved as evidence only."
+      },
+      {
+        "path": "scripts/validate_for282_cpu_color_filter_srcin_blend_parity.py",
+        "forNumber": 282,
+        "classification": "historical",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 2,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 0,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 4,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 3,
+          "support_decision": 4,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical analytic model source or pre-FOR-293 foundation; preserved as evidence only."
+      },
+      {
+        "path": "scripts/validate_for293_m60_red_drawrrect_runtime_visibility_audit.py",
+        "forNumber": 293,
+        "classification": "historical",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 2,
+          "clip_coverage": 9,
+          "difference_clip_coverage": 1,
+          "for293_symbol": 1,
+          "for293_text": 10,
+          "for293_artifact": 1,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 2,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 2,
+          "support_decision": 2,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical analytic model source or pre-FOR-293 foundation; preserved as evidence only."
+      },
+      {
+        "path": "scripts/validate_for294_m60_expanded_red_drawrrect_runtime_trace.py",
+        "forNumber": 294,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 1,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 5,
+          "for293_text": 8,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 2,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 2,
+          "support_decision": 2,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "scripts/validate_for295_m60_red_domain_vs_white_targets.py",
+        "forNumber": 295,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 4,
+          "for293_text": 5,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 2,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 2,
+          "support_decision": 2,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "scripts/validate_for296_m60_red_runtime_spatial_separation.py",
+        "forNumber": 296,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 4,
+          "for293_text": 3,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 2,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 2,
+          "support_decision": 2,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "scripts/validate_for297_m60_candidate_hole_overbreadth.py",
+        "forNumber": 297,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 1,
+          "clip_coverage": 15,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 5,
+          "for293_text": 6,
+          "for293_artifact": 0,
+          "for293_predicate": 2
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 2,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 2,
+          "support_decision": 2,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "scripts/validate_for298_m60_a8_srcinpayload_runtime_filter.py",
+        "forNumber": 298,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 1,
+          "clip_coverage": 1,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 6,
+          "for293_text": 3,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 2,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 2,
+          "support_decision": 2,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "scripts/validate_for299_m60_a8_predispatch_filter_trace.py",
+        "forNumber": 299,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 4,
+          "for293_text": 1,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 3,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 2,
+          "support_decision": 2,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "scripts/validate_for300_m60_active_aa_clip_coverage.py",
+        "forNumber": 300,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 1,
+          "clip_coverage": 20,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 5,
+          "for293_text": 9,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 2,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 2,
+          "support_decision": 2,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "scripts/validate_for301_m60_skaaclip_band_trace.py",
+        "forNumber": 301,
+        "classification": "runtime-reconciliation",
+        "allowed": true,
+        "referencesFor301": true,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 1,
+          "clip_coverage": 2,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 4,
+          "for293_text": 5,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 1,
+          "pass_row": 0,
+          "threshold": 0,
+          "expected_unsupported": 2,
+          "support_decision": 2,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "FOR-301 runtime SkAAClip trace is the superseding runtime operand evidence."
+      },
+      {
+        "path": "scripts/validate_for302_m60_analytic_clip_model_reconciliation.py",
+        "forNumber": 302,
+        "classification": "runtime-reconciliation",
+        "allowed": true,
+        "referencesFor301": true,
+        "referencesFor302": true,
+        "markerCounts": {
+          "red_draw_runtime_domain": 1,
+          "clip_coverage": 2,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 8,
+          "for293_text": 11,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 2,
+          "pass_row": 0,
+          "threshold": 0,
+          "expected_unsupported": 2,
+          "support_decision": 2,
+          "keep_expected_unsupported": 2
+        },
+        "reason": "FOR-302 reconciles the FOR-293 analytic model against the FOR-301 runtime trace."
+      },
+      {
+        "path": "scripts/validate_for303_m60_analytic_model_supersession_guard.py",
+        "forNumber": 303,
+        "classification": "supersession-guard",
+        "allowed": true,
+        "referencesFor301": true,
+        "referencesFor302": true,
+        "markerCounts": {
+          "red_draw_runtime_domain": 3,
+          "clip_coverage": 13,
+          "difference_clip_coverage": 6,
+          "for293_symbol": 3,
+          "for293_text": 15,
+          "for293_artifact": 2,
+          "for293_predicate": 1
+        },
+        "promotionCounts": {
+          "promote": 13,
+          "support": 11,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 0,
+          "support_decision": 4,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "FOR-303 guard references both superseding runtime/reconciliation records."
+      },
+      {
+        "path": "reports/wgsl-pipeline/2026-06-03-for-293-m60-red-drawrrect-runtime-visibility-audit.md",
+        "forNumber": 293,
+        "classification": "historical",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 1,
+          "for293_text": 3,
+          "for293_artifact": 1,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 1,
+          "support_decision": 0,
+          "keep_expected_unsupported": 0
+        },
+        "reason": "Historical analytic model source or pre-FOR-293 foundation; preserved as evidence only."
+      },
+      {
+        "path": "reports/wgsl-pipeline/2026-06-03-for-294-m60-expanded-red-drawrrect-runtime-trace.md",
+        "forNumber": 294,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 2,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 1,
+          "support_decision": 0,
+          "keep_expected_unsupported": 0
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/2026-06-04-for-295-m60-red-domain-vs-white-targets.md",
+        "forNumber": 295,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 2,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 1,
+          "support_decision": 0,
+          "keep_expected_unsupported": 0
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/2026-06-04-for-296-m60-red-runtime-spatial-separation.md",
+        "forNumber": 296,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 1,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 1,
+          "support_decision": 0,
+          "keep_expected_unsupported": 0
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/2026-06-04-for-297-m60-candidate-hole-overbreadth.md",
+        "forNumber": 297,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 1,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 2,
+          "for293_artifact": 0,
+          "for293_predicate": 1
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 1,
+          "support_decision": 0,
+          "keep_expected_unsupported": 0
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/2026-06-04-for-298-m60-a8-srcinpayload-runtime-filter.md",
+        "forNumber": 298,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 1,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 1,
+          "support_decision": 0,
+          "keep_expected_unsupported": 0
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/2026-06-04-for-299-m60-a8-predispatch-filter-trace.md",
+        "forNumber": 299,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 1,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 1,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 1,
+          "support_decision": 0,
+          "keep_expected_unsupported": 0
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/2026-06-04-for-300-m60-active-aa-clip-coverage.md",
+        "forNumber": 300,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 8,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 1,
+          "support_decision": 0,
+          "keep_expected_unsupported": 0
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/2026-06-04-for-301-m60-skaaclip-band-trace.md",
+        "forNumber": 301,
+        "classification": "runtime-reconciliation",
+        "allowed": true,
+        "referencesFor301": true,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 3,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 1,
+          "support_decision": 0,
+          "keep_expected_unsupported": 0
+        },
+        "reason": "FOR-301 runtime SkAAClip trace is the superseding runtime operand evidence."
+      },
+      {
+        "path": "reports/wgsl-pipeline/2026-06-04-for-302-m60-analytic-clip-model-reconciliation.md",
+        "forNumber": 302,
+        "classification": "runtime-reconciliation",
+        "allowed": true,
+        "referencesFor301": true,
+        "referencesFor302": true,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 5,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 1,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 1,
+          "support_decision": 0,
+          "keep_expected_unsupported": 0
+        },
+        "reason": "FOR-302 reconciles the FOR-293 analytic model against the FOR-301 runtime trace."
+      },
+      {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-a8-predispatch-filter-trace-for299.json",
+        "forNumber": 299,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 2,
+          "for293_text": 0,
+          "for293_artifact": 1,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 1,
+          "support_decision": 1,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-a8-srcinpayload-runtime-filter-for298.json",
+        "forNumber": 298,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 1,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 2,
+          "for293_text": 1,
+          "for293_artifact": 1,
+          "for293_predicate": 1
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 3,
+          "expected_unsupported": 1,
+          "support_decision": 1,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-active-aa-clip-coverage-for300.json",
+        "forNumber": 300,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 2,
+          "for293_text": 1,
+          "for293_artifact": 1,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 1,
+          "support_decision": 1,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-analytic-clip-model-reconciliation-for302.json",
+        "forNumber": 302,
+        "classification": "runtime-reconciliation",
+        "allowed": true,
+        "referencesFor301": true,
+        "referencesFor302": true,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 8,
+          "for293_text": 4,
+          "for293_artifact": 1,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 2,
+          "expected_unsupported": 1,
+          "support_decision": 1,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "FOR-302 reconciles the FOR-293 analytic model against the FOR-301 runtime trace."
+      },
+      {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-candidate-hole-overbreadth-for297.json",
+        "forNumber": 297,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 1,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 2,
+          "for293_text": 2,
+          "for293_artifact": 1,
+          "for293_predicate": 1
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 3,
+          "expected_unsupported": 1,
+          "support_decision": 1,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-expanded-red-drawrrect-runtime-trace-for294.json",
+        "forNumber": 294,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 2,
+          "for293_text": 2,
+          "for293_artifact": 1,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 3,
+          "expected_unsupported": 1,
+          "support_decision": 1,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-domain-vs-white-targets-for295.json",
+        "forNumber": 295,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 2,
+          "for293_text": 1,
+          "for293_artifact": 1,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 3,
+          "expected_unsupported": 1,
+          "support_decision": 1,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-drawrrect-runtime-visibility-audit-for293.json",
+        "forNumber": 293,
+        "classification": "historical",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 0,
+          "for293_text": 1,
+          "for293_artifact": 0,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 3,
+          "expected_unsupported": 1,
+          "support_decision": 1,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "Historical analytic model source or pre-FOR-293 foundation; preserved as evidence only."
+      },
+      {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-runtime-spatial-separation-for296.json",
+        "forNumber": 296,
+        "classification": "historical-comparison",
+        "allowed": true,
+        "referencesFor301": false,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 2,
+          "for293_text": 0,
+          "for293_artifact": 1,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 3,
+          "expected_unsupported": 1,
+          "support_decision": 1,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "Historical contradiction/comparison audit created before the FOR-301/FOR-302 reconciliation."
+      },
+      {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-skaaclip-band-trace-for301.json",
+        "forNumber": 301,
+        "classification": "runtime-reconciliation",
+        "allowed": true,
+        "referencesFor301": true,
+        "referencesFor302": false,
+        "markerCounts": {
+          "red_draw_runtime_domain": 0,
+          "clip_coverage": 0,
+          "difference_clip_coverage": 0,
+          "for293_symbol": 2,
+          "for293_text": 0,
+          "for293_artifact": 1,
+          "for293_predicate": 0
+        },
+        "promotionCounts": {
+          "promote": 0,
+          "support": 0,
+          "pass_row": 0,
+          "threshold": 1,
+          "expected_unsupported": 1,
+          "support_decision": 1,
+          "keep_expected_unsupported": 1
+        },
+        "reason": "FOR-301 runtime SkAAClip trace is the superseding runtime operand evidence."
+      }
+    ],
+    "unsafeConsumers": [],
+    "ambiguousConsumers": []
+  },
+  "strictPreservation": {
+    "productionRenderingChanged": false,
+    "normalRendererChanged": false,
+    "kotlinChanged": false,
+    "skAAClipOpChanged": false,
+    "ctmChanged": false,
+    "blendChanged": false,
+    "setPixelChanged": false,
+    "gpuOrWebGpuChanged": false,
+    "thresholdChanged": false,
+    "fallbackChanged": false,
+    "m60Promoted": false,
+    "historicalReportsRewritten": false
+  }
+}
