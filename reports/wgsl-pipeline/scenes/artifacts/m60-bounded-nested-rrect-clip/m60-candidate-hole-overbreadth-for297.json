@@ -1,0 +1,4645 @@
+{
+  "linear": "FOR-297",
+  "parent": "FOR-241",
+  "probe": "m60-candidate-hole-overbreadth",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/RGBA_8888/for294-for296-derived-diagnostic",
+  "sourceAudits": {
+    "for288": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-store-order-audit-for288.json",
+    "for289": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-runtime-write-chronology-for289.json",
+    "for290": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-expanded-runtime-write-trace-for290.json",
+    "for291": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-reconstructed-store-model-audit-for291.json",
+    "for292": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-source-payload-derivation-audit-for292.json",
+    "for293": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-drawrrect-runtime-visibility-audit-for293.json",
+    "for294": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-expanded-red-drawrrect-runtime-trace-for294.json",
+    "for295": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-domain-vs-white-targets-for295.json",
+    "for296": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-runtime-spatial-separation-for296.json",
+    "for294RawFinalReadback": "build/reports/for294/m60-expanded-red-drawrrect-runtime-trace-for294.raw.json"
+  },
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "RUNTIME_RED_DISPATCH_REQUIRES_ADDITIONAL_UNMODELED_FILTER",
+  "exactGap": null,
+  "decisionRationale": "candidate-minus-runtime-002 passes the same reconstructed FOR-293 mask/clip predicate as the red candidate domain and has nonzero mask alpha, clip coverage, and alpha-after-clip for every pixel. Its subzones are not unique: the original 59 targets are in draw_oval_outer_boundary, and FOR-294 observed 5548 red runtime dispatch pixels in that same subzone. The observed runtime red dispatch therefore requires an additional runtime write-eligibility filter that is not represented by the current mask/clip/subzone reconstruction artifacts.",
+  "route": {
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold",
+    "for288PrimaryClassification": "OTHER_LATER_WRITE_AFTER_RECONSTRUCTED_RED_STORE",
+    "for289Decision": "PROOF_INSUFFICIENT_RUNTIME_WRITE_CHRONOLOGY_GAP",
+    "for290Decision": "NO_RUNTIME_RED_ROOT_STORE_FOUND",
+    "for291Decision": "RECONSTRUCTION_SOURCE_PAYLOAD_MISMATCH",
+    "for292Decision": "RECONSTRUCTED_PAYLOAD_DRAW_MAPPING_MISMATCH",
+    "for293Decision": "RED_DRAWRRECT_RUNTIME_VISIBILITY_STILL_AMBIGUOUS",
+    "for294Decision": "RED_DRAWRRECT_RUNTIME_ROOT_DISPATCH_FOUND_OUTSIDE_TARGETS",
+    "for295Decision": "ORIGINAL_TARGETS_OUTSIDE_RED_RUNTIME_DISPATCH_DOMAIN",
+    "for296Decision": "RED_RUNTIME_DISPATCH_DOMAIN_SPATIALLY_SEPARATE_FROM_ORIGINAL_TARGET_CLUSTER"
+  },
+  "reconstructedModel": {
+    "drawOvalDeviceBounds": [
+      8,
+      8,
+      584,
+      584
+    ],
+    "differenceOvalDeviceBounds": [
+      16,
+      16,
+      576,
+      576
+    ],
+    "maskFilterBounds": {
+      "left": 2,
+      "top": 2,
+      "right": 590,
+      "bottom": 590,
+      "margin": 5
+    },
+    "candidatePredicate": "mask_alpha > 0 && clip_coverage > 0 && alpha_after_clip > 0",
+    "candidatePixels": 22424,
+    "runtimeRedDispatchPixels": 9088,
+    "candidateMinusRuntimePixels": 13336,
+    "runtimeOutsideCandidatePixels": 0,
+    "candidateBounds": {
+      "left": 4,
+      "top": 4,
+      "right": 588,
+      "bottom": 588,
+      "rightInclusive": 587,
+      "bottomInclusive": 587
+    },
+    "runtimeRedDispatchBounds": {
+      "left": 4,
+      "top": 4,
+      "right": 588,
+      "bottom": 588,
+      "rightInclusive": 587,
+      "bottomInclusive": 587
+    },
+    "candidateMinusRuntimeBounds": {
+      "left": 4,
+      "top": 4,
+      "right": 588,
+      "bottom": 588,
+      "rightInclusive": 587,
+      "bottomInclusive": 587
+    }
+  },
+  "targetCluster": {
+    "pixels": 59,
+    "bounds": {
+      "left": 94,
+      "top": 84,
+      "right": 105,
+      "bottom": 94,
+      "rightInclusive": 104,
+      "bottomInclusive": 93
+    },
+    "insideRedCandidateDomain": 59,
+    "insideRedRuntimeDispatchDomain": 0,
+    "insideTargetHoleComponent": 59,
+    "finalReadback": {
+      "finalWhiteLayerPixels": 59,
+      "finalRedTintPixels": 0,
+      "finalOtherPixels": 0,
+      "topFinalReadbackColors": [
+        {
+          "rgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "pixels": 59
+        }
+      ]
+    },
+    "maskClipAlphaStats": {
+      "maskAlpha": {
+        "pixels": 59,
+        "min": 6,
+        "max": 251,
+        "average": 158.694915,
+        "zeroPixels": 0,
+        "nonZeroPixels": 59,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 250,
+            "pixels": 3
+          },
+          {
+            "value": 249,
+            "pixels": 2
+          },
+          {
+            "value": 18,
+            "pixels": 2
+          },
+          {
+            "value": 134,
+            "pixels": 2
+          },
+          {
+            "value": 219,
+            "pixels": 2
+          },
+          {
+            "value": 244,
+            "pixels": 2
+          },
+          {
+            "value": 6,
+            "pixels": 2
+          },
+          {
+            "value": 183,
+            "pixels": 2
+          }
+        ]
+      },
+      "clipCoverage": {
+        "pixels": 59,
+        "min": 255,
+        "max": 255,
+        "average": 255.0,
+        "zeroPixels": 0,
+        "nonZeroPixels": 59,
+        "fullPixels": 59,
+        "topValues": [
+          {
+            "value": 255,
+            "pixels": 59
+          }
+        ]
+      },
+      "alphaAfterClip": {
+        "pixels": 59,
+        "min": 6,
+        "max": 251,
+        "average": 158.694915,
+        "zeroPixels": 0,
+        "nonZeroPixels": 59,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 250,
+            "pixels": 3
+          },
+          {
+            "value": 249,
+            "pixels": 2
+          },
+          {
+            "value": 18,
+            "pixels": 2
+          },
+          {
+            "value": 134,
+            "pixels": 2
+          },
+          {
+            "value": 219,
+            "pixels": 2
+          },
+          {
+            "value": 244,
+            "pixels": 2
+          },
+          {
+            "value": 6,
+            "pixels": 2
+          },
+          {
+            "value": 183,
+            "pixels": 2
+          }
+        ]
+      },
+      "allPixelsPassFor293CandidatePredicate": true
+    },
+    "subzonePixels": {
+      "draw_oval_outer_boundary": 59,
+      "difference_oval_inner_boundary": 0,
+      "halo_interior": 0,
+      "outside_draw_oval": 0,
+      "blurred_content_envelope": 59
+    },
+    "distanceToAllRedRuntimeDispatch": {
+      "pixels": 59,
+      "minEuclidean": 70.936591,
+      "maxEuclidean": 84.386018,
+      "averageEuclidean": 77.870976,
+      "minManhattan": 100,
+      "maxManhattan": 119,
+      "minChebyshev": 54,
+      "maxChebyshev": 64,
+      "nearestPixel": {
+        "x": 104,
+        "y": 84,
+        "nearest": {
+          "x": 158,
+          "y": 38,
+          "dx": 54,
+          "dy": -46,
+          "euclidean": 70.936591,
+          "manhattan": 100,
+          "chebyshev": 54
+        }
+      }
+    },
+    "distanceToRedRuntimeComponents": [
+      {
+        "componentId": "red-runtime-000",
+        "pixels": 2275,
+        "bounds": {
+          "left": 158,
+          "top": 4,
+          "right": 434,
+          "bottom": 39,
+          "rightInclusive": 433,
+          "bottomInclusive": 38
+        },
+        "distanceFromOriginalTargetCluster": {
+          "pixels": 59,
+          "minEuclidean": 70.936591,
+          "maxEuclidean": 84.386018,
+          "averageEuclidean": 77.870976,
+          "minManhattan": 100,
+          "maxManhattan": 119,
+          "minChebyshev": 54,
+          "maxChebyshev": 64,
+          "nearestPixel": {
+            "x": 104,
+            "y": 84,
+            "nearest": {
+              "x": 158,
+              "y": 38,
+              "dx": 54,
+              "dy": -46,
+              "euclidean": 70.936591,
+              "manhattan": 100,
+              "chebyshev": 54
+            }
+          }
+        }
+      },
+      {
+        "componentId": "red-runtime-002",
+        "pixels": 2270,
+        "bounds": {
+          "left": 4,
+          "top": 158,
+          "right": 39,
+          "bottom": 434,
+          "rightInclusive": 38,
+          "bottomInclusive": 433
+        },
+        "distanceFromOriginalTargetCluster": {
+          "pixels": 59,
+          "minEuclidean": 85.79627,
+          "maxEuclidean": 99.156442,
+          "averageEuclidean": 92.617708,
+          "minManhattan": 121,
+          "maxManhattan": 140,
+          "minChebyshev": 65,
+          "maxChebyshev": 74,
+          "nearestPixel": {
+            "x": 94,
+            "y": 93,
+            "nearest": {
+              "x": 38,
+              "y": 158,
+              "dx": -56,
+              "dy": 65,
+              "euclidean": 85.79627,
+              "manhattan": 121,
+              "chebyshev": 65
+            }
+          }
+        }
+      },
+      {
+        "componentId": "red-runtime-003",
+        "pixels": 2268,
+        "bounds": {
+          "left": 553,
+          "top": 158,
+          "right": 588,
+          "bottom": 434,
+          "rightInclusive": 587,
+          "bottomInclusive": 433
+        },
+        "distanceFromOriginalTargetCluster": {
+          "pixels": 59,
+          "minEuclidean": 455.057139,
+          "maxEuclidean": 464.612742,
+          "averageEuclidean": 460.877967,
+          "minManhattan": 523,
+          "maxManhattan": 531,
+          "minChebyshev": 449,
+          "maxChebyshev": 459,
+          "nearestPixel": {
+            "x": 104,
+            "y": 84,
+            "nearest": {
+              "x": 553,
+              "y": 158,
+              "dx": 449,
+              "dy": 74,
+              "euclidean": 455.057139,
+              "manhattan": 523,
+              "chebyshev": 449
+            }
+          }
+        }
+      },
+      {
+        "componentId": "red-runtime-001",
+        "pixels": 2275,
+        "bounds": {
+          "left": 158,
+          "top": 553,
+          "right": 434,
+          "bottom": 588,
+          "rightInclusive": 433,
+          "bottomInclusive": 587
+        },
+        "distanceFromOriginalTargetCluster": {
+          "pixels": 59,
+          "minEuclidean": 464.430834,
+          "maxEuclidean": 473.080331,
+          "averageEuclidean": 469.770919,
+          "minManhattan": 523,
+          "maxManhattan": 531,
+          "minChebyshev": 460,
+          "maxChebyshev": 469,
+          "nearestPixel": {
+            "x": 94,
+            "y": 93,
+            "nearest": {
+              "x": 158,
+              "y": 553,
+              "dx": 64,
+              "dy": 460,
+              "euclidean": 464.430834,
+              "manhattan": 524,
+              "chebyshev": 460
+            }
+          }
+        }
+      }
+    ],
+    "neighborhoodByChebyshevRadius": [
+      {
+        "chebyshevRadius": 0,
+        "sampledPixels": 59,
+        "redCandidatePixels": 59,
+        "redRuntimeDispatchPixels": 0,
+        "candidateMinusRuntimeTargetHolePixels": 59,
+        "finalWhiteLayerPixels": 59,
+        "finalRedTintPixels": 0
+      },
+      {
+        "chebyshevRadius": 4,
+        "sampledPixels": 291,
+        "redCandidatePixels": 246,
+        "redRuntimeDispatchPixels": 0,
+        "candidateMinusRuntimeTargetHolePixels": 246,
+        "finalWhiteLayerPixels": 246,
+        "finalRedTintPixels": 0
+      },
+      {
+        "chebyshevRadius": 8,
+        "sampledPixels": 651,
+        "redCandidatePixels": 386,
+        "redRuntimeDispatchPixels": 0,
+        "candidateMinusRuntimeTargetHolePixels": 386,
+        "finalWhiteLayerPixels": 386,
+        "finalRedTintPixels": 0
+      },
+      {
+        "chebyshevRadius": 16,
+        "sampledPixels": 1755,
+        "redCandidatePixels": 668,
+        "redRuntimeDispatchPixels": 0,
+        "candidateMinusRuntimeTargetHolePixels": 668,
+        "finalWhiteLayerPixels": 668,
+        "finalRedTintPixels": 0
+      },
+      {
+        "chebyshevRadius": 32,
+        "sampledPixels": 5499,
+        "redCandidatePixels": 1215,
+        "redRuntimeDispatchPixels": 0,
+        "candidateMinusRuntimeTargetHolePixels": 1215,
+        "finalWhiteLayerPixels": 1215,
+        "finalRedTintPixels": 0
+      },
+      {
+        "chebyshevRadius": 64,
+        "sampledPixels": 19131,
+        "redCandidatePixels": 2165,
+        "redRuntimeDispatchPixels": 20,
+        "candidateMinusRuntimeTargetHolePixels": 2145,
+        "finalWhiteLayerPixels": 2165,
+        "finalRedTintPixels": 0
+      },
+      {
+        "chebyshevRadius": 72,
+        "sampledPixels": 23819,
+        "redCandidatePixels": 2390,
+        "redRuntimeDispatchPixels": 56,
+        "candidateMinusRuntimeTargetHolePixels": 2333,
+        "finalWhiteLayerPixels": 2384,
+        "finalRedTintPixels": 0
+      }
+    ],
+    "payloadSourceComparisonSample": [
+      {
+        "x": 96,
+        "y": 84,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 6,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            6
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            249,
+            249,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 62,
+          "dy": -46,
+          "euclidean": 77.201036,
+          "manhattan": 108,
+          "chebyshev": 62
+        }
+      },
+      {
+        "x": 97,
+        "y": 84,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 18,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            18
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            237,
+            237,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 61,
+          "dy": -46,
+          "euclidean": 76.400262,
+          "manhattan": 107,
+          "chebyshev": 61
+        }
+      },
+      {
+        "x": 98,
+        "y": 84,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 42,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            42
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            213,
+            213,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 60,
+          "dy": -46,
+          "euclidean": 75.604233,
+          "manhattan": 106,
+          "chebyshev": 60
+        }
+      },
+      {
+        "x": 99,
+        "y": 84,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 79,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            79
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            176,
+            176,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 59,
+          "dy": -46,
+          "euclidean": 74.8131,
+          "manhattan": 105,
+          "chebyshev": 59
+        }
+      },
+      {
+        "x": 100,
+        "y": 84,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 126,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            126
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            129,
+            129,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 58,
+          "dy": -46,
+          "euclidean": 74.027022,
+          "manhattan": 104,
+          "chebyshev": 58
+        }
+      },
+      {
+        "x": 101,
+        "y": 84,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 174,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            174
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            81,
+            81,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 57,
+          "dy": -46,
+          "euclidean": 73.24616,
+          "manhattan": 103,
+          "chebyshev": 57
+        }
+      },
+      {
+        "x": 102,
+        "y": 84,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 212,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            212
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            43,
+            43,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 56,
+          "dy": -46,
+          "euclidean": 72.470684,
+          "manhattan": 102,
+          "chebyshev": 56
+        }
+      },
+      {
+        "x": 103,
+        "y": 84,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 236,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            236
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            19,
+            19,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 55,
+          "dy": -46,
+          "euclidean": 71.700767,
+          "manhattan": 101,
+          "chebyshev": 55
+        }
+      },
+      {
+        "x": 104,
+        "y": 84,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 248,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            248
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            7,
+            7,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 54,
+          "dy": -46,
+          "euclidean": 70.936591,
+          "manhattan": 100,
+          "chebyshev": 54
+        }
+      },
+      {
+        "x": 95,
+        "y": 85,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 6,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            6
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            249,
+            249,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 63,
+          "dy": -47,
+          "euclidean": 78.600254,
+          "manhattan": 110,
+          "chebyshev": 63
+        }
+      },
+      {
+        "x": 96,
+        "y": 85,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 18,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            18
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            237,
+            237,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 62,
+          "dy": -47,
+          "euclidean": 77.801028,
+          "manhattan": 109,
+          "chebyshev": 62
+        }
+      },
+      {
+        "x": 97,
+        "y": 85,
+        "reconstructed": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRRect(rr, paint)",
+          "paintSource": "maskFilter=SkBlurMaskFilter.Make + colorFilter=Blend(SK_ColorRED,kSrcIn)",
+          "maskFilterBranch": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "payloadFormula": "src = transformPaintColor(applyColorFilter(colorFilter, maskedA<<24 | paint.rgb))",
+          "maskAAfterBlur": 43,
+          "coverageAppliedInBlend": 255,
+          "dispatchInputMode": "SkBlendMode.kSrcOver",
+          "dispatchInputSrcRgba": [
+            255,
+            0,
+            0,
+            43
+          ],
+          "writeBranch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+          "valueWrittenRgba": [
+            255,
+            212,
+            212,
+            255
+          ]
+        },
+        "runtimeRoot": {
+          "mappedDraw": "BlurredClippedCircleGM.c.drawRect(clipRect1, whitePaint)",
+          "paintSource": "whitePaint color=SK_ColorWHITE blendMode=kSrc",
+          "maskFilterBranch": null,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "callsite": "SkBitmapDevice.blend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rootDevice": true,
+          "deviceKind": "root"
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "nearestRedRuntimeDispatch": {
+          "x": 158,
+          "y": 38,
+          "dx": 61,
+          "dy": -47,
+          "euclidean": 77.006493,
+          "manhattan": 108,
+          "chebyshev": 61
+        }
+      }
+    ]
+  },
+  "componentComparison": {
+    "candidateMinusRuntimeComponentCount": 80,
+    "targetHoleComponent": {
+      "id": "candidate-minus-runtime-002",
+      "pixels": 3293,
+      "bounds": {
+        "left": 18,
+        "top": 18,
+        "right": 262,
+        "bottom": 262,
+        "rightInclusive": 261,
+        "bottomInclusive": 261
+      },
+      "sampleCoordinates": [
+        {
+          "x": 250,
+          "y": 18
+        },
+        {
+          "x": 251,
+          "y": 18
+        },
+        {
+          "x": 252,
+          "y": 18
+        },
+        {
+          "x": 253,
+          "y": 18
+        },
+        {
+          "x": 254,
+          "y": 18
+        },
+        {
+          "x": 255,
+          "y": 18
+        },
+        {
+          "x": 256,
+          "y": 18
+        },
+        {
+          "x": 257,
+          "y": 18
+        }
+      ],
+      "originalTargetPixels": 59,
+      "maskClipAlphaStats": {
+        "maskAlpha": {
+          "pixels": 3293,
+          "min": 1,
+          "max": 255,
+          "average": 195.074097,
+          "zeroPixels": 0,
+          "nonZeroPixels": 3293,
+          "fullPixels": 1517,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 1517
+            },
+            {
+              "value": 254,
+              "pixels": 145
+            },
+            {
+              "value": 1,
+              "pixels": 82
+            },
+            {
+              "value": 253,
+              "pixels": 68
+            },
+            {
+              "value": 2,
+              "pixels": 46
+            },
+            {
+              "value": 252,
+              "pixels": 40
+            },
+            {
+              "value": 251,
+              "pixels": 40
+            },
+            {
+              "value": 250,
+              "pixels": 38
+            }
+          ]
+        },
+        "clipCoverage": {
+          "pixels": 3293,
+          "min": 16,
+          "max": 255,
+          "average": 240.901002,
+          "zeroPixels": 0,
+          "nonZeroPixels": 3293,
+          "fullPixels": 2937,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2937
+            },
+            {
+              "value": 16,
+              "pixels": 44
+            },
+            {
+              "value": 64,
+              "pixels": 32
+            },
+            {
+              "value": 192,
+              "pixels": 32
+            },
+            {
+              "value": 160,
+              "pixels": 32
+            },
+            {
+              "value": 208,
+              "pixels": 28
+            },
+            {
+              "value": 96,
+              "pixels": 26
+            },
+            {
+              "value": 240,
+              "pixels": 26
+            }
+          ]
+        },
+        "alphaAfterClip": {
+          "pixels": 3293,
+          "min": 1,
+          "max": 255,
+          "average": 180.975099,
+          "zeroPixels": 0,
+          "nonZeroPixels": 3293,
+          "fullPixels": 1161,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 1161
+            },
+            {
+              "value": 254,
+              "pixels": 145
+            },
+            {
+              "value": 1,
+              "pixels": 82
+            },
+            {
+              "value": 253,
+              "pixels": 68
+            },
+            {
+              "value": 16,
+              "pixels": 47
+            },
+            {
+              "value": 2,
+              "pixels": 46
+            },
+            {
+              "value": 252,
+              "pixels": 40
+            },
+            {
+              "value": 251,
+              "pixels": 40
+            }
+          ]
+        },
+        "allPixelsPassFor293CandidatePredicate": true
+      },
+      "subzonePixels": {
+        "draw_oval_outer_boundary": 1326,
+        "difference_oval_inner_boundary": 1220,
+        "halo_interior": 580,
+        "outside_draw_oval": 167,
+        "blurred_content_envelope": 3126
+      },
+      "finalReadback": {
+        "finalWhiteLayerPixels": 3293,
+        "finalRedTintPixels": 0,
+        "finalOtherPixels": 0,
+        "topFinalReadbackColors": [
+          {
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "pixels": 3293
+          }
+        ]
+      },
+      "runtimeEvents": {
+        "rootEventCount": 6586,
+        "rootSourceCounts": {
+          "SkBitmap.eraseColor": 3293,
+          "SkBitmapDevice.dispatchBlend": 3293
+        },
+        "rootModeCounts": {
+          "direct": 3293,
+          "kSrc": 3293
+        },
+        "redRuntimeDispatchEventCount": 0,
+        "redRuntimeDispatchPixelCount": 0,
+        "firstRootEvent": {
+          "index": 1667,
+          "x": 250,
+          "y": 18,
+          "source": "SkBitmap.eraseColor",
+          "branch": "SkBitmap.eraseColor.kRGBA_8888.fill",
+          "mode": "direct",
+          "coverage": 255,
+          "srcInputRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueBeforeRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "valueWrittenRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueReadAfterRgba": [
+            198,
+            198,
+            198,
+            255
+          ]
+        },
+        "lastRootEvent": {
+          "index": 32774,
+          "x": 18,
+          "y": 261,
+          "source": "SkBitmapDevice.dispatchBlend",
+          "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+          "mode": "kSrc",
+          "coverage": 255,
+          "srcInputRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "srcAfterCoverageRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueBeforeRgba": [
+            198,
+            198,
+            198,
+            255
+          ],
+          "valueWrittenRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "valueReadAfterRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "firstRedRuntimeDispatch": null
+      }
+    },
+    "redRuntimeComponentCount": 4,
+    "redRuntimeComponents": [
+      {
+        "id": "red-runtime-000",
+        "pixels": 2275,
+        "bounds": {
+          "left": 158,
+          "top": 4,
+          "right": 434,
+          "bottom": 39,
+          "rightInclusive": 433,
+          "bottomInclusive": 38
+        },
+        "sampleCoordinates": [
+          {
+            "x": 279,
+            "y": 4
+          },
+          {
+            "x": 280,
+            "y": 4
+          },
+          {
+            "x": 281,
+            "y": 4
+          },
+          {
+            "x": 282,
+            "y": 4
+          },
+          {
+            "x": 283,
+            "y": 4
+          },
+          {
+            "x": 284,
+            "y": 4
+          },
+          {
+            "x": 285,
+            "y": 4
+          },
+          {
+            "x": 286,
+            "y": 4
+          }
+        ],
+        "originalTargetPixels": 0,
+        "maskClipAlphaStats": {
+          "maskAlpha": {
+            "pixels": 2275,
+            "min": 1,
+            "max": 255,
+            "average": 138.114286,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 432,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 432
+              },
+              {
+                "value": 1,
+                "pixels": 154
+              },
+              {
+                "value": 254,
+                "pixels": 94
+              },
+              {
+                "value": 2,
+                "pixels": 70
+              },
+              {
+                "value": 4,
+                "pixels": 48
+              },
+              {
+                "value": 253,
+                "pixels": 36
+              },
+              {
+                "value": 7,
+                "pixels": 34
+              },
+              {
+                "value": 5,
+                "pixels": 34
+              }
+            ]
+          },
+          "clipCoverage": {
+            "pixels": 2275,
+            "min": 64,
+            "max": 255,
+            "average": 253.757802,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 2253,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2253
+              },
+              {
+                "value": 192,
+                "pixels": 6
+              },
+              {
+                "value": 128,
+                "pixels": 6
+              },
+              {
+                "value": 64,
+                "pixels": 6
+              },
+              {
+                "value": 144,
+                "pixels": 2
+              },
+              {
+                "value": 96,
+                "pixels": 2
+              }
+            ]
+          },
+          "alphaAfterClip": {
+            "pixels": 2275,
+            "min": 1,
+            "max": 255,
+            "average": 136.872088,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 410,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 410
+              },
+              {
+                "value": 1,
+                "pixels": 154
+              },
+              {
+                "value": 254,
+                "pixels": 94
+              },
+              {
+                "value": 2,
+                "pixels": 70
+              },
+              {
+                "value": 4,
+                "pixels": 48
+              },
+              {
+                "value": 253,
+                "pixels": 36
+              },
+              {
+                "value": 7,
+                "pixels": 34
+              },
+              {
+                "value": 5,
+                "pixels": 34
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "subzonePixels": {
+          "draw_oval_outer_boundary": 1387,
+          "difference_oval_inner_boundary": 298,
+          "halo_interior": 312,
+          "outside_draw_oval": 278,
+          "blurred_content_envelope": 1997
+        },
+        "finalReadback": {
+          "finalWhiteLayerPixels": 496,
+          "finalRedTintPixels": 1526,
+          "finalOtherPixels": 253,
+          "topFinalReadbackColors": [
+            {
+              "rgba": [
+                202,
+                59,
+                19,
+                255
+              ],
+              "pixels": 327
+            },
+            {
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "pixels": 172
+            },
+            {
+              "rgba": [
+                202,
+                60,
+                20,
+                255
+              ],
+              "pixels": 76
+            },
+            {
+              "rgba": [
+                254,
+                250,
+                249,
+                255
+              ],
+              "pixels": 76
+            },
+            {
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "pixels": 68
+            },
+            {
+              "rgba": [
+                254,
+                252,
+                251,
+                255
+              ],
+              "pixels": 44
+            },
+            {
+              "rgba": [
+                254,
+                253,
+                252,
+                255
+              ],
+              "pixels": 42
+            },
+            {
+              "rgba": [
+                242,
+                206,
+                196,
+                255
+              ],
+              "pixels": 41
+            }
+          ]
+        },
+        "runtimeEvents": {
+          "rootEventCount": 6825,
+          "rootSourceCounts": {
+            "SkBitmap.eraseColor": 2275,
+            "SkBitmapDevice.dispatchBlend": 2275,
+            "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload": 2275
+          },
+          "rootModeCounts": {
+            "direct": 2275,
+            "kSrc": 2275,
+            "kSrcOver": 2275
+          },
+          "redRuntimeDispatchEventCount": 2275,
+          "redRuntimeDispatchPixelCount": 2275,
+          "firstRootEvent": {
+            "index": 2,
+            "x": 279,
+            "y": 4,
+            "source": "SkBitmap.eraseColor",
+            "branch": "SkBitmap.eraseColor.kRGBA_8888.fill",
+            "mode": "direct",
+            "coverage": 255,
+            "srcInputRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueBeforeRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "valueWrittenRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueReadAfterRgba": [
+              198,
+              198,
+              198,
+              255
+            ]
+          },
+          "lastRootEvent": {
+            "index": 47122,
+            "x": 433,
+            "y": 38,
+            "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+            "branch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+            "mode": "kSrcOver",
+            "coverage": 240,
+            "srcInputRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "srcAfterCoverageRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "valueBeforeRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              254,
+              254,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              254,
+              254,
+              255
+            ]
+          },
+          "firstRedRuntimeDispatch": {
+            "index": 44848,
+            "x": 279,
+            "y": 4,
+            "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+            "branch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+            "mode": "kSrcOver",
+            "coverage": 255,
+            "srcInputRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "srcAfterCoverageRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "valueBeforeRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              254,
+              254,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              254,
+              254,
+              255
+            ]
+          }
+        }
+      },
+      {
+        "id": "red-runtime-001",
+        "pixels": 2275,
+        "bounds": {
+          "left": 158,
+          "top": 553,
+          "right": 434,
+          "bottom": 588,
+          "rightInclusive": 433,
+          "bottomInclusive": 587
+        },
+        "sampleCoordinates": [
+          {
+            "x": 158,
+            "y": 553
+          },
+          {
+            "x": 159,
+            "y": 553
+          },
+          {
+            "x": 160,
+            "y": 553
+          },
+          {
+            "x": 431,
+            "y": 553
+          },
+          {
+            "x": 432,
+            "y": 553
+          },
+          {
+            "x": 433,
+            "y": 553
+          },
+          {
+            "x": 160,
+            "y": 554
+          },
+          {
+            "x": 161,
+            "y": 554
+          }
+        ],
+        "originalTargetPixels": 0,
+        "maskClipAlphaStats": {
+          "maskAlpha": {
+            "pixels": 2275,
+            "min": 1,
+            "max": 255,
+            "average": 138.114286,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 432,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 432
+              },
+              {
+                "value": 1,
+                "pixels": 154
+              },
+              {
+                "value": 254,
+                "pixels": 94
+              },
+              {
+                "value": 2,
+                "pixels": 70
+              },
+              {
+                "value": 4,
+                "pixels": 48
+              },
+              {
+                "value": 253,
+                "pixels": 36
+              },
+              {
+                "value": 5,
+                "pixels": 34
+              },
+              {
+                "value": 7,
+                "pixels": 34
+              }
+            ]
+          },
+          "clipCoverage": {
+            "pixels": 2275,
+            "min": 64,
+            "max": 255,
+            "average": 253.757802,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 2253,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2253
+              },
+              {
+                "value": 192,
+                "pixels": 6
+              },
+              {
+                "value": 128,
+                "pixels": 6
+              },
+              {
+                "value": 64,
+                "pixels": 6
+              },
+              {
+                "value": 96,
+                "pixels": 2
+              },
+              {
+                "value": 144,
+                "pixels": 2
+              }
+            ]
+          },
+          "alphaAfterClip": {
+            "pixels": 2275,
+            "min": 1,
+            "max": 255,
+            "average": 136.872088,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 410,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 410
+              },
+              {
+                "value": 1,
+                "pixels": 154
+              },
+              {
+                "value": 254,
+                "pixels": 94
+              },
+              {
+                "value": 2,
+                "pixels": 70
+              },
+              {
+                "value": 4,
+                "pixels": 48
+              },
+              {
+                "value": 253,
+                "pixels": 36
+              },
+              {
+                "value": 5,
+                "pixels": 34
+              },
+              {
+                "value": 7,
+                "pixels": 34
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "subzonePixels": {
+          "draw_oval_outer_boundary": 1387,
+          "difference_oval_inner_boundary": 298,
+          "halo_interior": 312,
+          "outside_draw_oval": 278,
+          "blurred_content_envelope": 1997
+        },
+        "finalReadback": {
+          "finalWhiteLayerPixels": 496,
+          "finalRedTintPixels": 1526,
+          "finalOtherPixels": 253,
+          "topFinalReadbackColors": [
+            {
+              "rgba": [
+                202,
+                59,
+                19,
+                255
+              ],
+              "pixels": 327
+            },
+            {
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "pixels": 172
+            },
+            {
+              "rgba": [
+                202,
+                60,
+                20,
+                255
+              ],
+              "pixels": 76
+            },
+            {
+              "rgba": [
+                254,
+                250,
+                249,
+                255
+              ],
+              "pixels": 76
+            },
+            {
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "pixels": 68
+            },
+            {
+              "rgba": [
+                254,
+                252,
+                251,
+                255
+              ],
+              "pixels": 44
+            },
+            {
+              "rgba": [
+                254,
+                253,
+                252,
+                255
+              ],
+              "pixels": 42
+            },
+            {
+              "rgba": [
+                242,
+                206,
+                196,
+                255
+              ],
+              "pixels": 41
+            }
+          ]
+        },
+        "runtimeEvents": {
+          "rootEventCount": 6825,
+          "rootSourceCounts": {
+            "SkBitmap.eraseColor": 2275,
+            "SkBitmapDevice.dispatchBlend": 2275,
+            "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload": 2275
+          },
+          "rootModeCounts": {
+            "direct": 2275,
+            "kSrc": 2275,
+            "kSrcOver": 2275
+          },
+          "redRuntimeDispatchEventCount": 2275,
+          "redRuntimeDispatchPixelCount": 2275,
+          "firstRootEvent": {
+            "index": 19194,
+            "x": 158,
+            "y": 553,
+            "source": "SkBitmap.eraseColor",
+            "branch": "SkBitmap.eraseColor.kRGBA_8888.fill",
+            "mode": "direct",
+            "coverage": 255,
+            "srcInputRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueBeforeRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "valueWrittenRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueReadAfterRgba": [
+              198,
+              198,
+              198,
+              255
+            ]
+          },
+          "lastRootEvent": {
+            "index": 53935,
+            "x": 312,
+            "y": 587,
+            "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+            "branch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+            "mode": "kSrcOver",
+            "coverage": 255,
+            "srcInputRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "srcAfterCoverageRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "valueBeforeRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              254,
+              254,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              254,
+              254,
+              255
+            ]
+          },
+          "firstRedRuntimeDispatch": {
+            "index": 51661,
+            "x": 158,
+            "y": 553,
+            "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+            "branch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+            "mode": "kSrcOver",
+            "coverage": 240,
+            "srcInputRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "srcAfterCoverageRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "valueBeforeRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              254,
+              254,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              254,
+              254,
+              255
+            ]
+          }
+        }
+      },
+      {
+        "id": "red-runtime-002",
+        "pixels": 2270,
+        "bounds": {
+          "left": 4,
+          "top": 158,
+          "right": 39,
+          "bottom": 434,
+          "rightInclusive": 38,
+          "bottomInclusive": 433
+        },
+        "sampleCoordinates": [
+          {
+            "x": 38,
+            "y": 158
+          },
+          {
+            "x": 38,
+            "y": 159
+          },
+          {
+            "x": 37,
+            "y": 160
+          },
+          {
+            "x": 38,
+            "y": 160
+          },
+          {
+            "x": 37,
+            "y": 161
+          },
+          {
+            "x": 36,
+            "y": 162
+          },
+          {
+            "x": 37,
+            "y": 162
+          },
+          {
+            "x": 36,
+            "y": 163
+          }
+        ],
+        "originalTargetPixels": 0,
+        "maskClipAlphaStats": {
+          "maskAlpha": {
+            "pixels": 2270,
+            "min": 1,
+            "max": 255,
+            "average": 138.52511,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2270,
+            "fullPixels": 436,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 436
+              },
+              {
+                "value": 1,
+                "pixels": 142
+              },
+              {
+                "value": 254,
+                "pixels": 88
+              },
+              {
+                "value": 2,
+                "pixels": 60
+              },
+              {
+                "value": 3,
+                "pixels": 48
+              },
+              {
+                "value": 4,
+                "pixels": 42
+              },
+              {
+                "value": 5,
+                "pixels": 38
+              },
+              {
+                "value": 252,
+                "pixels": 38
+              }
+            ]
+          },
+          "clipCoverage": {
+            "pixels": 2270,
+            "min": 64,
+            "max": 255,
+            "average": 253.755066,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2270,
+            "fullPixels": 2248,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2248
+              },
+              {
+                "value": 192,
+                "pixels": 6
+              },
+              {
+                "value": 64,
+                "pixels": 6
+              },
+              {
+                "value": 128,
+                "pixels": 6
+              },
+              {
+                "value": 144,
+                "pixels": 2
+              },
+              {
+                "value": 96,
+                "pixels": 2
+              }
+            ]
+          },
+          "alphaAfterClip": {
+            "pixels": 2270,
+            "min": 1,
+            "max": 255,
+            "average": 137.280176,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2270,
+            "fullPixels": 414,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 414
+              },
+              {
+                "value": 1,
+                "pixels": 142
+              },
+              {
+                "value": 254,
+                "pixels": 88
+              },
+              {
+                "value": 2,
+                "pixels": 60
+              },
+              {
+                "value": 3,
+                "pixels": 48
+              },
+              {
+                "value": 4,
+                "pixels": 42
+              },
+              {
+                "value": 5,
+                "pixels": 38
+              },
+              {
+                "value": 252,
+                "pixels": 38
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "subzonePixels": {
+          "draw_oval_outer_boundary": 1388,
+          "difference_oval_inner_boundary": 298,
+          "halo_interior": 312,
+          "outside_draw_oval": 272,
+          "blurred_content_envelope": 1998
+        },
+        "finalReadback": {
+          "finalWhiteLayerPixels": 488,
+          "finalRedTintPixels": 1528,
+          "finalOtherPixels": 254,
+          "topFinalReadbackColors": [
+            {
+              "rgba": [
+                202,
+                59,
+                19,
+                255
+              ],
+              "pixels": 326
+            },
+            {
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "pixels": 166
+            },
+            {
+              "rgba": [
+                202,
+                60,
+                20,
+                255
+              ],
+              "pixels": 78
+            },
+            {
+              "rgba": [
+                254,
+                250,
+                249,
+                255
+              ],
+              "pixels": 70
+            },
+            {
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "pixels": 60
+            },
+            {
+              "rgba": [
+                254,
+                253,
+                252,
+                255
+              ],
+              "pixels": 54
+            },
+            {
+              "rgba": [
+                254,
+                252,
+                251,
+                255
+              ],
+              "pixels": 46
+            },
+            {
+              "rgba": [
+                242,
+                206,
+                196,
+                255
+              ],
+              "pixels": 40
+            }
+          ]
+        },
+        "runtimeEvents": {
+          "rootEventCount": 6810,
+          "rootSourceCounts": {
+            "SkBitmap.eraseColor": 2270,
+            "SkBitmapDevice.dispatchBlend": 2270,
+            "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload": 2270
+          },
+          "rootModeCounts": {
+            "direct": 2270,
+            "kSrc": 2270,
+            "kSrcOver": 2270
+          },
+          "redRuntimeDispatchEventCount": 2270,
+          "redRuntimeDispatchPixelCount": 2270,
+          "firstRootEvent": {
+            "index": 7620,
+            "x": 38,
+            "y": 158,
+            "source": "SkBitmap.eraseColor",
+            "branch": "SkBitmap.eraseColor.kRGBA_8888.fill",
+            "mode": "direct",
+            "coverage": 255,
+            "srcInputRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueBeforeRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "valueWrittenRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueReadAfterRgba": [
+              198,
+              198,
+              198,
+              255
+            ]
+          },
+          "lastRootEvent": {
+            "index": 51659,
+            "x": 38,
+            "y": 433,
+            "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+            "branch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+            "mode": "kSrcOver",
+            "coverage": 240,
+            "srcInputRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "srcAfterCoverageRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "valueBeforeRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              254,
+              254,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              254,
+              254,
+              255
+            ]
+          },
+          "firstRedRuntimeDispatch": {
+            "index": 47123,
+            "x": 38,
+            "y": 158,
+            "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+            "branch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+            "mode": "kSrcOver",
+            "coverage": 240,
+            "srcInputRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "srcAfterCoverageRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "valueBeforeRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              254,
+              254,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              254,
+              254,
+              255
+            ]
+          }
+        }
+      },
+      {
+        "id": "red-runtime-003",
+        "pixels": 2268,
+        "bounds": {
+          "left": 553,
+          "top": 158,
+          "right": 588,
+          "bottom": 434,
+          "rightInclusive": 587,
+          "bottomInclusive": 433
+        },
+        "sampleCoordinates": [
+          {
+            "x": 553,
+            "y": 158
+          },
+          {
+            "x": 553,
+            "y": 159
+          },
+          {
+            "x": 553,
+            "y": 160
+          },
+          {
+            "x": 554,
+            "y": 160
+          },
+          {
+            "x": 554,
+            "y": 161
+          },
+          {
+            "x": 554,
+            "y": 162
+          },
+          {
+            "x": 555,
+            "y": 162
+          },
+          {
+            "x": 554,
+            "y": 163
+          }
+        ],
+        "originalTargetPixels": 0,
+        "maskClipAlphaStats": {
+          "maskAlpha": {
+            "pixels": 2268,
+            "min": 1,
+            "max": 255,
+            "average": 138.432099,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2268,
+            "fullPixels": 436,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 436
+              },
+              {
+                "value": 1,
+                "pixels": 142
+              },
+              {
+                "value": 254,
+                "pixels": 88
+              },
+              {
+                "value": 2,
+                "pixels": 60
+              },
+              {
+                "value": 3,
+                "pixels": 48
+              },
+              {
+                "value": 4,
+                "pixels": 42
+              },
+              {
+                "value": 252,
+                "pixels": 38
+              },
+              {
+                "value": 5,
+                "pixels": 38
+              }
+            ]
+          },
+          "clipCoverage": {
+            "pixels": 2268,
+            "min": 64,
+            "max": 255,
+            "average": 253.753968,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2268,
+            "fullPixels": 2246,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2246
+              },
+              {
+                "value": 128,
+                "pixels": 6
+              },
+              {
+                "value": 192,
+                "pixels": 6
+              },
+              {
+                "value": 64,
+                "pixels": 6
+              },
+              {
+                "value": 144,
+                "pixels": 2
+              },
+              {
+                "value": 96,
+                "pixels": 2
+              }
+            ]
+          },
+          "alphaAfterClip": {
+            "pixels": 2268,
+            "min": 1,
+            "max": 255,
+            "average": 137.186067,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2268,
+            "fullPixels": 414,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 414
+              },
+              {
+                "value": 1,
+                "pixels": 142
+              },
+              {
+                "value": 254,
+                "pixels": 88
+              },
+              {
+                "value": 2,
+                "pixels": 60
+              },
+              {
+                "value": 3,
+                "pixels": 48
+              },
+              {
+                "value": 4,
+                "pixels": 42
+              },
+              {
+                "value": 252,
+                "pixels": 38
+              },
+              {
+                "value": 5,
+                "pixels": 38
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "subzonePixels": {
+          "draw_oval_outer_boundary": 1386,
+          "difference_oval_inner_boundary": 298,
+          "halo_interior": 312,
+          "outside_draw_oval": 272,
+          "blurred_content_envelope": 1996
+        },
+        "finalReadback": {
+          "finalWhiteLayerPixels": 488,
+          "finalRedTintPixels": 1528,
+          "finalOtherPixels": 252,
+          "topFinalReadbackColors": [
+            {
+              "rgba": [
+                202,
+                59,
+                19,
+                255
+              ],
+              "pixels": 324
+            },
+            {
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "pixels": 166
+            },
+            {
+              "rgba": [
+                202,
+                60,
+                20,
+                255
+              ],
+              "pixels": 78
+            },
+            {
+              "rgba": [
+                254,
+                250,
+                249,
+                255
+              ],
+              "pixels": 70
+            },
+            {
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "pixels": 60
+            },
+            {
+              "rgba": [
+                254,
+                253,
+                252,
+                255
+              ],
+              "pixels": 54
+            },
+            {
+              "rgba": [
+                254,
+                252,
+                251,
+                255
+              ],
+              "pixels": 46
+            },
+            {
+              "rgba": [
+                242,
+                206,
+                196,
+                255
+              ],
+              "pixels": 40
+            }
+          ]
+        },
+        "runtimeEvents": {
+          "rootEventCount": 6804,
+          "rootSourceCounts": {
+            "SkBitmap.eraseColor": 2268,
+            "SkBitmapDevice.dispatchBlend": 2268,
+            "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload": 2268
+          },
+          "rootModeCounts": {
+            "direct": 2268,
+            "kSrc": 2268,
+            "kSrcOver": 2268
+          },
+          "redRuntimeDispatchEventCount": 2268,
+          "redRuntimeDispatchPixelCount": 2268,
+          "firstRootEvent": {
+            "index": 7649,
+            "x": 553,
+            "y": 158,
+            "source": "SkBitmap.eraseColor",
+            "branch": "SkBitmap.eraseColor.kRGBA_8888.fill",
+            "mode": "direct",
+            "coverage": 255,
+            "srcInputRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueBeforeRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "valueWrittenRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueReadAfterRgba": [
+              198,
+              198,
+              198,
+              255
+            ]
+          },
+          "lastRootEvent": {
+            "index": 51660,
+            "x": 553,
+            "y": 433,
+            "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+            "branch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+            "mode": "kSrcOver",
+            "coverage": 240,
+            "srcInputRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "srcAfterCoverageRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "valueBeforeRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              254,
+              254,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              254,
+              254,
+              255
+            ]
+          },
+          "firstRedRuntimeDispatch": {
+            "index": 47124,
+            "x": 553,
+            "y": 158,
+            "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+            "branch": "SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)",
+            "mode": "kSrcOver",
+            "coverage": 240,
+            "srcInputRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "srcAfterCoverageRgba": [
+              202,
+              59,
+              19,
+              1
+            ],
+            "valueBeforeRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              254,
+              254,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              254,
+              254,
+              255
+            ]
+          }
+        }
+      }
+    ],
+    "largestCandidateMinusRuntimeComponents": [
+      {
+        "id": "candidate-minus-runtime-000",
+        "pixels": 3295,
+        "bounds": {
+          "left": 330,
+          "top": 18,
+          "right": 574,
+          "bottom": 262,
+          "rightInclusive": 573,
+          "bottomInclusive": 261
+        },
+        "sampleCoordinates": [
+          {
+            "x": 330,
+            "y": 18
+          },
+          {
+            "x": 331,
+            "y": 18
+          },
+          {
+            "x": 332,
+            "y": 18
+          },
+          {
+            "x": 333,
+            "y": 18
+          },
+          {
+            "x": 334,
+            "y": 18
+          },
+          {
+            "x": 335,
+            "y": 18
+          },
+          {
+            "x": 336,
+            "y": 18
+          },
+          {
+            "x": 337,
+            "y": 18
+          }
+        ],
+        "originalTargetPixels": 0,
+        "maskClipAlphaStats": {
+          "maskAlpha": {
+            "pixels": 3295,
+            "min": 1,
+            "max": 255,
+            "average": 195.103794,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3295,
+            "fullPixels": 1517,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 1517
+              },
+              {
+                "value": 254,
+                "pixels": 145
+              },
+              {
+                "value": 1,
+                "pixels": 82
+              },
+              {
+                "value": 253,
+                "pixels": 68
+              },
+              {
+                "value": 2,
+                "pixels": 46
+              },
+              {
+                "value": 251,
+                "pixels": 40
+              },
+              {
+                "value": 252,
+                "pixels": 40
+              },
+              {
+                "value": 250,
+                "pixels": 38
+              }
+            ]
+          },
+          "clipCoverage": {
+            "pixels": 3295,
+            "min": 16,
+            "max": 255,
+            "average": 240.90956,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3295,
+            "fullPixels": 2939,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2939
+              },
+              {
+                "value": 16,
+                "pixels": 44
+              },
+              {
+                "value": 64,
+                "pixels": 32
+              },
+              {
+                "value": 160,
+                "pixels": 32
+              },
+              {
+                "value": 192,
+                "pixels": 32
+              },
+              {
+                "value": 208,
+                "pixels": 28
+              },
+              {
+                "value": 96,
+                "pixels": 26
+              },
+              {
+                "value": 240,
+                "pixels": 26
+              }
+            ]
+          },
+          "alphaAfterClip": {
+            "pixels": 3295,
+            "min": 1,
+            "max": 255,
+            "average": 181.013354,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3295,
+            "fullPixels": 1161,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 1161
+              },
+              {
+                "value": 254,
+                "pixels": 145
+              },
+              {
+                "value": 1,
+                "pixels": 82
+              },
+              {
+                "value": 253,
+                "pixels": 68
+              },
+              {
+                "value": 16,
+                "pixels": 47
+              },
+              {
+                "value": 2,
+                "pixels": 46
+              },
+              {
+                "value": 251,
+                "pixels": 40
+              },
+              {
+                "value": 252,
+                "pixels": 40
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "subzonePixels": {
+          "draw_oval_outer_boundary": 1328,
+          "difference_oval_inner_boundary": 1220,
+          "halo_interior": 580,
+          "outside_draw_oval": 167,
+          "blurred_content_envelope": 3128
+        },
+        "finalReadback": {
+          "finalWhiteLayerPixels": 3295,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0,
+          "topFinalReadbackColors": [
+            {
+              "rgba": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "pixels": 3295
+            }
+          ]
+        },
+        "runtimeEvents": {
+          "rootEventCount": 6590,
+          "rootSourceCounts": {
+            "SkBitmap.eraseColor": 3295,
+            "SkBitmapDevice.dispatchBlend": 3295
+          },
+          "rootModeCounts": {
+            "direct": 3295,
+            "kSrc": 3295
+          },
+          "redRuntimeDispatchEventCount": 0,
+          "redRuntimeDispatchPixelCount": 0,
+          "firstRootEvent": {
+            "index": 1679,
+            "x": 330,
+            "y": 18,
+            "source": "SkBitmap.eraseColor",
+            "branch": "SkBitmap.eraseColor.kRGBA_8888.fill",
+            "mode": "direct",
+            "coverage": 255,
+            "srcInputRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueBeforeRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "valueWrittenRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueReadAfterRgba": [
+              198,
+              198,
+              198,
+              255
+            ]
+          },
+          "lastRootEvent": {
+            "index": 32775,
+            "x": 573,
+            "y": 261,
+            "source": "SkBitmapDevice.dispatchBlend",
+            "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+            "mode": "kSrc",
+            "coverage": 255,
+            "srcInputRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueBeforeRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          "firstRedRuntimeDispatch": null
+        }
+      },
+      {
+        "id": "candidate-minus-runtime-001",
+        "pixels": 3295,
+        "bounds": {
+          "left": 330,
+          "top": 330,
+          "right": 574,
+          "bottom": 574,
+          "rightInclusive": 573,
+          "bottomInclusive": 573
+        },
+        "sampleCoordinates": [
+          {
+            "x": 573,
+            "y": 330
+          },
+          {
+            "x": 573,
+            "y": 331
+          },
+          {
+            "x": 573,
+            "y": 332
+          },
+          {
+            "x": 573,
+            "y": 333
+          },
+          {
+            "x": 573,
+            "y": 334
+          },
+          {
+            "x": 573,
+            "y": 335
+          },
+          {
+            "x": 573,
+            "y": 336
+          },
+          {
+            "x": 572,
+            "y": 337
+          }
+        ],
+        "originalTargetPixels": 0,
+        "maskClipAlphaStats": {
+          "maskAlpha": {
+            "pixels": 3295,
+            "min": 1,
+            "max": 255,
+            "average": 195.103794,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3295,
+            "fullPixels": 1517,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 1517
+              },
+              {
+                "value": 254,
+                "pixels": 145
+              },
+              {
+                "value": 1,
+                "pixels": 82
+              },
+              {
+                "value": 253,
+                "pixels": 68
+              },
+              {
+                "value": 2,
+                "pixels": 46
+              },
+              {
+                "value": 252,
+                "pixels": 40
+              },
+              {
+                "value": 251,
+                "pixels": 40
+              },
+              {
+                "value": 250,
+                "pixels": 38
+              }
+            ]
+          },
+          "clipCoverage": {
+            "pixels": 3295,
+            "min": 16,
+            "max": 255,
+            "average": 240.90956,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3295,
+            "fullPixels": 2939,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2939
+              },
+              {
+                "value": 16,
+                "pixels": 44
+              },
+              {
+                "value": 64,
+                "pixels": 32
+              },
+              {
+                "value": 192,
+                "pixels": 32
+              },
+              {
+                "value": 160,
+                "pixels": 32
+              },
+              {
+                "value": 208,
+                "pixels": 28
+              },
+              {
+                "value": 96,
+                "pixels": 26
+              },
+              {
+                "value": 240,
+                "pixels": 26
+              }
+            ]
+          },
+          "alphaAfterClip": {
+            "pixels": 3295,
+            "min": 1,
+            "max": 255,
+            "average": 181.013354,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3295,
+            "fullPixels": 1161,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 1161
+              },
+              {
+                "value": 254,
+                "pixels": 145
+              },
+              {
+                "value": 1,
+                "pixels": 82
+              },
+              {
+                "value": 253,
+                "pixels": 68
+              },
+              {
+                "value": 16,
+                "pixels": 47
+              },
+              {
+                "value": 2,
+                "pixels": 46
+              },
+              {
+                "value": 252,
+                "pixels": 40
+              },
+              {
+                "value": 251,
+                "pixels": 40
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "subzonePixels": {
+          "draw_oval_outer_boundary": 1328,
+          "difference_oval_inner_boundary": 1220,
+          "halo_interior": 580,
+          "outside_draw_oval": 167,
+          "blurred_content_envelope": 3128
+        },
+        "finalReadback": {
+          "finalWhiteLayerPixels": 3295,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0,
+          "topFinalReadbackColors": [
+            {
+              "rgba": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "pixels": 3295
+            }
+          ]
+        },
+        "runtimeEvents": {
+          "rootEventCount": 6590,
+          "rootSourceCounts": {
+            "SkBitmap.eraseColor": 3295,
+            "SkBitmapDevice.dispatchBlend": 3295
+          },
+          "rootModeCounts": {
+            "direct": 3295,
+            "kSrc": 3295
+          },
+          "redRuntimeDispatchEventCount": 0,
+          "redRuntimeDispatchPixelCount": 0,
+          "firstRootEvent": {
+            "index": 12073,
+            "x": 573,
+            "y": 330,
+            "source": "SkBitmap.eraseColor",
+            "branch": "SkBitmap.eraseColor.kRGBA_8888.fill",
+            "mode": "direct",
+            "coverage": 255,
+            "srcInputRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueBeforeRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "valueWrittenRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueReadAfterRgba": [
+              198,
+              198,
+              198,
+              255
+            ]
+          },
+          "lastRootEvent": {
+            "index": 43180,
+            "x": 341,
+            "y": 573,
+            "source": "SkBitmapDevice.dispatchBlend",
+            "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+            "mode": "kSrc",
+            "coverage": 255,
+            "srcInputRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueBeforeRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          "firstRedRuntimeDispatch": null
+        }
+      },
+      {
+        "id": "candidate-minus-runtime-002",
+        "pixels": 3293,
+        "bounds": {
+          "left": 18,
+          "top": 18,
+          "right": 262,
+          "bottom": 262,
+          "rightInclusive": 261,
+          "bottomInclusive": 261
+        },
+        "sampleCoordinates": [
+          {
+            "x": 250,
+            "y": 18
+          },
+          {
+            "x": 251,
+            "y": 18
+          },
+          {
+            "x": 252,
+            "y": 18
+          },
+          {
+            "x": 253,
+            "y": 18
+          },
+          {
+            "x": 254,
+            "y": 18
+          },
+          {
+            "x": 255,
+            "y": 18
+          },
+          {
+            "x": 256,
+            "y": 18
+          },
+          {
+            "x": 257,
+            "y": 18
+          }
+        ],
+        "originalTargetPixels": 59,
+        "maskClipAlphaStats": {
+          "maskAlpha": {
+            "pixels": 3293,
+            "min": 1,
+            "max": 255,
+            "average": 195.074097,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3293,
+            "fullPixels": 1517,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 1517
+              },
+              {
+                "value": 254,
+                "pixels": 145
+              },
+              {
+                "value": 1,
+                "pixels": 82
+              },
+              {
+                "value": 253,
+                "pixels": 68
+              },
+              {
+                "value": 2,
+                "pixels": 46
+              },
+              {
+                "value": 252,
+                "pixels": 40
+              },
+              {
+                "value": 251,
+                "pixels": 40
+              },
+              {
+                "value": 250,
+                "pixels": 38
+              }
+            ]
+          },
+          "clipCoverage": {
+            "pixels": 3293,
+            "min": 16,
+            "max": 255,
+            "average": 240.901002,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3293,
+            "fullPixels": 2937,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2937
+              },
+              {
+                "value": 16,
+                "pixels": 44
+              },
+              {
+                "value": 64,
+                "pixels": 32
+              },
+              {
+                "value": 192,
+                "pixels": 32
+              },
+              {
+                "value": 160,
+                "pixels": 32
+              },
+              {
+                "value": 208,
+                "pixels": 28
+              },
+              {
+                "value": 96,
+                "pixels": 26
+              },
+              {
+                "value": 240,
+                "pixels": 26
+              }
+            ]
+          },
+          "alphaAfterClip": {
+            "pixels": 3293,
+            "min": 1,
+            "max": 255,
+            "average": 180.975099,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3293,
+            "fullPixels": 1161,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 1161
+              },
+              {
+                "value": 254,
+                "pixels": 145
+              },
+              {
+                "value": 1,
+                "pixels": 82
+              },
+              {
+                "value": 253,
+                "pixels": 68
+              },
+              {
+                "value": 16,
+                "pixels": 47
+              },
+              {
+                "value": 2,
+                "pixels": 46
+              },
+              {
+                "value": 252,
+                "pixels": 40
+              },
+              {
+                "value": 251,
+                "pixels": 40
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "subzonePixels": {
+          "draw_oval_outer_boundary": 1326,
+          "difference_oval_inner_boundary": 1220,
+          "halo_interior": 580,
+          "outside_draw_oval": 167,
+          "blurred_content_envelope": 3126
+        },
+        "finalReadback": {
+          "finalWhiteLayerPixels": 3293,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0,
+          "topFinalReadbackColors": [
+            {
+              "rgba": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "pixels": 3293
+            }
+          ]
+        },
+        "runtimeEvents": {
+          "rootEventCount": 6586,
+          "rootSourceCounts": {
+            "SkBitmap.eraseColor": 3293,
+            "SkBitmapDevice.dispatchBlend": 3293
+          },
+          "rootModeCounts": {
+            "direct": 3293,
+            "kSrc": 3293
+          },
+          "redRuntimeDispatchEventCount": 0,
+          "redRuntimeDispatchPixelCount": 0,
+          "firstRootEvent": {
+            "index": 1667,
+            "x": 250,
+            "y": 18,
+            "source": "SkBitmap.eraseColor",
+            "branch": "SkBitmap.eraseColor.kRGBA_8888.fill",
+            "mode": "direct",
+            "coverage": 255,
+            "srcInputRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueBeforeRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "valueWrittenRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueReadAfterRgba": [
+              198,
+              198,
+              198,
+              255
+            ]
+          },
+          "lastRootEvent": {
+            "index": 32774,
+            "x": 18,
+            "y": 261,
+            "source": "SkBitmapDevice.dispatchBlend",
+            "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+            "mode": "kSrc",
+            "coverage": 255,
+            "srcInputRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueBeforeRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          "firstRedRuntimeDispatch": null
+        }
+      },
+      {
+        "id": "candidate-minus-runtime-003",
+        "pixels": 3293,
+        "bounds": {
+          "left": 18,
+          "top": 330,
+          "right": 262,
+          "bottom": 574,
+          "rightInclusive": 261,
+          "bottomInclusive": 573
+        },
+        "sampleCoordinates": [
+          {
+            "x": 18,
+            "y": 330
+          },
+          {
+            "x": 18,
+            "y": 331
+          },
+          {
+            "x": 18,
+            "y": 332
+          },
+          {
+            "x": 18,
+            "y": 333
+          },
+          {
+            "x": 18,
+            "y": 334
+          },
+          {
+            "x": 18,
+            "y": 335
+          },
+          {
+            "x": 18,
+            "y": 336
+          },
+          {
+            "x": 18,
+            "y": 337
+          }
+        ],
+        "originalTargetPixels": 0,
+        "maskClipAlphaStats": {
+          "maskAlpha": {
+            "pixels": 3293,
+            "min": 1,
+            "max": 255,
+            "average": 195.074097,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3293,
+            "fullPixels": 1517,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 1517
+              },
+              {
+                "value": 254,
+                "pixels": 145
+              },
+              {
+                "value": 1,
+                "pixels": 82
+              },
+              {
+                "value": 253,
+                "pixels": 68
+              },
+              {
+                "value": 2,
+                "pixels": 46
+              },
+              {
+                "value": 251,
+                "pixels": 40
+              },
+              {
+                "value": 252,
+                "pixels": 40
+              },
+              {
+                "value": 250,
+                "pixels": 38
+              }
+            ]
+          },
+          "clipCoverage": {
+            "pixels": 3293,
+            "min": 16,
+            "max": 255,
+            "average": 240.901002,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3293,
+            "fullPixels": 2937,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2937
+              },
+              {
+                "value": 16,
+                "pixels": 44
+              },
+              {
+                "value": 192,
+                "pixels": 32
+              },
+              {
+                "value": 160,
+                "pixels": 32
+              },
+              {
+                "value": 64,
+                "pixels": 32
+              },
+              {
+                "value": 208,
+                "pixels": 28
+              },
+              {
+                "value": 240,
+                "pixels": 26
+              },
+              {
+                "value": 96,
+                "pixels": 26
+              }
+            ]
+          },
+          "alphaAfterClip": {
+            "pixels": 3293,
+            "min": 1,
+            "max": 255,
+            "average": 180.975099,
+            "zeroPixels": 0,
+            "nonZeroPixels": 3293,
+            "fullPixels": 1161,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 1161
+              },
+              {
+                "value": 254,
+                "pixels": 145
+              },
+              {
+                "value": 1,
+                "pixels": 82
+              },
+              {
+                "value": 253,
+                "pixels": 68
+              },
+              {
+                "value": 16,
+                "pixels": 47
+              },
+              {
+                "value": 2,
+                "pixels": 46
+              },
+              {
+                "value": 251,
+                "pixels": 40
+              },
+              {
+                "value": 252,
+                "pixels": 40
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "subzonePixels": {
+          "draw_oval_outer_boundary": 1326,
+          "difference_oval_inner_boundary": 1220,
+          "halo_interior": 580,
+          "outside_draw_oval": 167,
+          "blurred_content_envelope": 3126
+        },
+        "finalReadback": {
+          "finalWhiteLayerPixels": 3293,
+          "finalRedTintPixels": 0,
+          "finalOtherPixels": 0,
+          "topFinalReadbackColors": [
+            {
+              "rgba": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "pixels": 3293
+            }
+          ]
+        },
+        "runtimeEvents": {
+          "rootEventCount": 6586,
+          "rootSourceCounts": {
+            "SkBitmap.eraseColor": 3293,
+            "SkBitmapDevice.dispatchBlend": 3293
+          },
+          "rootModeCounts": {
+            "direct": 3293,
+            "kSrc": 3293
+          },
+          "redRuntimeDispatchEventCount": 0,
+          "redRuntimeDispatchPixelCount": 0,
+          "firstRootEvent": {
+            "index": 12072,
+            "x": 18,
+            "y": 330,
+            "source": "SkBitmap.eraseColor",
+            "branch": "SkBitmap.eraseColor.kRGBA_8888.fill",
+            "mode": "direct",
+            "coverage": 255,
+            "srcInputRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueBeforeRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "valueWrittenRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueReadAfterRgba": [
+              198,
+              198,
+              198,
+              255
+            ]
+          },
+          "lastRootEvent": {
+            "index": 43168,
+            "x": 261,
+            "y": 573,
+            "source": "SkBitmapDevice.dispatchBlend",
+            "branch": "SkBitmapDevice.blend.kSrc.setPixel(out)",
+            "mode": "kSrc",
+            "coverage": 255,
+            "srcInputRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "srcAfterCoverageRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueBeforeRgba": [
+              198,
+              198,
+              198,
+              255
+            ],
+            "valueWrittenRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "valueReadAfterRgba": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          "firstRedRuntimeDispatch": null
+        }
+      }
+    ]
+  },
+  "readbackSummary": {
+    "candidateDomain": {
+      "finalWhiteLayerPixels": 15304,
+      "finalRedTintPixels": 6108,
+      "finalOtherPixels": 1012,
+      "topFinalReadbackColors": [
+        {
+          "rgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "pixels": 13336
+        },
+        {
+          "rgba": [
+            202,
+            59,
+            19,
+            255
+          ],
+          "pixels": 1304
+        },
+        {
+          "rgba": [
+            255,
+            254,
+            254,
+            255
+          ],
+          "pixels": 676
+        },
+        {
+          "rgba": [
+            202,
+            60,
+            20,
+            255
+          ],
+          "pixels": 308
+        },
+        {
+          "rgba": [
+            254,
+            250,
+            249,
+            255
+          ],
+          "pixels": 292
+        },
+        {
+          "rgba": [
+            255,
+            253,
+            253,
+            255
+          ],
+          "pixels": 256
+        },
+        {
+          "rgba": [
+            254,
+            253,
+            252,
+            255
+          ],
+          "pixels": 192
+        },
+        {
+          "rgba": [
+            254,
+            252,
+            251,
+            255
+          ],
+          "pixels": 180
+        }
+      ]
+    },
+    "candidateMinusRuntime": {
+      "finalWhiteLayerPixels": 13336,
+      "finalRedTintPixels": 0,
+      "finalOtherPixels": 0,
+      "topFinalReadbackColors": [
+        {
+          "rgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "pixels": 13336
+        }
+      ]
+    },
+    "redRuntimeDispatch": {
+      "finalWhiteLayerPixels": 1968,
+      "finalRedTintPixels": 6108,
+      "finalOtherPixels": 1012,
+      "topFinalReadbackColors": [
+        {
+          "rgba": [
+            202,
+            59,
+            19,
+            255
+          ],
+          "pixels": 1304
+        },
+        {
+          "rgba": [
+            255,
+            254,
+            254,
+            255
+          ],
+          "pixels": 676
+        },
+        {
+          "rgba": [
+            202,
+            60,
+            20,
+            255
+          ],
+          "pixels": 308
+        },
+        {
+          "rgba": [
+            254,
+            250,
+            249,
+            255
+          ],
+          "pixels": 292
+        },
+        {
+          "rgba": [
+            255,
+            253,
+            253,
+            255
+          ],
+          "pixels": 256
+        },
+        {
+          "rgba": [
+            254,
+            253,
+            252,
+            255
+          ],
+          "pixels": 192
+        },
+        {
+          "rgba": [
+            254,
+            252,
+            251,
+            255
+          ],
+          "pixels": 180
+        },
+        {
+          "rgba": [
+            242,
+            206,
+            196,
+            255
+          ],
+          "pixels": 162
+        }
+      ]
+    },
+    "finalWhiteLayerPixels": 15304,
+    "finalRedTintPixels": 6108,
+    "finalOtherPixels": 1012
+  },
+  "interpretation": {
+    "candidateHolePassesMaskClipModel": true,
+    "candidateHoleIsExplainedBySubzoneSelection": false,
+    "candidateHoleHasRedRuntimeDispatch": false,
+    "sameOriginalTargetSubzoneHasRuntimeDispatchElsewhere": true,
+    "runtimeDispatchRequiresUnmodeledFilter": true,
+    "unmodeledFilterGap": "The current artifacts do not expose the per-pixel runtime criterion between FOR-293 alpha_after_clip > 0 and FOR-294 A8 srcInPayload root dispatch membership."
+  },
+  "sourcePreservation": {
+    "for288ClassificationPreserved": true,
+    "for289DecisionPreserved": true,
+    "for290DecisionPreserved": true,
+    "for291DecisionPreserved": true,
+    "for292DecisionPreserved": true,
+    "for293DecisionPreserved": true,
+    "for294DecisionPreserved": true,
+    "for295DecisionPreserved": true,
+    "for296DecisionPreserved": true
+  },
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "cpuRendererChanged": false,
+    "cpuInstrumentationChanged": false,
+    "newRuntimeTraceGeneratedByFOR297": false,
+    "gpuRendererChanged": false,
+    "globalBlendChanged": false,
+    "setPixelSemanticsChanged": false,
+    "for288ClassificationChanged": false,
+    "for289DecisionChanged": false,
+    "for290DecisionChanged": false,
+    "for291DecisionChanged": false,
+    "for292DecisionChanged": false,
+    "for293DecisionChanged": false,
+    "for294DecisionChanged": false,
+    "for295DecisionChanged": false,
+    "for296DecisionChanged": false,
+    "m60Promoted": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false,
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold"
+  }
+}
