@@ -1,0 +1,1063 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-365",
+  "sceneId": "f16-constrained-candidate-evaluation-for365",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-constrained-candidate-evaluation-after-for-364",
+  "sourceFindings": [
+    "global/kanvas/findings/for-364-captures-independent-comparable-f16-arc-evidence",
+    "global/kanvas/findings/for-363-constrained-f16-candidate-search-matrix-ready"
+  ],
+  "decision": "F16_CONSTRAINED_CANDIDATE_REJECTED_BY_CURRENT_GUARDS",
+  "allowedDecisions": [
+    "F16_CONSTRAINED_CANDIDATE_REJECTED_BY_CURRENT_GUARDS",
+    "F16_CONSTRAINED_CANDIDATE_READY_FOR_FUTURE_IMPLEMENTATION_TICKET"
+  ],
+  "decisionReason": "FOR-365 evaluates exactly one new evidence-only F16 candidate against FOR-345, FOR-358, FOR-361, and FOR-364. The candidate is rejected because at least one mandatory guard worsens.",
+  "inputValidation": {
+    "for364Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-independent-comparable-arc-evidence-for364/f16-independent-comparable-arc-evidence-for364.json",
+    "for364Decision": "F16_INDEPENDENT_COMPARABLE_ARC_EVIDENCE_CAPTURED",
+    "for364RequiredDecision": "F16_INDEPENDENT_COMPARABLE_ARC_EVIDENCE_CAPTURED",
+    "for363Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-constrained-candidate-search-for363/f16-constrained-candidate-search-for363.json",
+    "for363Decision": "F16_CONSTRAINED_CANDIDATE_SEARCH_MATRIX_READY",
+    "for363RequiredDecision": "F16_CONSTRAINED_CANDIDATE_SEARCH_MATRIX_READY",
+    "for362Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-rejected-candidate-closeout-for362/f16-rejected-candidate-closeout-for362.json",
+    "for362Decision": "F16_REJECTED_CANDIDATE_CLOSEOUT_AFTER_FOR361",
+    "for362RequiredDecision": "F16_REJECTED_CANDIDATE_CLOSEOUT_AFTER_FOR361",
+    "for361Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/f16-bounded-independent-arc-capture-for361.json",
+    "for361Decision": "F16_BOUNDED_INDEPENDENT_ARC_CAPTURE_REJECTS_CANDIDATE",
+    "for361RequiredDecision": "F16_BOUNDED_INDEPENDENT_ARC_CAPTURE_REJECTS_CANDIDATE",
+    "for358Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-real-additional-non-arc-row-for358/f16-real-additional-non-arc-row-for358.json",
+    "for358Decision": "F16_REAL_ADDITIONAL_NON_ARC_ROW_ACCEPTS_CANDIDATE",
+    "for358RequiredDecision": "F16_REAL_ADDITIONAL_NON_ARC_ROW_ACCEPTS_CANDIDATE",
+    "for355Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-generalized-non-scene-arc-delta-candidate-for355/f16-generalized-non-scene-arc-delta-candidate-for355.json",
+    "for355Decision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "for355RequiredDecision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "for345Artifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for345Decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for345RequiredDecision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE"
+  },
+  "closedFor355Candidate": {
+    "source": "FOR-355",
+    "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-generalized-non-scene-arc-delta-candidate-for355/f16-generalized-non-scene-arc-delta-candidate-for355.json",
+    "policyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+    "family": "nonzero_arc_delta_generalized_non_scene_guard_family",
+    "closedBy": "FOR-362",
+    "reopenedByFor365": false,
+    "selectableInFor365": false,
+    "selectedForEvaluation": false,
+    "selectedForImplementation": false
+  },
+  "preservedFor361RejectedCandidateResidual": {
+    "source": "FOR-361",
+    "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/f16-bounded-independent-arc-capture-for361.json",
+    "currentResidual": 0,
+    "rejectedCandidatePolicyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+    "rejectedCandidateResidual": 37,
+    "rejectedCandidateMinusCurrentResidual": 37,
+    "rejectedCandidateWorsenedSampleCount": 1
+  },
+  "candidate": {
+    "policyId": "covered_source_alpha_src_over_white_without_non_arc_guard_probe",
+    "family": "covered_source_alpha_over_white_f16_probe_family",
+    "closedFor355PolicyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+    "distinctFromFor355ClosedCandidate": true,
+    "reusesFor355Policy": false,
+    "exactlyOneCandidateEvaluated": true,
+    "evaluatedByFor365": true,
+    "selectedForImplementation": false,
+    "implementationAuthorized": false,
+    "scoreIncreaseAuthorized": false,
+    "rendererBehaviorChanged": false,
+    "samplesComputedOnlyInArtifact": true,
+    "formula": "Evidence-only probe: for any covered sample with captured source/raw RGBA alpha in (0, 255), compute that source color alpha-composited over white; otherwise preserve current Kanvas RGBA. The computed samples are artifact values only and are not renderer behavior.",
+    "shaping": {
+      "sceneIdShaped": false,
+      "coordinateShaped": false,
+      "selectedCellShaped": false,
+      "fixtureOnlyShaped": false,
+      "fullGmCropShaped": false,
+      "rendererBranchRequired": false
+    }
+  },
+  "evaluation": {
+    "guardSources": [
+      "FOR-345",
+      "FOR-358",
+      "FOR-361",
+      "FOR-364"
+    ],
+    "rejectIfAnyGuardWorsens": true,
+    "anyGuardWorsened": true,
+    "table": [
+      {
+        "source": "FOR-345",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+        "rowId": "non-arc-rec2020-f16-src-over-rect",
+        "rowKind": "non-arc",
+        "currentResidual": 0,
+        "candidateResidual": 111,
+        "candidateMinusCurrentResidual": 111,
+        "worsenedSampleCount": 3,
+        "candidateRuleAppliedSampleCount": 3,
+        "guardWorsened": true,
+        "sampleCount": 4,
+        "sampleEvaluations": [
+          {
+            "sample": "background_top_left",
+            "zone": "background",
+            "x": 0,
+            "y": 0,
+            "covered": false,
+            "sourceRgba": null,
+            "candidateRuleApplied": false,
+            "referenceSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 0,
+            "candidateMinusCurrentResidual": 0,
+            "candidateWorsensCurrent": false
+          },
+          {
+            "sample": "rect_center",
+            "zone": "fill-center",
+            "x": 16,
+            "y": 16,
+            "covered": true,
+            "sourceRgba": [
+              0,
+              0,
+              255,
+              100
+            ],
+            "candidateRuleApplied": true,
+            "referenceSrgbRgba": [
+              180,
+              167,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              180,
+              167,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              155,
+              155,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              -25,
+              -12,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              25,
+              12,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 37,
+            "candidateMinusCurrentResidual": 37,
+            "candidateWorsensCurrent": true
+          },
+          {
+            "sample": "rect_left_inside",
+            "zone": "fill-left-inside",
+            "x": 8,
+            "y": 16,
+            "covered": true,
+            "sourceRgba": [
+              0,
+              0,
+              255,
+              100
+            ],
+            "candidateRuleApplied": true,
+            "referenceSrgbRgba": [
+              180,
+              167,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              180,
+              167,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              155,
+              155,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              -25,
+              -12,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              25,
+              12,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 37,
+            "candidateMinusCurrentResidual": 37,
+            "candidateWorsensCurrent": true
+          },
+          {
+            "sample": "rect_right_inside",
+            "zone": "fill-right-inside",
+            "x": 23,
+            "y": 16,
+            "covered": true,
+            "sourceRgba": [
+              0,
+              0,
+              255,
+              100
+            ],
+            "candidateRuleApplied": true,
+            "referenceSrgbRgba": [
+              180,
+              167,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              180,
+              167,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              155,
+              155,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              -25,
+              -12,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              25,
+              12,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 37,
+            "candidateMinusCurrentResidual": 37,
+            "candidateWorsensCurrent": true
+          }
+        ]
+      },
+      {
+        "source": "FOR-358",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-real-additional-non-arc-row-for358/f16-real-additional-non-arc-row-for358.json",
+        "rowId": "for358-non-arc-rec2020-f16-src-over-green-rect",
+        "rowKind": "non-arc",
+        "currentResidual": 3,
+        "candidateResidual": 150,
+        "candidateMinusCurrentResidual": 147,
+        "worsenedSampleCount": 3,
+        "candidateRuleAppliedSampleCount": 3,
+        "guardWorsened": true,
+        "sampleCount": 4,
+        "sampleEvaluations": [
+          {
+            "sample": "for358_background_top_left",
+            "zone": "background",
+            "x": 0,
+            "y": 0,
+            "covered": false,
+            "sourceRgba": null,
+            "candidateRuleApplied": false,
+            "referenceSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 0,
+            "candidateMinusCurrentResidual": 0,
+            "candidateWorsensCurrent": false
+          },
+          {
+            "sample": "for358_rect_center",
+            "zone": "fill-center",
+            "x": 14,
+            "y": 14,
+            "covered": true,
+            "sourceRgba": [
+              0,
+              192,
+              64,
+              160
+            ],
+            "candidateRuleApplied": true,
+            "referenceSrgbRgba": [
+              137,
+              216,
+              142,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              138,
+              216,
+              142,
+              255
+            ],
+            "candidateRgba": [
+              95,
+              215,
+              135,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              -42,
+              -1,
+              -7,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              42,
+              1,
+              7,
+              0
+            ],
+            "currentResidual": 1,
+            "candidateResidual": 50,
+            "candidateMinusCurrentResidual": 49,
+            "candidateWorsensCurrent": true
+          },
+          {
+            "sample": "for358_rect_left_inside",
+            "zone": "fill-left-inside",
+            "x": 5,
+            "y": 14,
+            "covered": true,
+            "sourceRgba": [
+              0,
+              192,
+              64,
+              160
+            ],
+            "candidateRuleApplied": true,
+            "referenceSrgbRgba": [
+              137,
+              216,
+              142,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              138,
+              216,
+              142,
+              255
+            ],
+            "candidateRgba": [
+              95,
+              215,
+              135,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              -42,
+              -1,
+              -7,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              42,
+              1,
+              7,
+              0
+            ],
+            "currentResidual": 1,
+            "candidateResidual": 50,
+            "candidateMinusCurrentResidual": 49,
+            "candidateWorsensCurrent": true
+          },
+          {
+            "sample": "for358_rect_bottom_inside",
+            "zone": "fill-bottom-inside",
+            "x": 14,
+            "y": 20,
+            "covered": true,
+            "sourceRgba": [
+              0,
+              192,
+              64,
+              160
+            ],
+            "candidateRuleApplied": true,
+            "referenceSrgbRgba": [
+              137,
+              216,
+              142,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              138,
+              216,
+              142,
+              255
+            ],
+            "candidateRgba": [
+              95,
+              215,
+              135,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              -42,
+              -1,
+              -7,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              42,
+              1,
+              7,
+              0
+            ],
+            "currentResidual": 1,
+            "candidateResidual": 50,
+            "candidateMinusCurrentResidual": 49,
+            "candidateWorsensCurrent": true
+          }
+        ]
+      },
+      {
+        "source": "FOR-361",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/f16-bounded-independent-arc-capture-for361.json",
+        "rowId": "for361-bounded-independent-round-cap-arc-rec2020-f16",
+        "rowKind": "arc",
+        "currentResidual": 0,
+        "candidateResidual": 74,
+        "candidateMinusCurrentResidual": 74,
+        "worsenedSampleCount": 2,
+        "candidateRuleAppliedSampleCount": 2,
+        "guardWorsened": true,
+        "sampleCount": 4,
+        "sampleEvaluations": [
+          {
+            "sample": "for361_background_top_left",
+            "zone": "background",
+            "x": 0,
+            "y": 0,
+            "covered": false,
+            "sourceRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateRuleApplied": false,
+            "referenceSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 0,
+            "candidateMinusCurrentResidual": 0,
+            "candidateWorsensCurrent": false
+          },
+          {
+            "sample": "for361_arc_right_stroke_center",
+            "zone": "stroke-center",
+            "x": 52,
+            "y": 32,
+            "covered": true,
+            "sourceRgba": [
+              0,
+              0,
+              255,
+              100
+            ],
+            "candidateRuleApplied": true,
+            "referenceSrgbRgba": [
+              180,
+              167,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              180,
+              167,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              155,
+              155,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              -25,
+              -12,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              25,
+              12,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 37,
+            "candidateMinusCurrentResidual": 37,
+            "candidateWorsensCurrent": true
+          },
+          {
+            "sample": "for361_arc_lower_right_stroke",
+            "zone": "stroke-edge",
+            "x": 44,
+            "y": 46,
+            "covered": true,
+            "sourceRgba": [
+              0,
+              0,
+              255,
+              100
+            ],
+            "candidateRuleApplied": true,
+            "referenceSrgbRgba": [
+              180,
+              167,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              180,
+              167,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              155,
+              155,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              -25,
+              -12,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              25,
+              12,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 37,
+            "candidateMinusCurrentResidual": 37,
+            "candidateWorsensCurrent": true
+          },
+          {
+            "sample": "for361_arc_interior_clear",
+            "zone": "interior-clear",
+            "x": 32,
+            "y": 32,
+            "covered": false,
+            "sourceRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateRuleApplied": false,
+            "referenceSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 0,
+            "candidateMinusCurrentResidual": 0,
+            "candidateWorsensCurrent": false
+          }
+        ]
+      },
+      {
+        "source": "FOR-364",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-independent-comparable-arc-evidence-for364/f16-independent-comparable-arc-evidence-for364.json",
+        "rowId": "for364-independent-butt-cap-arc-rec2020-f16",
+        "rowKind": "arc",
+        "currentResidual": 0,
+        "candidateResidual": 92,
+        "candidateMinusCurrentResidual": 92,
+        "worsenedSampleCount": 2,
+        "candidateRuleAppliedSampleCount": 2,
+        "guardWorsened": true,
+        "sampleCount": 4,
+        "sampleEvaluations": [
+          {
+            "sample": "for364_background_top_left",
+            "zone": "background",
+            "x": 0,
+            "y": 0,
+            "covered": false,
+            "sourceRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateRuleApplied": false,
+            "referenceSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 0,
+            "candidateMinusCurrentResidual": 0,
+            "candidateWorsensCurrent": false
+          },
+          {
+            "sample": "for364_arc_diagonal_stroke_center",
+            "zone": "stroke-center",
+            "x": 16,
+            "y": 16,
+            "covered": true,
+            "sourceRgba": [
+              255,
+              0,
+              0,
+              128
+            ],
+            "candidateRuleApplied": true,
+            "referenceSrgbRgba": [
+              255,
+              156,
+              144,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              255,
+              156,
+              144,
+              255
+            ],
+            "candidateRgba": [
+              255,
+              127,
+              127,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              0,
+              -29,
+              -17,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              0,
+              29,
+              17,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 46,
+            "candidateMinusCurrentResidual": 46,
+            "candidateWorsensCurrent": true
+          },
+          {
+            "sample": "for364_arc_top_stroke_center",
+            "zone": "stroke-center",
+            "x": 32,
+            "y": 10,
+            "covered": true,
+            "sourceRgba": [
+              255,
+              0,
+              0,
+              128
+            ],
+            "candidateRuleApplied": true,
+            "referenceSrgbRgba": [
+              255,
+              156,
+              144,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              255,
+              156,
+              144,
+              255
+            ],
+            "candidateRgba": [
+              255,
+              127,
+              127,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              0,
+              -29,
+              -17,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              0,
+              29,
+              17,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 46,
+            "candidateMinusCurrentResidual": 46,
+            "candidateWorsensCurrent": true
+          },
+          {
+            "sample": "for364_arc_interior_clear",
+            "zone": "interior-clear",
+            "x": 32,
+            "y": 32,
+            "covered": false,
+            "sourceRgba": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateRuleApplied": false,
+            "referenceSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentKanvasSrgbRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "candidateRgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "currentVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceSignedDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "candidateVsReferenceAbsDelta": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "currentResidual": 0,
+            "candidateResidual": 0,
+            "candidateMinusCurrentResidual": 0,
+            "candidateWorsensCurrent": false
+          }
+        ]
+      }
+    ]
+  },
+  "criteriaEvaluation": {
+    "for364DecisionCaptured": true,
+    "for363SearchMatrixReady": true,
+    "for362RejectedCandidateCloseoutReady": true,
+    "for361CurrentResidualPreserved": true,
+    "for361RejectedCandidateResidualPreserved": true,
+    "for355ClosedCandidateNotReopened": true,
+    "candidateDistinctFromFor355": true,
+    "candidateSamplesOnlyInArtifact": true,
+    "noDisallowedBranchRequired": true,
+    "noRendererChange": true,
+    "noScoreIncrease": true,
+    "noThresholdChange": true,
+    "candidateRejectedBecauseAnyGuardWorsened": true,
+    "readyForFutureImplementationTicket": false,
+    "implementationAuthorizedByFor365": false
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "selectableCandidateDefined": false,
+    "implementationPlanAuthorized": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+      "rtk python3 scripts/validate_for364_f16_independent_comparable_arc_evidence.py",
+      "rtk python3 scripts/validate_for363_f16_constrained_candidate_search.py",
+      "rtk python3 scripts/validate_for362_f16_rejected_candidate_closeout.py",
+      "rtk python3 scripts/validate_for361_f16_bounded_independent_arc_capture.py",
+      "rtk python3 scripts/validate_for358_f16_real_additional_non_arc_row.py",
+      "rtk python3 scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk python3 -m py_compile scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
