@@ -1,0 +1,288 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-343",
+  "sceneId": "f16-color-policy-boundary-for343",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-explicit-f16-color-policy-boundary-and-broader-evidence-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-342-circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-partial-safer-route-finding"
+  ],
+  "inputValidation": {
+    "for342Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342.json",
+    "for342Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_SCOPED_IMPLEMENTATION_PARTIAL_REQUIRES_SAFER_ROUTE",
+    "for342RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_SCOPED_IMPLEMENTATION_PARTIAL_REQUIRES_SAFER_ROUTE",
+    "for342SaferRouteRequired": true,
+    "for342AuthorizedPolicyId": "adjacent_circular_arcs_stroke_butt_f16_straight_srgb_quantized_alpha_src_over_white",
+    "rawTransparentPngBasisAcceptedForImplementation": false,
+    "historicalArtifactsFOR329ToFOR342Rewritten": false
+  },
+  "decision": "F16_COLOR_POLICY_BOUNDARY_READY_FOR_BROADER_EVIDENCE",
+  "allowedDecisions": [
+    "F16_COLOR_POLICY_BOUNDARY_READY_FOR_BROADER_EVIDENCE",
+    "F16_COLOR_POLICY_BOUNDARY_PARTIAL_REQUIRES_ARCHITECTURE_DECISION",
+    "F16_COLOR_POLICY_BOUNDARY_INPUT_INVALID"
+  ],
+  "decisionReason": "FOR-343 defines an explicit F16 color-policy boundary and broader evidence gates before any global F16 renderer behavior change. It carries FOR-342's safer-route decision forward, rejects fixture/coordinate branches and unbounded hook mutation, and leaves all renderer behavior unchanged.",
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "status": "defined-for-evidence-not-implemented",
+    "scope": "CPU raster F16 color policy evidence boundary before a future global migration",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "broaderEvidenceCollectionAllowed": true,
+    "internalOracle": "SkBitmap.getPixel",
+    "exportBoundary": "SkBitmap.getPixelAsSrgb",
+    "rawTransparentPngBasisAcceptedForImplementation": false,
+    "policyAxes": [
+      {
+        "name": "sourceColorSpace",
+        "candidateValueFromFOR342": "straight sRGB source channels",
+        "currentHookOrEvidence": "colorToF16Premul / paint color transform evidence",
+        "futureAttachmentPoint": "typed PipelineIR color-space policy block before F16 premul conversion",
+        "migrationGate": "requires reference/current/candidate samples across arc and non-arc F16 blend scenes"
+      },
+      {
+        "name": "alphaQuantization",
+        "candidateValueFromFOR342": "rounded covered alpha",
+        "currentHookOrEvidence": "coverage-applied source alpha before blendF16PremulMode",
+        "futureAttachmentPoint": "coverage-to-color boundary with an explicit alpha quantization policy",
+        "migrationGate": "requires worsened-sample accounting and edge/center sample tables"
+      },
+      {
+        "name": "compositingBasis",
+        "candidateValueFromFOR342": "SrcOver composited over white for comparable evidence",
+        "currentHookOrEvidence": "blendF16PremulMode",
+        "futureAttachmentPoint": "BlendPlan or pipeline blend/store policy selected by typed color domain",
+        "migrationGate": "requires non-arc Rec.2020 F16 SrcOver blend proof before global hook change"
+      },
+      {
+        "name": "exportReadbackBoundary",
+        "candidateValueFromFOR342": "encoded sRGB export remains explicit and unchanged",
+        "currentHookOrEvidence": "SkBitmap.getPixelAsSrgb",
+        "futureAttachmentPoint": "readback/export policy boundary after internal SkBitmap.getPixel oracle",
+        "migrationGate": "requires separate export migration if getPixelAsSrgb semantics change"
+      },
+      {
+        "name": "referenceBasis",
+        "candidateValueFromFOR342": "isolated Skia over-white reference, not raw transparent PNG",
+        "currentHookOrEvidence": "FOR-340/FOR-342 isolated reference and residual tables",
+        "futureAttachmentPoint": "evidence artifact schema with reference/current/candidate triples",
+        "migrationGate": "requires cross-scene reference/current/candidate evidence and raw PNG rejection"
+      }
+    ],
+    "futureAttachmentPoints": [
+      {
+        "id": "pipeline-ir-color-policy-block",
+        "owner": "future typed PipelineIR color-space/value semantics",
+        "purpose": "make source color space, alpha domain, precision, and reference basis auditable before CPU/GPU specialization",
+        "notThisTicket": true
+      },
+      {
+        "id": "cpu-raster-f16-premul-conversion-policy",
+        "owner": "future CPU raster F16 conversion boundary",
+        "currentGlobalHook": "colorToF16Premul",
+        "purpose": "route F16 source-color policy through a named boundary before touching conversion semantics",
+        "notThisTicket": true
+      },
+      {
+        "id": "cpu-raster-f16-blend-policy",
+        "owner": "future CPU raster blend/store policy",
+        "currentGlobalHook": "blendF16PremulMode",
+        "purpose": "select compositing basis without fixture or coordinate branches",
+        "notThisTicket": true
+      },
+      {
+        "id": "encoded-export-readback-policy",
+        "owner": "future export/readback migration if approved separately",
+        "currentGlobalHook": "SkBitmap.getPixelAsSrgb",
+        "purpose": "separate internal oracle behavior from encoded export semantics",
+        "notThisTicket": true
+      }
+    ]
+  },
+  "broaderEvidenceRequiredBeforeGlobalF16Change": [
+    {
+      "id": "for342-adjacent-arc-prerequisite",
+      "kind": "arc-adjacent-f16-policy-prerequisite",
+      "status": "present-partial-safer-route",
+      "requiresReferenceCurrentCandidate": true,
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342.json"
+      ],
+      "summary": {
+        "sampleCount": 12,
+        "strokeSampleCount": 10,
+        "oldCurrentOverWhiteResidual": 375,
+        "actualNewOverWhiteResidual": 375,
+        "candidateNewOverWhiteResidual": 0
+      },
+      "blocksGlobalChangeUntil": "combined with broader non-arc and cross-scene evidence"
+    },
+    {
+      "id": "non-arc-rec2020-f16-src-over-blend-reference-current-candidate",
+      "kind": "non-arc-f16-blend",
+      "status": "missing-required",
+      "requiresReferenceCurrentCandidate": true,
+      "minimumRequirement": "A non-arc Rec.2020 kRGBA_F16Norm SrcOver/blend scene with isolated reference, current renderer samples, candidate policy samples, residuals, and worsened-sample counts.",
+      "mustNotUseAsSubstitute": [
+        "FOR-337 M60 targetColorSpaceBlend diagnostic without candidate values",
+        "sRGB-only F16 blend tests",
+        "arc selected-cell residuals"
+      ]
+    },
+    {
+      "id": "cross-scene-reference-current-candidate-matrix",
+      "kind": "cross-scene-reference-current-candidate",
+      "status": "missing-required",
+      "requiresReferenceCurrentCandidate": true,
+      "minimumRequirement": "At least one arc-adjacent group and one non-arc F16 blend group must report reference/current/candidate triples under the same named policy axes before colorToF16Premul, blendF16PremulMode, or export behavior can move globally.",
+      "mustInclude": [
+        "isolated reference or explicit expected reference basis",
+        "current SkBitmap.getPixelAsSrgb export samples",
+        "candidate policy samples",
+        "per-sample residuals and aggregate residual totals",
+        "worsened-sample count"
+      ]
+    }
+  ],
+  "dangerousRouteDiagnostics": [
+    {
+      "code": "F16_POLICY_UNSAFE_FIXTURE_BRANCH",
+      "route": "fixture-specific renderer branch",
+      "status": "rejected",
+      "reason": "would encode policy by scene identity instead of a typed color-policy boundary"
+    },
+    {
+      "code": "F16_POLICY_UNSAFE_COORDINATE_BRANCH",
+      "route": "coordinate-specific renderer branch",
+      "status": "rejected",
+      "reason": "would patch selected pixels/cells rather than define global policy semantics"
+    },
+    {
+      "code": "F16_POLICY_UNSAFE_SELECTED_CELL_SUBSTITUTION",
+      "route": "selected-cell or FOR-327 substitution",
+      "status": "rejected",
+      "reason": "FOR-329 through FOR-342 require exact-cell traceability and reject extrapolation"
+    },
+    {
+      "code": "F16_POLICY_UNSAFE_FULL_GM_CROP",
+      "route": "full-GM crop reference",
+      "status": "rejected",
+      "reason": "crop evidence is not an isolated reference for implementation"
+    },
+    {
+      "code": "F16_POLICY_UNSAFE_GLOBAL_HOOK_MUTATION_WITHOUT_BOUNDARY",
+      "route": "mutating colorToF16Premul, blendF16PremulMode, or SkBitmap.getPixelAsSrgb before boundary approval",
+      "status": "rejected",
+      "reason": "these hooks are global and require broader evidence plus an explicit migration ticket"
+    }
+  ],
+  "historicalTraceability": [
+    {
+      "linear": "FOR-329",
+      "role": "historical selected-cell CPU raster audit remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-330",
+      "role": "historical selected-cell evidence remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-331",
+      "role": "historical selected-cell sample selection remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-332",
+      "role": "historical CPU color pipeline trace remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-333",
+      "role": "historical Kotlin CPU runtime trace remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-334",
+      "role": "historical F16 diagnostic context remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-335",
+      "role": "selected-cell F16 blend policy prerequisite remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-336",
+      "role": "renderer color-policy cross-scene gate remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-337",
+      "role": "mixed cross-scene evidence finding remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-338",
+      "role": "comparable-sample target artifact remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-339",
+      "role": "adjacent F16 runtime trace remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-340",
+      "role": "adjacent isolated Skia reference remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-341",
+      "role": "adjacent candidate policy decision remains traceable",
+      "rewritten": false
+    },
+    {
+      "linear": "FOR-342",
+      "role": "scoped implementation refusal and safer-route decision imported",
+      "rewritten": false,
+      "decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_SCOPED_IMPLEMENTATION_PARTIAL_REQUIRES_SAFER_ROUTE"
+    }
+  ],
+  "implementation": {
+    "rendererBehaviorChanged": false,
+    "evidenceOnly": true,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "fixtureBranchAdded": false,
+    "coordinateBranchAdded": false,
+    "fallbackChanged": false
+  },
+  "nonGoalsPreserved": {
+    "colorToF16Premul": true,
+    "blendF16PremulMode": true,
+    "skBitmapGetPixelInternalOracle": true,
+    "skBitmapGetPixelAsSrgbExportBoundary": true,
+    "geometry": true,
+    "coveragePolicy": true,
+    "gpu": true,
+    "wgsl": true,
+    "thresholds": true,
+    "fallbacks": true,
+    "kadre": true,
+    "promotion": true,
+    "score": true,
+    "historicalArtifactsFOR329ToFOR342Rewritten": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for343_f16_color_policy_boundary.py",
+      "rtk python3 scripts/validate_for342_circular_arcs_stroke_butt_adjacent_f16_color_policy_scoped_implementation.py",
+      "rtk python3 scripts/validate_for341_circular_arcs_stroke_butt_adjacent_f16_color_policy_decision.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
