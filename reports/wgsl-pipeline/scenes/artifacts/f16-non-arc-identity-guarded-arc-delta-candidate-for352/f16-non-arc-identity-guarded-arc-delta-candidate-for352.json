@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-352",
+  "sceneId": "f16-non-arc-identity-guarded-arc-delta-candidate-for352",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-evaluate-non-arc-identity-guarded-arc-delta-candidate-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-351-f16-non-arc-preserving-arc-constraints-ready"
+  ],
+  "inputValidation": {
+    "for351Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-non-arc-preserving-arc-constraints-for351/f16-non-arc-preserving-arc-constraints-for351.json",
+    "for351Decision": "F16_NON_ARC_PRESERVING_ARC_CONSTRAINTS_READY",
+    "for351RequiredDecision": "F16_NON_ARC_PRESERVING_ARC_CONSTRAINTS_READY",
+    "for350Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-arc-improving-non-arc-safe-candidate-for350/f16-arc-improving-non-arc-safe-candidate-for350.json",
+    "for350Decision": "F16_ARC_IMPROVING_NON_ARC_SAFE_CANDIDATE_REJECTED",
+    "for350RequiredDecision": "F16_ARC_IMPROVING_NON_ARC_SAFE_CANDIDATE_REJECTED",
+    "for348Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-new-candidate-search-matrix-for348/f16-new-candidate-search-matrix-for348.json",
+    "for348Decision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for348RequiredDecision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for346Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-global-color-policy-candidate-retired-for346/f16-global-color-policy-candidate-retired-for346.json",
+    "for346Decision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for346RequiredDecision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED"
+  },
+  "decision": "F16_NON_ARC_IDENTITY_GUARDED_ARC_DELTA_CANDIDATE_REJECTED",
+  "allowedDecisions": [
+    "F16_NON_ARC_IDENTITY_GUARDED_ARC_DELTA_CANDIDATE_REJECTED",
+    "F16_NON_ARC_IDENTITY_GUARDED_ARC_DELTA_CANDIDATE_PARTIAL",
+    "F16_NON_ARC_IDENTITY_GUARDED_ARC_DELTA_CANDIDATE_READY",
+    "F16_NON_ARC_IDENTITY_GUARDED_ARC_DELTA_CANDIDATE_INPUT_INVALID"
+  ],
+  "candidate": {
+    "policyId": "non_arc_identity_guarded_arc_delta_zero_probe",
+    "family": "non_arc_identity_guarded_arc_delta_candidate_family",
+    "retiredPolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "for350RejectedCandidateId": "halfway_to_retired_over_white_candidate",
+    "isRetiredPolicy": false,
+    "isFor350RejectedCandidate": false,
+    "formula": "Evidence-only zero-delta probe: preserve the FOR-345 non-arc identity guard first, then evaluate the current arc residual without applying any over-white movement.",
+    "guardFirst": true,
+    "rendererBehaviorChanged": false,
+    "selectedForImplementation": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "evaluation": {
+    "nonArcGuard": {
+      "rowId": "non-arc-rec2020-f16-src-over-rect",
+      "guardEvaluatedFirst": true,
+      "requiredResidual": 0,
+      "candidateResidual": 0,
+      "requiredWorsenedSampleCount": 0,
+      "candidateWorsenedSampleCount": 0,
+      "passed": true,
+      "guardedSampleCount": 3,
+      "candidateBehavior": "preserve-current-reference-equality-on-guarded-non-arc-samples"
+    },
+    "arcEvaluation": {
+      "rowId": "arc-circular-arcs-stroke-butt-adjacent-for341",
+      "evaluatedAfterNonArcGuard": true,
+      "currentResidual": 375,
+      "candidateResidual": 375,
+      "residualReductionVsCurrent": 0,
+      "targetSampleCount": 10,
+      "positiveArcReduction": false,
+      "candidateBehavior": "zero-arc-delta-probe-keeps-current-arc-residual"
+    }
+  },
+  "criteriaEvaluation": {
+    "nonArcGuardPassed": true,
+    "arcResidualReductionPositive": false,
+    "noCoveredSampleRegression": true,
+    "candidateRejectedReason": "NON_ARC_GUARD_PASSED_BUT_ARC_DELTA_ZERO",
+    "minimumSelectionCriteria": [
+      {
+        "id": "non-arc-residual-zero",
+        "passed": true
+      },
+      {
+        "id": "non-arc-worsened-sample-zero",
+        "passed": true
+      },
+      {
+        "id": "positive-arc-residual-reduction",
+        "passed": false
+      },
+      {
+        "id": "no-renderer-change-before-decision",
+        "passed": true
+      }
+    ]
+  },
+  "decisionReason": "The candidate satisfies the FOR-345 non-arc identity guard but leaves the FOR-341 arc residual unchanged at 375. It is rejected as a safe but non-improving probe.",
+  "nextSearchConstraint": {
+    "requires": "The next candidate must keep FOR-345 residual 0 and introduce a nonzero, analytic arc delta that does not move the guarded non-arc samples toward the retired over-white policy.",
+    "rendererImplementationAuthorized": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "retiredPolicyStillForbiddenAsGlobalCandidate": true,
+    "scoreIncreaseAuthorized": false
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "fixtureOrCoordinateBranchChanged": false,
+    "selectedCellOrFullGmCropUsed": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for352_f16_non_arc_identity_guarded_arc_delta_candidate.py",
+      "rtk python3 scripts/validate_for351_f16_non_arc_preserving_arc_constraints.py",
+      "rtk python3 scripts/validate_for350_f16_arc_improving_non_arc_safe_candidate.py",
+      "rtk python3 scripts/validate_for348_f16_new_candidate_search_matrix.py",
+      "rtk python3 scripts/validate_for346_f16_global_color_policy_candidate_retired.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
