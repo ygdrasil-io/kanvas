@@ -1,0 +1,624 @@
+{
+  "allowedClassifications": [
+    "coverage-access-ready-for-candidate-probe",
+    "coverage-access-missing-from-current-artifacts",
+    "coverage-access-requires-new-export-point"
+  ],
+  "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+  "classification": "coverage-access-requires-new-export-point",
+  "computedResidual": 856,
+  "coverageAccess": {
+    "availableInCurrentArtifacts": false,
+    "classification": "coverage-access-requires-new-export-point",
+    "coverageOwnerExists": true,
+    "coverageReconstructedFromRgbaDeltas": false,
+    "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+    "ownerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+    "ownerCoveragePlan": "PathStrokeCoverage(openPolyline,aa=true,strokeWidth=10,capJoinMatrix=butt-bevel+round-round+square-bevel)",
+    "ownerRoute": "cpu.coverage.stroke-cap-join-oracle",
+    "readyForCandidateProbe": false,
+    "requiredExportPoint": "Add a diagnostic-only per-sample export from the CPU stroke coverage oracle or its PathStrokeCoverage evaluation path, carrying effective AA coverage/source alpha for the preserved M60 coordinates.",
+    "requiresNewExportPoint": true
+  },
+  "currentResidual": 856,
+  "decision": "M60_F16_EFFECTIVE_COVERAGE_ACCESS_REQUIRES_NEW_EXPORT_POINT",
+  "decisionReason": "A reliable coverage owner is visible through the CPU route cpu.coverage.stroke-cap-join-oracle, but the current committed producer and artifacts do not expose per-pixel effective AA coverage or effective source alpha for the 10 M60 samples. The next step must add an explicit proof export point instead of reconstructing coverage from RGBA deltas.",
+  "evidenceLines": {
+    "aaResidualArtifact": {
+      "greaterThanEightPixelsLine": 12,
+      "highDeltaSamplesLine": 47,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+      "remainingRootCauseLine": 9
+    },
+    "captureProducer": {
+      "cpuCoveragePlanLine": 227,
+      "cpuRouteJsonLine": 220,
+      "cpuSelectedRouteLine": 226,
+      "for370EffectiveSourceAlphaNullLine": 835,
+      "for370SourceCoverageNullLine": 833,
+      "gpuRouteJsonLine": 251,
+      "path": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+      "residualGpuPixelReadLine": 438,
+      "residualReferencePixelReadLine": 439,
+      "residualSampleConstructorLine": 449,
+      "residualSampleJsonLine": 702,
+      "sourcePaintExtensionLine": 806,
+      "strokePaintBandsLine": 848,
+      "strokeResidualStatsLine": 422
+    },
+    "for370Artifact": {
+      "candidateRefusalLine": 59,
+      "classificationLine": 14,
+      "decisionLine": 13,
+      "firstEffectiveSourceAlphaNullLine": 55,
+      "firstSourceCoverageNullLine": 53,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-paint-capture-extension-for370/m60-f16-source-paint-capture-extension-for370.json"
+    },
+    "routeCpuArtifact": {
+      "coveragePlanLine": 7,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "selectedRouteLine": 6,
+      "statusLine": 5
+    },
+    "routeGpuArtifact": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+      "remainingRootCauseLine": 13,
+      "selectedRouteLine": 8,
+      "statusLine": 6
+    }
+  },
+  "inspectedInputs": {
+    "aaResidualDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+    "captureProducer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+    "for365Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-constrained-candidate-evaluation-for365/f16-constrained-candidate-evaluation-for365.json",
+    "for366Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-positive-residual-target-inventory-for366/f16-positive-residual-target-inventory-for366.json",
+    "for367Artifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join-comparable-f16-evidence-for367/m60-bounded-stroke-cap-join-comparable-f16-evidence-for367.json",
+    "for368Artifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-candidate-metadata-capture-for368/m60-f16-candidate-metadata-capture-for368.json",
+    "for369Artifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-candidate-coordinate-probe-for369/m60-f16-source-candidate-coordinate-probe-for369.json",
+    "for370Artifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-paint-capture-extension-for370/m60-f16-source-paint-capture-extension-for370.json",
+    "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+    "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json"
+  },
+  "linear": "FOR-371",
+  "nonGoalsPreserved": {
+    "approximatedAaCoverageRebuilt": false,
+    "candidateImplementationAuthorized": false,
+    "candidatePolicyRgbaProduced": false,
+    "coverageProductionChanged": false,
+    "f16PremulBlendRuntimeChanged": false,
+    "fallbackChanged": false,
+    "fixtureOnlyPathAdded": false,
+    "fullGmCropPathAdded": false,
+    "geometryChanged": false,
+    "gpuOrWgslChanged": false,
+    "kadreChanged": false,
+    "promotionChanged": false,
+    "rendererBehaviorChanged": false,
+    "rendererCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellBranchAdded": false,
+    "scoreIncreased": false,
+    "skBitmapGetPixelChanged": false,
+    "thresholdChanged": false
+  },
+  "requiredFor370": {
+    "artifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-paint-capture-extension-for370/m60-f16-source-paint-capture-extension-for370.json",
+    "classification": "candidate-probe-refused-by-ambiguous-coverage",
+    "currentResidual": 856,
+    "decision": "M60_F16_SOURCE_PAINT_CAPTURE_EXTENSION_REFUSED_BY_AMBIGUOUS_COVERAGE",
+    "sampleCount": 10
+  },
+  "sampleCount": 10,
+  "samples": [
+    {
+      "accessClassification": "coverage-access-requires-new-export-point",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "candidatePolicyRgba": null,
+      "candidatePolicyRgbaStatus": "blocked-until-effective-coverage-export",
+      "cap": "round",
+      "coverageReconstructedFromRgbaDeltas": false,
+      "currentRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "effectiveSourceAlpha": null,
+      "effectiveSourceAlphaStatus": "requires-new-export-point-from-effective-aa-coverage",
+      "gpuRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "index": 1,
+      "join": "round",
+      "maxChannelDelta": 48,
+      "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+      "paintSourceRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+      "referenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "reliableCoverageOwnerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "reliableCoverageOwnerPath": "cpu.coverage.stroke-cap-join-oracle",
+      "reliableCoverageOwnerStatus": "owner-route-known-but-sample-export-missing",
+      "sampleResidual": 105,
+      "sourceCoverage": null,
+      "sourceCoverageStatus": "requires-new-export-point-from-cpu-coverage-oracle",
+      "strokeBand": "round-round",
+      "strokeWidth": 10.0,
+      "x": 92,
+      "y": 75
+    },
+    {
+      "accessClassification": "coverage-access-requires-new-export-point",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "candidatePolicyRgba": null,
+      "candidatePolicyRgbaStatus": "blocked-until-effective-coverage-export",
+      "cap": "round",
+      "coverageReconstructedFromRgbaDeltas": false,
+      "currentRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "effectiveSourceAlpha": null,
+      "effectiveSourceAlphaStatus": "requires-new-export-point-from-effective-aa-coverage",
+      "gpuRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "index": 2,
+      "join": "round",
+      "maxChannelDelta": 48,
+      "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+      "paintSourceRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+      "referenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "reliableCoverageOwnerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "reliableCoverageOwnerPath": "cpu.coverage.stroke-cap-join-oracle",
+      "reliableCoverageOwnerStatus": "owner-route-known-but-sample-export-missing",
+      "sampleResidual": 105,
+      "sourceCoverage": null,
+      "sourceCoverageStatus": "requires-new-export-point-from-cpu-coverage-oracle",
+      "strokeBand": "round-round",
+      "strokeWidth": 10.0,
+      "x": 91,
+      "y": 76
+    },
+    {
+      "accessClassification": "coverage-access-requires-new-export-point",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "candidatePolicyRgba": null,
+      "candidatePolicyRgbaStatus": "blocked-until-effective-coverage-export",
+      "cap": "round",
+      "coverageReconstructedFromRgbaDeltas": false,
+      "currentRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "effectiveSourceAlpha": null,
+      "effectiveSourceAlphaStatus": "requires-new-export-point-from-effective-aa-coverage",
+      "gpuRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "index": 3,
+      "join": "round",
+      "maxChannelDelta": 48,
+      "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+      "paintSourceRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+      "referenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "reliableCoverageOwnerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "reliableCoverageOwnerPath": "cpu.coverage.stroke-cap-join-oracle",
+      "reliableCoverageOwnerStatus": "owner-route-known-but-sample-export-missing",
+      "sampleResidual": 105,
+      "sourceCoverage": null,
+      "sourceCoverageStatus": "requires-new-export-point-from-cpu-coverage-oracle",
+      "strokeBand": "round-round",
+      "strokeWidth": 10.0,
+      "x": 90,
+      "y": 77
+    },
+    {
+      "accessClassification": "coverage-access-requires-new-export-point",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "candidatePolicyRgba": null,
+      "candidatePolicyRgbaStatus": "blocked-until-effective-coverage-export",
+      "cap": "round",
+      "coverageReconstructedFromRgbaDeltas": false,
+      "currentRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "effectiveSourceAlpha": null,
+      "effectiveSourceAlphaStatus": "requires-new-export-point-from-effective-aa-coverage",
+      "gpuRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "index": 4,
+      "join": "round",
+      "maxChannelDelta": 48,
+      "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+      "paintSourceRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+      "referenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "reliableCoverageOwnerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "reliableCoverageOwnerPath": "cpu.coverage.stroke-cap-join-oracle",
+      "reliableCoverageOwnerStatus": "owner-route-known-but-sample-export-missing",
+      "sampleResidual": 105,
+      "sourceCoverage": null,
+      "sourceCoverageStatus": "requires-new-export-point-from-cpu-coverage-oracle",
+      "strokeBand": "round-round",
+      "strokeWidth": 10.0,
+      "x": 89,
+      "y": 78
+    },
+    {
+      "accessClassification": "coverage-access-requires-new-export-point",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "candidatePolicyRgba": null,
+      "candidatePolicyRgbaStatus": "blocked-until-effective-coverage-export",
+      "cap": "round",
+      "coverageReconstructedFromRgbaDeltas": false,
+      "currentRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "effectiveSourceAlpha": null,
+      "effectiveSourceAlphaStatus": "requires-new-export-point-from-effective-aa-coverage",
+      "gpuRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "index": 5,
+      "join": "round",
+      "maxChannelDelta": 48,
+      "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+      "paintSourceRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+      "referenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "reliableCoverageOwnerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "reliableCoverageOwnerPath": "cpu.coverage.stroke-cap-join-oracle",
+      "reliableCoverageOwnerStatus": "owner-route-known-but-sample-export-missing",
+      "sampleResidual": 105,
+      "sourceCoverage": null,
+      "sourceCoverageStatus": "requires-new-export-point-from-cpu-coverage-oracle",
+      "strokeBand": "round-round",
+      "strokeWidth": 10.0,
+      "x": 88,
+      "y": 79
+    },
+    {
+      "accessClassification": "coverage-access-requires-new-export-point",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "candidatePolicyRgba": null,
+      "candidatePolicyRgbaStatus": "blocked-until-effective-coverage-export",
+      "cap": "round",
+      "coverageReconstructedFromRgbaDeltas": false,
+      "currentRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "effectiveSourceAlpha": null,
+      "effectiveSourceAlphaStatus": "requires-new-export-point-from-effective-aa-coverage",
+      "gpuRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "index": 6,
+      "join": "round",
+      "maxChannelDelta": 48,
+      "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+      "paintSourceRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+      "referenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "reliableCoverageOwnerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "reliableCoverageOwnerPath": "cpu.coverage.stroke-cap-join-oracle",
+      "reliableCoverageOwnerStatus": "owner-route-known-but-sample-export-missing",
+      "sampleResidual": 105,
+      "sourceCoverage": null,
+      "sourceCoverageStatus": "requires-new-export-point-from-cpu-coverage-oracle",
+      "strokeBand": "round-round",
+      "strokeWidth": 10.0,
+      "x": 87,
+      "y": 80
+    },
+    {
+      "accessClassification": "coverage-access-requires-new-export-point",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "candidatePolicyRgba": null,
+      "candidatePolicyRgbaStatus": "blocked-until-effective-coverage-export",
+      "cap": "butt",
+      "coverageReconstructedFromRgbaDeltas": false,
+      "currentRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "effectiveSourceAlpha": null,
+      "effectiveSourceAlphaStatus": "requires-new-export-point-from-effective-aa-coverage",
+      "gpuRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "index": 7,
+      "join": "bevel",
+      "maxChannelDelta": 25,
+      "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+      "paintSourceRgba": [
+        0,
+        102,
+        204,
+        255
+      ],
+      "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+      "referenceRgba": [
+        206,
+        213,
+        239,
+        255
+      ],
+      "reliableCoverageOwnerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "reliableCoverageOwnerPath": "cpu.coverage.stroke-cap-join-oracle",
+      "reliableCoverageOwnerStatus": "owner-route-known-but-sample-export-missing",
+      "sampleResidual": 56,
+      "sourceCoverage": null,
+      "sourceCoverageStatus": "requires-new-export-point-from-cpu-coverage-oracle",
+      "strokeBand": "butt-bevel",
+      "strokeWidth": 10.0,
+      "x": 21,
+      "y": 81
+    },
+    {
+      "accessClassification": "coverage-access-requires-new-export-point",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "candidatePolicyRgba": null,
+      "candidatePolicyRgbaStatus": "blocked-until-effective-coverage-export",
+      "cap": "round",
+      "coverageReconstructedFromRgbaDeltas": false,
+      "currentRgba": [
+        206,
+        213,
+        238,
+        255
+      ],
+      "effectiveSourceAlpha": null,
+      "effectiveSourceAlphaStatus": "requires-new-export-point-from-effective-aa-coverage",
+      "gpuRgba": [
+        206,
+        213,
+        238,
+        255
+      ],
+      "index": 8,
+      "join": "round",
+      "maxChannelDelta": 24,
+      "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+      "paintSourceRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+      "referenceRgba": [
+        182,
+        192,
+        231,
+        255
+      ],
+      "reliableCoverageOwnerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "reliableCoverageOwnerPath": "cpu.coverage.stroke-cap-join-oracle",
+      "reliableCoverageOwnerStatus": "owner-route-known-but-sample-export-missing",
+      "sampleResidual": 52,
+      "sourceCoverage": null,
+      "sourceCoverageStatus": "requires-new-export-point-from-cpu-coverage-oracle",
+      "strokeBand": "round-round",
+      "strokeWidth": 10.0,
+      "x": 93,
+      "y": 74
+    },
+    {
+      "accessClassification": "coverage-access-requires-new-export-point",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "candidatePolicyRgba": null,
+      "candidatePolicyRgbaStatus": "blocked-until-effective-coverage-export",
+      "cap": "butt",
+      "coverageReconstructedFromRgbaDeltas": false,
+      "currentRgba": [
+        157,
+        170,
+        222,
+        255
+      ],
+      "effectiveSourceAlpha": null,
+      "effectiveSourceAlphaStatus": "requires-new-export-point-from-effective-aa-coverage",
+      "gpuRgba": [
+        157,
+        170,
+        222,
+        255
+      ],
+      "index": 9,
+      "join": "bevel",
+      "maxChannelDelta": 24,
+      "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+      "paintSourceRgba": [
+        0,
+        102,
+        204,
+        255
+      ],
+      "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+      "referenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "reliableCoverageOwnerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "reliableCoverageOwnerPath": "cpu.coverage.stroke-cap-join-oracle",
+      "reliableCoverageOwnerStatus": "owner-route-known-but-sample-export-missing",
+      "sampleResidual": 52,
+      "sourceCoverage": null,
+      "sourceCoverageStatus": "requires-new-export-point-from-cpu-coverage-oracle",
+      "strokeBand": "butt-bevel",
+      "strokeWidth": 10.0,
+      "x": 17,
+      "y": 77
+    },
+    {
+      "accessClassification": "coverage-access-requires-new-export-point",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+      "candidatePolicyRgba": null,
+      "candidatePolicyRgbaStatus": "blocked-until-effective-coverage-export",
+      "cap": "round",
+      "coverageReconstructedFromRgbaDeltas": false,
+      "currentRgba": [
+        185,
+        204,
+        185,
+        255
+      ],
+      "effectiveSourceAlpha": null,
+      "effectiveSourceAlphaStatus": "requires-new-export-point-from-effective-aa-coverage",
+      "gpuRgba": [
+        185,
+        204,
+        185,
+        255
+      ],
+      "index": 10,
+      "join": "round",
+      "maxChannelDelta": 24,
+      "missingReason": "The CPU route names a PathStrokeCoverage owner, but the committed producer and artifacts only expose route facts, bitmap RGBA deltas, source paint, cap, join, and strokeWidth. They do not export per-pixel AA coverage or effective source alpha for the sample.",
+      "paintSourceRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+      "referenceRgba": [
+        209,
+        222,
+        209,
+        255
+      ],
+      "reliableCoverageOwnerArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+      "reliableCoverageOwnerPath": "cpu.coverage.stroke-cap-join-oracle",
+      "reliableCoverageOwnerStatus": "owner-route-known-but-sample-export-missing",
+      "sampleResidual": 66,
+      "sourceCoverage": null,
+      "sourceCoverageStatus": "requires-new-export-point-from-cpu-coverage-oracle",
+      "strokeBand": "round-round",
+      "strokeWidth": 10.0,
+      "x": 69,
+      "y": 81
+    }
+  ],
+  "sceneId": "m60-f16-effective-coverage-access-audit-for371",
+  "schemaVersion": 1,
+  "sourceFinding": "global/kanvas/findings/for-370-relie-source-paint-m60-f16-mais-refuse-la-candidate-faute-de-couverture-aa-effective",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-couverture-aa-effective-apres-for-370",
+  "sourceSceneId": "m60-bounded-stroke-cap-join",
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for371_m60_f16_effective_coverage_access_audit.py",
+      "rtk python3 scripts/validate_for370_m60_f16_source_paint_capture_extension.py",
+      "rtk python3 scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+      "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+      "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+      "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+      "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+      "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for371-pycache python3 -m py_compile scripts/validate_for371_m60_f16_effective_coverage_access_audit.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ],
+    "notes": "This validator generates and validates the FOR-371 audit artifact and report."
+  }
+}
