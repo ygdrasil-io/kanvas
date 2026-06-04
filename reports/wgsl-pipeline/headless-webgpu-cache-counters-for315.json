@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "linearIssue": "FOR-315",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-headless-web-gpu-cache-counter-evidence-ticket",
+  "generatedBy": "org.skia.gpu.webgpu.GeneratedSolidRectMigrationTest#generated solid color rect reuses warm pipeline cache",
+  "status": "pass",
+  "claimLevel": "headless-webgpu-cache-counter-evidence",
+  "sourceClass": "kanvas-headless-webgpu-observed",
+  "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+  "sourceArtifact": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+  "backend": "WebGPU",
+  "executionMode": "headless",
+  "adapter": "Apple M2 Max",
+  "notKadreNativeCallbacks": true,
+  "broadKadreWgpu4kCallbacksClaimed": false,
+  "releaseGate": false,
+  "readinessGateChanged": false,
+  "generatedPath": {
+    "shaderFamily": "Rect + SolidColor + SrcOver",
+    "selectedPath": "generated",
+    "generatedDefaultAvailable": true,
+    "retainedFallbackReason": null
+  },
+  "coldSnapshot": {"shaderModuleCacheHits":0,"shaderModuleCacheMisses":28,"pipelineCacheHits":0,"pipelineCacheMisses":1,"resourceCacheHits":0,"resourceCacheMisses":0,"pipelineCreations":1,"shaderModuleCount":30,"pipelineCacheEntryCount":1,"resourceCacheEntryCount":0},
+  "warmSnapshot": {"shaderModuleCacheHits":0,"shaderModuleCacheMisses":28,"pipelineCacheHits":1,"pipelineCacheMisses":1,"resourceCacheHits":0,"resourceCacheMisses":0,"pipelineCreations":1,"shaderModuleCount":30,"pipelineCacheEntryCount":1,"resourceCacheEntryCount":0},
+  "invariants": {
+    "coldPipelineCacheMissesAtLeastOne": true,
+    "warmPipelineCacheHitsIncreased": true,
+    "generatedPathSelected": true
+  },
+  "nonChanges": {
+    "rendererBehavior": "unchanged",
+    "gradle": "unchanged",
+    "shaders": "unchanged",
+    "thresholds": "unchanged",
+    "sceneStatus": "unchanged",
+    "readiness": "unchanged",
+    "releaseGateStatus": "unchanged",
+    "fallbacks": "unchanged",
+    "kadreNativeBehavior": "unchanged"
+  }
+}
