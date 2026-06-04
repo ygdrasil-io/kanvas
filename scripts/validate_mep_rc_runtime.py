@@ -80,8 +80,33 @@ def main() -> int:
     require("external/poc-koreos" in native.get("submodulePrecondition", ""), "Kadre submodule precondition missing")
 
     headless = evidence.get("commands", {}).get("headlessEvidence", {})
+    require(
+        headless.get("command") == "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+        "headless evidence must use the checked-in MEP-NEXT validator",
+    )
     require(headless.get("nativeWindow") is False, "headless evidence must not open native windows")
     require(headless.get("usesKadreNativeSubmodule") is False, "headless evidence must not require Kadre submodule")
+    require(headless.get("ciGate") is True, "headless evidence validator must remain a CI gate")
+    require(
+        headless.get("validatesCheckedInArtifacts") is True,
+        "headless evidence must validate checked-in artifacts",
+    )
+    require(
+        ":kadre-runtime:pipelineMepNextRuntimeInteractive" not in headless.get("command", ""),
+        "direct Kadre runtime task must not be listed as mandatory headless evidence",
+    )
+
+    optional_refresh = evidence.get("commands", {}).get("optionalDirectRuntimeRefresh", {})
+    require(
+        optional_refresh.get("command") == "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+        "optional direct runtime refresh command missing",
+    )
+    require(optional_refresh.get("ciGate") is False, "direct Kadre runtime refresh must not be a CI gate")
+    require(
+        "external/poc-koreos" in optional_refresh.get("submodulePrecondition", "")
+        or "org.graphiks.kadre" in optional_refresh.get("submodulePrecondition", ""),
+        "direct Kadre runtime refresh must document Kadre source/local artifact precondition",
+    )
 
     product = evidence.get("productRuntimeEvidence", {})
     require(product.get("sceneSwitching", {}).get("renderableSceneCount", 0) >= 3, "scene switching needs three renderable scenes")
@@ -142,6 +167,15 @@ def main() -> int:
     require("not treated as solved by derived M85 ledgers" in closeout_flat, "closeout must not treat blockers as solved")
     require("Single opt-in native RC command" in closeout, "closeout must document the opt-in native command")
     require("not wired into CI" in closeout_flat, "closeout must keep native command out of CI")
+    require(
+        "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive" in closeout,
+        "closeout must document checked-in MEP-NEXT runtime validation",
+    )
+    require(
+        ":kadre-runtime:pipelineMepNextRuntimeInteractive"
+        not in closeout.split("Optional/provisioned evidence refresh:")[0],
+        "direct Kadre runtime task must not appear before optional/provisioned refresh in closeout",
+    )
 
     require("Do not claim release-grade `frame.kadre-windowed` FPS" in pm_script_flat, "PM script must forbid release-grade FPS claims")
     require("Do not claim broad observed WebGPU cache hit/miss telemetry" in pm_script_flat, "PM script must forbid broad cache claims")
@@ -149,6 +183,14 @@ def main() -> int:
     require("WGSL remains the shader target" in pm_script_flat, "PM script must keep WGSL target wording")
     require("Native-Unavailable Fallback" in pm_script, "PM script must include native-unavailable fallback")
     require(":kadre-runtime:pipelineMepNextRuntimeInteractive" not in pm_script.split("Optional Kadre-provisioned evidence refresh:")[0], "Kadre runtime task must not be required before optional provisioning")
+    native_unavailable_fallback = pm_script.split("## Native-Unavailable Fallback", 1)[1].split(
+        "Use the optional Kadre-provisioned refresh only",
+        1,
+    )[0]
+    require(
+        ":kadre-runtime:pipelineMepNextRuntimeInteractive" not in native_unavailable_fallback,
+        "Kadre runtime task must not be required in native-unavailable fallback",
+    )
 
     non_claims = "\n".join(evidence.get("nonClaims", []))
     require("No new native window execution" in non_claims, "native execution non-claim missing")

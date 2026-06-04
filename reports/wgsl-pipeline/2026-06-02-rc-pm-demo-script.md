@@ -94,8 +94,15 @@ If the native window cannot open on the PM machine, do not improvise a web demo
 as a substitute for Kadre native. Use the headless fallback:
 
 ```bash
-rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive
+rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive
 python3 scripts/validate_mep_rc_runtime.py .
+```
+
+Use the optional Kadre-provisioned refresh only after the source-build
+precondition above is satisfied:
+
+```bash
+rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive
 ```
 
 Then show:
