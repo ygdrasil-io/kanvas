@@ -6424,7 +6424,9 @@ tasks.register("pipelinePmBundle") {
                 "linearIssues" to listOf("FOR-193", "FOR-194", "FOR-195", "FOR-196"),
                 "demoCommand" to "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive",
                 "benchmarkCommand" to "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeBenchmark -PkadreMepNextFrames=300 -PkadreMepNextWarmupFrames=120",
-                "ciEvidenceCommand" to "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+                "ciEvidenceCommand" to "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+                "optionalDirectRuntimeRefreshCommand" to "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+                "optionalDirectRuntimeRefreshPrecondition" to "git submodule update --init --recursive external/poc-koreos or provide local org.graphiks.kadre artifacts",
                 "runtimeCapabilities" to linkedMapOf(
                     "autonomousFrameClock" to true,
                     "sceneSwitchingRenderableScenes" to 4,

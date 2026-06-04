@@ -35,26 +35,36 @@
     "reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md",
     "reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md"
   ],
-  "commands": {
-    "singleNativeRcDemo": {
-      "command": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive",
-      "nativeWindow": true,
+    "commands": {
+        "singleNativeRcDemo": {
+            "command": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive",
+            "nativeWindow": true,
       "optIn": true,
       "ciGate": false,
       "submodulePrecondition": "git submodule update --init --recursive external/poc-koreos",
-      "kadreSource": "external/poc-koreos source build; settings.gradle.kts substitutes org.graphiks.kadre coordinates when the submodule is provisioned",
-      "reason": "Uses the existing interactive Kadre task as the single RC native demo command rather than adding a second native-window task."
-    },
-    "headlessEvidence": {
-      "command": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
-      "nativeWindow": false,
-      "ciGate": true,
-      "usesKadreNativeSubmodule": false
-    },
-    "validator": {
-      "command": "python3 scripts/validate_mep_rc_runtime.py .",
-      "nativeWindow": false,
-      "ciGate": true
+            "kadreSource": "external/poc-koreos source build; settings.gradle.kts substitutes org.graphiks.kadre coordinates when the submodule is provisioned",
+            "reason": "Uses the existing interactive Kadre task as the single RC native demo command rather than adding a second native-window task."
+        },
+        "headlessEvidence": {
+            "command": "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+            "nativeWindow": false,
+            "ciGate": true,
+            "usesKadreNativeSubmodule": false,
+            "validatesCheckedInArtifacts": true,
+            "reason": "Validates checked-in M90 runtime evidence without resolving Kadre native runtime dependencies."
+        },
+        "optionalDirectRuntimeRefresh": {
+            "command": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+            "nativeWindow": false,
+            "ciGate": false,
+            "usesKadreNativeSubmodule": "provisioned-or-local-artifacts",
+            "submodulePrecondition": "git submodule update --init --recursive external/poc-koreos or provide local org.graphiks.kadre artifacts",
+            "reason": "Optional evidence regeneration path; not a checked-in RC/CI gate when Kadre source substitution is unavailable."
+        },
+        "validator": {
+            "command": "python3 scripts/validate_mep_rc_runtime.py .",
+            "nativeWindow": false,
+            "ciGate": true
     },
     "pmBundle": {
       "command": "rtk ./gradlew --no-daemon pipelinePmBundle",
