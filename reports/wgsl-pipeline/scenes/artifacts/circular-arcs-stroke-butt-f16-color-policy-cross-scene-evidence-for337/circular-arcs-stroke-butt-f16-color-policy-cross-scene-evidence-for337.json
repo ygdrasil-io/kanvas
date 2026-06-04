@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-337",
+  "sceneId": "circular-arcs-stroke-butt-f16-color-policy-cross-scene-evidence-for337",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-cross-scene-f16-renderer-color-policy-evidence-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-336-circular-arcs-stroke-butt-renderer-color-policy-needs-cross-scene-evidence-finding"
+  ],
+  "inputValidation": {
+    "for336Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-renderer-color-policy-for336/circular-arcs-stroke-butt-selected-cell-renderer-color-policy-for336.json",
+    "for336Decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_RENDERER_COLOR_POLICY_NEEDS_CROSS_SCENE_EVIDENCE",
+    "for336RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_RENDERER_COLOR_POLICY_NEEDS_CROSS_SCENE_EVIDENCE",
+    "for335Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-f16-blend-policy-for335/circular-arcs-stroke-butt-selected-cell-f16-blend-policy-for335.json",
+    "for335Decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_BLEND_POLICY_REQUIRES_RENDERER_COLOR_POLICY_DECISION",
+    "for335RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_BLEND_POLICY_REQUIRES_RENDERER_COLOR_POLICY_DECISION"
+  },
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_F16_COLOR_POLICY_CROSS_SCENE_EVIDENCE_MIXED_REQUIRES_MORE_DATA",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_F16_COLOR_POLICY_CROSS_SCENE_EVIDENCE_SUPPORTS_IMPLEMENTATION",
+    "CIRCULAR_ARCS_STROKE_BUTT_F16_COLOR_POLICY_CROSS_SCENE_EVIDENCE_MIXED_REQUIRES_MORE_DATA",
+    "CIRCULAR_ARCS_STROKE_BUTT_F16_COLOR_POLICY_CROSS_SCENE_EVIDENCE_REJECTS_STRAIGHT_SRGB",
+    "CIRCULAR_ARCS_STROKE_BUTT_F16_COLOR_POLICY_CROSS_SCENE_EVIDENCE_INPUT_INVALID"
+  ],
+  "decisionReason": "Only the selected cell has a comparable Rec.2020 F16 working-space versus straight-sRGB candidate residual table. Adjacent arc-stroke cells and the available non-arc blend scene expose source gaps rather than policy proof, so the evidence remains mixed and requires more data before any renderer change.",
+  "recommendation": {
+    "type": "more_evidence_before_renderer_patch",
+    "implementationAllowedNow": false,
+    "nextTicketMustUseMemoryFirst": true,
+    "requiredNextEvidence": [
+      "Instrument adjacent CircularArcsStrokeButt cells with the same F16 store/readback sample schema.",
+      "Add or identify a true non-arc Rec.2020 F16 SrcOver/blend scene with reference, current, and candidate samples.",
+      "Keep SkBitmap.getPixel as internal oracle and SkBitmap.getPixelAsSrgb as export boundary unless explicitly migrated."
+    ]
+  },
+  "policyComparison": {
+    "currentPolicy": "current_cpu_rec2020_f16_src_over_then_srgb_export",
+    "candidatePolicy": "straight_srgb_quantized_alpha_src_over_white",
+    "comparableGroupCount": 1,
+    "requiredComparableGroupCountBeforeImplementation": 3
+  },
+  "evidenceGroups": [
+    {
+      "groupId": "selected_cell_instrumented_f16_rec2020",
+      "title": "Selected CircularArcsStrokeButt cell with F16 runtime trace",
+      "sourceKind": "direct-selected-cell-runtime-trace",
+      "sampleCount": 8,
+      "currentResidual": 132,
+      "candidateResidual": 52,
+      "residualDeltaCandidateMinusCurrent": -80,
+      "residualReduction": 80,
+      "worsenedSamples": 2,
+      "dataComparableForPolicyDecision": true,
+      "sourceLimitations": [
+        "Only one isolated selected cell is instrumented through the FOR-333/FOR-335 F16 trace.",
+        "The evidence is CPU/readback-side; it does not prove a GPU renderer policy.",
+        "Two antialiased edge samples worsen under the best straight-sRGB candidate."
+      ],
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-f16-blend-policy-for335/circular-arcs-stroke-butt-selected-cell-f16-blend-policy-for335.json",
+        "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-renderer-color-policy-for336/circular-arcs-stroke-butt-selected-cell-renderer-color-policy-for336.json"
+      ],
+      "notes": [
+        "Best candidate policy: straight_srgb_quantized_alpha_src_over_white",
+        "Full-coverage stroke centers improve from 57 residual to 0."
+      ]
+    },
+    {
+      "groupId": "adjacent_comparable_arc_stroke_cells",
+      "title": "Adjacent/comparable CircularArcsStrokeButt cells",
+      "sourceKind": "grid-identified-but-not-runtime-traced",
+      "sampleCount": 4,
+      "currentResidual": null,
+      "candidateResidual": null,
+      "residualDeltaCandidateMinusCurrent": null,
+      "residualReduction": null,
+      "worsenedSamples": null,
+      "dataComparableForPolicyDecision": false,
+      "sourceLimitations": [
+        "Adjacent cells are identifiable from the GM grid, but no FOR-333-style runtime trace exists for them.",
+        "No per-cell upstream Skia isolated reference or CPU F16 sample table exists for these candidates.",
+        "Using the selected-cell residual for adjacent cells would be an extrapolation, so it is refused."
+      ],
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+        "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/circular-arcs-stroke-butt-selected-cell-skia-reference-for327.json"
+      ],
+      "notes": [
+        "The selected cell is start=0 sweep=90 at row 0 column 2.",
+        "The listed adjacent cells are future instrumentation targets, not evidence of policy safety."
+      ],
+      "selectedCellAnchor": {
+        "rowIndex": 0,
+        "columnIndex": 2,
+        "startDegrees": 0,
+        "sweepDegrees": 90,
+        "useCenter": false,
+        "aa": true,
+        "strokeCap": "kButt_Cap"
+      },
+      "candidateCells": [
+        {
+          "rowIndex": 0,
+          "columnIndex": 1,
+          "startDegrees": 0,
+          "sweepDegrees": 45
+        },
+        {
+          "rowIndex": 0,
+          "columnIndex": 3,
+          "startDegrees": 0,
+          "sweepDegrees": 130
+        },
+        {
+          "rowIndex": 1,
+          "columnIndex": 2,
+          "startDegrees": 10,
+          "sweepDegrees": 90
+        },
+        {
+          "rowIndex": 2,
+          "columnIndex": 2,
+          "startDegrees": 30,
+          "sweepDegrees": 90
+        }
+      ],
+      "skiaSelectedCellReferenceReady": true
+    },
+    {
+      "groupId": "non_arc_blend_scene_available_but_not_f16_policy_comparable",
+      "title": "Non-arc blend scene evidence gap",
+      "sourceKind": "non-arc-target-colorspace-blend-diagnostic",
+      "sampleCount": 10,
+      "currentResidual": 856,
+      "candidateResidual": null,
+      "residualDeltaCandidateMinusCurrent": null,
+      "residualReduction": null,
+      "worsenedSamples": null,
+      "dataComparableForPolicyDecision": false,
+      "sourceLimitations": [
+        "The available non-arc scene is a targetColorSpaceBlend diagnostic, not a Rec.2020 F16 CPU blend trace.",
+        "It has reference/GPU high-delta samples, but no straight-sRGB candidate values.",
+        "It proves that color/blend policy can be scene-sensitive, not that FOR-335's candidate is safe."
+      ],
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+        "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json"
+      ],
+      "notes": [
+        "Route status: expected-unsupported",
+        "Resolved root cause: color-space.target-blend-required",
+        "Remaining root cause: coverage.stroke-cap-join-aa-residual"
+      ],
+      "diagnosticRoute": {
+        "sceneId": "m60-bounded-stroke-cap-join",
+        "drawKind": "BoundedStrokeCapJoinGM",
+        "targetColorSpaceBlend": true,
+        "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+        "edgeCount": 18,
+        "edgeBudget": 256
+      }
+    }
+  ],
+  "summary": {
+    "groupCount": 3,
+    "comparableGroupCount": 1,
+    "selectedCellCurrentResidual": 132,
+    "selectedCellCandidateResidual": 52,
+    "selectedCellResidualReduction": 80,
+    "selectedCellWorsenedSamples": 2,
+    "missingComparableGroups": [
+      "adjacent_comparable_arc_stroke_cells",
+      "non_arc_blend_scene_available_but_not_f16_policy_comparable"
+    ],
+    "supportsImplementation": false,
+    "rejectsStraightSrgb": false,
+    "requiresMoreData": true
+  },
+  "implementation": {
+    "rendererBehaviorChanged": false,
+    "reason": "FOR-337 is an evidence artifact only."
+  },
+  "nonGoalsPreserved": {
+    "colorToF16Premul": true,
+    "blendF16PremulMode": true,
+    "skBitmapGetPixelInternalOracle": true,
+    "skBitmapGetPixelAsSrgbExportBoundary": true,
+    "arcGeometry": true,
+    "coverage": true,
+    "gpu": true,
+    "wgsl": true,
+    "thresholds": true,
+    "fallbacks": true,
+    "kadre": true,
+    "promotion": true,
+    "score": true,
+    "historicalArtifactsFOR329ToFOR336Rewritten": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for337_circular_arcs_stroke_butt_f16_color_policy_cross_scene_evidence.py",
+      "rtk python3 scripts/validate_for336_circular_arcs_stroke_butt_selected_cell_renderer_color_policy.py",
+      "rtk python3 scripts/validate_for335_circular_arcs_stroke_butt_selected_cell_f16_blend_policy.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
