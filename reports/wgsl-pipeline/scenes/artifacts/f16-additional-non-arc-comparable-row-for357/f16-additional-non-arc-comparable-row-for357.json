@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-357",
+  "sceneId": "f16-additional-non-arc-comparable-row-for357",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-additional-non-arc-f16-comparable-row-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-356-f16-broader-evidence-remains-partial"
+  ],
+  "inputValidation": {
+    "for356Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-generalized-non-scene-arc-delta-broader-evidence-for356/f16-generalized-non-scene-arc-delta-broader-evidence-for356.json",
+    "for356Decision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_BROADER_EVIDENCE_PARTIAL",
+    "for356RequiredDecision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_BROADER_EVIDENCE_PARTIAL",
+    "for355Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-generalized-non-scene-arc-delta-candidate-for355/f16-generalized-non-scene-arc-delta-candidate-for355.json",
+    "for355Decision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "for355RequiredDecision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "for345Artifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for345Decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for345RequiredDecision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for344Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-broader-non-arc-color-policy-for344/f16-broader-non-arc-color-policy-for344.json",
+    "for344Decision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "for344RequiredDecision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "for338Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-f16-color-policy-comparable-samples-for338/circular-arcs-stroke-butt-f16-color-policy-comparable-samples-for338.json",
+    "for338Decision": "CIRCULAR_ARCS_STROKE_BUTT_F16_COLOR_POLICY_COMPARABLE_SAMPLES_PARTIAL_REQUIRES_MORE_INSTRUMENTATION",
+    "for338RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_F16_COLOR_POLICY_COMPARABLE_SAMPLES_PARTIAL_REQUIRES_MORE_INSTRUMENTATION"
+  },
+  "decision": "F16_ADDITIONAL_NON_ARC_COMPARABLE_ROW_PARTIAL_INSUFFICIENT_REFERENCE",
+  "allowedDecisions": [
+    "F16_ADDITIONAL_NON_ARC_COMPARABLE_ROW_ACCEPTS_CANDIDATE",
+    "F16_ADDITIONAL_NON_ARC_COMPARABLE_ROW_REJECTS_CANDIDATE",
+    "F16_ADDITIONAL_NON_ARC_COMPARABLE_ROW_PARTIAL_INSUFFICIENT_REFERENCE"
+  ],
+  "candidate": {
+    "policyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+    "family": "nonzero_arc_delta_generalized_non_scene_guard_family",
+    "reusedFromFor355": true,
+    "reusedFromFor356": true,
+    "newCandidateDefined": false,
+    "selectedForImplementation": false,
+    "rendererBehaviorChanged": false,
+    "scoreIncreaseAuthorized": false,
+    "candidateRule": "FOR-355 stroke-center partial raw-alpha-over-white rule, guarded by non-arc identity evidence."
+  },
+  "additionalNonArcRow": {
+    "rowId": "additional-non-arc-f16-comparable-row-reference-gap-for357",
+    "sceneId": "f16-additional-non-arc-comparable-row-for357",
+    "family": "additional-non-arc-f16-reference-gap",
+    "nonArc": true,
+    "distinctFromFor345": true,
+    "referenceAccepted": false,
+    "referenceStatus": "insufficient-reference",
+    "referenceInsufficiencyReason": "No additional non-arc row distinct from FOR-345 supplies accepted reference samples, current Kanvas values, and candidate values computed by the FOR-355 rule.",
+    "currentKanvasValuesAvailable": false,
+    "candidateValuesComputedByFor355Rule": false,
+    "candidateRuleAppliedSampleCount": 0,
+    "sampleCount": 2,
+    "samples": [
+      {
+        "name": "additional_non_arc_reference_probe_background",
+        "zone": "background",
+        "referenceAccepted": false,
+        "insufficiencyReason": "no additional isolated non-arc Rec.2020 F16 reference/current/candidate row exists beyond FOR-345",
+        "currentKanvasSrgbRgba": null,
+        "candidateRgba": null,
+        "currentResidual": null,
+        "candidateResidual": null,
+        "candidateRuleApplied": false,
+        "worsenedCurrent": null
+      },
+      {
+        "name": "additional_non_arc_reference_probe_covered_sample",
+        "zone": "non-arc-covered-sample",
+        "referenceAccepted": false,
+        "insufficiencyReason": "candidate computation would require a comparable reference and current Kanvas sample pair; the repository does not contain one",
+        "currentKanvasSrgbRgba": null,
+        "candidateRgba": null,
+        "currentResidual": null,
+        "candidateResidual": null,
+        "candidateRuleApplied": false,
+        "worsenedCurrent": null
+      }
+    ],
+    "residuals": {
+      "currentResidual": null,
+      "candidateResidual": null,
+      "residualReductionVsCurrent": null,
+      "candidateWorsenedSampleCount": null
+    },
+    "decision": "F16_ADDITIONAL_NON_ARC_COMPARABLE_ROW_PARTIAL_INSUFFICIENT_REFERENCE"
+  },
+  "inventory": {
+    "searchedForAdditionalComparableNonArcRows": true,
+    "for345ReusedAsAdditionalRow": false,
+    "selectedCellProofUsed": false,
+    "fullGmCropProofUsed": false,
+    "candidateComparableRowsFoundDistinctFromFor345": 0,
+    "rows": [
+      {
+        "sourceId": "FOR-345",
+        "rowId": "non-arc-rec2020-f16-src-over-rect",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+        "nonArc": true,
+        "referenceCurrentCandidateComparable": true,
+        "eligibleAsAdditionalRow": false,
+        "exclusionReason": "FOR-357 requires a non-arc row distinct from FOR-345; this row remains only the existing guard.",
+        "sampleCount": 4,
+        "currentResidual": 0,
+        "candidateResidualUnderFor355Rule": 0,
+        "candidateWorsenedSampleCountUnderFor355Rule": 0
+      },
+      {
+        "sourceId": "FOR-344",
+        "rowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-broader-non-arc-color-policy-for344/f16-broader-non-arc-color-policy-for344.json",
+        "family": "bounded-stroke-cap-join",
+        "sourceKind": "non-arc-target-colorspace-blend-diagnostic",
+        "nonArc": true,
+        "referenceCurrentCandidateComparable": false,
+        "eligibleAsAdditionalRow": false,
+        "referenceStatus": "reference-rgba-high-delta-samples-available",
+        "currentStatus": "current-gpu-rgba-high-delta-samples-available",
+        "candidateStatus": "missing-for-f16-policy-candidate",
+        "currentResidual": 856,
+        "candidateResidualUnderFor355Rule": null,
+        "candidateWorsenedSampleCountUnderFor355Rule": null,
+        "rejectionReason": "This is the available non-arc color/blend signal, but it is a targetColorSpaceBlend diagnostic and not a Rec.2020 F16 reference/current/candidate row for straight_srgb_quantized_alpha_src_over_white."
+      },
+      {
+        "sourceId": "FOR-344",
+        "rowId": "non-arc-m60-target-colorspace-neutral-aa-substitute-refused",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-broader-non-arc-color-policy-for344/f16-broader-non-arc-color-policy-for344.json",
+        "family": "target-colorspace-neutral-aa",
+        "sourceKind": "isolated-target-colorspace-blend-diagnostic-fixture",
+        "nonArc": true,
+        "referenceCurrentCandidateComparable": false,
+        "eligibleAsAdditionalRow": false,
+        "referenceStatus": "single-channel-cpu-reference-sample-available",
+        "currentStatus": "post-present-red-sample-available",
+        "candidateStatus": "targetColorSpaceBlend-red-sample-available-not-f16-policy-candidate",
+        "currentResidual": 13,
+        "candidateResidualUnderFor355Rule": null,
+        "candidateWorsenedSampleCountUnderFor355Rule": null,
+        "rejectionReason": "The neutral AA fixture has a reference/current/targetBlend triple, but the candidate is the WebGPU targetColorSpaceBlend pilot, not the FOR-341/FOR-342 F16 CPU policy candidate. Using it as the non-arc F16 proof would be a fixture substitution."
+      },
+      {
+        "sourceId": "FOR-344",
+        "rowId": "non-arc-target-color-candidate-inventory-reference-gap",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-broader-non-arc-color-policy-for344/f16-broader-non-arc-color-policy-for344.json",
+        "family": "target-color-candidate-inventory",
+        "sourceKind": "inventory-classification",
+        "nonArc": true,
+        "referenceCurrentCandidateComparable": false,
+        "eligibleAsAdditionalRow": false,
+        "referenceStatus": "inventory-references-existing-scene-artifacts-only",
+        "currentStatus": "inventory-current-route-stats-only",
+        "candidateStatus": "missing-straight-srgb-f16-policy-candidate",
+        "currentResidual": null,
+        "candidateResidualUnderFor355Rule": null,
+        "candidateWorsenedSampleCountUnderFor355Rule": null,
+        "rejectionReason": "The inventory is useful cross-scene evidence for target-color candidates, but it does not contain per-sample Rec.2020 F16 reference/current/candidate rows."
+      },
+      {
+        "sourceId": "FOR-338",
+        "rowId": "non-arc-rec2020-f16-blend-target-no-fixture",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-f16-color-policy-comparable-samples-for338/circular-arcs-stroke-butt-f16-color-policy-comparable-samples-for338.json",
+        "nonArc": true,
+        "referenceCurrentCandidateComparable": false,
+        "eligibleAsAdditionalRow": false,
+        "currentResidual": null,
+        "candidateResidualUnderFor355Rule": null,
+        "candidateWorsenedSampleCountUnderFor355Rule": null,
+        "rejectionReason": "FOR-338 records the desired non-arc target but explicitly lacks current/candidate comparable values."
+      }
+    ]
+  },
+  "summary": {
+    "referenceAccepted": false,
+    "currentResidual": null,
+    "candidateResidual": null,
+    "candidateWorsenedSampleCount": null,
+    "partialReason": "The current artifact set still has no additional comparable non-arc F16 row distinct from FOR-345. FOR-357 records the insufficiency explicitly and does not convert missing reference data into acceptance.",
+    "blocksImplementationPlanning": true
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererImplementationAuthorized": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for357_f16_additional_non_arc_comparable_row.py",
+      "rtk python3 scripts/validate_for356_f16_generalized_non_scene_arc_delta_broader_evidence.py",
+      "rtk python3 scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk python3 -m py_compile scripts/validate_for357_f16_additional_non_arc_comparable_row.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
