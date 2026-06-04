@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-360",
+  "sceneId": "f16-independent-arc-scene-evidence-for360",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-independent-arc-scene-evidence-for-f16-candidate",
+  "sourceFindings": [
+    "global/kanvas/findings/for-359-f16-candidate-still-requires-independent-arc-scene",
+    "global/kanvas/findings/for-358-real-additional-non-arc-f16-row-accepts-candidate"
+  ],
+  "inputValidation": {
+    "for359Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-candidate-after-for358-guard-for359/f16-candidate-after-for358-guard-for359.json",
+    "for359Report": "reports/wgsl-pipeline/2026-06-04-for-359-f16-candidate-after-for358-guard.md",
+    "for359Decision": "F16_GENERALIZED_CANDIDATE_STILL_REQUIRES_INDEPENDENT_ARC_SCENE",
+    "for359RequiredDecision": "F16_GENERALIZED_CANDIDATE_STILL_REQUIRES_INDEPENDENT_ARC_SCENE",
+    "for358Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-real-additional-non-arc-row-for358/f16-real-additional-non-arc-row-for358.json",
+    "for358Report": "reports/wgsl-pipeline/2026-06-04-for-358-f16-real-additional-non-arc-row.md",
+    "for358Decision": "F16_REAL_ADDITIONAL_NON_ARC_ROW_ACCEPTS_CANDIDATE",
+    "for358RequiredDecision": "F16_REAL_ADDITIONAL_NON_ARC_ROW_ACCEPTS_CANDIDATE",
+    "for355Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-generalized-non-scene-arc-delta-candidate-for355/f16-generalized-non-scene-arc-delta-candidate-for355.json",
+    "for355Report": "reports/wgsl-pipeline/2026-06-04-for-355-f16-generalized-non-scene-arc-delta-candidate.md",
+    "for355Decision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "for355RequiredDecision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE"
+  },
+  "decision": "F16_INDEPENDENT_ARC_SCENE_EVIDENCE_PARTIAL",
+  "allowedDecisions": [
+    "F16_INDEPENDENT_ARC_SCENE_SUPPORTS_CANDIDATE",
+    "F16_INDEPENDENT_ARC_SCENE_REJECTS_CANDIDATE",
+    "F16_INDEPENDENT_ARC_SCENE_EVIDENCE_PARTIAL"
+  ],
+  "decisionReason": "No inspected repository artifact supplies an independent arc scene outside the FOR-340/FOR-341 CircularArcsStrokeButt adjacent groups with accepted reference samples, current Kanvas F16 samples, and candidate RGBA values for the exact FOR-355 candidate. FOR-360 therefore records PARTIAL instead of accepting or rejecting the candidate from incomplete data.",
+  "candidate": {
+    "policyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+    "family": "nonzero_arc_delta_generalized_non_scene_guard_family",
+    "formula": "Evidence-only generalized non-scene probe: evaluate the FOR-345 non-arc guard first; if it stays exact, preserve current RGBA except for samples with zone `stroke-center` and a captured raw reference alpha in (0, 255), where the candidate computes the raw source RGBA alpha-composited over white. This is artifact evaluation, not renderer logic.",
+    "reusedFromFor355": true,
+    "reusedExactly": true,
+    "newCandidateDefined": false,
+    "selectedForImplementation": false,
+    "rendererBehaviorChanged": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "independentArcSceneSearch": {
+    "searchedForIndependentArcScene": true,
+    "capturedIndependentComparableScene": false,
+    "comparableIndependentArcSceneAvailable": false,
+    "selectedCellProofUsed": false,
+    "fullGmCropProofUsed": false,
+    "for340For341AdjacentGroupsReusedAsNewProof": false,
+    "inspectedPathCount": 7,
+    "inspectedPaths": [
+      {
+        "sourceId": "FOR-340",
+        "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/circular-arcs-stroke-butt-adjacent-f16-reference-for340.json",
+        "sceneId": "circular-arcs-stroke-butt-adjacent-f16-reference-for340",
+        "sourceKind": "isolated-skia-reference-for-forbidden-adjacent-circular-arcs-stroke-butt-groups",
+        "rowIds": [
+          "adjacent_arc_stroke_start0_sweep45_target",
+          "adjacent_arc_stroke_start0_sweep130_target"
+        ],
+        "exists": true,
+        "arcScene": true,
+        "independentFromFor340For341AdjacentGroups": false,
+        "referenceCurrentCandidateComparable": true,
+        "selectedCellProof": false,
+        "fullGmCropProof": false,
+        "eligibleAsIndependentArcSceneEvidence": false,
+        "currentResidual": null,
+        "candidateResidual": null,
+        "candidateWorsenedSampleCount": null,
+        "candidateEvaluationStatus": "not-evaluated-as-independent-proof",
+        "exactReason": "FOR-340 is the accepted Skia reference for the same two adjacent CircularArcsStrokeButt groups already used by FOR-341/FOR-355, so FOR-360 must not count it as independent proof."
+      },
+      {
+        "sourceId": "FOR-341",
+        "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+        "sceneId": "circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341",
+        "sourceKind": "forbidden-adjacent-circular-arcs-stroke-butt-current-reference-candidate-evidence",
+        "rowIds": [
+          "adjacent_arc_stroke_start0_sweep45_target",
+          "adjacent_arc_stroke_start0_sweep130_target"
+        ],
+        "exists": true,
+        "arcScene": true,
+        "independentFromFor340For341AdjacentGroups": false,
+        "referenceCurrentCandidateComparable": true,
+        "selectedCellProof": false,
+        "fullGmCropProof": false,
+        "eligibleAsIndependentArcSceneEvidence": false,
+        "currentResidual": 375,
+        "candidateResidual": 0,
+        "candidateWorsenedSampleCount": 0,
+        "candidateEvaluationStatus": "not-evaluated-as-independent-proof",
+        "exactReason": "FOR-341 has the comparable current/reference/candidate arc rows, but they are exactly the two adjacent CircularArcsStrokeButt groups prohibited as new independent FOR-360 evidence."
+      },
+      {
+        "sourceId": "FOR-342",
+        "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342.json",
+        "sceneId": "circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342",
+        "sourceKind": "derivative-scoped-route-record-for-same-adjacent-groups",
+        "rowIds": [
+          "adjacent_arc_stroke_start0_sweep45_target",
+          "adjacent_arc_stroke_start0_sweep130_target"
+        ],
+        "exists": true,
+        "arcScene": true,
+        "independentFromFor340For341AdjacentGroups": false,
+        "referenceCurrentCandidateComparable": true,
+        "selectedCellProof": false,
+        "fullGmCropProof": false,
+        "eligibleAsIndependentArcSceneEvidence": false,
+        "currentResidual": 375,
+        "candidateResidual": 0,
+        "candidateWorsenedSampleCount": 0,
+        "candidateEvaluationStatus": "not-evaluated-as-independent-proof",
+        "exactReason": "FOR-342 is derivative evidence for the same adjacent CircularArcsStrokeButt groups and records no independent scene beyond FOR-340/FOR-341."
+      },
+      {
+        "sourceId": "FOR-337",
+        "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-f16-color-policy-cross-scene-evidence-for337/circular-arcs-stroke-butt-f16-color-policy-cross-scene-evidence-for337.json",
+        "sceneId": "circular-arcs-stroke-butt-f16-color-policy-cross-scene-evidence-for337",
+        "sourceKind": "selected-cell-and-target-inventory",
+        "rowIds": [
+          "selected_cell_instrumented_f16_rec2020",
+          "adjacent_comparable_arc_stroke_cells"
+        ],
+        "exists": true,
+        "arcScene": true,
+        "independentFromFor340For341AdjacentGroups": false,
+        "referenceCurrentCandidateComparable": false,
+        "selectedCellProof": true,
+        "fullGmCropProof": false,
+        "eligibleAsIndependentArcSceneEvidence": false,
+        "currentResidual": null,
+        "candidateResidual": null,
+        "candidateWorsenedSampleCount": null,
+        "candidateEvaluationStatus": "not-evaluated-as-independent-proof",
+        "exactReason": "FOR-337 contains selected-cell evidence and only identifies adjacent targets without a comparable current/reference/candidate table. FOR-360 forbids selected-cell substitution."
+      },
+      {
+        "sourceId": "FOR-338",
+        "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-f16-color-policy-comparable-samples-for338/circular-arcs-stroke-butt-f16-color-policy-comparable-samples-for338.json",
+        "sceneId": "circular-arcs-stroke-butt-f16-color-policy-comparable-samples-for338",
+        "sourceKind": "future-comparable-sample-target-inventory",
+        "rowIds": [
+          "adjacent_arc_stroke_start0_sweep45_target",
+          "adjacent_arc_stroke_start0_sweep130_target"
+        ],
+        "exists": true,
+        "arcScene": true,
+        "independentFromFor340For341AdjacentGroups": false,
+        "referenceCurrentCandidateComparable": false,
+        "selectedCellProof": false,
+        "fullGmCropProof": false,
+        "eligibleAsIndependentArcSceneEvidence": false,
+        "currentResidual": null,
+        "candidateResidual": null,
+        "candidateWorsenedSampleCount": null,
+        "candidateEvaluationStatus": "not-evaluated-as-independent-proof",
+        "exactReason": "FOR-338 records adjacent CircularArcsStrokeButt instrumentation targets and explicitly lacks captured current/candidate comparable values; it is not an independent arc scene."
+      },
+      {
+        "sourceId": "FOR-318",
+        "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-arc-stroke-hairline-scout-for318/path-aa-arc-stroke-hairline-scout-for318.json",
+        "sceneId": "path-aa-arc-stroke-hairline-scout-for318",
+        "sourceKind": "path-aa-independent-arc-scout-inventory",
+        "rowIds": [
+          "addarc-webgpu",
+          "circular-arcs-hairline-webgpu",
+          "circular-arcs-stroke-round-webgpu",
+          "circular-arcs-stroke-square-webgpu",
+          "crbug1472747-webgpu"
+        ],
+        "exists": true,
+        "arcScene": true,
+        "independentFromFor340For341AdjacentGroups": true,
+        "referenceCurrentCandidateComparable": false,
+        "selectedCellProof": false,
+        "fullGmCropProof": false,
+        "eligibleAsIndependentArcSceneEvidence": false,
+        "currentResidual": null,
+        "candidateResidual": null,
+        "candidateWorsenedSampleCount": null,
+        "candidateEvaluationStatus": "not-evaluated-as-independent-proof",
+        "exactReason": "FOR-318 identifies independent arc GM rows such as AddArc and Crbug1472747, but they are scout/broad-GM expected-unsupported entries without accepted Rec.2020 F16 current/reference/candidate sample tables for the FOR-355 candidate."
+      },
+      {
+        "sourceId": "FOR-356",
+        "path": "reports/wgsl-pipeline/scenes/artifacts/f16-generalized-non-scene-arc-delta-broader-evidence-for356/f16-generalized-non-scene-arc-delta-broader-evidence-for356.json",
+        "sceneId": "f16-generalized-non-scene-arc-delta-broader-evidence-for356",
+        "sourceKind": "broader-evidence-summary",
+        "rowIds": [
+          "broaderEvidenceSummary"
+        ],
+        "exists": true,
+        "arcScene": true,
+        "independentFromFor340For341AdjacentGroups": false,
+        "referenceCurrentCandidateComparable": false,
+        "selectedCellProof": false,
+        "fullGmCropProof": false,
+        "eligibleAsIndependentArcSceneEvidence": false,
+        "currentResidual": null,
+        "candidateResidual": null,
+        "candidateWorsenedSampleCount": null,
+        "candidateEvaluationStatus": "not-evaluated-as-independent-proof",
+        "exactReason": "FOR-356 already summarizes that the candidate has zero independent arc scenes beyond CircularArcsStrokeButt; FOR-360 treats that as prior evidence, not as a new scene."
+      }
+    ]
+  },
+  "candidateEvaluation": {
+    "evaluatedOnIndependentArcScene": false,
+    "status": "not-evaluated-no-independent-comparable-arc-scene",
+    "sampleCount": 0,
+    "samples": [],
+    "totals": {
+      "currentResidual": null,
+      "candidateResidual": null,
+      "residualDeltaCandidateMinusCurrent": null,
+      "candidateWorsenedSampleCount": null,
+      "for355RuleAppliedSampleCount": null
+    },
+    "exactReason": "No inspected repository artifact supplies an independent arc scene outside the FOR-340/FOR-341 CircularArcsStrokeButt adjacent groups with accepted reference samples, current Kanvas F16 samples, and candidate RGBA values for the exact FOR-355 candidate. FOR-360 therefore records PARTIAL instead of accepting or rejecting the candidate from incomplete data."
+  },
+  "summary": {
+    "independentArcScenesComparableFound": 0,
+    "decisionIsPartial": true,
+    "partialReason": "No inspected repository artifact supplies an independent arc scene outside the FOR-340/FOR-341 CircularArcsStrokeButt adjacent groups with accepted reference samples, current Kanvas F16 samples, and candidate RGBA values for the exact FOR-355 candidate. FOR-360 therefore records PARTIAL instead of accepting or rejecting the candidate from incomplete data.",
+    "blocksImplementationPlanning": true
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "implementationPlanAuthorized": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for360_f16_independent_arc_scene_evidence.py",
+      "rtk python3 scripts/validate_for359_f16_candidate_after_for358_guard.py",
+      "rtk python3 scripts/validate_for358_f16_real_additional_non_arc_row.py",
+      "rtk python3 scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk python3 -m py_compile scripts/validate_for360_f16_independent_arc_scene_evidence.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
