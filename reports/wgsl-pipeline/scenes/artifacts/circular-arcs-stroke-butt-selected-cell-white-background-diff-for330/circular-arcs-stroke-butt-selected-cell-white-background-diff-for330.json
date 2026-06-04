@@ -1,0 +1,556 @@
+{
+  "linear": "FOR-330",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-circular-arcs-stroke-butt-selected-cell-white-background-skia-cpu-comparison-ticket",
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_WHITE_BACKGROUND_DIFF_RESIDUAL_PRESENT",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_WHITE_BACKGROUND_DIFF_RESIDUAL_PRESENT",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_WHITE_BACKGROUND_DIFF_MATCH",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_WHITE_BACKGROUND_DIFF_INPUT_INVALID"
+  ],
+  "sceneId": "circular-arcs-stroke-butt-selected-cell-white-background-diff-for330",
+  "selectedCell": {
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceFutureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "boundedHarnessGm": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+    "cellCount": 1,
+    "quadrant": "bottom-left",
+    "fullGmCanvasArcRectLTRB": [
+      140,
+      520,
+      180,
+      560
+    ],
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "rowIndex": 0,
+    "columnIndex": 2,
+    "startDegrees": 0,
+    "sweepDegrees": 90,
+    "complementSweepDegrees": -270,
+    "useCenter": false,
+    "aa": true,
+    "style": "kStroke_Style",
+    "strokeWidth": 15,
+    "strokeCap": "kButt_Cap",
+    "includedCaps": [
+      "kButt_Cap"
+    ],
+    "excludedCaps": [
+      "kRound_Cap",
+      "kSquare_Cap"
+    ],
+    "includesHairlineStrokeWidth0": false,
+    "includesFill": false,
+    "includesDash": false,
+    "paintAlpha": 100,
+    "drawArcCalls": [
+      {
+        "paintColor": "red",
+        "startDegrees": 0,
+        "sweepDegrees": 90
+      },
+      {
+        "paintColor": "blue",
+        "startDegrees": 0,
+        "sweepDegrees": -270
+      }
+    ]
+  },
+  "follows": {
+    "for327Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/circular-arcs-stroke-butt-selected-cell-skia-reference-for327.json",
+    "for327Skia": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png",
+    "for327Provenance": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia-reference-provenance.json",
+    "for322Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+    "for322Cpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+    "for322Stats": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json",
+    "for322RouteCpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-cpu.json",
+    "for329Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329.json",
+    "for329Report": "reports/wgsl-pipeline/2026-06-04-for-329-circular-arcs-stroke-butt-selected-cell-cpu-raster-audit.md"
+  },
+  "inputs": {
+    "skia": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png",
+      "sourceLinear": "FOR-327",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-skia-reference-for327",
+      "dimensions": {
+        "width": 80,
+        "height": 80
+      },
+      "sha256": "0b69bc3d36f34f6c2fc0fd8f67d9d120d632cf64264983e52db9f5f7cd679ef0"
+    },
+    "cpu": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+      "sourceLinear": "FOR-322",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+      "dimensions": {
+        "width": 80,
+        "height": 80
+      },
+      "sha256": "8b57311de03c9771cd25327248d0b85afb7283e958dae11b6117790fea3f3b37"
+    },
+    "for329Artifact": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329.json",
+      "sourceLinear": "FOR-329",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329",
+      "sha256": "e89d99fd930ccf903fc62166bb8c8716b789ed7006dcd45df092fadfd174ae26",
+      "expectedDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_CPU_RASTER_AUDIT_CAUSE_IDENTIFIED",
+      "expectedNormalizedMetrics": {
+        "totalPixels": 6400,
+        "differentPixels": 2031,
+        "matchingPixels": 4369,
+        "similarityPercent": 68.265625,
+        "maxDeltaByChannel": {
+          "r": 39,
+          "g": 43,
+          "b": 31,
+          "a": 0
+        },
+        "sumAbsDeltaTotal": 63527,
+        "differentPixelBoundingBox": {
+          "left": 12,
+          "top": 12,
+          "right": 67,
+          "bottom": 67
+        }
+      }
+    }
+  },
+  "inputValidation": {
+    "valid": true,
+    "expectedDimensions": {
+      "width": 80,
+      "height": 80
+    },
+    "expectedFor329Decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_CPU_RASTER_AUDIT_CAUSE_IDENTIFIED",
+    "expectedFor329PrimaryCause": "CAUSE_CANDIDATE_BACKGROUND_ALPHA_CONTRACT_MISMATCH",
+    "expectedFor329ResidualCause": "CAUSE_RESIDUAL_REQUIRES_NORMALIZED_BACKGROUND_CPU_TRACE",
+    "expectedFor329NormalizedMetrics": {
+      "totalPixels": 6400,
+      "differentPixels": 2031,
+      "matchingPixels": 4369,
+      "similarityPercent": 68.265625,
+      "maxDeltaByChannel": {
+        "r": 39,
+        "g": 43,
+        "b": 31,
+        "a": 0
+      },
+      "sumAbsDeltaTotal": 63527,
+      "differentPixelBoundingBox": {
+        "left": 12,
+        "top": 12,
+        "right": 67,
+        "bottom": 67
+      }
+    },
+    "invalidReasons": []
+  },
+  "normalization": {
+    "skiaOverWhitePng": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/skia-over-white.png",
+    "method": "PIL Image.alpha_composite(opaque white RGBA background, FOR-327 skia.png)",
+    "backgroundRgba": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "diagnosticOnly": true,
+    "fidelityScoreCounted": false,
+    "scenePromotionChanged": false,
+    "dimensions": {
+      "width": 80,
+      "height": 80
+    },
+    "sha256": "b267d3c48568338fe6b107c4a93f21bae9787ae5dc1fbd7fe39dac0b8fc51368"
+  },
+  "comparison": {
+    "diffPng": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/cpu-vs-skia-over-white-diff.png",
+    "diffEncoding": "absolute RGB channel deltas with opaque changed pixels and transparent equal pixels",
+    "pixelComparison": "strict RGBA pixel comparison, CPU minus Skia-over-white absolute deltas",
+    "totalPixels": 6400,
+    "differentPixels": 2031,
+    "matchingPixels": 4369,
+    "cellSimilarityPercent": 68.265625,
+    "maxDeltaByChannel": {
+      "r": 39,
+      "g": 43,
+      "b": 31,
+      "a": 0
+    },
+    "sumAbsDeltaByChannel": {
+      "r": 33893,
+      "g": 18839,
+      "b": 10795,
+      "a": 0
+    },
+    "sumAbsDeltaTotal": 63527,
+    "differentPixelBoundingBox": {
+      "left": 12,
+      "top": 12,
+      "right": 67,
+      "bottom": 67
+    },
+    "samples": [
+      {
+        "name": "top_left_background",
+        "x": 0,
+        "y": 0,
+        "skiaRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "diffRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "top_edge_background",
+        "x": 40,
+        "y": 0,
+        "skiaRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "diffRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "left_edge_background",
+        "x": 0,
+        "y": 40,
+        "skiaRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "diffRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "arc_rect_top_left",
+        "x": 20,
+        "y": 20,
+        "skiaRgba": [
+          0,
+          0,
+          255,
+          40
+        ],
+        "skiaOverWhiteRgba": [
+          215,
+          215,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          224,
+          220,
+          253,
+          255
+        ],
+        "diffRgba": [
+          9,
+          5,
+          2,
+          255
+        ],
+        "cpuMinusSkiaOverWhiteAbsDelta": [
+          9,
+          5,
+          2,
+          0
+        ]
+      },
+      {
+        "name": "blue_top_stroke_center",
+        "x": 40,
+        "y": 20,
+        "skiaRgba": [
+          0,
+          0,
+          255,
+          100
+        ],
+        "skiaOverWhiteRgba": [
+          155,
+          155,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          172,
+          160,
+          250,
+          255
+        ],
+        "diffRgba": [
+          17,
+          5,
+          5,
+          255
+        ],
+        "cpuMinusSkiaOverWhiteAbsDelta": [
+          17,
+          5,
+          5,
+          0
+        ]
+      },
+      {
+        "name": "red_right_stroke_center",
+        "x": 60,
+        "y": 40,
+        "skiaRgba": [
+          255,
+          0,
+          0,
+          100
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          155,
+          155,
+          255
+        ],
+        "cpuRgba": [
+          235,
+          178,
+          162,
+          255
+        ],
+        "diffRgba": [
+          20,
+          23,
+          7,
+          255
+        ],
+        "cpuMinusSkiaOverWhiteAbsDelta": [
+          20,
+          23,
+          7,
+          0
+        ]
+      },
+      {
+        "name": "red_bottom_stroke_center",
+        "x": 40,
+        "y": 60,
+        "skiaRgba": [
+          255,
+          0,
+          0,
+          100
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          155,
+          155,
+          255
+        ],
+        "cpuRgba": [
+          235,
+          178,
+          162,
+          255
+        ],
+        "diffRgba": [
+          20,
+          23,
+          7,
+          255
+        ],
+        "cpuMinusSkiaOverWhiteAbsDelta": [
+          20,
+          23,
+          7,
+          0
+        ]
+      },
+      {
+        "name": "cell_center_hole",
+        "x": 40,
+        "y": 40,
+        "skiaRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "diffRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "bottom_right_background",
+        "x": 79,
+        "y": 79,
+        "skiaRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "diffRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "hashes": {
+      "skiaInputPngSha256": "0b69bc3d36f34f6c2fc0fd8f67d9d120d632cf64264983e52db9f5f7cd679ef0",
+      "cpuInputPngSha256": "8b57311de03c9771cd25327248d0b85afb7283e958dae11b6117790fea3f3b37",
+      "for329ArtifactSha256": "e89d99fd930ccf903fc62166bb8c8716b789ed7006dcd45df092fadfd174ae26",
+      "skiaOverWhitePngSha256": "b267d3c48568338fe6b107c4a93f21bae9787ae5dc1fbd7fe39dac0b8fc51368",
+      "diffPngSha256": "833b714cf11d34c6ee8e3163105adfcbef97fb79a431b42c10fe29fdfd733ff8"
+    }
+  },
+  "interpretation": {
+    "classification": "white-background-residual-present",
+    "residualPresent": true,
+    "reason": "FOR-329 normalized-background metrics are reproduced: background/alpha is isolated, while stroke/color residuals remain in the selected cell.",
+    "recommendedNextAction": "Trace the normalized-background CPU stroke/color path before any CPU renderer correction or support claim."
+  },
+  "preservedContracts": {
+    "diffScope": "selected-cell-only",
+    "diagnosticOnly": true,
+    "fullGmSubstitutionAccepted": false,
+    "fullGmCropAccepted": false,
+    "fullGmScoreAccepted": false,
+    "productionRendererChanged": false,
+    "cpuRendererFixed": false,
+    "gpuRendered": false,
+    "wgslChanged": false,
+    "thresholdChanged": false,
+    "fallbackPolicyChanged": false,
+    "kadreNativeDependencyAdded": false,
+    "scenePromotionChanged": false,
+    "fidelityScoreCounted": false
+  },
+  "validation": [
+    "rtk python3 scripts/validate_for330_circular_arcs_stroke_butt_selected_cell_white_background_diff.py",
+    "rtk python3 scripts/validate_for329_circular_arcs_stroke_butt_selected_cell_cpu_raster_audit.py",
+    "rtk python3 scripts/validate_for328_circular_arcs_stroke_butt_selected_cell_skia_cpu_diff.py",
+    "rtk python3 scripts/validate_for327_circular_arcs_stroke_butt_selected_cell_skia_reference.py",
+    "rtk python3 scripts/validate_for322_circular_arcs_stroke_butt_selected_cell_harness.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330.json >/dev/null",
+    "rtk ./gradlew pipelineSceneDashboardGate",
+    "rtk git diff --check origin/master...HEAD"
+  ]
+}
