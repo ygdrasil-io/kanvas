@@ -91,7 +91,7 @@
       "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload": 9088
     },
     "firstRedRootDispatch": {
-      "index": 44848,
+      "index": 44851,
       "x": 279,
       "y": 4,
       "bitmapWidth": 1164,
@@ -135,7 +135,7 @@
       ]
     },
     "firstRedRootDispatchOutsideOriginalTargets": {
-      "index": 44848,
+      "index": 44851,
       "x": 279,
       "y": 4,
       "bitmapWidth": 1164,
@@ -189,7 +189,7 @@
       "whiteFinalReadbackPixels": 6176,
       "redFinalReadbackPixels": 3700,
       "firstRedRootDispatch": {
-        "index": 44895,
+        "index": 44947,
         "x": 279,
         "y": 5,
         "bitmapWidth": 1164,
@@ -242,7 +242,7 @@
       "whiteFinalReadbackPixels": 4976,
       "redFinalReadbackPixels": 1176,
       "firstRedRootDispatch": {
-        "index": 45773,
+        "index": 46707,
         "x": 279,
         "y": 13,
         "bitmapWidth": 1164,
@@ -295,7 +295,7 @@
       "whiteFinalReadbackPixels": 2320,
       "redFinalReadbackPixels": 1232,
       "firstRedRootDispatch": {
-        "index": 45493,
+        "index": 46147,
         "x": 279,
         "y": 11,
         "bitmapWidth": 1164,
@@ -348,7 +348,7 @@
       "whiteFinalReadbackPixels": 1832,
       "redFinalReadbackPixels": 0,
       "firstRedRootDispatch": {
-        "index": 44848,
+        "index": 44851,
         "x": 279,
         "y": 4,
         "bitmapWidth": 1164,
@@ -401,7 +401,7 @@
       "whiteFinalReadbackPixels": 13472,
       "redFinalReadbackPixels": 6108,
       "firstRedRootDispatch": {
-        "index": 44895,
+        "index": 44947,
         "x": 279,
         "y": 5,
         "bitmapWidth": 1164,

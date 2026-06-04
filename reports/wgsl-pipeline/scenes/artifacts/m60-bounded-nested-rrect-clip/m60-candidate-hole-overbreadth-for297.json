@@ -1991,7 +1991,7 @@
             ]
           },
           "lastRootEvent": {
-            "index": 47122,
+            "index": 51289,
             "x": 433,
             "y": 38,
             "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
@@ -2030,7 +2030,7 @@
             ]
           },
           "firstRedRuntimeDispatch": {
-            "index": 44848,
+            "index": 44851,
             "x": 279,
             "y": 4,
             "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
@@ -2380,7 +2380,7 @@
             ]
           },
           "lastRootEvent": {
-            "index": 53935,
+            "index": 89585,
             "x": 312,
             "y": 587,
             "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
@@ -2419,7 +2419,7 @@
             ]
           },
           "firstRedRuntimeDispatch": {
-            "index": 51661,
+            "index": 83147,
             "x": 158,
             "y": 553,
             "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
@@ -2769,7 +2769,7 @@
             ]
           },
           "lastRootEvent": {
-            "index": 51659,
+            "index": 74329,
             "x": 38,
             "y": 433,
             "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
@@ -2808,7 +2808,7 @@
             ]
           },
           "firstRedRuntimeDispatch": {
-            "index": 47123,
+            "index": 60049,
             "x": 38,
             "y": 158,
             "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
@@ -3158,7 +3158,7 @@
             ]
           },
           "lastRootEvent": {
-            "index": 51660,
+            "index": 74387,
             "x": 553,
             "y": 433,
             "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
@@ -3197,7 +3197,7 @@
             ]
           },
           "firstRedRuntimeDispatch": {
-            "index": 47124,
+            "index": 60107,
             "x": 553,
             "y": 158,
             "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",

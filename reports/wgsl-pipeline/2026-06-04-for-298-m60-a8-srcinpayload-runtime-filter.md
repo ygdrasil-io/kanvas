@@ -74,8 +74,8 @@ pre-dispatch A8 filter state is not serialized.
 | `a8SrcInPayloadDispatchSourcePresent` | True |
 | `a8LoopUsesMaskLocalCoordinates` | True |
 | `a8LoopHasMaskedAlphaSkipBeforeDispatch` | True |
-| `traceRecordSchemaIsPostBlendOnly` | True |
-| `for294RawJsonSerializesOnlyEventFields` | True |
+| `for299PredispatchSchemaPresentButDecisionFrozen` | True |
+| `for294RawJsonSerializesA8FieldsForFOR299` | True |
 
 ## Preserved Decisions
 
