@@ -66,6 +66,10 @@ REQUESTED_SUBZONES = (
     "blurred_content_envelope",
 )
 RED_SOURCE = "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload"
+FOR299_TRACE_ONLY_SOURCES = {
+    "SkBitmapDevice.drawPathWithMaskFilter.A8.preDispatch",
+    "SkBitmapDevice.drawPathWithMaskFilter.A8.blendSkip",
+}
 
 
 def fail(message: str) -> None:
@@ -257,7 +261,13 @@ def analyze(
         exact_limit = None
 
     original_target_coords = {key_xy(pixel) for pixel in source_for292.get("perPixelComparisons", [])}
-    root_events = [event for event in events if isinstance(event, dict) and bool(event.get("rootDevice"))]
+    root_events = [
+        event
+        for event in events
+        if isinstance(event, dict)
+        and bool(event.get("rootDevice"))
+        and str(event.get("source")) not in FOR299_TRACE_ONLY_SOURCES
+    ]
     root_coords = {key_xy(event) for event in root_events}
     missing_runtime_coords = red_candidate_coords - root_coords
     if missing_runtime_coords:
@@ -389,7 +399,7 @@ def analyze(
             "for293Decision": source_for293["decision"],
         },
         "runtimeRootTrace": {
-            "rawEventCount": int(raw.get("eventCount", len(events))),
+            "rawEventCount": len(root_events),
             "rootEventCount": len(root_events),
             "rootCoordinateCount": len(root_coords),
             "rootCoordinatesCoverExpandedDomain": missing_runtime_coords == set(),

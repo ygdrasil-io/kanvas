@@ -78,6 +78,33 @@ private const val CPU_DESCRIPTOR_LOWERING_UNSUPPORTED_REASON: String = "coverage
 
 public object SkCpuWriteChronologyTrace {
     public data class Target(public val x: Int, public val y: Int)
+    public data class Bounds(
+        public val left: Int,
+        public val top: Int,
+        public val right: Int,
+        public val bottom: Int,
+    )
+
+    public data class A8SrcInPayloadTrace(
+        public val maskLocalX: Int,
+        public val maskLocalY: Int,
+        public val maskOriginLeft: Int,
+        public val maskOriginTop: Int,
+        public val maskWidth: Int,
+        public val maskHeight: Int,
+        public val compositeX0: Int,
+        public val compositeY0: Int,
+        public val compositeX1: Int,
+        public val compositeY1: Int,
+        public val blurredMaskAlpha: Int,
+        public val maskedAlphaBeforeBlend: Int,
+        public val a8SkipReason: String?,
+        public val a8SpanLeft: Int,
+        public val a8SpanRight: Int,
+        public val activeClipBounds: Bounds,
+        public val layerBounds: Bounds,
+        public val sourceLayerBounds: Bounds,
+    )
 
     public data class Event(
         public val index: Int,
@@ -98,6 +125,24 @@ public object SkCpuWriteChronologyTrace {
         public val valueBefore: SkColor,
         public val valueWritten: SkColor,
         public val valueReadAfter: SkColor,
+        public val maskLocalX: Int? = null,
+        public val maskLocalY: Int? = null,
+        public val maskOriginLeft: Int? = null,
+        public val maskOriginTop: Int? = null,
+        public val maskWidth: Int? = null,
+        public val maskHeight: Int? = null,
+        public val compositeX0: Int? = null,
+        public val compositeY0: Int? = null,
+        public val compositeX1: Int? = null,
+        public val compositeY1: Int? = null,
+        public val blurredMaskAlpha: Int? = null,
+        public val maskedAlphaBeforeBlend: Int? = null,
+        public val a8SkipReason: String? = null,
+        public val a8SpanLeft: Int? = null,
+        public val a8SpanRight: Int? = null,
+        public val activeClipBounds: Bounds? = null,
+        public val layerBounds: Bounds? = null,
+        public val sourceLayerBounds: Bounds? = null,
     )
 
     private val lock = Any()
@@ -218,6 +263,7 @@ public object SkCpuWriteChronologyTrace {
         valueReadAfter: SkColor,
         bitmapWidth: Int? = null,
         bitmapHeight: Int? = null,
+        a8SrcInPayloadTrace: A8SrcInPayloadTrace? = null,
     ) {
         synchronized(lock) {
             if (!enabled || Target(x, y) !in targetPixels) return
@@ -245,8 +291,90 @@ public object SkCpuWriteChronologyTrace {
                 valueBefore = valueBefore,
                 valueWritten = valueWritten,
                 valueReadAfter = valueReadAfter,
+                maskLocalX = a8SrcInPayloadTrace?.maskLocalX,
+                maskLocalY = a8SrcInPayloadTrace?.maskLocalY,
+                maskOriginLeft = a8SrcInPayloadTrace?.maskOriginLeft,
+                maskOriginTop = a8SrcInPayloadTrace?.maskOriginTop,
+                maskWidth = a8SrcInPayloadTrace?.maskWidth,
+                maskHeight = a8SrcInPayloadTrace?.maskHeight,
+                compositeX0 = a8SrcInPayloadTrace?.compositeX0,
+                compositeY0 = a8SrcInPayloadTrace?.compositeY0,
+                compositeX1 = a8SrcInPayloadTrace?.compositeX1,
+                compositeY1 = a8SrcInPayloadTrace?.compositeY1,
+                blurredMaskAlpha = a8SrcInPayloadTrace?.blurredMaskAlpha,
+                maskedAlphaBeforeBlend = a8SrcInPayloadTrace?.maskedAlphaBeforeBlend,
+                a8SkipReason = a8SrcInPayloadTrace?.a8SkipReason,
+                a8SpanLeft = a8SrcInPayloadTrace?.a8SpanLeft,
+                a8SpanRight = a8SrcInPayloadTrace?.a8SpanRight,
+                activeClipBounds = a8SrcInPayloadTrace?.activeClipBounds,
+                layerBounds = a8SrcInPayloadTrace?.layerBounds,
+                sourceLayerBounds = a8SrcInPayloadTrace?.sourceLayerBounds,
             )
         }
+    }
+
+    internal fun recordA8SrcInPayloadPreDispatch(
+        x: Int,
+        y: Int,
+        mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender?,
+        valueBefore: SkColor,
+        srcBeforeBlend: SkColor,
+        bitmapWidth: Int,
+        bitmapHeight: Int,
+        trace: A8SrcInPayloadTrace,
+    ) {
+        record(
+            x = x,
+            y = y,
+            source = "SkBitmapDevice.drawPathWithMaskFilter.A8.preDispatch",
+            callsite = "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+            branch = "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload.preDispatch",
+            mode = mode,
+            blender = blender,
+            coverage = 255,
+            srcInput = srcBeforeBlend,
+            srcAfterCoverage = srcBeforeBlend,
+            valueBefore = valueBefore,
+            valueWritten = valueBefore,
+            valueReadAfter = valueBefore,
+            bitmapWidth = bitmapWidth,
+            bitmapHeight = bitmapHeight,
+            a8SrcInPayloadTrace = trace,
+        )
+    }
+
+    internal fun recordA8SrcInPayloadBlendSkip(
+        x: Int,
+        y: Int,
+        mode: SkBlendMode,
+        blender: org.skia.foundation.SkBlender?,
+        coverage: Int,
+        valueBefore: SkColor,
+        srcInput: SkColor,
+        srcAfterCoverage: SkColor,
+        bitmapWidth: Int,
+        bitmapHeight: Int,
+        trace: A8SrcInPayloadTrace,
+    ) {
+        record(
+            x = x,
+            y = y,
+            source = "SkBitmapDevice.drawPathWithMaskFilter.A8.blendSkip",
+            callsite = "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+            branch = "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload.blendSkip",
+            mode = mode,
+            blender = blender,
+            coverage = coverage,
+            srcInput = srcInput,
+            srcAfterCoverage = srcAfterCoverage,
+            valueBefore = valueBefore,
+            valueWritten = valueBefore,
+            valueReadAfter = valueBefore,
+            bitmapWidth = bitmapWidth,
+            bitmapHeight = bitmapHeight,
+            a8SrcInPayloadTrace = trace,
+        )
     }
 
     internal fun recordBitmapDirectWrite(
@@ -1883,6 +2011,41 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                     }
                 } else {
                     val rgb = effectiveColor and 0x00FFFFFF
+                    val activeClipTraceBounds = SkCpuWriteChronologyTrace.Bounds(
+                        clip.left,
+                        clip.top,
+                        clip.right,
+                        clip.bottom,
+                    )
+                    val layerTraceBounds = SkCpuWriteChronologyTrace.Bounds(0, 0, width, height)
+                    val sourceLayerTraceBounds = SkCpuWriteChronologyTrace.Bounds(ml, mt, mr, mb)
+                    fun a8SrcInPayloadTrace(
+                        maskLocalX: Int,
+                        maskLocalY: Int,
+                        blurredMaskAlpha: Int,
+                        maskedAlphaBeforeBlend: Int,
+                        skipReason: String?,
+                    ): SkCpuWriteChronologyTrace.A8SrcInPayloadTrace =
+                        SkCpuWriteChronologyTrace.A8SrcInPayloadTrace(
+                            maskLocalX = maskLocalX,
+                            maskLocalY = maskLocalY,
+                            maskOriginLeft = ml,
+                            maskOriginTop = mt,
+                            maskWidth = maskW,
+                            maskHeight = maskH,
+                            compositeX0 = compositeX0,
+                            compositeY0 = compositeY0,
+                            compositeX1 = compositeX1,
+                            compositeY1 = compositeY1,
+                            blurredMaskAlpha = blurredMaskAlpha,
+                            maskedAlphaBeforeBlend = maskedAlphaBeforeBlend,
+                            a8SkipReason = skipReason,
+                            a8SpanLeft = ml + compositeX0,
+                            a8SpanRight = ml + compositeX1,
+                            activeClipBounds = activeClipTraceBounds,
+                            layerBounds = layerTraceBounds,
+                            sourceLayerBounds = sourceLayerTraceBounds,
+                        )
                     for (y in compositeY0 until compositeY1) {
                         val devY = mt + y
                         for (x in compositeX0 until compositeX1) {
@@ -1902,10 +2065,66 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                             } else {
                                 val baseA = SkColorGetA(paint.color)
                                 val maskedA = (baseA * maskA + 127) / 255
-                                if (maskedA == 0 && !mustBlendZero) continue
-                                val src = transformPaintColor(
-                                    applyColorFilter(colorFilter, (maskedA shl 24) or (paint.color and 0x00FFFFFF)),
+                                val traceActive = SkCpuWriteChronologyTrace.shouldTrace(
+                                    devX,
+                                    devY,
+                                    width,
+                                    height,
                                 )
+                                val skipReason = if (maskedA == 0 && !mustBlendZero) {
+                                    if (maskA == 0) {
+                                        "A8_SRCINPAYLOAD_MASK_ALPHA_ZERO"
+                                    } else {
+                                        "A8_SRCINPAYLOAD_MASKED_ALPHA_ZERO_BEFORE_BLEND"
+                                    }
+                                } else {
+                                    null
+                                }
+                                val trace = if (traceActive) {
+                                    a8SrcInPayloadTrace(
+                                        maskLocalX = x,
+                                        maskLocalY = y,
+                                        blurredMaskAlpha = maskA,
+                                        maskedAlphaBeforeBlend = maskedA,
+                                        skipReason = skipReason,
+                                    )
+                                } else {
+                                    null
+                                }
+                                val traceSrc = if (traceActive) {
+                                    transformPaintColor(
+                                        applyColorFilter(
+                                            colorFilter,
+                                            (maskedA shl 24) or (paint.color and 0x00FFFFFF),
+                                        ),
+                                    )
+                                } else {
+                                    0
+                                }
+                                if (trace != null) {
+                                    SkCpuWriteChronologyTrace.recordA8SrcInPayloadPreDispatch(
+                                        x = devX,
+                                        y = devY,
+                                        mode = mode,
+                                        blender = blender,
+                                        valueBefore = bitmap.getPixel(devX, devY),
+                                        srcBeforeBlend = traceSrc,
+                                        bitmapWidth = width,
+                                        bitmapHeight = height,
+                                        trace = trace,
+                                    )
+                                }
+                                if (maskedA == 0 && !mustBlendZero) continue
+                                val src = if (traceActive) {
+                                    traceSrc
+                                } else {
+                                    transformPaintColor(
+                                        applyColorFilter(
+                                            colorFilter,
+                                            (maskedA shl 24) or (paint.color and 0x00FFFFFF),
+                                        ),
+                                    )
+                                }
                                 dispatchBlend(
                                     devX,
                                     devY,
@@ -1913,6 +2132,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                                     mode,
                                     blender,
                                     "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+                                    a8SrcInPayloadTrace = trace,
                                 )
                             }
                         }
@@ -3018,6 +3238,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         srcInput: SkColor,
         srcAfterCoverage: SkColor,
         valueBefore: SkColor? = null,
+        a8SrcInPayloadTrace: SkCpuWriteChronologyTrace.A8SrcInPayloadTrace? = null,
     ) {
         if (!SkCpuWriteChronologyTrace.shouldTrace(x, y, width, height)) {
             setPixelWithBitmapDirectTraceSuppressedIfNeeded(x, y, value)
@@ -3042,6 +3263,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             valueReadAfter = after,
             bitmapWidth = width,
             bitmapHeight = height,
+            a8SrcInPayloadTrace = a8SrcInPayloadTrace,
         )
     }
 
@@ -3062,6 +3284,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         mode: SkBlendMode,
         traceSource: String,
         traceBlender: org.skia.foundation.SkBlender?,
+        a8SrcInPayloadTrace: SkCpuWriteChronologyTrace.A8SrcInPayloadTrace? = null,
     ) {
         // Phase 7q — clipPath / clipRRect alpha-mask modulation. When a
         // non-rect clip is active we modulate `src.alpha` by the mask
@@ -3075,7 +3298,27 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             cov = (cov * csCov + 127) / 255
         }
         val src: SkColor = if (cov == 0) {
-            if (!modeAffectsZeroAlphaSrc(mode)) return
+            if (!modeAffectsZeroAlphaSrc(mode)) {
+                if (a8SrcInPayloadTrace != null) {
+                    val before = bitmap.getPixel(x, y)
+                    SkCpuWriteChronologyTrace.recordA8SrcInPayloadBlendSkip(
+                        x = x,
+                        y = y,
+                        mode = mode,
+                        blender = traceBlender,
+                        coverage = cov,
+                        valueBefore = before,
+                        srcInput = srcIn,
+                        srcAfterCoverage = SkColorSetARGB(0, 0, 0, 0),
+                        bitmapWidth = width,
+                        bitmapHeight = height,
+                        trace = a8SrcInPayloadTrace.copy(
+                            a8SkipReason = "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+                        ),
+                    )
+                }
+                return
+            }
             SkColorSetARGB(0, 0, 0, 0)
         } else if (cov == 255) {
             srcIn
@@ -3114,10 +3357,31 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                     coverage = cov,
                     srcInput = srcIn,
                     srcAfterCoverage = src,
+                    a8SrcInPayloadTrace = a8SrcInPayloadTrace,
                 )
                 return
             }
-            if (sa == 0) return
+            if (sa == 0) {
+                if (a8SrcInPayloadTrace != null) {
+                    val before = bitmap.getPixel(x, y)
+                    SkCpuWriteChronologyTrace.recordA8SrcInPayloadBlendSkip(
+                        x = x,
+                        y = y,
+                        mode = mode,
+                        blender = traceBlender,
+                        coverage = cov,
+                        valueBefore = before,
+                        srcInput = srcIn,
+                        srcAfterCoverage = src,
+                        bitmapWidth = width,
+                        bitmapHeight = height,
+                        trace = a8SrcInPayloadTrace.copy(
+                            a8SkipReason = "A8_SRCINPAYLOAD_SRC_ALPHA_ZERO_AFTER_COVERAGE",
+                        ),
+                    )
+                }
+                return
+            }
             val dst = bitmap.getPixel(x, y)
             val da = SkColorGetA(dst)
             val invSa = 255 - sa
@@ -3135,6 +3399,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                     srcInput = srcIn,
                     srcAfterCoverage = src,
                     valueBefore = dst,
+                    a8SrcInPayloadTrace = a8SrcInPayloadTrace,
                 )
                 return
             }
@@ -3155,6 +3420,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 srcInput = srcIn,
                 srcAfterCoverage = src,
                 valueBefore = dst,
+                a8SrcInPayloadTrace = a8SrcInPayloadTrace,
             )
             return
         }
@@ -3173,6 +3439,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             srcInput = srcIn,
             srcAfterCoverage = src,
             valueBefore = dst,
+            a8SrcInPayloadTrace = a8SrcInPayloadTrace,
         )
     }
 
@@ -3198,11 +3465,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         mode: SkBlendMode,
         blender: org.skia.foundation.SkBlender?,
         traceSource: String = "SkBitmapDevice.dispatchBlend",
+        a8SrcInPayloadTrace: SkCpuWriteChronologyTrace.A8SrcInPayloadTrace? = null,
     ) {
         when (blender) {
-            null -> blend(x, y, src, mode, traceSource, null)
-            is org.skia.foundation.SkBlendModeBlender -> blend(x, y, src, blender.mode, traceSource, blender)
-            else -> blendCustom(x, y, src, blender, traceSource)
+            null -> blend(x, y, src, mode, traceSource, null, a8SrcInPayloadTrace)
+            is org.skia.foundation.SkBlendModeBlender -> {
+                blend(x, y, src, blender.mode, traceSource, blender, a8SrcInPayloadTrace)
+            }
+            else -> blendCustom(x, y, src, blender, traceSource, a8SrcInPayloadTrace)
         }
     }
 
@@ -3228,6 +3498,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         srcIn: SkColor,
         blender: org.skia.foundation.SkBlender,
         traceSource: String,
+        a8SrcInPayloadTrace: SkCpuWriteChronologyTrace.A8SrcInPayloadTrace? = null,
     ) {
         // AA-clip + clipShader modulation parity with [blend].
         var cov = 255
@@ -3268,6 +3539,7 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             srcInput = srcIn,
             srcAfterCoverage = srcByte,
             valueBefore = dstByte,
+            a8SrcInPayloadTrace = a8SrcInPayloadTrace,
         )
     }
 

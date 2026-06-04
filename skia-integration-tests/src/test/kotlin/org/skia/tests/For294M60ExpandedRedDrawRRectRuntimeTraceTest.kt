@@ -114,7 +114,25 @@ class For294M60ExpandedRedDrawRRectRuntimeTraceTest {
                 "srcAfterCoverageRgba": ${rgba(event.srcAfterCoverage)},
                 "valueBeforeRgba": ${rgba(event.valueBefore)},
                 "valueWrittenRgba": ${rgba(event.valueWritten)},
-                "valueReadAfterRgba": ${rgba(event.valueReadAfter)}
+                "valueReadAfterRgba": ${rgba(event.valueReadAfter)},
+                "maskLocalX": ${nullableInt(event.maskLocalX)},
+                "maskLocalY": ${nullableInt(event.maskLocalY)},
+                "maskOriginLeft": ${nullableInt(event.maskOriginLeft)},
+                "maskOriginTop": ${nullableInt(event.maskOriginTop)},
+                "maskWidth": ${nullableInt(event.maskWidth)},
+                "maskHeight": ${nullableInt(event.maskHeight)},
+                "compositeX0": ${nullableInt(event.compositeX0)},
+                "compositeY0": ${nullableInt(event.compositeY0)},
+                "compositeX1": ${nullableInt(event.compositeX1)},
+                "compositeY1": ${nullableInt(event.compositeY1)},
+                "blurredMaskAlpha": ${nullableInt(event.blurredMaskAlpha)},
+                "maskedAlphaBeforeBlend": ${nullableInt(event.maskedAlphaBeforeBlend)},
+                "a8SkipReason": ${nullableString(event.a8SkipReason)},
+                "a8SpanLeft": ${nullableInt(event.a8SpanLeft)},
+                "a8SpanRight": ${nullableInt(event.a8SpanRight)},
+                "activeClipBounds": ${bounds(event.activeClipBounds)},
+                "layerBounds": ${bounds(event.layerBounds)},
+                "sourceLayerBounds": ${bounds(event.sourceLayerBounds)}
               }""".trimIndent()
         }
         return """
@@ -137,6 +155,24 @@ class For294M60ExpandedRedDrawRRectRuntimeTraceTest {
 
     private fun rgba(color: SkColor): String =
         "[${SkColorGetR(color)}, ${SkColorGetG(color)}, ${SkColorGetB(color)}, ${SkColorGetA(color)}]"
+
+    private fun nullableInt(value: Int?): String = value?.toString() ?: "null"
+
+    private fun nullableString(value: String?): String =
+        if (value == null) "null" else quote(value)
+
+    private fun bounds(value: SkCpuWriteChronologyTrace.Bounds?): String =
+        if (value == null) {
+            "null"
+        } else {
+            """
+              {
+                "left": ${value.left},
+                "top": ${value.top},
+                "right": ${value.right},
+                "bottom": ${value.bottom}
+              }""".trimIndent()
+        }
 
     private fun quote(value: String): String =
         buildString {

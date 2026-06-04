@@ -176,22 +176,14 @@ def source_needles() -> dict[str, bool]:
             "val maskedA = (baseA * maskA + 127) / 255" in source_text
             and "if (maskedA == 0 && !mustBlendZero) continue" in source_text
         ),
-        "traceRecordSchemaIsPostBlendOnly": (
-            "public data class Event(" in source_text
-            and "public val coverage: Int" in source_text
-            and "public val srcInput: SkColor" in source_text
-            and "public val srcAfterCoverage: SkColor" in source_text
-            and "public val valueReadAfter: SkColor" in source_text
-            and "maskLocalX" not in source_text
-            and "blurredMaskAlpha" not in source_text
-            and "a8SkipReason" not in source_text
+        "for299PredispatchSchemaPresentButDecisionFrozen": (
+            "public data class A8SrcInPayloadTrace" in source_text
+            and "recordA8SrcInPayloadPreDispatch" in source_text
         ),
-        "for294RawJsonSerializesOnlyEventFields": (
-            '"coverage": ${event.coverage}' in test_text
-            and '"srcInputRgba": ${rgba(event.srcInput)}' in test_text
-            and "maskLocalX" not in test_text
-            and "blurredMaskAlpha" not in test_text
-            and "a8SkipReason" not in test_text
+        "for294RawJsonSerializesA8FieldsForFOR299": (
+            '"maskLocalX": ${nullableInt(event.maskLocalX)}' in test_text
+            and '"blurredMaskAlpha": ${nullableInt(event.blurredMaskAlpha)}' in test_text
+            and '"a8SkipReason": ${nullableString(event.a8SkipReason)}' in test_text
         ),
     }
 
