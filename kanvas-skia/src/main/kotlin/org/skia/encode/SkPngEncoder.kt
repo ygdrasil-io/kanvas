@@ -23,9 +23,9 @@ import java.util.zip.Deflater
  * chooses the row filter with the smallest absolute-byte score.
  *
  * **Colour space** : the caller's [SkBitmap.colorSpace] is **not**
- * embedded as an `iCCP` chunk, so a non-sRGB bitmap loses
- * its working-space tag through an encode→decode round-trip. The
- * pixel values themselves are preserved as 8-bit RGBA samples.
+ * embedded as an `iCCP` chunk. Pixel rows are materialized through
+ * [SkBitmap.getPixelAsSrgb], so F16 non-sRGB bitmaps are converted to
+ * untagged sRGB RGBA samples at the encoder boundary.
  */
 public object SkPngEncoder {
 
@@ -204,7 +204,7 @@ public object SkPngEncoder {
         val row = ByteArray(src.width * RGBA_BYTES_PER_PIXEL)
         var offset = 0
         for (x in 0 until src.width) {
-            val argb = src.getPixel(x, y)
+            val argb = src.getPixelAsSrgb(x, y)
             row[offset++] = ((argb ushr 16) and 0xFF).toByte()
             row[offset++] = ((argb ushr 8) and 0xFF).toByte()
             row[offset++] = (argb and 0xFF).toByte()
