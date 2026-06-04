@@ -277,7 +277,13 @@ def summarize_event(event: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def event_stats(coords: set[tuple[int, int]], events: list[dict[str, Any]]) -> dict[str, Any]:
-    selected = [event for event in events if key_xy(event) in coords and bool(event.get("rootDevice"))]
+    selected = [
+        event
+        for event in events
+        if key_xy(event) in coords
+        and bool(event.get("rootDevice"))
+        and str(event.get("source")) not in for294.FOR299_TRACE_ONLY_SOURCES
+    ]
     red_events = [event for event in selected if str(event.get("source")) == for294.RED_SOURCE]
     return {
         "rootEventCount": len(selected),

@@ -42,8 +42,8 @@ coordinates via `build/reports/for294/m60-expanded-red-drawrrect-runtime-trace-f
 
 | Event | Index | Pixel | Source | Branch | Mode | Source RGBA | Written RGBA |
 |---|---:|---|---|---|---|---|---|
-| First red root dispatch | 44848 | `279,4` | `SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload` | `SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)` | `kSrcOver` | `[202, 59, 19, 1]` | `[255, 254, 254, 255]` |
-| First red root dispatch outside original targets | 44848 | `279,4` | `SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload` | `SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)` | `kSrcOver` | `[202, 59, 19, 1]` | `[255, 254, 254, 255]` |
+| First red root dispatch | 44851 | `279,4` | `SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload` | `SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)` | `kSrcOver` | `[202, 59, 19, 1]` | `[255, 254, 254, 255]` |
+| First red root dispatch outside original targets | 44851 | `279,4` | `SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload` | `SkBitmapDevice.blend.kSrcOver.partialSrc.setPixel(out)` | `kSrcOver` | `[202, 59, 19, 1]` | `[255, 254, 254, 255]` |
 
 ## Subzone Comparison
 
