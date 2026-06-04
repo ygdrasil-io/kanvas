@@ -1,0 +1,334 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-344",
+  "sceneId": "f16-broader-non-arc-color-policy-for344",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-broader-non-arc-f16-color-policy-evidence-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-343-f16-color-policy-boundary-ready-for-broader-evidence-finding"
+  ],
+  "inputValidation": {
+    "for343Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-color-policy-boundary-for343/f16-color-policy-boundary-for343.json",
+    "for343Decision": "F16_COLOR_POLICY_BOUNDARY_READY_FOR_BROADER_EVIDENCE",
+    "for343RequiredDecision": "F16_COLOR_POLICY_BOUNDARY_READY_FOR_BROADER_EVIDENCE",
+    "for343BoundaryId": "cpu-raster-f16-color-policy-boundary",
+    "for343BoundaryReadyForBroaderEvidence": true,
+    "for342Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342.json",
+    "for342Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_SCOPED_IMPLEMENTATION_PARTIAL_REQUIRES_SAFER_ROUTE",
+    "for337Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-f16-color-policy-cross-scene-evidence-for337/circular-arcs-stroke-butt-f16-color-policy-cross-scene-evidence-for337.json",
+    "for337Decision": "CIRCULAR_ARCS_STROKE_BUTT_F16_COLOR_POLICY_CROSS_SCENE_EVIDENCE_MIXED_REQUIRES_MORE_DATA"
+  },
+  "decision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+  "allowedDecisions": [
+    "F16_BROADER_NON_ARC_EVIDENCE_READY_FOR_POLICY_DECISION",
+    "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "F16_BROADER_NON_ARC_EVIDENCE_REJECTS_GLOBAL_MIGRATION",
+    "F16_BROADER_NON_ARC_EVIDENCE_INPUT_INVALID"
+  ],
+  "decisionReason": "FOR-343 is ready for broader evidence, but the repository still lacks a genuine non-arc Rec.2020 F16 reference/current/candidate row for the straight_srgb_quantized_alpha_src_over_white policy. The available non-arc targetColorSpaceBlend artifacts are useful gap evidence and substitution guards, not policy proof.",
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "status": "evidence-collection-partial-not-implemented",
+    "globalF16RendererChangeAllowedNow": false,
+    "rendererBehaviorChanged": false,
+    "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "requiredReferenceKind": "non-arc Rec.2020 kRGBA_F16Norm SrcOver/blend isolated reference"
+  },
+  "matrix": {
+    "description": "Reference/current/candidate matrix for FOR-344 broader non-arc F16 policy evidence.",
+    "requiredComparableNonArcRowsBeforeGlobalMigration": 1,
+    "requiredCrossSceneRowsBeforeGlobalMigration": 2,
+    "rowCount": 4,
+    "comparableRowCount": 1,
+    "nonArcRowCount": 3,
+    "comparableNonArcRowCount": 0,
+    "rows": [
+      {
+        "rowId": "arc-prerequisite-for342-adjacent-cells",
+        "family": "circular-arcs-stroke-butt",
+        "sceneId": "circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342",
+        "sourceKind": "arc-adjacent-old-current-actual-new-candidate",
+        "nonArc": false,
+        "rec2020F16SrcOverOrBlendSignal": true,
+        "referenceCurrentCandidateComparable": true,
+        "reference": {
+          "status": "isolated-skia-over-white-reference-available"
+        },
+        "current": {
+          "status": "old-current-and-actual-new-renderer-match-unchanged"
+        },
+        "candidate": {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "status": "computed-policy-samples-available-not-applied"
+        },
+        "sampleCount": 12,
+        "currentResidual": 375,
+        "candidateResidual": 0,
+        "candidateMinusCurrentResidual": -375,
+        "residualReduction": 375,
+        "worsenedSamples": 0,
+        "sourceArtifacts": [
+          "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342.json"
+        ],
+        "classificationReason": "FOR-342 keeps the known arc-adjacent prerequisite visible: the candidate matches the isolated Skia-over-white samples, but renderer behavior was intentionally not changed.",
+        "notes": [
+          "This is not the non-arc proof required for a global color-policy migration.",
+          "The row prevents FOR-344 from losing the source candidate and safer-route context."
+        ],
+        "samplePreview": []
+      },
+      {
+        "rowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+        "family": "bounded-stroke-cap-join",
+        "sceneId": "m60-bounded-stroke-cap-join",
+        "sourceKind": "non-arc-target-colorspace-blend-diagnostic",
+        "nonArc": true,
+        "rec2020F16SrcOverOrBlendSignal": true,
+        "referenceCurrentCandidateComparable": false,
+        "reference": {
+          "status": "reference-rgba-high-delta-samples-available"
+        },
+        "current": {
+          "status": "current-gpu-rgba-high-delta-samples-available"
+        },
+        "candidate": {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "status": "missing-for-f16-policy-candidate"
+        },
+        "sampleCount": 10,
+        "currentResidual": 856,
+        "candidateResidual": null,
+        "candidateMinusCurrentResidual": null,
+        "residualReduction": null,
+        "worsenedSamples": null,
+        "sourceArtifacts": [
+          "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+          "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json"
+        ],
+        "classificationReason": "This is the available non-arc color/blend signal, but it is a targetColorSpaceBlend diagnostic and not a Rec.2020 F16 reference/current/candidate row for straight_srgb_quantized_alpha_src_over_white.",
+        "notes": [
+          "routeStatus=expected-unsupported",
+          "resolvedRootCause=color-space.target-blend-required",
+          "remainingRootCause=coverage.stroke-cap-join-aa-residual",
+          "residualClassification=mostly byte-exact target-color transform residual after RGBA8 source quantization; remaining >8 tail is localized to cap/join AA boundary pixels"
+        ],
+        "samplePreview": [
+          {
+            "x": 92,
+            "y": 75,
+            "referenceRgba": [
+              133,
+              150,
+              214,
+              255
+            ],
+            "currentRgba": [
+              181,
+              191,
+              230,
+              255
+            ],
+            "candidatePolicyRgba": null,
+            "reason": "no straight-sRGB F16 candidate sample exists for this non-arc diagnostic"
+          },
+          {
+            "x": 91,
+            "y": 76,
+            "referenceRgba": [
+              133,
+              150,
+              214,
+              255
+            ],
+            "currentRgba": [
+              181,
+              191,
+              230,
+              255
+            ],
+            "candidatePolicyRgba": null,
+            "reason": "no straight-sRGB F16 candidate sample exists for this non-arc diagnostic"
+          },
+          {
+            "x": 90,
+            "y": 77,
+            "referenceRgba": [
+              133,
+              150,
+              214,
+              255
+            ],
+            "currentRgba": [
+              181,
+              191,
+              230,
+              255
+            ],
+            "candidatePolicyRgba": null,
+            "reason": "no straight-sRGB F16 candidate sample exists for this non-arc diagnostic"
+          }
+        ]
+      },
+      {
+        "rowId": "non-arc-m60-target-colorspace-neutral-aa-substitute-refused",
+        "family": "target-colorspace-neutral-aa",
+        "sceneId": "m60-target-colorspace-neutral-aa",
+        "sourceKind": "isolated-target-colorspace-blend-diagnostic-fixture",
+        "nonArc": true,
+        "rec2020F16SrcOverOrBlendSignal": true,
+        "referenceCurrentCandidateComparable": false,
+        "reference": {
+          "status": "single-channel-cpu-reference-sample-available"
+        },
+        "current": {
+          "status": "post-present-red-sample-available"
+        },
+        "candidate": {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "status": "targetColorSpaceBlend-red-sample-available-not-f16-policy-candidate"
+        },
+        "sampleCount": 1,
+        "currentResidual": 13,
+        "candidateResidual": 0,
+        "candidateMinusCurrentResidual": -13,
+        "residualReduction": 13,
+        "worsenedSamples": 0,
+        "sourceArtifacts": [
+          "reports/wgsl-pipeline/scenes/artifacts/m60-target-colorspace-neutral-aa/stats.json"
+        ],
+        "classificationReason": "The neutral AA fixture has a reference/current/targetBlend triple, but the candidate is the WebGPU targetColorSpaceBlend pilot, not the FOR-341/FOR-342 F16 CPU policy candidate. Using it as the non-arc F16 proof would be a fixture substitution.",
+        "notes": [
+          "sourceRoute=webgpu.present-pass.srgb-to-rec2020-after-blend",
+          "targetRoute=webgpu.target-colorspace-blend.solid-coverage",
+          "target-colorspace blend path matches CPU 128 on the isolated neutral AA sample"
+        ],
+        "samplePreview": [
+          {
+            "channel": "red",
+            "reference": 128,
+            "current": 115,
+            "targetColorSpaceBlendCandidate": 128,
+            "f16PolicyCandidate": null
+          }
+        ]
+      },
+      {
+        "rowId": "non-arc-target-color-candidate-inventory-reference-gap",
+        "family": "target-color-candidate-inventory",
+        "sceneId": "m60-target-color-candidate-inventory",
+        "sourceKind": "inventory-classification",
+        "nonArc": true,
+        "rec2020F16SrcOverOrBlendSignal": true,
+        "referenceCurrentCandidateComparable": false,
+        "reference": {
+          "status": "inventory-references-existing-scene-artifacts-only"
+        },
+        "current": {
+          "status": "inventory-current-route-stats-only"
+        },
+        "candidate": {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "status": "missing-straight-srgb-f16-policy-candidate"
+        },
+        "sampleCount": 33,
+        "currentResidual": null,
+        "candidateResidual": null,
+        "candidateMinusCurrentResidual": null,
+        "residualReduction": null,
+        "worsenedSamples": null,
+        "sourceArtifacts": [
+          "reports/wgsl-pipeline/scenes/artifacts/m60-target-color-candidate-inventory.json"
+        ],
+        "classificationReason": "The inventory is useful cross-scene evidence for target-color candidates, but it does not contain per-sample Rec.2020 F16 reference/current/candidate rows.",
+        "notes": [
+          "candidateRows=1",
+          "nonCandidateRows=32",
+          "generatedDate=2026-06-02"
+        ],
+        "samplePreview": []
+      }
+    ]
+  },
+  "referenceGapClassification": {
+    "status": "partial",
+    "stableReasonCode": "NON_ARC_REC2020_F16_REFERENCE_CURRENT_CANDIDATE_ROWS_MISSING",
+    "trueComparableNonArcReferencePresent": false,
+    "falseProofRejected": true,
+    "requiresMoreReferenceRows": true,
+    "minimumMissingRow": "A non-arc Rec.2020 kRGBA_F16Norm SrcOver/blend scene with isolated reference, current renderer samples, straight_srgb_quantized_alpha_src_over_white candidate samples, per-sample residuals, aggregate residuals, and worsened-sample counts."
+  },
+  "dangerousRouteDiagnostics": [
+    {
+      "code": "F16_POLICY_UNSAFE_SELECTED_CELL_SUBSTITUTION",
+      "route": "reuse selected-cell or arc-adjacent samples as non-arc proof",
+      "status": "rejected",
+      "reason": "FOR-344 requires genuine non-arc evidence, not extrapolation from circular_arcs_stroke_butt."
+    },
+    {
+      "code": "F16_POLICY_UNSAFE_FIXTURE_BRANCH",
+      "route": "fixture-specific renderer branch",
+      "status": "rejected",
+      "reason": "A fixture branch would encode evidence gaps into renderer behavior."
+    },
+    {
+      "code": "F16_POLICY_UNSAFE_COORDINATE_BRANCH",
+      "route": "coordinate-specific renderer branch",
+      "status": "rejected",
+      "reason": "Coordinate patches would substitute chosen cells for color-policy semantics."
+    },
+    {
+      "code": "F16_POLICY_UNSAFE_GLOBAL_HOOK_MUTATION",
+      "route": "mutate colorToF16Premul, blendF16PremulMode, SkBitmap.getPixel, or SkBitmap.getPixelAsSrgb",
+      "status": "rejected",
+      "reason": "Global hooks require comparable non-arc reference/current/candidate rows first."
+    },
+    {
+      "code": "F16_POLICY_UNSAFE_FULL_GM_CROP",
+      "route": "use a full-GM crop as implementation reference",
+      "status": "rejected",
+      "reason": "Full-GM crop evidence is not an isolated reference for this policy migration."
+    },
+    {
+      "code": "F16_POLICY_UNSAFE_THRESHOLD_RELAXATION",
+      "route": "relax similarity or residual thresholds",
+      "status": "rejected",
+      "reason": "FOR-344 is evidence-only and cannot create policy safety by weakening gates."
+    }
+  ],
+  "implementation": {
+    "rendererBehaviorChanged": false,
+    "evidenceOnly": true,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false
+  },
+  "nonGoalsPreserved": {
+    "globalF16PolicyChange": true,
+    "selectedCellSubstitutionRefused": true,
+    "fixtureBranchRefused": true,
+    "coordinateBranchRefused": true,
+    "fullGmCropRefused": true,
+    "thresholdRelaxationRefused": true,
+    "ganeshGraphitePortNotAdded": true,
+    "skslCompilerVmWorkNotAdded": true,
+    "historicalArtifactsRewritten": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for344_f16_broader_non_arc_color_policy_evidence.py",
+      "rtk python3 scripts/validate_for343_f16_color_policy_boundary.py",
+      "rtk python3 scripts/validate_for337_circular_arcs_stroke_butt_f16_color_policy_cross_scene_evidence.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
