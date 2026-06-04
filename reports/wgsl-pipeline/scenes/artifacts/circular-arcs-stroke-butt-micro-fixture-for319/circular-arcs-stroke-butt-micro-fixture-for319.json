@@ -1,0 +1,255 @@
+{
+  "linear": "FOR-319",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-circular-arcs-stroke-butt-micro-fixture-preflight-ticket",
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_MICRO_FIXTURE_PREFLIGHT_APPLIED",
+  "follows": {
+    "for318": {
+      "artifact": "reports/wgsl-pipeline/scenes/artifacts/path-aa-arc-stroke-hairline-scout-for318/path-aa-arc-stroke-hairline-scout-for318.json",
+      "report": "reports/wgsl-pipeline/2026-06-04-for-318-path-aa-arc-stroke-hairline-scout.md",
+      "futureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+      "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+      "sourceGm": "CircularArcsStrokeButtGM",
+      "supportStatus": "not-supported",
+      "stableFallbackIfNotIsolated": "coverage.edge-count-exceeded"
+    }
+  },
+  "sourceReports": {
+    "m37": "reports/wgsl-pipeline/2026-05-28-m37-path-aa-breadth-audit.md",
+    "m60FeatureSpec": ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    "fidelitySpec": ".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md"
+  },
+  "sourceCode": {
+    "circularArcsGm": "skia-integration-tests/src/main/kotlin/org/skia/tests/CircularArcsGM.kt",
+    "strokeButtWebGpuTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CircularArcsStrokeButtWebGpuTest.kt"
+  },
+  "microFixture": {
+    "id": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "fixtureKind": "single-gm-cell-reporting-only",
+    "sourceFutureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceGmName": "circular_arcs_stroke_butt",
+    "selectionReason": "The first start row and 90-degree sweep column provide a deterministic butt-cap, non-hairline, AA circular arc cell while avoiding hairline, round-cap, square-cap, fill, dash, useCenter, and full-GM breadth.",
+    "gmGrid": {
+      "quadrants": 4,
+      "starts": [
+        0,
+        10,
+        30,
+        45,
+        90,
+        165,
+        180,
+        270
+      ],
+      "sweeps": [
+        1,
+        45,
+        90,
+        130,
+        180,
+        184,
+        300,
+        355
+      ],
+      "arcsPerCell": 2,
+      "fullGmDrawArcCalls": 512
+    },
+    "selectedCell": {
+      "cellCount": 1,
+      "quadrant": "bottom-left",
+      "quadrantOrigin": {
+        "x": 0,
+        "y": 500
+      },
+      "rowIndex": 0,
+      "columnIndex": 2,
+      "startDegrees": 0,
+      "sweepDegrees": 90,
+      "complementSweepDegrees": -270,
+      "useCenter": false,
+      "aa": true,
+      "style": "kStroke_Style",
+      "strokeWidth": 15,
+      "strokeCap": "kButt_Cap",
+      "includedCaps": [
+        "kButt_Cap"
+      ],
+      "excludedCaps": [
+        "kRound_Cap",
+        "kSquare_Cap"
+      ],
+      "includesHairlineStrokeWidth0": false,
+      "includesFill": false,
+      "includesDash": false,
+      "localArcRectLTRB": [
+        0,
+        0,
+        40,
+        40
+      ],
+      "canvasArcRectLTRB": [
+        140,
+        520,
+        180,
+        560
+      ],
+      "paintAlpha": 100,
+      "drawArcCalls": [
+        {
+          "paintColor": "red",
+          "startDegrees": 0,
+          "sweepDegrees": 90
+        },
+        {
+          "paintColor": "blue",
+          "startDegrees": 0,
+          "sweepDegrees": -270
+        }
+      ]
+    },
+    "budgetPreflight": {
+      "webgpuAaEdgeBudget": 256,
+      "edgeBudgetMayIncrease": false,
+      "measuredEdgeCountKnown": false,
+      "measuredEdgeCountRequiredBeforeSupport": true,
+      "fallbackIfMeasuredOverBudget": "coverage.edge-count-exceeded",
+      "fullGmDrawArcCalls": 512,
+      "selectedDrawArcCalls": 2,
+      "drawArcReductionFactorVsFullGm": 256,
+      "strokeWidthWithinM60Budget": true,
+      "hairlineExcludedByM60Budget": true
+    }
+  },
+  "supportGuard": {
+    "status": "reporting-only",
+    "supportStatus": "not-supported",
+    "currentSupportClaim": "none",
+    "declaredSupportEvidenceComplete": false,
+    "readinessMovement": false,
+    "readinessScoreChanged": false,
+    "releaseGateChanged": false,
+    "unsafeDecision": "CIRCULAR_ARCS_STROKE_BUTT_UNSAFE_SUPPORT_CLAIM_FOUND",
+    "requiredCompleteProof": [
+      "row-specific geometry",
+      "Skia/reference artifact",
+      "CPU artifact",
+      "adapter-backed GPU artifact",
+      "CPU/GPU diff and stats",
+      "route diagnostics with edge-count and fallback fields",
+      "fallback policy preserving refusals outside the selected row",
+      "no global edge-budget increase",
+      "no threshold weakening"
+    ],
+    "proofStatus": {
+      "row-specific geometry": false,
+      "Skia/reference artifact": false,
+      "CPU artifact": false,
+      "adapter-backed GPU artifact": false,
+      "CPU/GPU diff and stats": false,
+      "route diagnostics with edge-count and fallback fields": false,
+      "fallback policy preserving refusals outside the selected row": false,
+      "no global edge-budget increase": false,
+      "no threshold weakening": false
+    },
+    "supportedStatusesThatRequireCompleteProof": [
+      "gpu-supported",
+      "pass",
+      "promoted",
+      "support-promoted",
+      "supported"
+    ]
+  },
+  "budgetPolicy": {
+    "webgpuAaEdgeBudget": 256,
+    "edgeBudgetMayIncrease": false,
+    "strokeWidthBudget": {
+      "minPx": 0.5,
+      "maxPx": 64.0
+    },
+    "hairlineStrokeWidth0Supported": false,
+    "fallbackWeakeningAllowed": false,
+    "thresholdWeakeningAllowed": false,
+    "rendererOrShaderChangeAllowed": false,
+    "sceneStatusChangeAllowed": false,
+    "releaseGateChangeAllowed": false,
+    "readinessScoreChangeAllowed": false,
+    "preservedFallbackReasons": [
+      "coverage.edge-count-exceeded",
+      "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "coverage.stroke-outline-edge-count-exceeded"
+    ]
+  },
+  "preservedFallbackEvidence": [
+    {
+      "id": "path-aa-stroke-outline-fallback",
+      "source": "reports/wgsl-pipeline/scenes/data/scenes.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.stroke-outline-edge-count-exceeded"
+    },
+    {
+      "id": "path-aa-edge-budget-boundary",
+      "source": "reports/wgsl-pipeline/scenes/data/scenes.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "path-aa-convexpaths-edge-budget",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "path-aa-dashing-edge-budget",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "m52-closed-capped-hairlines-edge-budget",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "m54-dash-circle-boundary",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    },
+    {
+      "id": "m66-path-aa-dashing-edge-budget-refusal",
+      "source": "reports/wgsl-pipeline/scenes/generated/*.json",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded"
+    }
+  ],
+  "blockedUntil": [
+    "row-specific geometry",
+    "Skia/reference artifact",
+    "CPU artifact",
+    "adapter-backed GPU artifact",
+    "CPU/GPU diff and stats",
+    "route diagnostics with edge-count and fallback fields",
+    "fallback policy preserving refusals outside the selected row",
+    "no global edge-budget increase",
+    "no threshold weakening"
+  ],
+  "nonGoals": [
+    "no CPU/GPU/reference images generated or modified",
+    "no renderer or shader code changed",
+    "no existing tests changed",
+    "no scene status changed",
+    "no fallback reason changed",
+    "no edge budget changed",
+    "no visual threshold changed",
+    "no readiness score changed",
+    "no release gate changed",
+    "no support claim for CircularArcsStrokeButtGM or the micro-fixture",
+    "no hairline, round cap, square cap, fill, dash, or full-GM scope"
+  ],
+  "alternateDecisions": {
+    "blocked": "CIRCULAR_ARCS_STROKE_BUTT_MICRO_FIXTURE_BLOCKED",
+    "unsafe": "CIRCULAR_ARCS_STROKE_BUTT_UNSAFE_SUPPORT_CLAIM_FOUND"
+  }
+}
