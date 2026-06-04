@@ -1,0 +1,208 @@
+{
+  "linear": "FOR-324",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-circular-arcs-stroke-butt-isolated-selected-cell-skia-reference-harness-ticket",
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_HARNESS_MISSING",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_READY",
+    "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_HARNESS_MISSING",
+    "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_PROVENANCE_INVALID",
+    "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_AMBIGUOUS"
+  ],
+  "sceneId": "circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for324",
+  "skiaPngReady": false,
+  "acceptedSkiaPng": null,
+  "skiaPngPresent": false,
+  "missingApiOrCommand": "missing repo-owned headless upstream Skia selected-cell render API/command: no Gradle task, CLI flag, Kotlin helper, or checked-in executable renders only the FOR-319 CircularArcsStrokeButt selected cell through upstream Skia and writes an 80x80 skia.png plus skia-reference-provenance.json; existing TestUtils.runGmTest, RasterSinkF16, DmMain/DmCli, and the FOR-322 capture test are Kanvas CPU/DM/test paths, not upstream Skia reference generation",
+  "selectedCell": {
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceFutureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "boundedHarnessGm": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+    "cellCount": 1,
+    "quadrant": "bottom-left",
+    "fullGmCanvasArcRectLTRB": [
+      140,
+      520,
+      180,
+      560
+    ],
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "rowIndex": 0,
+    "columnIndex": 2,
+    "startDegrees": 0,
+    "sweepDegrees": 90,
+    "complementSweepDegrees": -270,
+    "useCenter": false,
+    "aa": true,
+    "style": "kStroke_Style",
+    "strokeWidth": 15,
+    "strokeCap": "kButt_Cap",
+    "includedCaps": [
+      "kButt_Cap"
+    ],
+    "excludedCaps": [
+      "kRound_Cap",
+      "kSquare_Cap"
+    ],
+    "includesHairlineStrokeWidth0": false,
+    "includesFill": false,
+    "includesDash": false,
+    "paintAlpha": 100,
+    "drawArcCalls": [
+      {
+        "paintColor": "red",
+        "startDegrees": 0,
+        "sweepDegrees": 90
+      },
+      {
+        "paintColor": "blue",
+        "startDegrees": 0,
+        "sweepDegrees": -270
+      }
+    ]
+  },
+  "follows": {
+    "for319Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-micro-fixture-for319/circular-arcs-stroke-butt-micro-fixture-for319.json",
+    "for320Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-micro-fixture-proof-for320/circular-arcs-stroke-butt-micro-fixture-proof-for320.json",
+    "for321Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-artifacts-for321/circular-arcs-stroke-butt-selected-cell-artifacts-for321.json",
+    "for322Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+    "for323Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for323/circular-arcs-stroke-butt-selected-cell-skia-reference-for323.json",
+    "for322Cpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+    "for322RouteGpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-gpu.json",
+    "for322Stats": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json",
+    "for323Report": "reports/wgsl-pipeline/2026-06-04-for-323-circular-arcs-stroke-butt-selected-cell-skia-reference.md"
+  },
+  "candidateSkiaReference": {
+    "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for324/skia.png",
+    "provenancePath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for324/skia-reference-provenance.json",
+    "present": false,
+    "accepted": false,
+    "status": "blocked-missing",
+    "blockedReasons": [
+      "no skia.png is present under the FOR-324 artifact directory",
+      "missing repo-owned headless upstream Skia selected-cell render API/command: no Gradle task, CLI flag, Kotlin helper, or checked-in executable renders only the FOR-319 CircularArcsStrokeButt selected cell through upstream Skia and writes an 80x80 skia.png plus skia-reference-provenance.json; existing TestUtils.runGmTest, RasterSinkF16, DmMain/DmCli, and the FOR-322 capture test are Kanvas CPU/DM/test paths, not upstream Skia reference generation"
+    ]
+  },
+  "missingPathAudit": {
+    "repoHeadlessIsolatedSkiaPathExists": false,
+    "missingApiOrCommand": "missing repo-owned headless upstream Skia selected-cell render API/command: no Gradle task, CLI flag, Kotlin helper, or checked-in executable renders only the FOR-319 CircularArcsStrokeButt selected cell through upstream Skia and writes an 80x80 skia.png plus skia-reference-provenance.json; existing TestUtils.runGmTest, RasterSinkF16, DmMain/DmCli, and the FOR-322 capture test are Kanvas CPU/DM/test paths, not upstream Skia reference generation",
+    "auditedEntryPoints": [
+      {
+        "path": "cpu-raster/src/main/kotlin/org/skia/testing/TestUtils.kt",
+        "symbol": "TestUtils.runGmTest",
+        "acceptedAsSkiaReference": false,
+        "reason": "renders through Kanvas RasterSinkF16, not upstream Skia"
+      },
+      {
+        "path": "cpu-raster/src/main/kotlin/org/skia/dm/DmCli.kt",
+        "symbol": "DmCli",
+        "acceptedAsSkiaReference": false,
+        "reason": "parses Kanvas DM config/match/skip only; --writePath is documented out of scope"
+      },
+      {
+        "path": "cpu-raster/src/main/kotlin/org/skia/dm/DmMain.kt",
+        "symbol": "DmMain.runFromArgs",
+        "acceptedAsSkiaReference": false,
+        "reason": "returns a Kanvas DM JSON report for an explicit Kotlin GM list and has no standalone image-generation command"
+      },
+      {
+        "path": "cpu-raster/src/main/kotlin/org/skia/dm/Runner.kt",
+        "symbol": "Runner",
+        "acceptedAsSkiaReference": false,
+        "reason": "hashes encoded Kanvas sink output for reports; it does not write selected-cell reference PNGs"
+      },
+      {
+        "path": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CircularArcsStrokeButtSelectedCellCaptureTest.kt",
+        "symbol": "CircularArcsStrokeButtSelectedCellCaptureTest",
+        "acceptedAsSkiaReference": false,
+        "reason": "bounded selected-cell harness writes Kanvas CPU output and explicitly deletes skia.png"
+      }
+    ]
+  },
+  "rejectedSources": {
+    "fullGmPng": {
+      "path": "skia-integration-tests/src/test/resources/original-888/circular_arcs_stroke_butt.png",
+      "accepted": false,
+      "reason": "full-GM PNG is not an isolated selected-cell render"
+    },
+    "fullGmCrop": {
+      "accepted": false,
+      "for323Decision": "CIRCULAR_ARCS_STROKE_BUTT_FULL_GM_CROP_CONTAMINATED",
+      "cropBoxLTRB": [
+        120,
+        500,
+        200,
+        580
+      ],
+      "reason": "FOR-323 proved the crop is contaminated by neighboring stroke margins"
+    },
+    "for322CpuPng": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+      "present": true,
+      "accepted": false,
+      "reason": "FOR-322 cpu.png is Kanvas CPU output, not Skia"
+    },
+    "fullGmScores": {
+      "accepted": false,
+      "reason": "full-GM similarity scores are not selected-cell reference pixels"
+    }
+  },
+  "strictProvenanceRequirements": {
+    "sourceType": "isolated-skia-selected-cell-render",
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "commandRequired": true,
+    "dimensions": {
+      "width": 80,
+      "height": 80
+    },
+    "fullGmCrop": false,
+    "fullGmSubstitutionAccepted": false,
+    "cpuKanvasOutputAcceptedAsSkia": false,
+    "selectedCellRequired": true
+  },
+  "referenceDecision": {
+    "decision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_HARNESS_MISSING",
+    "readyDecision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_READY",
+    "missingDecision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_HARNESS_MISSING",
+    "provenanceInvalidDecision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_PROVENANCE_INVALID",
+    "ambiguousDecision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_AMBIGUOUS",
+    "skiaPngReady": false,
+    "blockedReasons": [
+      "no skia.png is present under the FOR-324 artifact directory",
+      "missing repo-owned headless upstream Skia selected-cell render API/command: no Gradle task, CLI flag, Kotlin helper, or checked-in executable renders only the FOR-319 CircularArcsStrokeButt selected cell through upstream Skia and writes an 80x80 skia.png plus skia-reference-provenance.json; existing TestUtils.runGmTest, RasterSinkF16, DmMain/DmCli, and the FOR-322 capture test are Kanvas CPU/DM/test paths, not upstream Skia reference generation"
+    ]
+  },
+  "preservedContracts": {
+    "supportStatus": "not-supported",
+    "fullGmSubstitutionAccepted": false,
+    "fullGmScoreEvidenceAccepted": false,
+    "cpuKanvasOutputAcceptedAsSkia": false,
+    "gpuRouteStatus": "expected-unsupported",
+    "gpuRefusalReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "readinessMovement": false,
+    "releaseGateChanged": false,
+    "productionRendererChanged": false,
+    "wgslChanged": false,
+    "thresholdChanged": false,
+    "fallbackPolicyChanged": false,
+    "kadreNativeDependencyAdded": false
+  },
+  "validation": [
+    "rtk python3 scripts/validate_for324_circular_arcs_stroke_butt_isolated_skia_reference.py",
+    "no true headless isolated Skia generation command exists in the repo for this cell",
+    "rtk python3 scripts/validate_for323_circular_arcs_stroke_butt_selected_cell_skia_reference.py",
+    "rtk python3 scripts/validate_for322_circular_arcs_stroke_butt_selected_cell_harness.py",
+    "rtk python3 scripts/validate_for321_circular_arcs_stroke_butt_selected_cell_artifacts.py",
+    "rtk python3 scripts/validate_for320_circular_arcs_stroke_butt_micro_fixture_proof.py",
+    "rtk python3 scripts/validate_for319_circular_arcs_stroke_butt_micro_fixture.py",
+    "rtk ./gradlew pipelineSceneDashboardGate",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for324/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for324.json >/dev/null",
+    "rtk git diff --check origin/master...HEAD"
+  ]
+}
