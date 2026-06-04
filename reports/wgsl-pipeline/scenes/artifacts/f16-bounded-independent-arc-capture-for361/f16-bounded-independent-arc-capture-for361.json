@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-361",
+  "sceneId": "f16-bounded-independent-arc-capture-for361",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-bounded-independent-arc-capture-for-f16-candidate",
+  "sourceFindings": [
+    "global/kanvas/findings/for-360-independent-arc-scene-evidence-remains-partial",
+    "global/kanvas/findings/for-359-f16-candidate-still-requires-independent-arc-scene"
+  ],
+  "decision": "F16_BOUNDED_INDEPENDENT_ARC_CAPTURE_REJECTS_CANDIDATE",
+  "allowedDecisions": [
+    "F16_BOUNDED_INDEPENDENT_ARC_CAPTURE_SUPPORTS_CANDIDATE",
+    "F16_BOUNDED_INDEPENDENT_ARC_CAPTURE_REJECTS_CANDIDATE",
+    "F16_BOUNDED_INDEPENDENT_ARC_CAPTURE_PARTIAL"
+  ],
+  "decisionReason": "FOR-361 creates a bounded independent Rec.2020 kRGBA_F16Norm drawArc fixture outside the FOR-340/FOR-341 CircularArcsStrokeButt adjacent groups. The exact FOR-355 candidate worsens the independent stroke-center sample versus the captured Skia over-white reference, so this bounded independent arc capture rejects the candidate.",
+  "inputValidation": {
+    "for360Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-independent-arc-scene-evidence-for360/f16-independent-arc-scene-evidence-for360.json",
+    "for360Decision": "F16_INDEPENDENT_ARC_SCENE_EVIDENCE_PARTIAL",
+    "for360RequiredDecision": "F16_INDEPENDENT_ARC_SCENE_EVIDENCE_PARTIAL",
+    "for359Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-candidate-after-for358-guard-for359/f16-candidate-after-for358-guard-for359.json",
+    "for359Decision": "F16_GENERALIZED_CANDIDATE_STILL_REQUIRES_INDEPENDENT_ARC_SCENE",
+    "for359RequiredDecision": "F16_GENERALIZED_CANDIDATE_STILL_REQUIRES_INDEPENDENT_ARC_SCENE",
+    "for358Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-real-additional-non-arc-row-for358/f16-real-additional-non-arc-row-for358.json",
+    "for358Decision": "F16_REAL_ADDITIONAL_NON_ARC_ROW_ACCEPTS_CANDIDATE",
+    "for358RequiredDecision": "F16_REAL_ADDITIONAL_NON_ARC_ROW_ACCEPTS_CANDIDATE",
+    "for355Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-generalized-non-scene-arc-delta-candidate-for355/f16-generalized-non-scene-arc-delta-candidate-for355.json",
+    "for355Decision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "for355RequiredDecision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE"
+  },
+  "candidate": {
+    "policyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+    "family": "nonzero_arc_delta_generalized_non_scene_guard_family",
+    "formula": "Evidence-only generalized non-scene probe: evaluate the FOR-345 non-arc guard first; if it stays exact, preserve current RGBA except for samples with zone `stroke-center` and a captured raw reference alpha in (0, 255), where the candidate computes the raw source RGBA alpha-composited over white. This is artifact evaluation, not renderer logic.",
+    "reusedFromFor355": true,
+    "reusedExactly": true,
+    "newCandidateDefined": false,
+    "selectedForImplementation": false,
+    "rendererBehaviorChanged": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "row": {
+    "rowId": "for361-bounded-independent-round-cap-arc-rec2020-f16",
+    "family": "bounded-independent-drawArc-round-cap",
+    "sceneId": "f16-bounded-independent-arc-capture-for361",
+    "sourceKind": "isolated-skia-current-kanvas-candidate",
+    "arcScene": true,
+    "independentFromFor340For341AdjacentGroups": true,
+    "excludedScene": "circular_arcs_stroke_butt_adjacent_groups",
+    "selectedCellSubstitutionUsed": false,
+    "fullGmCrop": false,
+    "referenceCurrentCandidateComparable": true,
+    "reference": {
+      "status": "isolated-skia-bounded-independent-arc-rec2020-f16-reference-available",
+      "captureCommand": "rtk python3 tools/skia-reference/build_for361_f16_bounded_independent_arc_capture.py",
+      "samplesPath": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/skia-reference-samples.json",
+      "provenancePath": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/skia-reference-provenance.json",
+      "pngPath": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/skia-reference.png",
+      "referenceJsonSha256": "bda475fedc5105ae0b751b2430f0e0a575e99a138f586e060995ee771eb81d8c",
+      "referencePngSha256": "586030d6962075fce1bf8b8f6132cefed8f43417c84a070376174b92772c09b5"
+    },
+    "current": {
+      "status": "current-kanvas-kotlin-cpu-rec2020-f16-drawArc-samples-captured",
+      "captureCommand": "KANVAS_FOR361_CURRENT_CAPTURE_OUTPUT=reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/current-kanvas-samples.json rtk ./gradlew --no-daemon --rerun-tasks :skia-integration-tests:test --tests org.skia.tests.For361BoundedIndependentArcF16CurrentCaptureTest",
+      "samplesPath": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/current-kanvas-samples.json",
+      "captureMethod": "Kanvas SkBitmap + SkCanvas public CPU drawArc path, sampled through SkBitmap.getPixelAsSrgb"
+    },
+    "candidateEvaluation": {
+      "policyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+      "status": "computed-policy-samples-available-not-applied",
+      "for355RuleAppliedSampleCount": 1
+    },
+    "samples": [
+      {
+        "name": "for361_background_top_left",
+        "zone": "background",
+        "x": 0,
+        "y": 0,
+        "covered": false,
+        "rawReferenceRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "rawReferenceAlpha": 0,
+        "referenceSrgbRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "currentKanvasSrgbRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "candidatePolicyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+        "candidateRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "candidatePolicyRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "for355RuleApplies": false,
+        "currentVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentResidual": 0,
+        "candidateVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "candidateVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "candidateResidual": 0,
+        "worsened": false,
+        "candidateWorsensCurrent": false
+      },
+      {
+        "name": "for361_arc_right_stroke_center",
+        "zone": "stroke-center",
+        "x": 52,
+        "y": 32,
+        "covered": true,
+        "rawReferenceRgba": [
+          0,
+          0,
+          255,
+          100
+        ],
+        "rawReferenceAlpha": 100,
+        "referenceSrgbRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "currentKanvasSrgbRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "candidatePolicyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+        "candidateRgba": [
+          155,
+          155,
+          255,
+          255
+        ],
+        "candidatePolicyRgba": [
+          155,
+          155,
+          255,
+          255
+        ],
+        "for355RuleApplies": true,
+        "currentVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentResidual": 0,
+        "candidateVsReferenceSignedDelta": [
+          -25,
+          -12,
+          0,
+          0
+        ],
+        "candidateVsReferenceAbsDelta": [
+          25,
+          12,
+          0,
+          0
+        ],
+        "candidateResidual": 37,
+        "worsened": true,
+        "candidateWorsensCurrent": true
+      },
+      {
+        "name": "for361_arc_lower_right_stroke",
+        "zone": "stroke-edge",
+        "x": 44,
+        "y": 46,
+        "covered": true,
+        "rawReferenceRgba": [
+          0,
+          0,
+          255,
+          100
+        ],
+        "rawReferenceAlpha": 100,
+        "referenceSrgbRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "currentKanvasSrgbRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "candidatePolicyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+        "candidateRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "candidatePolicyRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "for355RuleApplies": false,
+        "currentVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentResidual": 0,
+        "candidateVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "candidateVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "candidateResidual": 0,
+        "worsened": false,
+        "candidateWorsensCurrent": false
+      },
+      {
+        "name": "for361_arc_interior_clear",
+        "zone": "interior-clear",
+        "x": 32,
+        "y": 32,
+        "covered": false,
+        "rawReferenceRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "rawReferenceAlpha": 0,
+        "referenceSrgbRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "currentKanvasSrgbRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "candidatePolicyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+        "candidateRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "candidatePolicyRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "for355RuleApplies": false,
+        "currentVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentResidual": 0,
+        "candidateVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "candidateVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "candidateResidual": 0,
+        "worsened": false,
+        "candidateWorsensCurrent": false
+      }
+    ],
+    "residuals": {
+      "sampleCount": 4,
+      "coveredSampleCount": 2,
+      "currentResidual": 0,
+      "candidateResidual": 37,
+      "residualDelta": 37,
+      "candidateMinusCurrentResidual": 37,
+      "worsenedSampleCount": 1,
+      "for355RuleAppliedSampleCount": 1
+    }
+  },
+  "scene": {
+    "dimensions": {
+      "width": 64,
+      "height": 64
+    },
+    "colorType": "kRGBA_F16Norm",
+    "colorSpace": "Rec.2020",
+    "draw": {
+      "op": "drawArc",
+      "ovalXYWH": [
+        12,
+        12,
+        40,
+        40
+      ],
+      "startAngleDeg": 0,
+      "sweepAngleDeg": 120,
+      "useCenter": false,
+      "antiAlias": false,
+      "style": "kStroke_Style",
+      "strokeWidth": 8,
+      "strokeCap": "kRound_Cap",
+      "blendMode": "kSrcOver",
+      "paintArgb": [
+        100,
+        0,
+        0,
+        255
+      ]
+    },
+    "independentFromFor340For341AdjacentGroups": true,
+    "fullGmCrop": false,
+    "selectedCellSubstitutionUsed": false,
+    "fixtureOrCoordinateRendererBranchUsed": false
+  },
+  "referenceSource": {
+    "source": {
+      "path": "tools/skia-reference/bounded_independent_arc_f16_for361_reference.cpp",
+      "sha256": "f848949e4d86a69e628f009b3cc4621c0f41cf943c6c040c79701c6abab3a4f5",
+      "present": true
+    },
+    "runner": {
+      "path": "tools/skia-reference/build_for361_f16_bounded_independent_arc_capture.py",
+      "present": true,
+      "headless": true
+    },
+    "currentCaptureTest": {
+      "path": "skia-integration-tests/src/test/kotlin/org/skia/tests/For361BoundedIndependentArcF16CurrentCaptureTest.kt",
+      "present": true,
+      "headless": true
+    }
+  },
+  "implementation": {
+    "rendererBehaviorChanged": false,
+    "evidenceOnly": true,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "implementationPlanAuthorized": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false
+  },
+  "nonGoalsPreserved": {
+    "rendererBehaviorChange": true,
+    "candidateSelectionOrImplementation": true,
+    "scoreIncrease": true,
+    "selectedCellSubstitutionRefused": true,
+    "fixtureBranchRefused": true,
+    "coordinateBranchRefused": true,
+    "fullGmCropRefused": true,
+    "thresholdRelaxationRefused": true
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for361_f16_bounded_independent_arc_capture.py",
+      "rtk python3 tools/skia-reference/build_for361_f16_bounded_independent_arc_capture.py",
+      "KANVAS_FOR361_CURRENT_CAPTURE_OUTPUT=reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/current-kanvas-samples.json rtk ./gradlew --no-daemon --rerun-tasks :skia-integration-tests:test --tests org.skia.tests.For361BoundedIndependentArcF16CurrentCaptureTest",
+      "rtk python3 scripts/validate_for360_f16_independent_arc_scene_evidence.py",
+      "rtk python3 scripts/validate_for359_f16_candidate_after_for358_guard.py",
+      "rtk python3 scripts/validate_for358_f16_real_additional_non_arc_row.py",
+      "rtk python3 scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk python3 -m py_compile scripts/validate_for361_f16_bounded_independent_arc_capture.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
