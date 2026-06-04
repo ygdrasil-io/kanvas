@@ -1,0 +1,78 @@
+{
+  "linear": "FOR-361",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-bounded-independent-arc-capture-for-f16-candidate",
+  "sourceFindings": [
+    "global/kanvas/findings/for-360-independent-arc-scene-evidence-remains-partial",
+    "global/kanvas/findings/for-359-f16-candidate-still-requires-independent-arc-scene"
+  ],
+  "sceneId": "f16-bounded-independent-arc-capture-for361",
+  "sourceType": "isolated-skia-bounded-independent-arc-rec2020-f16-for361-round-cap",
+  "sourceImplementation": "tools/skia-reference/bounded_independent_arc_f16_for361_reference.cpp",
+  "sourceSha256": "f848949e4d86a69e628f009b3cc4621c0f41cf943c6c040c79701c6abab3a4f5",
+  "dimensions": {
+    "width": 64,
+    "height": 64
+  },
+  "command": "rtk python3 tools/skia-reference/build_for361_f16_bounded_independent_arc_capture.py",
+  "commandArgv": [
+    "rtk",
+    "python3",
+    "tools/skia-reference/build_for361_f16_bounded_independent_arc_capture.py"
+  ],
+  "buildCommand": [
+    "/usr/bin/clang++",
+    "-std=c++17",
+    "-I/Users/chaos/workspace/kanvas-forge/skia-main",
+    "-I/Users/chaos/workspace/kanvas-forge/skia-main/include",
+    "-I/Users/chaos/workspace/kanvas-forge/skia-main/include/core",
+    "-I/Users/chaos/workspace/kanvas-forge/skia-main/include/encode",
+    "/Users/chaos/.codex/worktrees/3499/kanvas/tools/skia-reference/bounded_independent_arc_f16_for361_reference.cpp",
+    "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libskia.a",
+    "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libpng.a",
+    "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libzlib.a",
+    "-framework",
+    "CoreFoundation",
+    "-framework",
+    "CoreGraphics",
+    "-framework",
+    "CoreText",
+    "-framework",
+    "Foundation",
+    "-framework",
+    "ImageIO",
+    "-framework",
+    "Metal",
+    "-framework",
+    "QuartzCore",
+    "-o",
+    "<temporary-binary>"
+  ],
+  "executeCommand": [
+    "<temporary-binary>",
+    "/Users/chaos/.codex/worktrees/3499/kanvas/reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/skia-reference-samples.json",
+    "/Users/chaos/.codex/worktrees/3499/kanvas/reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/skia-reference.png"
+  ],
+  "headless": true,
+  "upstreamSkiaRoot": "/Users/chaos/workspace/kanvas-forge/skia-main",
+  "upstreamSkiaOut": "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release",
+  "upstreamSkiaGitRevision": "defc3a5a92966c32cb2a6a901e2fa3036a13bb8a",
+  "upstreamSkiaGitStatusShort": "?? skia-gm-out/",
+  "referenceJsonPath": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/skia-reference-samples.json",
+  "referenceJsonSha256": "bda475fedc5105ae0b751b2430f0e0a575e99a138f586e060995ee771eb81d8c",
+  "referencePngPath": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/skia-reference.png",
+  "referencePngSha256": "586030d6962075fce1bf8b8f6132cefed8f43417c84a070376174b92772c09b5",
+  "sourceTypeProof": {
+    "compiledRepoOwnedSource": true,
+    "compiledSourcePath": "tools/skia-reference/bounded_independent_arc_f16_for361_reference.cpp",
+    "linkedAgainstUpstreamSkiaLib": "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libskia.a",
+    "executedBinary": true,
+    "isolatedBoundedArcOutput": true,
+    "independentFromFor340For341AdjacentGroups": true
+  },
+  "arcScene": true,
+  "independentFromFor340For341AdjacentGroups": true,
+  "excludedScene": "circular_arcs_stroke_butt_adjacent_groups",
+  "fullGmCrop": false,
+  "selectedCellSubstitutionAccepted": false,
+  "cpuKanvasOutputAcceptedAsSkia": false
+}

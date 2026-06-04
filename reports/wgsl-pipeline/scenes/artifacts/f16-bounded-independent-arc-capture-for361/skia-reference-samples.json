@@ -1,0 +1,17 @@
+{
+  "sceneId": "f16-bounded-independent-arc-capture-for361",
+  "sourceType": "isolated-skia-bounded-independent-arc-rec2020-f16-for361-round-cap",
+  "dimensions": {"width": 64, "height": 64},
+  "colorType": "kRGBA_F16Norm",
+  "colorSpace": "Rec.2020",
+  "blendMode": "kSrcOver",
+  "arcScene": true,
+  "independentFromFor340For341AdjacentGroups": true,
+  "excludedScene": "circular_arcs_stroke_butt_adjacent_groups",
+  "samples": [
+    {"name": "for361_background_top_left", "zone": "background", "x": 0, "y": 0, "rawReferenceRgba": [0, 0, 0, 0], "referenceSrgbRgba": [255, 255, 255, 255]},
+    {"name": "for361_arc_right_stroke_center", "zone": "stroke-center", "x": 52, "y": 32, "rawReferenceRgba": [0, 0, 255, 100], "referenceSrgbRgba": [180, 167, 255, 255]},
+    {"name": "for361_arc_lower_right_stroke", "zone": "stroke-edge", "x": 44, "y": 46, "rawReferenceRgba": [0, 0, 255, 100], "referenceSrgbRgba": [180, 167, 255, 255]},
+    {"name": "for361_arc_interior_clear", "zone": "interior-clear", "x": 32, "y": 32, "rawReferenceRgba": [0, 0, 0, 0], "referenceSrgbRgba": [255, 255, 255, 255]}
+  ]
+}
