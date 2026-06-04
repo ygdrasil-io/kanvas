@@ -1,0 +1,333 @@
+{
+  "schemaVersion": 1,
+  "linearIssue": "FOR-314",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-runtime-cache-counter-source-map-ticket",
+  "generatedBy": "scripts/validate_for314_runtime_cache_counter_source_map.py",
+  "status": "pass",
+  "claimLevel": "runtime-cache-counter-source-map",
+  "sourceArtifacts": {
+    "docs": {
+      ".upstream/target/skia-like-realtime-renderer-target.md": "verified",
+      ".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md": "verified",
+      ".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md": "verified"
+    },
+    "code": {
+      "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt": "verified",
+      "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt": "verified"
+    },
+    "evidence": {
+      "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json": "verified",
+      "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json": "verified",
+      "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json": "verified",
+      "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json": "verified"
+    }
+  },
+  "kanvasHeadlessWebGpuObservedCandidate": {
+    "sourceArtifact": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+    "snapshotType": "SkWebGpuDevice.GpuCacheTelemetrySnapshot",
+    "snapshotFunction": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+    "sourceClass": "kanvas-headless-webgpu-observed-candidate",
+    "fields": [
+      {
+        "name": "shaderModuleCacheHits",
+        "meaning": "shader module cache hit counter"
+      },
+      {
+        "name": "shaderModuleCacheMisses",
+        "meaning": "shader module cache miss counter"
+      },
+      {
+        "name": "pipelineCacheHits",
+        "meaning": "pipeline cache hit counter"
+      },
+      {
+        "name": "pipelineCacheMisses",
+        "meaning": "pipeline cache miss counter"
+      },
+      {
+        "name": "resourceCacheHits",
+        "meaning": "resource cache hit counter"
+      },
+      {
+        "name": "resourceCacheMisses",
+        "meaning": "resource cache miss counter"
+      },
+      {
+        "name": "pipelineCreations",
+        "meaning": "pipeline creation counter"
+      },
+      {
+        "name": "shaderModuleCount",
+        "meaning": "shader module entry count"
+      },
+      {
+        "name": "pipelineCacheEntryCount",
+        "meaning": "pipeline cache entry count"
+      },
+      {
+        "name": "resourceCacheEntryCount",
+        "meaning": "resource cache entry count"
+      }
+    ],
+    "counterFamilies": {
+      "shaderModule": [
+        "shaderModuleCacheHits",
+        "shaderModuleCacheMisses",
+        "shaderModuleCount"
+      ],
+      "pipeline": [
+        "pipelineCacheHits",
+        "pipelineCacheMisses",
+        "pipelineCreations",
+        "pipelineCacheEntryCount"
+      ],
+      "resource": [
+        "resourceCacheHits",
+        "resourceCacheMisses",
+        "resourceCacheEntryCount"
+      ],
+      "creation": [
+        "pipelineCreations"
+      ],
+      "entryCount": [
+        "shaderModuleCount",
+        "pipelineCacheEntryCount",
+        "resourceCacheEntryCount"
+      ]
+    },
+    "warmPipelineReuseEvidence": {
+      "sourceArtifact": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+      "testName": "generated solid color rect reuses warm pipeline cache",
+      "asserts": [
+        "cold pipeline cache misses are recorded",
+        "warm pipeline cache hits increase after the second draw",
+        "the generated solid rect path remains selected"
+      ],
+      "uses": "SkWebGpuDevice.cacheTelemetrySnapshot()"
+    },
+    "bridgeRequirements": [
+      "Route cacheTelemetrySnapshot() counters into checked-in runtime evidence from a headless WebGPU execution artifact.",
+      "Keep Kadre/wgpu4k native callbacks separate from Kanvas-owned headless counters.",
+      "Do not count the candidate as broad Kadre native cache telemetry until the runtime evidence names an observed source artifact."
+    ]
+  },
+  "m85DerivedLedger": {
+    "sourceClass": "derived",
+    "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+    "counterSource": "derived-selected-scene-resource-ledger",
+    "observedRuntimeCounters": false,
+    "countedAsCacheReadinessGate": false,
+    "counters": {
+      "frameCount": 180,
+      "pipelineCacheMisses": 1,
+      "pipelineCacheHits": 179,
+      "shaderModuleCount": 1,
+      "pipelineCount": 1,
+      "bindGroupCount": 1,
+      "textureCount": 2,
+      "textureUploadBytes": 1075200,
+      "intermediateTextureBytes": 0,
+      "bindGroupChurn": 0,
+      "resourceGenerationCount": 3,
+      "invalidResourceReuseCount": 0
+    },
+    "pipelineKeyPolicy": "layout-code-resource-pipeline-state-only",
+    "uniformValuesInPipelineKey": false,
+    "nonClaim": "selected-scene deterministic ledger, not observed WebGPU runtime cache telemetry"
+  },
+  "m90ObservedPartialNativeRoute": {
+    "sourceClass": "observed-partial-native-route-with-derived-ledger",
+    "sourceArtifacts": [
+      "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json",
+      "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json"
+    ],
+    "sourceClassification": {
+      "nativeRouteAllocations": "observed-partial",
+      "cacheHitsMisses": "derived"
+    },
+    "observedPartial": {
+      "sourceClass": "observed-partial",
+      "source": "mep-next.cache-observed-partial-native-route",
+      "shaderModuleCreates": 180,
+      "pipelineCreates": 180,
+      "limitations": [
+        "M69 creates shader modules and render pipelines per frame in the selected native route; this is observed allocation/churn telemetry, not a cache-hit implementation.",
+        "The current native route does not expose WebGPU cache hit/miss callbacks for shader/pipeline/bind-group caches."
+      ]
+    },
+    "derivedLedger": {
+      "sourceClass": "derived",
+      "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+      "counters": {
+        "pipelineCacheHits": 179,
+        "pipelineCacheMisses": 1,
+        "textureUploadBytes": 1075200,
+        "intermediateTextureBytes": 0,
+        "bindGroupChurn": 0,
+        "resourceGenerationCount": 3,
+        "invalidResourceReuseCount": 0
+      }
+    },
+    "liveRouteCounters": {
+      "sourceClass": "observed-partial",
+      "missingCounterReason": "mep-next.native-cache-counter-unavailable",
+      "counters": {
+        "pipelineCacheHits": 0,
+        "pipelineCacheMisses": 180,
+        "shaderModuleCreates": 180,
+        "pipelineCreates": 180,
+        "bindGroupCreates": 0,
+        "textureUploads": 0,
+        "intermediateTextureBytes": 0
+      }
+    },
+    "nonClaim": "selected native route creation/churn is not broad WebGPU cache hit/miss telemetry"
+  },
+  "m92NotObservableKadreBlockers": {
+    "sourceClass": "not-observable-kadre-blockers-with-observed-partial-creation-rows",
+    "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+    "observedPartialRows": [
+      {
+        "id": "shader-module-creates-selected-route",
+        "classification": "observed-partial",
+        "sourceArtifact": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+        "limitation": "Not a broad backend cache counter.",
+        "releaseGate": false
+      },
+      {
+        "id": "pipeline-creates-selected-route",
+        "classification": "observed-partial",
+        "sourceArtifact": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+        "limitation": "Not a broad backend cache counter.",
+        "releaseGate": false
+      }
+    ],
+    "notObservableRows": [
+      {
+        "id": "broad-webgpu-cache-hit-callbacks",
+        "classification": "not-observable",
+        "blocker": "kadre-runtime.native-cache-counter-unavailable",
+        "pmMeaning": "Kadre/wgpu4k does not expose broad cache callbacks for this evidence slice.",
+        "releaseGate": false
+      },
+      {
+        "id": "bind-group-cache-callbacks",
+        "classification": "not-observable",
+        "blocker": "kadre-runtime.native-cache-counter-unavailable",
+        "pmMeaning": "Bind-group cache hit/miss callbacks are not exposed in the selected native route.",
+        "releaseGate": false
+      },
+      {
+        "id": "native-resource-free-callbacks",
+        "classification": "not-observable",
+        "blocker": "kadre-runtime.resource-lifetime-observation-partial",
+        "pmMeaning": "Native object disposal/free telemetry is not observable end-to-end from current APIs.",
+        "releaseGate": false
+      },
+      {
+        "id": "adapter-owned-memory-snapshots",
+        "classification": "not-observable",
+        "blocker": "kadre-runtime.resource-lifetime-observation-partial",
+        "pmMeaning": "Adapter memory snapshots are not available, so memory claims remain bounded to selected ledgers.",
+        "releaseGate": false
+      }
+    ],
+    "blockers": [
+      {
+        "id": "kadre-runtime.native-cache-counter-unavailable",
+        "owner": "external Kadre/wgpu4k integration",
+        "unblockCondition": "Expose observed shader, pipeline, bind-group, and cache hit/miss callbacks from the native route."
+      },
+      {
+        "id": "kadre-runtime.resource-lifetime-observation-partial",
+        "owner": "external Kadre/wgpu4k integration",
+        "unblockCondition": "Expose allocation/free/resource lifetime snapshots for surface resize and scene switch transitions."
+      }
+    ]
+  },
+  "guardPolicy": {
+    "observedRequiresNamedSourceArtifact": true,
+    "protectedPartialOrDerivedClasses": [
+      "derived",
+      "deterministic-derived",
+      "not-observable",
+      "observed-partial",
+      "unavailable"
+    ],
+    "policyCases": [
+      {
+        "name": "derived cache hits without observed artifact stay non-observed",
+        "classification": "derived",
+        "source": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "allowed": true,
+        "result": "allowed"
+      },
+      {
+        "name": "observed partial native route stays non-observed",
+        "classification": "observed-partial",
+        "source": "mep-next.cache-observed-partial-native-route",
+        "allowed": true,
+        "result": "allowed"
+      },
+      {
+        "name": "observed cache claim without source artifact is rejected",
+        "classification": "observed",
+        "source": "mep-next.cache-observed-partial-native-route",
+        "allowed": false,
+        "result": "rejected"
+      },
+      {
+        "name": "observed cache claim with checked-in source artifact is allowed",
+        "classification": "observed",
+        "source": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "allowed": true,
+        "result": "allowed"
+      }
+    ]
+  },
+  "nonChanges": {
+    "readiness": "unchanged",
+    "score": "unchanged",
+    "releaseGateStatus": "unchanged",
+    "rendererBehavior": "unchanged",
+    "gradle": "unchanged",
+    "shaders": "unchanged",
+    "thresholds": "unchanged",
+    "sceneStatus": "unchanged",
+    "fallbacks": "unchanged",
+    "kadreNativeBehavior": "unchanged",
+    "kadreProvisioning": "unchanged"
+  },
+  "validationRows": [
+    {
+      "id": "for314.gpu-cache-telemetry-snapshot-fields",
+      "status": "pass",
+      "assertion": "GpuCacheTelemetrySnapshot exposes shader module, pipeline, resource, creation, and entry-count counters."
+    },
+    {
+      "id": "for314.warm-pipeline-cache-reuse-source",
+      "status": "pass",
+      "assertion": "GeneratedSolidRectMigrationTest asserts warm pipeline cache reuse via cacheTelemetrySnapshot()."
+    },
+    {
+      "id": "for314.m85-derived-ledger-boundary",
+      "status": "pass",
+      "assertion": "M85 remains a derived selected-scene ledger and is not counted as an observed cache readiness gate."
+    },
+    {
+      "id": "for314.m90-observed-partial-boundary",
+      "status": "pass",
+      "assertion": "M90 keeps native route allocations observed-partial and cache hits/misses derived from M85."
+    },
+    {
+      "id": "for314.m92-kadre-blockers",
+      "status": "pass",
+      "assertion": "M92 keeps broad Kadre/wgpu4k cache callback and resource lifetime blockers not observable."
+    },
+    {
+      "id": "for314.observed-source-artifact-guard",
+      "status": "pass",
+      "assertion": "Derived or observed-partial cache counters cannot be reclassified as observed without a named observed source artifact."
+    }
+  ]
+}
