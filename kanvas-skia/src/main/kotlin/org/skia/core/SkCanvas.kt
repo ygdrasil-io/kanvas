@@ -38,6 +38,95 @@ import java.util.zip.Inflater
 import kotlin.math.ceil as kCeil
 import kotlin.math.floor as kFloor
 
+public object SkAAClipDifferenceTrace {
+    public data class MatrixSnapshot(
+        public val sx: Float,
+        public val kx: Float,
+        public val tx: Float,
+        public val ky: Float,
+        public val sy: Float,
+        public val ty: Float,
+        public val persp0: Float,
+        public val persp1: Float,
+        public val persp2: Float,
+    )
+
+    public data class Event(
+        public val index: Int,
+        public val op: String,
+        public val doAntiAlias: Boolean,
+        public val stateClipBounds: SkIRect,
+        public val matrix: MatrixSnapshot,
+        public val parent: SkAAClip.DebugSnapshot,
+        public val path: SkAAClip.DebugSnapshot,
+        public val result: SkAAClip.DebugSnapshot,
+    )
+
+    private val lock = Any()
+    @Volatile
+    private var enabled: Boolean = false
+    private var probeRows: Set<Int> = emptySet()
+    private var probePoints: Set<SkAAClip.DebugProbePoint> = emptySet()
+    private val events = mutableListOf<Event>()
+
+    public fun configure(
+        probeRows: Set<Int> = emptySet(),
+        probePoints: Set<SkAAClip.DebugProbePoint> = emptySet(),
+    ) {
+        synchronized(lock) {
+            this.probeRows = probeRows
+            this.probePoints = probePoints
+            events.clear()
+            enabled = true
+        }
+    }
+
+    public fun reset() {
+        synchronized(lock) {
+            enabled = false
+            probeRows = emptySet()
+            probePoints = emptySet()
+            events.clear()
+        }
+    }
+
+    public fun snapshot(): List<Event> = synchronized(lock) { events.toList() }
+
+    internal fun recordClipPathDifference(
+        stateClipBounds: SkIRect,
+        matrix: SkMatrix,
+        doAntiAlias: Boolean,
+        parent: SkAAClip,
+        path: SkAAClip,
+        result: SkAAClip,
+    ) {
+        if (!enabled) return
+        synchronized(lock) {
+            if (!enabled) return
+            events += Event(
+                index = events.size,
+                op = "kDifference",
+                doAntiAlias = doAntiAlias,
+                stateClipBounds = stateClipBounds.copy(),
+                matrix = MatrixSnapshot(
+                    sx = matrix.sx,
+                    kx = matrix.kx,
+                    tx = matrix.tx,
+                    ky = matrix.ky,
+                    sy = matrix.sy,
+                    ty = matrix.ty,
+                    persp0 = matrix.persp0,
+                    persp1 = matrix.persp1,
+                    persp2 = matrix.persp2,
+                ),
+                parent = parent.debugSnapshot(probeRows, probePoints),
+                path = path.debugSnapshot(probeRows, probePoints),
+                result = result.debugSnapshot(probeRows, probePoints),
+            )
+        }
+    }
+}
+
 /**
  * Cast a [SkDevice] down to [SkBitmapDevice] for paths that still need the
  * raster-only surface (layer composite-back, image-filter snapshots,
@@ -896,9 +985,18 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             s.simpleShapeClip = null
             return
         }
+        val parent = s.aaClip ?: SkAAClip(s.clip)
         val pathAac = rasterisePathToAaClip(s, path, s.clip, doAntiAlias)
-        val combined = SkAAClip(s.aaClip ?: SkAAClip(s.clip))
+        val combined = SkAAClip(parent)
         combined.op(pathAac, SkRegion.Op.kDifference)
+        SkAAClipDifferenceTrace.recordClipPathDifference(
+            stateClipBounds = s.clip,
+            matrix = s.matrix,
+            doAntiAlias = doAntiAlias,
+            parent = parent,
+            path = pathAac,
+            result = combined,
+        )
         s.aaClip = combined
         // M4 -- analytic difference clip. If the path is a canonical simple
         // shape (rect / oval / circle / uniform-corner rrect) under an

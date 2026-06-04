@@ -89,6 +89,48 @@ public class SkAAClip private constructor(
             widths.contentEquals(other.widths) && alphas.contentEquals(other.alphas)
     }
 
+    public data class DebugProbePoint(public val x: Int, public val y: Int)
+
+    public data class DebugCoverageProbe(
+        public val x: Int,
+        public val y: Int,
+        public val coverage: Int,
+    )
+
+    public data class DebugRun(
+        public val index: Int,
+        public val left: Int,
+        public val right: Int,
+        public val width: Int,
+        public val alpha: Int,
+    )
+
+    public data class DebugBand(
+        public val index: Int,
+        public val top: Int,
+        public val bottom: Int,
+        public val runs: List<DebugRun>,
+    )
+
+    public data class DebugLineProbe(
+        public val y: Int,
+        public val bandIndex: Int?,
+        public val bandTop: Int?,
+        public val bandBottom: Int?,
+        public val runs: List<DebugRun>,
+    )
+
+    public data class DebugSnapshot(
+        public val bounds: SkIRect,
+        public val isEmpty: Boolean,
+        public val isRect: Boolean,
+        public val rowCount: Int,
+        public val runCount: Int,
+        public val bands: List<DebugBand>,
+        public val lineProbes: List<DebugLineProbe>,
+        public val coverageProbes: List<DebugCoverageProbe>,
+    )
+
     /** Empty AA clip. */
     public constructor() : this(emptyList(), SkIRect(0, 0, 0, 0), false)
 
@@ -229,6 +271,68 @@ public class SkAAClip private constructor(
 
     /** Total `(width, alpha)` run count across every band. Useful for tests. */
     internal fun computeRunCount(): Int = bands.sumOf { it.widths.size }
+
+    /**
+     * Read-only diagnostic snapshot of the internal band/run state.
+     * Used by opt-in validators; normal rendering never calls this path.
+     */
+    public fun debugSnapshot(
+        probeRows: Set<Int> = emptySet(),
+        probePoints: Set<DebugProbePoint> = emptySet(),
+    ): DebugSnapshot {
+        val debugBands = bands.mapIndexed { index, band -> debugBand(index, band) }
+        return DebugSnapshot(
+            bounds = getBounds(),
+            isEmpty = isEmpty(),
+            isRect = isRect(),
+            rowCount = bands.size,
+            runCount = computeRunCount(),
+            bands = debugBands,
+            lineProbes = probeRows.sorted().map { y ->
+                val bandIndex = bands.indexOfFirst { band -> y in band.top until band.bottom }
+                if (bandIndex < 0) {
+                    DebugLineProbe(y, null, null, null, emptyList())
+                } else {
+                    val band = bands[bandIndex]
+                    DebugLineProbe(
+                        y = y,
+                        bandIndex = bandIndex,
+                        bandTop = band.top,
+                        bandBottom = band.bottom,
+                        runs = debugRuns(band),
+                    )
+                }
+            },
+            coverageProbes = probePoints
+                .sortedWith(compareBy<DebugProbePoint> { it.y }.thenBy { it.x })
+                .map { point -> DebugCoverageProbe(point.x, point.y, coverage(point.x, point.y)) },
+        )
+    }
+
+    private fun debugBand(index: Int, band: Band): DebugBand =
+        DebugBand(
+            index = index,
+            top = band.top,
+            bottom = band.bottom,
+            runs = debugRuns(band),
+        )
+
+    private fun debugRuns(band: Band): List<DebugRun> {
+        val out = ArrayList<DebugRun>(band.widths.size)
+        var cursor = fBounds.left
+        for (i in band.widths.indices) {
+            val next = cursor + band.widths[i]
+            out += DebugRun(
+                index = i,
+                left = cursor,
+                right = next,
+                width = band.widths[i],
+                alpha = band.alphas[i].toInt() and 0xFF,
+            )
+            cursor = next
+        }
+        return out
+    }
 
     // ─── Coverage query (Phase I3.3) ───────────────────────────────
 
