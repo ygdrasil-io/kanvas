@@ -1,0 +1,218 @@
+{
+  "linear": "FOR-322",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-circular-arcs-stroke-butt-selected-cell-harness-ticket",
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_HARNESS_READY",
+  "sceneId": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+  "harness": {
+    "test": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CircularArcsStrokeButtSelectedCellCaptureTest.kt",
+    "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.CircularArcsStrokeButtSelectedCellCaptureTest",
+    "headless": true,
+    "bounded": true,
+    "modifiesProductionRenderer": false,
+    "modifiesWgslShaders": false,
+    "modifiesThresholds": false,
+    "modifiesFallbackPolicy": false,
+    "modifiesSceneSupportStatus": false
+  },
+  "follows": {
+    "for319Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-micro-fixture-for319/circular-arcs-stroke-butt-micro-fixture-for319.json",
+    "for320Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-micro-fixture-proof-for320/circular-arcs-stroke-butt-micro-fixture-proof-for320.json",
+    "for321Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-artifacts-for321/circular-arcs-stroke-butt-selected-cell-artifacts-for321.json",
+    "for321Report": "reports/wgsl-pipeline/2026-06-04-for-321-circular-arcs-stroke-butt-selected-cell-artifacts.md"
+  },
+  "selectedCell": {
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceFutureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "boundedHarnessGm": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+    "cellCount": 1,
+    "quadrant": "bottom-left",
+    "fullGmCanvasArcRectLTRB": [
+      140,
+      520,
+      180,
+      560
+    ],
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "rowIndex": 0,
+    "columnIndex": 2,
+    "startDegrees": 0,
+    "sweepDegrees": 90,
+    "complementSweepDegrees": -270,
+    "useCenter": false,
+    "aa": true,
+    "style": "kStroke_Style",
+    "strokeWidth": 15,
+    "strokeCap": "kButt_Cap",
+    "includedCaps": [
+      "kButt_Cap"
+    ],
+    "excludedCaps": [
+      "kRound_Cap",
+      "kSquare_Cap"
+    ],
+    "includesHairlineStrokeWidth0": false,
+    "includesFill": false,
+    "includesDash": false,
+    "paintAlpha": 100,
+    "drawArcCalls": [
+      {
+        "paintColor": "red",
+        "startDegrees": 0,
+        "sweepDegrees": 90
+      },
+      {
+        "paintColor": "blue",
+        "startDegrees": 0,
+        "sweepDegrees": -270
+      }
+    ]
+  },
+  "artifactCoverage": {
+    "expectedArtifactIds": [
+      "skia.png",
+      "cpu.png",
+      "gpu.png",
+      "cpu-diff.png",
+      "gpu-diff.png",
+      "route-cpu.json",
+      "route-gpu.json",
+      "stats.json"
+    ],
+    "coverageComplete": false,
+    "blockedArtifactIds": [
+      "skia.png",
+      "gpu.png",
+      "gpu-diff.png"
+    ],
+    "items": [
+      {
+        "id": "skia.png",
+        "status": "blocked",
+        "complete": false,
+        "selectedCellPath": null,
+        "blockedReason": "No checked-in upstream Skia selected-cell reference exists; the harness does not substitute the full-GM PNG.",
+        "fullGmSubstitutionAccepted": false
+      },
+      {
+        "id": "cpu.png",
+        "status": "available",
+        "complete": true,
+        "selectedCellPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+        "blockedReason": null,
+        "fullGmSubstitutionAccepted": false
+      },
+      {
+        "id": "gpu.png",
+        "status": "blocked",
+        "complete": false,
+        "selectedCellPath": null,
+        "blockedReason": "WebGPU selected-cell PNG unavailable: coverage.stroke-cap-join-visual-parity-below-threshold",
+        "fullGmSubstitutionAccepted": false
+      },
+      {
+        "id": "cpu-diff.png",
+        "status": "available",
+        "complete": true,
+        "selectedCellPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu-diff.png",
+        "blockedReason": null,
+        "fullGmSubstitutionAccepted": false
+      },
+      {
+        "id": "gpu-diff.png",
+        "status": "blocked",
+        "complete": false,
+        "selectedCellPath": null,
+        "blockedReason": "WebGPU selected-cell diff unavailable: coverage.stroke-cap-join-visual-parity-below-threshold",
+        "fullGmSubstitutionAccepted": false
+      },
+      {
+        "id": "route-cpu.json",
+        "status": "available",
+        "complete": true,
+        "selectedCellPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-cpu.json",
+        "blockedReason": null,
+        "fullGmSubstitutionAccepted": false
+      },
+      {
+        "id": "route-gpu.json",
+        "status": "available",
+        "complete": true,
+        "selectedCellPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-gpu.json",
+        "blockedReason": null,
+        "fullGmSubstitutionAccepted": false
+      },
+      {
+        "id": "stats.json",
+        "status": "available",
+        "complete": true,
+        "selectedCellPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json",
+        "blockedReason": null,
+        "fullGmSubstitutionAccepted": false
+      }
+    ],
+    "fullGmSubstitutionRejected": true,
+    "fullGmReferencePng": "skia-integration-tests/src/test/resources/original-888/circular_arcs_stroke_butt.png"
+  },
+  "routes": {
+    "cpu": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-cpu.json",
+      "backend": "CPU",
+      "status": "capture-available-not-promoting",
+      "fallbackReason": "none",
+      "refusalReason": "none",
+      "edgeCount": null,
+      "edgeCountAbsentReason": "test-only selected-cell harness does not expose post-stroke edge-count diagnostics",
+      "edgeBudget": 256,
+      "drawKind": "CircularArcsStrokeButtSelectedCell",
+      "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.CircularArcsStrokeButtSelectedCellCaptureTest"
+    },
+    "gpu": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-gpu.json",
+      "backend": "WebGPU",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "refusalReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "edgeCount": 66,
+      "edgeCountAbsentReason": null,
+      "edgeBudget": 256,
+      "drawKind": "CircularArcsStrokeButtSelectedCell",
+      "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.CircularArcsStrokeButtSelectedCellCaptureTest"
+    }
+  },
+  "stats": {
+    "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json",
+    "cpuSimilarity": 100.0,
+    "gpuStatus": "expected-unsupported",
+    "gpuSimilarityToCpu": null,
+    "edgeBudget": 256
+  },
+  "supportGuard": {
+    "supportStatus": "not-supported",
+    "currentSupportClaim": "none",
+    "readinessMovement": false,
+    "releaseGateChanged": false,
+    "fullGmSubstitutionAccepted": false,
+    "alternativeDecisions": [
+      "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_GPU_ADAPTER_MISSING",
+      "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_CPU_ROUTE_MISSING",
+      "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_HARNESS_BLOCKED"
+    ]
+  },
+  "nonGoals": [
+    "no production renderer behavior changed",
+    "no WGSL shader changed",
+    "no support threshold changed",
+    "no fallback policy changed",
+    "no scene support status changed",
+    "no CircularArcsStrokeButtGM support promotion",
+    "no selected-cell support promotion",
+    "no full-GM PNG or score substitution"
+  ]
+}
