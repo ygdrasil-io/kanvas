@@ -1,0 +1,237 @@
+{
+  "linear": "FOR-325",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-provision-repo-owned-isolated-skia-selected-cell-reference-command-ticket",
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_COMMAND_PROVISIONING_MISSING",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_COMMAND_READY",
+    "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_COMMAND_PROVISIONING_MISSING",
+    "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_COMMAND_PROVENANCE_INVALID",
+    "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_COMMAND_AMBIGUOUS"
+  ],
+  "sceneId": "circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for325",
+  "skiaPngReady": false,
+  "acceptedSkiaPng": null,
+  "skiaPngPresent": false,
+  "missingDependency": "missing repo-owned headless upstream Skia selected-cell render command or checked-in upstream Skia tool source that draws only the FOR-319 CircularArcsStrokeButt selected cell and writes an 80x80 skia.png plus skia-reference-provenance.json; the available upstream Skia dm binary and gm/circulararcs.cpp render the full 1000x1000 GM, and full-GM output or crops are forbidden",
+  "selectedCell": {
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceFutureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "boundedHarnessGm": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+    "cellCount": 1,
+    "quadrant": "bottom-left",
+    "fullGmCanvasArcRectLTRB": [
+      140,
+      520,
+      180,
+      560
+    ],
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "rowIndex": 0,
+    "columnIndex": 2,
+    "startDegrees": 0,
+    "sweepDegrees": 90,
+    "complementSweepDegrees": -270,
+    "useCenter": false,
+    "aa": true,
+    "style": "kStroke_Style",
+    "strokeWidth": 15,
+    "strokeCap": "kButt_Cap",
+    "includedCaps": [
+      "kButt_Cap"
+    ],
+    "excludedCaps": [
+      "kRound_Cap",
+      "kSquare_Cap"
+    ],
+    "includesHairlineStrokeWidth0": false,
+    "includesFill": false,
+    "includesDash": false,
+    "paintAlpha": 100,
+    "drawArcCalls": [
+      {
+        "paintColor": "red",
+        "startDegrees": 0,
+        "sweepDegrees": 90
+      },
+      {
+        "paintColor": "blue",
+        "startDegrees": 0,
+        "sweepDegrees": -270
+      }
+    ]
+  },
+  "follows": {
+    "for319Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-micro-fixture-for319/circular-arcs-stroke-butt-micro-fixture-for319.json",
+    "for320Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-micro-fixture-proof-for320/circular-arcs-stroke-butt-micro-fixture-proof-for320.json",
+    "for321Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-artifacts-for321/circular-arcs-stroke-butt-selected-cell-artifacts-for321.json",
+    "for322Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+    "for323Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for323/circular-arcs-stroke-butt-selected-cell-skia-reference-for323.json",
+    "for324Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for324/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for324.json",
+    "for324Report": "reports/wgsl-pipeline/2026-06-04-for-324-circular-arcs-stroke-butt-isolated-skia-reference.md",
+    "for322Cpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+    "for322RouteGpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-gpu.json",
+    "for322Stats": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json"
+  },
+  "candidateSkiaReference": {
+    "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for325/skia.png",
+    "provenancePath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for325/skia-reference-provenance.json",
+    "present": false,
+    "accepted": false,
+    "status": "blocked-provisioning-missing",
+    "blockedReasons": [
+      "no skia.png is present under the FOR-325 artifact directory",
+      "missing repo-owned headless upstream Skia selected-cell render command or checked-in upstream Skia tool source that draws only the FOR-319 CircularArcsStrokeButt selected cell and writes an 80x80 skia.png plus skia-reference-provenance.json; the available upstream Skia dm binary and gm/circulararcs.cpp render the full 1000x1000 GM, and full-GM output or crops are forbidden"
+    ]
+  },
+  "repoEntryPointAudit": {
+    "repoOwnedSelectedCellCommandPresent": false,
+    "missingDependency": "missing repo-owned headless upstream Skia selected-cell render command or checked-in upstream Skia tool source that draws only the FOR-319 CircularArcsStrokeButt selected cell and writes an 80x80 skia.png plus skia-reference-provenance.json; the available upstream Skia dm binary and gm/circulararcs.cpp render the full 1000x1000 GM, and full-GM output or crops are forbidden",
+    "auditedEntryPoints": [
+      {
+        "path": "cpu-raster/src/main/kotlin/org/skia/testing/TestUtils.kt",
+        "symbol": "TestUtils.runGmTest",
+        "acceptedAsSkiaReference": false,
+        "reason": "renders through Kanvas RasterSinkF16, not upstream Skia"
+      },
+      {
+        "path": "cpu-raster/src/main/kotlin/org/skia/dm/DmCli.kt",
+        "symbol": "DmCli",
+        "acceptedAsSkiaReference": false,
+        "reason": "Kanvas DM config parser; --writePath is explicitly out of scope here"
+      },
+      {
+        "path": "cpu-raster/src/main/kotlin/org/skia/dm/DmMain.kt",
+        "symbol": "DmMain.runFromArgs",
+        "acceptedAsSkiaReference": false,
+        "reason": "returns a Kanvas DM JSON report and has no standalone image-generation command"
+      },
+      {
+        "path": "cpu-raster/src/main/kotlin/org/skia/dm/Runner.kt",
+        "symbol": "Runner",
+        "acceptedAsSkiaReference": false,
+        "reason": "hashes encoded Kanvas sink output for reports; it does not write selected-cell reference PNGs"
+      },
+      {
+        "path": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CircularArcsStrokeButtSelectedCellCaptureTest.kt",
+        "symbol": "CircularArcsStrokeButtSelectedCellCaptureTest",
+        "acceptedAsSkiaReference": false,
+        "reason": "bounded selected-cell harness writes Kanvas CPU output and explicitly deletes skia.png"
+      }
+    ]
+  },
+  "upstreamSkiaDependencyAudit": {
+    "upstreamSkiaRoot": "/Users/chaos/workspace/kanvas-forge/skia-main",
+    "upstreamCircularArcsSource": {
+      "path": "/Users/chaos/workspace/kanvas-forge/skia-main/gm/circulararcs.cpp",
+      "present": true,
+      "acceptedAsSelectedCellCommand": false,
+      "reason": "source defines the full 1000x1000 GM grid, not a checked-in headless selected-cell renderer"
+    },
+    "upstreamDmBinary": {
+      "path": "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/dm",
+      "present": true,
+      "acceptedAsSelectedCellCommand": false,
+      "rejectedCommand": "rtk /Users/chaos/workspace/kanvas-forge/skia-main/out/Release/dm --src gm --config 8888 --match ^circular_arcs_stroke_butt$ --writePath <dir>",
+      "reason": "dm --writePath can emit the full 1000x1000 GM circular_arcs_stroke_butt; FOR-325 requires only the 80x80 FOR-319 cell and forbids crop/full-GM substitution"
+    },
+    "provisionableSelectedCellCommand": false,
+    "missingDependency": "missing repo-owned headless upstream Skia selected-cell render command or checked-in upstream Skia tool source that draws only the FOR-319 CircularArcsStrokeButt selected cell and writes an 80x80 skia.png plus skia-reference-provenance.json; the available upstream Skia dm binary and gm/circulararcs.cpp render the full 1000x1000 GM, and full-GM output or crops are forbidden"
+  },
+  "rejectedSources": {
+    "fullGmPng": {
+      "path": "skia-integration-tests/src/test/resources/original-888/circular_arcs_stroke_butt.png",
+      "accepted": false,
+      "reason": "full-GM PNG is not an isolated selected-cell render"
+    },
+    "fullGmCrop": {
+      "accepted": false,
+      "for323Decision": "CIRCULAR_ARCS_STROKE_BUTT_FULL_GM_CROP_CONTAMINATED",
+      "cropBoxLTRB": [
+        120,
+        500,
+        200,
+        580
+      ],
+      "reason": "FOR-323 proved the crop is contaminated by neighboring stroke margins"
+    },
+    "for322CpuPng": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+      "present": true,
+      "accepted": false,
+      "reason": "FOR-322 cpu.png is Kanvas CPU output, not Skia"
+    },
+    "fullGmScores": {
+      "accepted": false,
+      "reason": "full-GM similarity scores are not selected-cell reference pixels"
+    },
+    "upstreamDmFullGmWritePath": {
+      "command": "rtk /Users/chaos/workspace/kanvas-forge/skia-main/out/Release/dm --src gm --config 8888 --match ^circular_arcs_stroke_butt$ --writePath <dir>",
+      "accepted": false,
+      "reason": "upstream dm writes the whole GM; FOR-325 needs an isolated 80x80 selected-cell renderer"
+    }
+  },
+  "strictProvenanceRequirements": {
+    "sourceType": "isolated-skia-selected-cell-render",
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "commandRequired": true,
+    "sourceImplementationRequired": true,
+    "upstreamSkiaVersionRequired": true,
+    "dimensions": {
+      "width": 80,
+      "height": 80
+    },
+    "fullGmCrop": false,
+    "fullGmSubstitutionAccepted": false,
+    "cpuKanvasOutputAcceptedAsSkia": false,
+    "selectedCellRequired": true
+  },
+  "referenceDecision": {
+    "decision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_COMMAND_PROVISIONING_MISSING",
+    "readyDecision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_COMMAND_READY",
+    "missingDecision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_COMMAND_PROVISIONING_MISSING",
+    "provenanceInvalidDecision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_COMMAND_PROVENANCE_INVALID",
+    "ambiguousDecision": "CIRCULAR_ARCS_STROKE_BUTT_ISOLATED_SKIA_REFERENCE_COMMAND_AMBIGUOUS",
+    "skiaPngReady": false,
+    "blockedReasons": [
+      "no skia.png is present under the FOR-325 artifact directory",
+      "missing repo-owned headless upstream Skia selected-cell render command or checked-in upstream Skia tool source that draws only the FOR-319 CircularArcsStrokeButt selected cell and writes an 80x80 skia.png plus skia-reference-provenance.json; the available upstream Skia dm binary and gm/circulararcs.cpp render the full 1000x1000 GM, and full-GM output or crops are forbidden"
+    ]
+  },
+  "preservedContracts": {
+    "supportStatus": "not-supported",
+    "fullGmSubstitutionAccepted": false,
+    "fullGmScoreEvidenceAccepted": false,
+    "cpuKanvasOutputAcceptedAsSkia": false,
+    "gpuRouteStatus": "expected-unsupported",
+    "gpuRefusalReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "readinessMovement": false,
+    "releaseGateChanged": false,
+    "productionRendererChanged": false,
+    "wgslChanged": false,
+    "thresholdChanged": false,
+    "fallbackPolicyChanged": false,
+    "kadreNativeDependencyAdded": false
+  },
+  "validation": [
+    "rtk python3 scripts/validate_for325_circular_arcs_stroke_butt_isolated_skia_reference_command.py",
+    "no true repo-owned headless upstream Skia selected-cell generation command is provisionable for this cell",
+    "rtk python3 scripts/validate_for324_circular_arcs_stroke_butt_isolated_skia_reference.py",
+    "rtk python3 scripts/validate_for323_circular_arcs_stroke_butt_selected_cell_skia_reference.py",
+    "rtk python3 scripts/validate_for322_circular_arcs_stroke_butt_selected_cell_harness.py",
+    "rtk python3 scripts/validate_for321_circular_arcs_stroke_butt_selected_cell_artifacts.py",
+    "rtk python3 scripts/validate_for320_circular_arcs_stroke_butt_micro_fixture_proof.py",
+    "rtk python3 scripts/validate_for319_circular_arcs_stroke_butt_micro_fixture.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for325/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for325.json >/dev/null",
+    "rtk ./gradlew pipelineSceneDashboardGate",
+    "rtk git diff --check origin/master...HEAD"
+  ]
+}
