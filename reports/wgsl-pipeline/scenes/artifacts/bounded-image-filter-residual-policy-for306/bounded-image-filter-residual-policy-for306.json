@@ -1,0 +1,173 @@
+{
+  "linear": "FOR-306",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-bounded-image-filter-residual-policy-guard-ticket",
+  "decision": "IMAGE_FILTER_RESIDUAL_POLICY_GUARD_APPLIED",
+  "policy": {
+    "targetRoute": "webgpu.image-filter.offset-crop-prepass-and-src-over",
+    "preservedFallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+    "remainingBoundary": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+    "diagnosticOnlySignals": [
+      "RGBA8Unorm intermediate candidate",
+      "RGBA16Float present byte quantization",
+      "targetColorSpaceBlend"
+    ],
+    "requiredLocalProof": [
+      "cpuArtifact",
+      "diffStats",
+      "fallbackStable",
+      "gpuArtifact",
+      "noGlobalTargetColorSpaceBlend",
+      "noGlobalThresholdChange",
+      "referenceArtifact",
+      "routeDiagnostics",
+      "strictLocalImprovement"
+    ],
+    "forbiddenPromotionInputs": [
+      "diagnostic-only RGBA8Unorm improvement without strict local parity",
+      "diagnostic-only RGBA16Float present quantization family scope",
+      "global targetColorSpaceBlend activation",
+      "threshold weakening",
+      "fallback removal without row-local reference/CPU/GPU/diff/stat evidence"
+    ]
+  },
+  "sourceAudits": [
+    {
+      "linear": "FOR-261",
+      "source": "reports/wgsl-pipeline/scenes/generated/artifacts/whole-scene-rgba8-intermediate-audit-for261/whole-scene-rgba8-intermediate-audit-for261.json",
+      "signal": "RGBA8Unorm intermediate candidate",
+      "supportDecision": "KEEP_DIAGNOSTIC",
+      "finding": "whole_scene_rgba8_intermediate_candidate_observed_but_precision_fixture_not_corrected",
+      "missingCondition": "missing_precision_sensitive_whole_scene_rgba8_intermediate_correction_without_targetColorSpaceBlend",
+      "remainingBoundary": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+      "admissibleCorrection": "none_applied: RGBA8Unorm remains diagnostic because the precision-sensitive fixture is not corrected and targetColorSpaceBlend is explicitly out of scope",
+      "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+    },
+    {
+      "linear": "FOR-262",
+      "source": "reports/wgsl-pipeline/scenes/generated/artifacts/target-colorspace-blend-scope-audit-for262/target-colorspace-blend-scope-audit-for262.json",
+      "signal": "targetColorSpaceBlend scope",
+      "supportDecision": "KEEP_DIAGNOSTIC",
+      "finding": "targetColorSpaceBlend_corrects_isolated_neutral_aa_but_safe_family_scope_not_proven",
+      "missingCondition": "missing_family_bound_proof_for_target_colorspace_blend_and_intermediate_boundary_separation",
+      "remainingBoundary": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+      "admissibleCorrection": "none_applied: targetColorSpaceBlend remains diagnostic because the only exact correction is isolated, the bounded stroke cap/join scene still misses exact parity, an exact control does not need the mode, and the FOR-261 residual image-filter route is outside the target-blend draw-family scope",
+      "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+    },
+    {
+      "linear": "FOR-263",
+      "source": "reports/wgsl-pipeline/scenes/generated/artifacts/target-blend-intermediate-matrix-audit-for263/target-blend-intermediate-matrix-audit-for263.json",
+      "signal": "targetColorSpaceBlend x intermediateFormat matrix",
+      "supportDecision": "KEEP_DIAGNOSTIC",
+      "finding": "targetColorSpaceBlend_and_intermediateFormat_correct_different_boundaries_without_safe_shared_scope",
+      "missingCondition": "missing_family_bound_proof_for_target_colorspace_blend_and_intermediate_boundary_separation",
+      "remainingBoundary": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+      "admissibleCorrection": "none_applied: targetColorSpaceBlend remains diagnostic for an isolated and insufficient-parity family scope, RGBA8Unorm remains diagnostic for FOR-261 residual intermediate-boundary cases, and targetColorSpaceBlend refuses the image-filter residual route for both intermediate formats",
+      "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+    },
+    {
+      "linear": "FOR-264",
+      "source": "reports/wgsl-pipeline/scenes/generated/artifacts/rgba16float-present-quantization-audit-for264/rgba16float-present-quantization-audit-for264.json",
+      "signal": "RGBA16Float present byte quantization",
+      "supportDecision": "KEEP_DIAGNOSTIC",
+      "finding": "rgba16float_present_quantization_reconstructs_residual_samples_but_targetColorSpaceBlend_boundary_stays_separate",
+      "missingCondition": "missing_family_bound_proof_that_rgba16float_present_byte_quantization_is_safe_without_targetColorSpaceBlend",
+      "remainingBoundary": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+      "admissibleCorrection": "none_applied: RGBA16Float present-byte quantization remains diagnostic because the residual representatives are bounded samples, the exact control needs no correction, and the targetColorSpaceBlend-sensitive fixture is corrected only by targetColorSpaceBlend=true",
+      "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+    },
+    {
+      "linear": "FOR-265",
+      "source": "reports/wgsl-pipeline/scenes/generated/artifacts/rgba16float-quantization-family-scope-for265/rgba16float-quantization-family-scope-for265.json",
+      "signal": "RGBA16Float quantization family scope",
+      "supportDecision": "KEEP_DIAGNOSTIC",
+      "finding": "rgba16float_present_quantization_family_scope_not_proven_targetColorSpaceBlend_boundary_stays_separate",
+      "missingCondition": "missing_family_bound_proof_that_rgba16float_present_byte_quantization_is_safe_without_targetColorSpaceBlend",
+      "remainingBoundary": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+      "admissibleCorrection": "none_applied: RGBA16Float present-byte quantization remains diagnostic because the residual representatives are bounded samples, exact opaque and blend/coverage controls need no correction, and the targetColorSpaceBlend-sensitive fixture is corrected only by targetColorSpaceBlend=true",
+      "preservedUnsupportedReason": "image-filter.crop-input-nonnull-prepass-required"
+    }
+  ],
+  "guardCases": [
+    {
+      "name": "FOR-261/FOR-265 diagnostic signals alone must not promote image-filter support",
+      "signals": [
+        "RGBA16Float present quantization",
+        "RGBA8Unorm"
+      ],
+      "proof": [
+        "gpuArtifact",
+        "referenceArtifact"
+      ],
+      "globalTargetColorSpaceBlend": false,
+      "promotionClaim": true,
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Promotion lacks required local proof fields: cpuArtifact, diffStats, fallbackStable, noGlobalTargetColorSpaceBlend, noGlobalThresholdChange, routeDiagnostics, strictLocalImprovement"
+    },
+    {
+      "name": "Global targetColorSpaceBlend activation must not promote image-filter support",
+      "signals": [
+        "targetColorSpaceBlend"
+      ],
+      "proof": [
+        "cpuArtifact",
+        "diffStats",
+        "fallbackStable",
+        "gpuArtifact",
+        "noGlobalTargetColorSpaceBlend",
+        "noGlobalThresholdChange",
+        "referenceArtifact",
+        "routeDiagnostics",
+        "strictLocalImprovement"
+      ],
+      "globalTargetColorSpaceBlend": true,
+      "promotionClaim": true,
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Global targetColorSpaceBlend activation is not an allowed image-filter residual support proof."
+    },
+    {
+      "name": "Diagnostic inventory without support claim is allowed",
+      "signals": [
+        "RGBA8Unorm"
+      ],
+      "proof": [],
+      "globalTargetColorSpaceBlend": false,
+      "promotionClaim": false,
+      "decision": "diagnostic-inventory",
+      "allowed": true,
+      "reason": "Diagnostic inventory is allowed when it does not claim support or promotion."
+    },
+    {
+      "name": "Complete local proof can become a support candidate",
+      "signals": [
+        "local renderer correction"
+      ],
+      "proof": [
+        "cpuArtifact",
+        "diffStats",
+        "fallbackStable",
+        "gpuArtifact",
+        "noGlobalTargetColorSpaceBlend",
+        "noGlobalThresholdChange",
+        "referenceArtifact",
+        "routeDiagnostics",
+        "strictLocalImprovement"
+      ],
+      "globalTargetColorSpaceBlend": false,
+      "promotionClaim": true,
+      "decision": "candidate-local-proof",
+      "allowed": true,
+      "reason": "Promotion is allowed only as a candidate because complete local proof is present."
+    }
+  ],
+  "futureConsumers": [],
+  "strictPreservation": {
+    "rendererChanged": false,
+    "shaderChanged": false,
+    "thresholdChanged": false,
+    "fallbackChanged": false,
+    "sceneStatusChanged": false,
+    "historicalReportsRewritten": false
+  }
+}
