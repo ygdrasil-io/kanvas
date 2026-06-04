@@ -1,0 +1,157 @@
+{
+  "linear": "FOR-340",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-isolated-upstream-skia-references-for-adjacent-circular-arcs-stroke-butt-f16-cells-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-339-circular-arcs-stroke-butt-adjacent-f16-runtime-trace-partial-finding"
+  ],
+  "sceneId": "circular-arcs-stroke-butt-adjacent-f16-reference-for340",
+  "sourceType": "isolated-skia-adjacent-cell-render",
+  "sourceGm": "CircularArcsStrokeButtGM",
+  "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+  "dimensions": {
+    "width": 80,
+    "height": 80
+  },
+  "command": "rtk python3 tools/skia-reference/build_for340_circular_arcs_stroke_butt_adjacent_f16_reference.py",
+  "commandArgv": [
+    "rtk",
+    "python3",
+    "tools/skia-reference/build_for340_circular_arcs_stroke_butt_adjacent_f16_reference.py"
+  ],
+  "buildCommand": [
+    "/usr/bin/clang++",
+    "-std=c++17",
+    "-I/Users/chaos/workspace/kanvas-forge/skia-main",
+    "-I/Users/chaos/workspace/kanvas-forge/skia-main/include",
+    "-I/Users/chaos/workspace/kanvas-forge/skia-main/include/core",
+    "-I/Users/chaos/workspace/kanvas-forge/skia-main/include/encode",
+    "/Users/chaos/.codex/worktrees/3499/kanvas/tools/skia-reference/circular_arcs_stroke_butt_adjacent_f16_reference.cpp",
+    "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libskia.a",
+    "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libpng.a",
+    "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libzlib.a",
+    "-framework",
+    "CoreFoundation",
+    "-framework",
+    "CoreGraphics",
+    "-framework",
+    "CoreText",
+    "-framework",
+    "Foundation",
+    "-framework",
+    "ImageIO",
+    "-framework",
+    "Metal",
+    "-framework",
+    "QuartzCore",
+    "-o",
+    "/var/folders/81/9k3fbzrd42b_r_vm8fkfy16w0000gn/T/kanvas-for340-skia-1cho1f5x/circular_arcs_stroke_butt_adjacent_f16_reference"
+  ],
+  "executeCommand": [
+    "/var/folders/81/9k3fbzrd42b_r_vm8fkfy16w0000gn/T/kanvas-for340-skia-1cho1f5x/circular_arcs_stroke_butt_adjacent_f16_reference",
+    "/Users/chaos/.codex/worktrees/3499/kanvas/reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep45-skia.png",
+    "/Users/chaos/.codex/worktrees/3499/kanvas/reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep130-skia.png"
+  ],
+  "headless": true,
+  "sourceImplementation": "tools/skia-reference/circular_arcs_stroke_butt_adjacent_f16_reference.cpp",
+  "sourceSha256": "f4197ab5c360b6d44eaab0f32e8f93be0f92cc887ec94520fc8cac2edc211a71",
+  "upstreamSkiaRoot": "/Users/chaos/workspace/kanvas-forge/skia-main",
+  "upstreamSkiaOut": "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release",
+  "upstreamSkiaGitRevision": "defc3a5a92966c32cb2a6a901e2fa3036a13bb8a",
+  "upstreamSkiaGitStatusShort": "?? skia-gm-out/",
+  "upstreamSkiaSourceVersion": "defc3a5a92966c32cb2a6a901e2fa3036a13bb8a",
+  "sourceTypeProof": {
+    "compiledRepoOwnedSource": true,
+    "compiledSourcePath": "tools/skia-reference/circular_arcs_stroke_butt_adjacent_f16_reference.cpp",
+    "linkedAgainstUpstreamSkiaLib": "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libskia.a",
+    "executedBinary": true,
+    "isolatedCellOutputs": true
+  },
+  "targetCells": [
+    {
+      "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+      "fixtureId": "circular-arcs-stroke-butt-start0-sweep45-usecenter-false-aa-true",
+      "sourceGm": "CircularArcsStrokeButtGM",
+      "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+      "rowIndex": 0,
+      "columnIndex": 1,
+      "startDegrees": 0,
+      "sweepDegrees": 45,
+      "complementSweepDegrees": -315,
+      "useCenter": false,
+      "aa": true,
+      "style": "kStroke_Style",
+      "strokeWidth": 15,
+      "strokeCap": "kButt_Cap",
+      "paintAlpha": 100,
+      "boundedCanvasArcRectLTRB": [
+        20,
+        20,
+        60,
+        60
+      ],
+      "dimensions": {
+        "width": 80,
+        "height": 80
+      },
+      "outputPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep45-skia.png",
+      "outputSha256": "217e3d4661411db1bb940ef2297be497b4254c8501c17204e84a50013c673c0c",
+      "sourceType": "isolated-skia-adjacent-cell-render",
+      "fullGmCrop": false,
+      "selectedCellExtrapolationUsed": false
+    },
+    {
+      "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+      "fixtureId": "circular-arcs-stroke-butt-start0-sweep130-usecenter-false-aa-true",
+      "sourceGm": "CircularArcsStrokeButtGM",
+      "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+      "rowIndex": 0,
+      "columnIndex": 3,
+      "startDegrees": 0,
+      "sweepDegrees": 130,
+      "complementSweepDegrees": -230,
+      "useCenter": false,
+      "aa": true,
+      "style": "kStroke_Style",
+      "strokeWidth": 15,
+      "strokeCap": "kButt_Cap",
+      "paintAlpha": 100,
+      "boundedCanvasArcRectLTRB": [
+        20,
+        20,
+        60,
+        60
+      ],
+      "dimensions": {
+        "width": 80,
+        "height": 80
+      },
+      "outputPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep130-skia.png",
+      "outputSha256": "fa255283c907d90470211ff22fdfe93bd051e8220f565d9527c70fe39c2d1ac3",
+      "sourceType": "isolated-skia-adjacent-cell-render",
+      "fullGmCrop": false,
+      "selectedCellExtrapolationUsed": false
+    }
+  ],
+  "fullGmCrop": false,
+  "fullGmSubstitutionAccepted": false,
+  "cpuKanvasOutputAcceptedAsSkia": false,
+  "selectedCellExtrapolationUsed": false,
+  "for327SelectedCellReferenceAcceptedAsAdjacent": false,
+  "rejectedSources": {
+    "selectedCellFor327": {
+      "accepted": false
+    },
+    "fullGmPng": {
+      "accepted": false
+    },
+    "fullGmCrop": {
+      "accepted": false
+    },
+    "for339RuntimeExport": {
+      "acceptedAsSkiaReference": false
+    },
+    "cpuKanvasOutput": {
+      "accepted": false
+    }
+  }
+}
