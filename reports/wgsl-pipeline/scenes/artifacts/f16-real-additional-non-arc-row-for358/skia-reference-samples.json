@@ -1,0 +1,16 @@
+{
+  "sceneId": "f16-real-additional-non-arc-row-for358",
+  "sourceType": "isolated-skia-non-arc-rec2020-f16-for358-src-over-rect",
+  "dimensions": {"width": 40, "height": 28},
+  "colorType": "kRGBA_F16Norm",
+  "colorSpace": "Rec.2020",
+  "blendMode": "kSrcOver",
+  "nonArc": true,
+  "excludedScene": "circular_arcs_stroke_butt",
+  "samples": [
+    {"name": "for358_background_top_left", "x": 0, "y": 0, "referenceSrgbRgba": [255, 255, 255, 255]},
+    {"name": "for358_rect_center", "x": 14, "y": 14, "referenceSrgbRgba": [137, 216, 142, 255]},
+    {"name": "for358_rect_left_inside", "x": 5, "y": 14, "referenceSrgbRgba": [137, 216, 142, 255]},
+    {"name": "for358_rect_bottom_inside", "x": 14, "y": 20, "referenceSrgbRgba": [137, 216, 142, 255]}
+  ]
+}
