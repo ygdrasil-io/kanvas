@@ -1,0 +1,688 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-367",
+  "sceneId": "m60-bounded-stroke-cap-join-comparable-f16-evidence-for367",
+  "sourceSceneId": "m60-bounded-stroke-cap-join",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-m60-bounded-stroke-cap-join-comparable-f16-evidence-after-for-366",
+  "decision": "M60_BOUNDED_STROKE_CAP_JOIN_COMPARABLE_F16_EVIDENCE_RECORDED",
+  "classification": "still-missing-comparable-metadata",
+  "allowedClassifications": [
+    "ready-for-candidate-evaluation",
+    "still-missing-comparable-metadata"
+  ],
+  "decisionReason": "FOR-367 records the FOR-366 selected M60 bounded stroke cap/join positive residual as comparable reference/current evidence, while refusing candidate evaluation until candidate samples and missing source metadata exist.",
+  "inputValidation": {
+    "for366Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-positive-residual-target-inventory-for366/f16-positive-residual-target-inventory-for366.json",
+    "for366Decision": "F16_POSITIVE_RESIDUAL_TARGET_INVENTORY_READY",
+    "for366RequiredDecision": "F16_POSITIVE_RESIDUAL_TARGET_INVENTORY_READY",
+    "for366SelectedFamily": "m60-bounded-stroke-cap-join-positive-residual-evidence-target",
+    "for366SelectedRowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+    "for366CurrentResidual": 856,
+    "for344Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-broader-non-arc-color-policy-for344/f16-broader-non-arc-color-policy-for344.json",
+    "for344Decision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "for344RequiredDecision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "for344RowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+    "for344CurrentResidual": 856
+  },
+  "sourceArtifacts": {
+    "for366": "reports/wgsl-pipeline/scenes/artifacts/f16-positive-residual-target-inventory-for366/f16-positive-residual-target-inventory-for366.json",
+    "for344": "reports/wgsl-pipeline/scenes/artifacts/f16-broader-non-arc-color-policy-for344/f16-broader-non-arc-color-policy-for344.json",
+    "aaResidualDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+    "stats": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json",
+    "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+    "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+    "experimentalGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/experimental-gpu-diagnostic.json"
+  },
+  "rejectedCandidateBoundaries": [
+    {
+      "source": "FOR-355",
+      "policyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+      "selectableForFutureWork": false,
+      "reason": "closed after independent FOR-361 evidence"
+    },
+    {
+      "source": "FOR-365",
+      "policyId": "covered_source_alpha_src_over_white_without_non_arc_guard_probe",
+      "selectableForFutureWork": false,
+      "reason": "worsened all mandatory FOR-365 guards"
+    }
+  ],
+  "evidenceLine": {
+    "rowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+    "familyId": "m60-bounded-stroke-cap-join-positive-residual-evidence-target",
+    "family": "bounded-stroke-cap-join",
+    "sourceKind": "non-arc-target-colorspace-blend-diagnostic",
+    "rowKind": "non-arc",
+    "rec2020F16SrcOverOrBlendSignal": true,
+    "referenceCurrentComparable": true,
+    "referenceCurrentCandidateComparable": false,
+    "currentResidual": 856,
+    "candidateResidual": null,
+    "sampleCount": 10,
+    "residualComputation": {
+      "method": "sum absolute RGBA channel deltas across committed highDeltaSamples",
+      "computedResidual": 856,
+      "matchesFor344CurrentResidual": true,
+      "matchesFor366CurrentResidual": true
+    },
+    "reference": {
+      "status": "reference-rgba-high-delta-samples-available",
+      "sampleKey": "referenceRgba",
+      "colorType": "RGBA8 diagnostic sample",
+      "colorSpace": "committed M60 diagnostic reference output",
+      "samplesAvailable": true
+    },
+    "current": {
+      "status": "current-gpu-rgba-high-delta-samples-available",
+      "sampleKey": "gpuRgba",
+      "normalizedSampleKey": "currentRgba",
+      "backend": "WebGPU",
+      "adapter": "Apple M2 Max",
+      "colorType": "RGBA8 diagnostic sample",
+      "colorSpace": "committed M60 WebGPU diagnostic output",
+      "samplesAvailable": true
+    },
+    "candidate": {
+      "policyId": "straight_srgb_quantized_alpha_src_over_white",
+      "status": "missing-for-f16-policy-candidate",
+      "samplesAvailable": false,
+      "candidateImplementationAuthorized": false,
+      "scoreIncreaseAuthorized": false
+    },
+    "sourceInputRgba": {
+      "available": false,
+      "status": "missing-from-committed-m60-artifacts",
+      "reason": "The committed M60 artifacts expose reference/current RGBA samples but do not expose source input RGBA or raw premul/unpremul F16 components."
+    },
+    "colorAndBlendMetadata": {
+      "targetColorSpaceBlend": true,
+      "resolvedRootCause": "color-space.target-blend-required",
+      "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
+      "premulAssumption": "not-explicitly-recorded-for-source-f16-components",
+      "blendAssumption": "targetColorSpaceBlend diagnostic, not a selected F16 policy candidate",
+      "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white"
+    },
+    "coverageAndEdgeMetadata": {
+      "coveragePlan": "PathStrokeCoverage(openPolyline,aa=true,strokeWidth=10,capJoinMatrix=butt-bevel+round-round+square-bevel)",
+      "normalGpuRoute": "webgpu.coverage.refuse",
+      "experimentalGpuRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
+      "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "rootCause": "coverage.stroke-cap-join-aa-residual",
+      "resolvedRootCause": "color-space.target-blend-required",
+      "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
+      "pathVerbCount": 9,
+      "pathVerbBudget": 96,
+      "edgeCount": 18,
+      "edgeBudget": 256,
+      "strokeWidth": 10.0,
+      "strokeWidthBudget": {
+        "min": 0.5,
+        "max": 64.0
+      },
+      "strokeCaps": [
+        "butt",
+        "round",
+        "square"
+      ],
+      "strokeJoins": [
+        "bevel",
+        "round",
+        "bevel"
+      ],
+      "dashIntervalCount": 0,
+      "dashIntervalBudget": 8,
+      "deviceBounds": {
+        "left": 0,
+        "top": 0,
+        "right": 192,
+        "bottom": 128
+      },
+      "deviceBoundsBudget": 2048,
+      "dominantMismatchRegion": "round-round",
+      "dominantMismatchDescription": "middle band: round cap with round join",
+      "regions": [
+        {
+          "id": "butt-bevel",
+          "description": "left band: butt cap with bevel join",
+          "mismatchPixels": 394,
+          "oneUnitMismatchPixels": 392,
+          "greaterThanEightPixels": 2,
+          "greaterThanThirtyTwoPixels": 0,
+          "maxChannelDelta": 25,
+          "bounds": {
+            "left": 9,
+            "top": 27,
+            "right": 47,
+            "bottom": 92
+          }
+        },
+        {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "mismatchPixels": 523,
+          "oneUnitMismatchPixels": 515,
+          "greaterThanEightPixels": 8,
+          "greaterThanThirtyTwoPixels": 6,
+          "maxChannelDelta": 48,
+          "bounds": {
+            "left": 48,
+            "top": 38,
+            "right": 95,
+            "bottom": 81
+          }
+        },
+        {
+          "id": "square-bevel",
+          "description": "right band: square cap with bevel join",
+          "mismatchPixels": 87,
+          "oneUnitMismatchPixels": 87,
+          "greaterThanEightPixels": 0,
+          "greaterThanThirtyTwoPixels": 0,
+          "maxChannelDelta": 1,
+          "bounds": {
+            "left": 96,
+            "top": 37,
+            "right": 153,
+            "bottom": 82
+          }
+        }
+      ],
+      "residualSummary": {
+        "mismatchPixels": 1004,
+        "oneUnitMismatchPixels": 994,
+        "greaterThanEightPixels": 10,
+        "greaterThanThirtyTwoPixels": 6,
+        "maxChannelDelta": 48,
+        "classification": "mostly byte-exact target-color transform residual after RGBA8 source quantization; remaining >8 tail is localized to cap/join AA boundary pixels"
+      }
+    },
+    "samples": [
+      {
+        "index": 1,
+        "x": 92,
+        "y": 75,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "currentSourceKey": "gpuRgba",
+        "candidatePolicyRgba": null,
+        "sourceInputRgba": null,
+        "sourceInputRgbaStatus": "missing-from-committed-m60-artifacts",
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "maxChannelDelta": 48
+      },
+      {
+        "index": 2,
+        "x": 91,
+        "y": 76,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "currentSourceKey": "gpuRgba",
+        "candidatePolicyRgba": null,
+        "sourceInputRgba": null,
+        "sourceInputRgbaStatus": "missing-from-committed-m60-artifacts",
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "maxChannelDelta": 48
+      },
+      {
+        "index": 3,
+        "x": 90,
+        "y": 77,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "currentSourceKey": "gpuRgba",
+        "candidatePolicyRgba": null,
+        "sourceInputRgba": null,
+        "sourceInputRgbaStatus": "missing-from-committed-m60-artifacts",
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "maxChannelDelta": 48
+      },
+      {
+        "index": 4,
+        "x": 89,
+        "y": 78,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "currentSourceKey": "gpuRgba",
+        "candidatePolicyRgba": null,
+        "sourceInputRgba": null,
+        "sourceInputRgbaStatus": "missing-from-committed-m60-artifacts",
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "maxChannelDelta": 48
+      },
+      {
+        "index": 5,
+        "x": 88,
+        "y": 79,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "currentSourceKey": "gpuRgba",
+        "candidatePolicyRgba": null,
+        "sourceInputRgba": null,
+        "sourceInputRgbaStatus": "missing-from-committed-m60-artifacts",
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "maxChannelDelta": 48
+      },
+      {
+        "index": 6,
+        "x": 87,
+        "y": 80,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "currentSourceKey": "gpuRgba",
+        "candidatePolicyRgba": null,
+        "sourceInputRgba": null,
+        "sourceInputRgbaStatus": "missing-from-committed-m60-artifacts",
+        "signedCurrentMinusReferenceDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "absoluteChannelDelta": [
+          48,
+          41,
+          16,
+          0
+        ],
+        "sampleResidual": 105,
+        "maxChannelDelta": 48
+      },
+      {
+        "index": 7,
+        "x": 21,
+        "y": 81,
+        "region": {
+          "id": "butt-bevel",
+          "description": "left band: butt cap with bevel join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          206,
+          213,
+          239,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "currentSourceKey": "gpuRgba",
+        "candidatePolicyRgba": null,
+        "sourceInputRgba": null,
+        "sourceInputRgbaStatus": "missing-from-committed-m60-artifacts",
+        "signedCurrentMinusReferenceDelta": [
+          -25,
+          -22,
+          -9,
+          0
+        ],
+        "absoluteChannelDelta": [
+          25,
+          22,
+          9,
+          0
+        ],
+        "sampleResidual": 56,
+        "maxChannelDelta": 25
+      },
+      {
+        "index": 8,
+        "x": 93,
+        "y": 74,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          182,
+          192,
+          231,
+          255
+        ],
+        "currentRgba": [
+          206,
+          213,
+          238,
+          255
+        ],
+        "currentSourceKey": "gpuRgba",
+        "candidatePolicyRgba": null,
+        "sourceInputRgba": null,
+        "sourceInputRgbaStatus": "missing-from-committed-m60-artifacts",
+        "signedCurrentMinusReferenceDelta": [
+          24,
+          21,
+          7,
+          0
+        ],
+        "absoluteChannelDelta": [
+          24,
+          21,
+          7,
+          0
+        ],
+        "sampleResidual": 52,
+        "maxChannelDelta": 24
+      },
+      {
+        "index": 9,
+        "x": 17,
+        "y": 77,
+        "region": {
+          "id": "butt-bevel",
+          "description": "left band: butt cap with bevel join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          157,
+          170,
+          222,
+          255
+        ],
+        "currentSourceKey": "gpuRgba",
+        "candidatePolicyRgba": null,
+        "sourceInputRgba": null,
+        "sourceInputRgbaStatus": "missing-from-committed-m60-artifacts",
+        "signedCurrentMinusReferenceDelta": [
+          24,
+          20,
+          8,
+          0
+        ],
+        "absoluteChannelDelta": [
+          24,
+          20,
+          8,
+          0
+        ],
+        "sampleResidual": 52,
+        "maxChannelDelta": 24
+      },
+      {
+        "index": 10,
+        "x": 69,
+        "y": 81,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          209,
+          222,
+          209,
+          255
+        ],
+        "currentRgba": [
+          185,
+          204,
+          185,
+          255
+        ],
+        "currentSourceKey": "gpuRgba",
+        "candidatePolicyRgba": null,
+        "sourceInputRgba": null,
+        "sourceInputRgbaStatus": "missing-from-committed-m60-artifacts",
+        "signedCurrentMinusReferenceDelta": [
+          -24,
+          -18,
+          -24,
+          0
+        ],
+        "absoluteChannelDelta": [
+          24,
+          18,
+          24,
+          0
+        ],
+        "sampleResidual": 66,
+        "maxChannelDelta": 24
+      }
+    ]
+  },
+  "candidateReadiness": {
+    "classification": "still-missing-comparable-metadata",
+    "readyForCandidateEvaluation": false,
+    "reasons": [
+      "candidatePolicyRgba samples are missing for the FOR-341/FOR-342 F16 policy",
+      "source input RGBA and raw F16 premul/unpremul metadata are not present in committed M60 artifacts",
+      "the current line is a targetColorSpaceBlend diagnostic, not an applied candidate policy row"
+    ],
+    "metadataAvailable": [
+      "reference/current RGBA samples",
+      "sample coordinates",
+      "per-sample region and cap/join AA edge-zone classification",
+      "coverage route, edge budget, stroke cap/join, device bounds, and residual summaries",
+      "targetColorSpaceBlend/root-cause diagnostics"
+    ],
+    "nextEvidenceNeeded": [
+      "candidatePolicyRgba samples for the same coordinates",
+      "source input/raw RGBA or explicit note from a capture that it cannot be exported",
+      "explicit premul/blend metadata for the candidate evaluation row"
+    ]
+  },
+  "dangerousRoutesRejected": [
+    "renderer scene-id branch",
+    "renderer coordinate branch",
+    "selected-cell substitution",
+    "fixture-only proof",
+    "full-GM crop proof",
+    "threshold relaxation",
+    "score increase",
+    "GPU/WGSL, geometry, coverage, fallback, Kadre, F16 premul, or blend mutation"
+  ],
+  "criteriaEvaluation": {
+    "sourceMemoryRecorded": true,
+    "for366DecisionCaptured": true,
+    "for366DecisionRequired": true,
+    "m60RowConsolidated": true,
+    "currentResidualKeptAt856": true,
+    "referenceSamplesRecorded": true,
+    "currentSamplesRecorded": true,
+    "availableMetadataRecorded": true,
+    "classificationRecorded": true,
+    "for355CandidateExcluded": true,
+    "for365CandidateExcluded": true,
+    "candidateImplementationAuthorized": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "selectableCandidateDefined": false,
+    "implementationPlanAuthorized": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+      "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+      "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+      "rtk python3 scripts/validate_for364_f16_independent_comparable_arc_evidence.py",
+      "rtk python3 scripts/validate_for363_f16_constrained_candidate_search.py",
+      "rtk python3 scripts/validate_for362_f16_rejected_candidate_closeout.py",
+      "rtk python3 scripts/validate_for361_f16_bounded_independent_arc_capture.py",
+      "rtk python3 scripts/validate_for358_f16_real_additional_non_arc_row.py",
+      "rtk python3 scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for367-pycache python3 -m py_compile scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
