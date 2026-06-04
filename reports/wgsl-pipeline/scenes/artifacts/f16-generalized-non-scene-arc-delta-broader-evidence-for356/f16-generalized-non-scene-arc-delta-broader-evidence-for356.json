@@ -1,0 +1,430 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-356",
+  "sceneId": "f16-generalized-non-scene-arc-delta-broader-evidence-for356",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-broader-evidence-for-generalized-non-scene-arc-delta-candidate-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-355-f16-generalized-non-scene-arc-delta-candidate-ready-for-broader-evidence"
+  ],
+  "inputValidation": {
+    "for355Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-generalized-non-scene-arc-delta-candidate-for355/f16-generalized-non-scene-arc-delta-candidate-for355.json",
+    "for355Decision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "for355RequiredDecision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "for354Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-nonzero-arc-delta-generalization-constraints-for354/f16-nonzero-arc-delta-generalization-constraints-for354.json",
+    "for354Decision": "F16_NONZERO_ARC_DELTA_GENERALIZATION_CONSTRAINTS_READY",
+    "for354RequiredDecision": "F16_NONZERO_ARC_DELTA_GENERALIZATION_CONSTRAINTS_READY",
+    "for345Artifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for345Decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for345RequiredDecision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for340Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/circular-arcs-stroke-butt-adjacent-f16-reference-for340.json",
+    "for340Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_REFERENCE_CAPTURED",
+    "for340RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_REFERENCE_CAPTURED",
+    "for341Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+    "for341Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION",
+    "for341RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION",
+    "for342Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342.json",
+    "for342Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_SCOPED_IMPLEMENTATION_PARTIAL_REQUIRES_SAFER_ROUTE",
+    "for342RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_SCOPED_IMPLEMENTATION_PARTIAL_REQUIRES_SAFER_ROUTE"
+  },
+  "decision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_BROADER_EVIDENCE_PARTIAL",
+  "allowedDecisions": [
+    "F16_GENERALIZED_NON_SCENE_ARC_DELTA_BROADER_EVIDENCE_REJECTED",
+    "F16_GENERALIZED_NON_SCENE_ARC_DELTA_BROADER_EVIDENCE_PARTIAL",
+    "F16_GENERALIZED_NON_SCENE_ARC_DELTA_BROADER_EVIDENCE_READY_FOR_IMPLEMENTATION_PLAN",
+    "F16_GENERALIZED_NON_SCENE_ARC_DELTA_BROADER_EVIDENCE_INPUT_INVALID"
+  ],
+  "candidate": {
+    "policyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+    "family": "nonzero_arc_delta_generalized_non_scene_guard_family",
+    "reusedFromFor355": true,
+    "newCandidateDefined": false,
+    "selectedForImplementation": false,
+    "rendererBehaviorChanged": false,
+    "scoreIncreaseAuthorized": false,
+    "familyZoneShaped": true,
+    "familyZone": "stroke-center"
+  },
+  "nonArcGuard": {
+    "rowId": "non-arc-rec2020-f16-src-over-rect",
+    "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "evaluatedFirst": true,
+    "requiredResidual": 0,
+    "candidateResidual": 0,
+    "requiredWorsenedSampleCount": 0,
+    "candidateWorsenedSampleCount": 0,
+    "passed": true,
+    "sampleCount": 4,
+    "sampleEvaluations": [
+      {
+        "sample": "background_top_left",
+        "zone": "background",
+        "candidateRuleApplied": false,
+        "currentResidual": 0,
+        "candidateResidual": 0,
+        "worsenedCurrent": false
+      },
+      {
+        "sample": "rect_center",
+        "zone": "fill-center",
+        "candidateRuleApplied": false,
+        "currentResidual": 0,
+        "candidateResidual": 0,
+        "worsenedCurrent": false
+      },
+      {
+        "sample": "rect_left_inside",
+        "zone": "fill-left-inside",
+        "candidateRuleApplied": false,
+        "currentResidual": 0,
+        "candidateResidual": 0,
+        "worsenedCurrent": false
+      },
+      {
+        "sample": "rect_right_inside",
+        "zone": "fill-right-inside",
+        "candidateRuleApplied": false,
+        "currentResidual": 0,
+        "candidateResidual": 0,
+        "worsenedCurrent": false
+      }
+    ]
+  },
+  "arcEvidence": [
+    {
+      "sourceId": "FOR-340",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/circular-arcs-stroke-butt-adjacent-f16-reference-for340.json",
+      "comparability": "comparable-arc-evidence",
+      "cellCount": 2,
+      "sampleCount": 12,
+      "candidateRuleAppliedSampleCount": 10,
+      "currentResidual": 375,
+      "candidateResidual": 0,
+      "residualReductionVsCurrent": 375,
+      "cells": [
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sampleCount": 6,
+          "candidateRuleAppliedSampleCount": 5,
+          "currentResidual": 187,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 187,
+          "samples": [
+            {
+              "sample": "sweep45_background_top_left",
+              "zone": "background",
+              "candidateRuleApplied": false,
+              "currentResidual": 0,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 0
+            },
+            {
+              "sample": "sweep45_blue_top_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 37,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 37
+            },
+            {
+              "sample": "sweep45_blue_left_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 37,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 37
+            },
+            {
+              "sample": "sweep45_red_right_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 38,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 38
+            },
+            {
+              "sample": "sweep45_red_inner_sweep_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 38,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 38
+            },
+            {
+              "sample": "sweep45_blue_bottom_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 37,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 37
+            }
+          ]
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sampleCount": 6,
+          "candidateRuleAppliedSampleCount": 5,
+          "currentResidual": 188,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 188,
+          "samples": [
+            {
+              "sample": "sweep130_background_top_left",
+              "zone": "background",
+              "candidateRuleApplied": false,
+              "currentResidual": 0,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 0
+            },
+            {
+              "sample": "sweep130_blue_top_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 37,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 37
+            },
+            {
+              "sample": "sweep130_red_right_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 38,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 38
+            },
+            {
+              "sample": "sweep130_red_bottom_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 38,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 38
+            },
+            {
+              "sample": "sweep130_red_inner_sweep_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 38,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 38
+            },
+            {
+              "sample": "sweep130_blue_left_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 37,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 37
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "sourceId": "FOR-341",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+      "comparability": "comparable-arc-evidence",
+      "cellCount": 2,
+      "sampleCount": 12,
+      "candidateRuleAppliedSampleCount": 10,
+      "currentResidual": 375,
+      "candidateResidual": 0,
+      "residualReductionVsCurrent": 375,
+      "cells": [
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sampleCount": 6,
+          "candidateRuleAppliedSampleCount": 5,
+          "currentResidual": 187,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 187,
+          "samples": [
+            {
+              "sample": "sweep45_background_top_left",
+              "zone": "background",
+              "candidateRuleApplied": false,
+              "currentResidual": 0,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 0
+            },
+            {
+              "sample": "sweep45_blue_top_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 37,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 37
+            },
+            {
+              "sample": "sweep45_blue_left_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 37,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 37
+            },
+            {
+              "sample": "sweep45_red_right_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 38,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 38
+            },
+            {
+              "sample": "sweep45_red_inner_sweep_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 38,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 38
+            },
+            {
+              "sample": "sweep45_blue_bottom_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 37,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 37
+            }
+          ]
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sampleCount": 6,
+          "candidateRuleAppliedSampleCount": 5,
+          "currentResidual": 188,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 188,
+          "samples": [
+            {
+              "sample": "sweep130_background_top_left",
+              "zone": "background",
+              "candidateRuleApplied": false,
+              "currentResidual": 0,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 0
+            },
+            {
+              "sample": "sweep130_blue_top_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 37,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 37
+            },
+            {
+              "sample": "sweep130_red_right_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 38,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 38
+            },
+            {
+              "sample": "sweep130_red_bottom_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 38,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 38
+            },
+            {
+              "sample": "sweep130_red_inner_sweep_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 38,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 38
+            },
+            {
+              "sample": "sweep130_blue_left_stroke_center",
+              "zone": "stroke-center",
+              "candidateRuleApplied": true,
+              "currentResidual": 37,
+              "candidateResidual": 0,
+              "residualReductionVsCurrent": 37
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "derivativeEvidence": [
+    {
+      "sourceId": "FOR-342",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342/circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342.json",
+      "comparability": "derivative-scoped-route-evidence-not-independent-scene",
+      "cellCount": 2,
+      "sampleCount": 12,
+      "currentResidual": 375,
+      "candidateResidual": 0,
+      "residualReductionVsCurrent": 375,
+      "reason": "FOR-342 confirms the same adjacent groups and records no safe renderer route; it is useful corroboration but not a broader independent scene."
+    }
+  ],
+  "nonArcEvidenceInventory": [
+    {
+      "sourceId": "FOR-345",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+      "comparability": "comparable-non-arc-guard",
+      "candidateResidual": 0,
+      "candidateWorsenedSampleCount": 0
+    },
+    {
+      "sourceId": "additional-non-arc-rows",
+      "comparability": "missing",
+      "reason": "No additional comparable non-arc row with current/reference/candidate fields is available in the current artifact set."
+    }
+  ],
+  "broaderEvidenceSummary": {
+    "comparableArcArtifactCount": 2,
+    "derivativeEvidenceCount": 1,
+    "independentArcSceneCountBeyondCircularArcsStrokeButt": 0,
+    "currentResidual": 750,
+    "candidateResidual": 0,
+    "residualReductionVsCurrent": 750,
+    "additionalComparableNonArcRows": 0,
+    "readyForImplementationPlan": false,
+    "partialReason": "The candidate improves the comparable FOR-340/FOR-341 adjacent arc evidence, but those artifacts cover the same two CircularArcsStrokeButt groups and FOR-342 is derivative. No independent arc scene or additional comparable non-arc row is available yet."
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererImplementationAuthorized": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for356_f16_generalized_non_scene_arc_delta_broader_evidence.py",
+      "rtk python3 scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk python3 scripts/validate_for354_f16_nonzero_arc_delta_generalization_constraints.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk python3 scripts/validate_for341_circular_arcs_stroke_butt_adjacent_f16_color_policy_decision.py",
+      "rtk python3 scripts/validate_for340_circular_arcs_stroke_butt_adjacent_f16_reference.py",
+      "rtk python3 scripts/validate_for342_circular_arcs_stroke_butt_adjacent_f16_color_policy_scoped_implementation.py",
+      "rtk python3 -m py_compile scripts/validate_for356_f16_generalized_non_scene_arc_delta_broader_evidence.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
