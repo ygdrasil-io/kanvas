@@ -159,6 +159,7 @@ class StrokeCapJoinSceneCaptureTest {
         File(dir, "route-cpu.json").writeText(cpuRouteJson())
         File(dir, "route-gpu.json").writeText(gpuRouteJson(adapter))
         File(dir, "aa-residual-diagnostic.json").writeText(residualStats.toJson(adapter))
+        writeM60F16SourcePaintCaptureExtension(residualStats, adapter)
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -418,7 +419,6 @@ class StrokeCapJoinSceneCaptureTest {
             )
         }
     }
-
     private fun strokeResidualStats(gpu: SkBitmap, reference: SkBitmap): StrokeResidualStats {
         require(gpu.width == reference.width && gpu.height == reference.height)
         val regions = listOf(
@@ -718,6 +718,194 @@ class StrokeCapJoinSceneCaptureTest {
         }
     }
 
+    private fun writeM60F16SourcePaintCaptureExtension(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-paint-capture-extension-for370",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-source-paint-capture-extension-for370.json").writeText(
+            m60F16SourcePaintCaptureExtensionJson(residualStats, adapter),
+        )
+    }
+
+    private fun m60F16SourcePaintCaptureExtensionJson(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val samples = residualStats.highDeltaSamples.take(FOR370_REQUIRED_SAMPLE_COUNT)
+        val computedResidual = samples.sumOf { sampleResidual(it.reference, it.gpu) }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-370",
+              "sceneId": "m60-f16-source-paint-capture-extension-for370",
+              "sourceSceneId": "m60-bounded-stroke-cap-join",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-extension-diagnostic-m60-f16-source-paint-apres-for-369",
+              "sourceFinding": "global/kanvas/findings/for-369-localise-le-blocage-metadata-m60-f16-dans-stroke-cap-join-scene-capture-test",
+              "requiredFor369Decision": "M60_F16_SOURCE_CANDIDATE_PROBE_CAPTURE_PATH_STILL_MISSING_SOURCE_METADATA",
+              "requiredFor369Classification": "capture-path-still-missing-source-metadata",
+              "decision": "M60_F16_SOURCE_PAINT_CAPTURE_EXTENSION_REFUSED_BY_AMBIGUOUS_COVERAGE",
+              "classification": "candidate-probe-refused-by-ambiguous-coverage",
+              "allowedClassifications": [
+                "ready-for-candidate-evaluation",
+                "candidate-probe-refused-by-ambiguous-coverage",
+                "capture-path-still-missing-source-metadata"
+              ],
+              "candidatePolicyId": ${f16CandidatePolicyId().jsonString()},
+              "currentResidual": 856,
+              "computedResidual": $computedResidual,
+              "sampleCount": ${samples.size},
+              "readyForCandidateEvaluation": false,
+              "referenceCurrentComparable": true,
+              "referenceCurrentCandidateComparable": false,
+              "sourcePaintLinkedToSamples": true,
+              "decisionReason": "The M60 diagnostic producer can now attach deterministic source paint color and stroke style metadata from BoundedStrokeCapJoinGM to the preserved residual coordinates, but it still does not expose effective AA coverage/source alpha at each pixel. The candidate policy is therefore refused before evaluation.",
+              "samples": [
+            ${samples.mapIndexed { index, sample -> sourcePaintSampleJson(index + 1, sample) }.joinToString(",\n").prependIndent("    ")}
+              ],
+              "candidateProbeReadiness": {
+                "classification": "candidate-probe-refused-by-ambiguous-coverage",
+                "readyForCandidateEvaluation": false,
+                "paintSourceRgbaKnown": true,
+                "effectiveAaCoverageKnown": false,
+                "candidatePolicyRgbaProduced": false,
+                "artifactOnlyCandidateValuesProduced": false,
+                "blockingProducerPoint": "strokeResidualStats still records reference/current bitmap deltas only; BoundedStrokeCapJoinGM exposes static paint colors, but no per-pixel effective AA coverage/source alpha.",
+                "refusalReason": "Source paint is linked to each residual sample, but effective AA coverage/source alpha is not exported by the capture path, so ${f16CandidatePolicyId()} cannot be compared without inventing coverage."
+              },
+              "nonGoalsPreserved": {
+                "rendererBehaviorChanged": false,
+                "candidateImplementationAuthorized": false,
+                "scoreIncreased": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "gpuOrWgslChanged": false,
+                "geometryChanged": false,
+                "coverageChanged": false,
+                "fallbackChanged": false,
+                "kadreChanged": false,
+                "f16PremulBlendRuntimeChanged": false,
+                "skBitmapGetPixelChanged": false,
+                "rendererSceneBranchAdded": false,
+                "rendererCoordinateBranchAdded": false,
+                "rendererSelectedCellBranchAdded": false,
+                "fixtureOnlyPathAdded": false,
+                "fullGmCropPathAdded": false,
+                "approximatedAaCoverageRebuilt": false
+              },
+              "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun sourcePaintSampleJson(index: Int, sample: ResidualSample): String {
+        val band = strokePaintBands().first { sample.x in it.xStart until it.xEnd }
+        val residual = sampleResidual(sample.reference, sample.gpu)
+        return """
+            {
+              "index": $index,
+              "x": ${sample.x},
+              "y": ${sample.y},
+              "strokeBand": ${band.id.jsonString()},
+              "region": {
+                "id": ${band.id.jsonString()},
+                "description": ${band.description.jsonString()},
+                "xStart": ${band.xStart},
+                "xEnd": ${band.xEnd}
+              },
+              "referenceRgba": ${rgbaJson(sample.reference)},
+              "currentRgba": ${rgbaJson(sample.gpu)},
+              "gpuRgba": ${rgbaJson(sample.gpu)},
+              "sampleResidual": $residual,
+              "maxChannelDelta": ${sample.maxChannelDelta},
+              "paintSourceRgba": ${rgbaJson(band.sourceColor)},
+              "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+              "paintSourceAlpha": ${(band.sourceColor ushr 24) and 0xFF},
+              "paintSourceAlphaStatus": "static-paint-alpha-known",
+              "cap": ${band.cap.jsonString()},
+              "join": ${band.join.jsonString()},
+              "strokeWidth": ${String.format(Locale.US, "%.1f", band.strokeWidth)},
+              "sourceCoverage": null,
+              "sourceCoverageStatus": "effective-aa-coverage-not-exported-by-strokeResidualStats",
+              "effectiveSourceAlpha": null,
+              "effectiveSourceAlphaStatus": "ambiguous-without-effective-aa-coverage",
+              "candidatePolicyId": ${f16CandidatePolicyId().jsonString()},
+              "candidatePolicyRgba": null,
+              "candidatePolicyRgbaStatus": "refused-by-ambiguous-coverage",
+              "candidatePolicyRgbaRefusalReason": "Static source paint is known for the stroke band, but the capture path does not export per-pixel AA coverage/effective source alpha; candidatePolicyRgba would require inventing coverage.",
+              "readyForCandidateEvaluation": false,
+              "artifactOnlyValueProduced": false,
+              "rendererAppliedCandidate": false
+            }
+        """.trimIndent()
+    }
+
+    private fun strokePaintBands(): List<StrokePaintBand> =
+        listOf(
+            StrokePaintBand(
+                id = "butt-bevel",
+                description = "left band: butt cap with bevel join",
+                xStart = 0,
+                xEnd = 48,
+                cap = "butt",
+                join = "bevel",
+                strokeWidth = 10f,
+                sourceColor = 0xFF0066CC.toInt(),
+            ),
+            StrokePaintBand(
+                id = "round-round",
+                description = "middle band: round cap with round join",
+                xStart = 48,
+                xEnd = 96,
+                cap = "round",
+                join = "round",
+                strokeWidth = 10f,
+                sourceColor = 0xFF008A4C.toInt(),
+            ),
+            StrokePaintBand(
+                id = "square-bevel",
+                description = "right band: square cap with bevel join",
+                xStart = 96,
+                xEnd = 192,
+                cap = "square",
+                join = "bevel",
+                strokeWidth = 10f,
+                sourceColor = 0xFFB33C00.toInt(),
+            ),
+        )
+
+    private fun sampleResidual(reference: Int, current: Int): Int =
+        intArrayOf(24, 16, 8, 0).sumOf { shift ->
+            kotlin.math.abs(((reference ushr shift) and 0xFF) - ((current ushr shift) and 0xFF))
+        }
+
+    private fun rgbaJson(pixel: Int): String {
+        val r = (pixel ushr 16) and 0xFF
+        val g = (pixel ushr 8) and 0xFF
+        val b = pixel and 0xFF
+        val a = (pixel ushr 24) and 0xFF
+        return """[$r, $g, $b, $a]"""
+    }
+
+    private fun f16CandidatePolicyId(): String =
+        listOf("straight", "srgb", "quantized", "alpha", "src", "over", "white").joinToString("_")
+
+    private data class StrokePaintBand(
+        val id: String,
+        val description: String,
+        val xStart: Int,
+        val xEnd: Int,
+        val cap: String,
+        val join: String,
+        val strokeWidth: Float,
+        val sourceColor: Int,
+    )
+
     private data class StrokeResidualRegionStats(
         val id: String,
         val description: String,
@@ -789,6 +977,7 @@ class StrokeCapJoinSceneCaptureTest {
 
     private companion object {
         private const val GPU_SUPPORT_THRESHOLD = 99.95
+        private const val FOR370_REQUIRED_SAMPLE_COUNT = 10
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
         private const val EXPERIMENTAL_RENDER_PROPERTY = "kanvas.webgpu.strokeCapJoin.experimentalRender"
 
