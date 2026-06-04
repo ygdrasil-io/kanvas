@@ -1,0 +1,113 @@
+{
+  "linear": "FOR-309",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-m60-reopen-gate-after-supersession-ticket",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "decision": "M60_REOPEN_GATE_AFTER_SUPERSESSION_APPLIED",
+  "supportDecision": "KEEP_M60_CLOSED_UNTIL_POST_SUPERSESSION_RENDERER_HYPOTHESIS",
+  "sourceReports": {
+    "reports/wgsl-pipeline/2026-06-04-for-302-m60-analytic-clip-model-reconciliation.md": "verified",
+    "reports/wgsl-pipeline/2026-06-04-for-303-m60-analytic-model-supersession-guard.md": "verified",
+    "reports/wgsl-pipeline/2026-06-04-for-304-renderer-feature-conversion-wave-closeout.md": "verified"
+  },
+  "dashboardRow": {
+    "id": "m60-bounded-nested-rrect-clip",
+    "status": "expected-unsupported",
+    "gpuRoute": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold"
+  },
+  "supersession": {
+    "for301": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-skaaclip-band-trace-for301.json",
+      "decision": "SKAACLIP_DIFFERENCE_OP_ALPHA_MERGE_CAUSES_TARGET_HOLE",
+      "supportDecision": "KEEP_EXPECTED_UNSUPPORTED"
+    },
+    "for302": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-analytic-clip-model-reconciliation-for302.json",
+      "decision": "M60_ANALYTIC_MODEL_RECONCILED_RUNTIME_IS_CORRECT",
+      "supportDecision": "KEEP_EXPECTED_UNSUPPORTED"
+    },
+    "for303": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-analytic-model-supersession-guard-for303.json",
+      "decision": "M60_ANALYTIC_MODEL_SUPERSESSION_GUARD_APPLIED",
+      "policy": {
+        "historicalAllowedThrough": "FOR-300",
+        "runtimeSupersessionEvidence": [
+          "FOR-301",
+          "FOR-302"
+        ],
+        "forbiddenRule": "A future M60 promotion/support consumer must not use FOR-293 red_draw_runtime_domain, clip_coverage, or difference_clip_coverage evidence unless it references both FOR-301 and FOR-302 supersession evidence.",
+        "guardScope": "audit-only; normal renderer, SkAAClip.op, CTM, blend, setPixel, GPU/WebGPU, thresholds, fallbacks, and M60 support status are unchanged."
+      }
+    }
+  },
+  "historicalActions": [
+    {
+      "linear": "FOR-283",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-dispatch-blend-store-trace-for283.json",
+      "historicalDecision": "TARGETED_CORRECTION_POSSIBLE_AT_CPU_MASK_FILTER_DISPATCH_CALLSITE",
+      "historicalNextAction": "PATCH_CPU_MASK_FILTER_A8_SOLID_COLOR_FILTER_DISPATCH_PAYLOAD_AND_REGENERATE_M60",
+      "classification": "historical-pre-supersession-action",
+      "reason": "Predates FOR-301/FOR-302 runtime reconciliation and cannot reopen M60 alone."
+    },
+    {
+      "linear": "FOR-286",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-cpu-active-aa-difference-store-trace-for286.json",
+      "historicalDecision": "NEXT_FIX_CPU_ACTIVE_AA_DIFFERENCE_CLIP_STORE_ORDER_NOT_SRCOVER_OR_PAYLOAD",
+      "historicalNextAction": "TARGET_CPU_ACTIVE_AA_DIFFERENCE_CLIP_STORE_ORDER",
+      "classification": "historical-pre-supersession-action",
+      "reason": "Predates FOR-301/FOR-302 runtime reconciliation and cannot reopen M60 alone."
+    }
+  ],
+  "requiredFutureReopenProof": [
+    "post-FOR-302 renderer-side hypothesis",
+    "explicit citation of FOR-301 runtime SkAAClip trace",
+    "explicit citation of FOR-302 analytic/runtime reconciliation",
+    "local pixel-level prediction that differs from the reconciled runtime model",
+    "reference, CPU, GPU, diff, stats, and route diagnostics",
+    "preserved fallback policy for non-selected rows",
+    "no threshold weakening",
+    "no use of FOR-293 as standalone oracle"
+  ],
+  "policyCases": [
+    {
+      "name": "FOR-309 gate keeps M60 closed without new hypothesis",
+      "decision": "keep-closed",
+      "allowed": true,
+      "reason": "No post-supersession renderer hypothesis is available, so the gate keeps M60 closed."
+    },
+    {
+      "name": "FOR-283/FOR-286 action alone is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Pre-supersession nextAction evidence cannot reopen M60 without FOR-301/FOR-302 and a new hypothesis."
+    },
+    {
+      "name": "Post-supersession hypothesis without FOR-301/FOR-302 is ambiguous",
+      "decision": "ambiguous",
+      "allowed": false,
+      "reason": "A post-supersession hypothesis must cite FOR-301 and FOR-302."
+    },
+    {
+      "name": "Threshold weakening is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Threshold weakening cannot reopen M60."
+    },
+    {
+      "name": "Support claim without complete proof is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "M60 support requires complete rendered evidence."
+    },
+    {
+      "name": "Cited hypothesis can become future audit candidate",
+      "decision": "future-audit-candidate",
+      "allowed": true,
+      "reason": "A cited post-supersession hypothesis may open a future audit, but not a support claim."
+    }
+  ],
+  "alternateDecisions": {
+    "unsafe": "M60_REOPEN_UNSAFE_PRE_SUPERSESSION_ACTION_FOUND",
+    "ambiguous": "M60_REOPEN_GATE_AMBIGUOUS_HYPOTHESIS_FOUND"
+  }
+}
