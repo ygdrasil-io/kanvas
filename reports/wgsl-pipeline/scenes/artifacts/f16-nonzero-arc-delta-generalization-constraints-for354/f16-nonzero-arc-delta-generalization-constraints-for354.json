@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-354",
+  "sceneId": "f16-nonzero-arc-delta-generalization-constraints-for354",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-generalize-nonzero-arc-delta-beyond-target-set-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-353-f16-nonzero-arc-delta-with-non-arc-guard-partial"
+  ],
+  "inputValidation": {
+    "for353Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-nonzero-arc-delta-with-non-arc-guard-for353/f16-nonzero-arc-delta-with-non-arc-guard-for353.json",
+    "for353Decision": "F16_NONZERO_ARC_DELTA_WITH_NON_ARC_GUARD_PARTIAL",
+    "for353RequiredDecision": "F16_NONZERO_ARC_DELTA_WITH_NON_ARC_GUARD_PARTIAL",
+    "for351Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-non-arc-preserving-arc-constraints-for351/f16-non-arc-preserving-arc-constraints-for351.json",
+    "for351Decision": "F16_NON_ARC_PRESERVING_ARC_CONSTRAINTS_READY",
+    "for351RequiredDecision": "F16_NON_ARC_PRESERVING_ARC_CONSTRAINTS_READY",
+    "for348Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-new-candidate-search-matrix-for348/f16-new-candidate-search-matrix-for348.json",
+    "for348Decision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for348RequiredDecision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for346Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-global-color-policy-candidate-retired-for346/f16-global-color-policy-candidate-retired-for346.json",
+    "for346Decision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for346RequiredDecision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED"
+  },
+  "decision": "F16_NONZERO_ARC_DELTA_GENERALIZATION_CONSTRAINTS_READY",
+  "allowedDecisions": [
+    "F16_NONZERO_ARC_DELTA_GENERALIZATION_CONSTRAINTS_READY",
+    "F16_NONZERO_ARC_DELTA_GENERALIZATION_CONSTRAINTS_INPUT_INVALID"
+  ],
+  "for353CandidateStatus": {
+    "policyId": "nonzero_analytic_arc_delta_with_non_arc_identity_guard",
+    "targetSetShaped": true,
+    "sceneShaped": true,
+    "rendererSelectable": false,
+    "selectedForImplementation": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "generalizationBlockers": [
+    {
+      "id": "target-set-dependence",
+      "status": "blocks-renderer-selection",
+      "evidence": "FOR-353 maps only the captured FOR-351 target samples.",
+      "clearanceRequirement": "candidate formula must evaluate from general draw/color/coverage state, not target sample ids"
+    },
+    {
+      "id": "scene-dependence",
+      "status": "blocks-renderer-selection",
+      "evidence": "FOR-353 declares `sceneShaped=true`.",
+      "clearanceRequirement": "candidate must apply across comparable arc evidence without scene identity"
+    },
+    {
+      "id": "broader-non-arc-coverage-missing",
+      "status": "blocks-renderer-selection",
+      "evidence": "current guard has one FOR-345 non-arc row",
+      "clearanceRequirement": "future evidence must add or preserve broader non-arc rows before implementation"
+    },
+    {
+      "id": "non-scene-analytic-rule-missing",
+      "status": "blocks-renderer-selection",
+      "evidence": "FOR-353 is an artifact probe, not an analytic renderer rule",
+      "clearanceRequirement": "candidate must define a renderer-independent rule with stable diagnostics"
+    }
+  ],
+  "generalizationConstraints": [
+    {
+      "id": "preserve-for345-non-arc-zero",
+      "requires": "candidate residual on FOR-345 remains 0",
+      "requiredValue": 0
+    },
+    {
+      "id": "preserve-for345-no-worsened-samples",
+      "requires": "candidate worsened sample count on FOR-345 remains 0",
+      "requiredValue": 0
+    },
+    {
+      "id": "positive-for341-arc-reduction",
+      "requires": "candidate reduces FOR-341 arc residual versus current",
+      "currentResidual": 375,
+      "requiredRelation": "candidateResidual < currentResidual"
+    },
+    {
+      "id": "no-target-set-or-scene-shaping",
+      "requires": "candidate is not fixture, coordinate, selected-cell, full-GM-crop, scene, or target-set shaped",
+      "requiredValue": true
+    },
+    {
+      "id": "for348-rejection-criteria-preserved",
+      "requires": "candidate passes every FOR-348 pre-evaluation rejection rule before selection",
+      "sourceCriteriaCount": 5
+    },
+    {
+      "id": "renderer-selection-deferred",
+      "requires": "candidate remains evidence-only until a later implementation ticket",
+      "requiredValue": true
+    }
+  ],
+  "nextCandidateFamily": {
+    "id": "nonzero_arc_delta_generalized_non_scene_guard_family",
+    "status": "recommended-for-next-evaluation",
+    "selectedForImplementation": false,
+    "description": "Evaluate a generalized nonzero arc-delta formula that preserves FOR-345 residual 0 and produces positive FOR-341 reduction without target-set, scene, fixture, or coordinate shaping.",
+    "mandatoryRejectWhen": [
+      "FOR-345 residual exceeds 0",
+      "FOR-345 worsened sample count exceeds 0",
+      "candidate requires target sample ids or scene identity",
+      "candidate reuses the retired over-white policy globally",
+      "candidate authorizes score or renderer implementation before broader evidence"
+    ]
+  },
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "retiredPolicyStillForbiddenAsGlobalCandidate": true,
+    "scoreIncreaseAuthorized": false
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for354_f16_nonzero_arc_delta_generalization_constraints.py",
+      "rtk python3 scripts/validate_for353_f16_nonzero_arc_delta_with_non_arc_guard.py",
+      "rtk python3 scripts/validate_for351_f16_non_arc_preserving_arc_constraints.py",
+      "rtk python3 scripts/validate_for348_f16_new_candidate_search_matrix.py",
+      "rtk python3 scripts/validate_for346_f16_global_color_policy_candidate_retired.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
