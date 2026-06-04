@@ -1,0 +1,464 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-368",
+  "sceneId": "m60-f16-candidate-metadata-capture-for368",
+  "sourceSceneId": "m60-bounded-stroke-cap-join",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-m60-f16-candidate-metadata-capture-after-for-367",
+  "decision": "M60_F16_CANDIDATE_METADATA_STILL_MISSING",
+  "classification": "candidate-metadata-still-missing",
+  "allowedClassifications": [
+    "ready-for-candidate-evaluation",
+    "candidate-metadata-still-missing"
+  ],
+  "decisionReason": "FOR-368 preserves the FOR-367 M60 coordinates and residual, but the committed artifacts do not contain candidatePolicyRgba or source/raw RGBA samples; the line therefore remains candidate-metadata-still-missing.",
+  "inputValidation": {
+    "for365Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-constrained-candidate-evaluation-for365/f16-constrained-candidate-evaluation-for365.json",
+    "for365Decision": "F16_CONSTRAINED_CANDIDATE_REJECTED_BY_CURRENT_GUARDS",
+    "for365RequiredDecision": "F16_CONSTRAINED_CANDIDATE_REJECTED_BY_CURRENT_GUARDS",
+    "for366Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-positive-residual-target-inventory-for366/f16-positive-residual-target-inventory-for366.json",
+    "for366Decision": "F16_POSITIVE_RESIDUAL_TARGET_INVENTORY_READY",
+    "for366RequiredDecision": "F16_POSITIVE_RESIDUAL_TARGET_INVENTORY_READY",
+    "for367Artifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join-comparable-f16-evidence-for367/m60-bounded-stroke-cap-join-comparable-f16-evidence-for367.json",
+    "for367Decision": "M60_BOUNDED_STROKE_CAP_JOIN_COMPARABLE_F16_EVIDENCE_RECORDED",
+    "for367RequiredDecision": "M60_BOUNDED_STROKE_CAP_JOIN_COMPARABLE_F16_EVIDENCE_RECORDED",
+    "for367Classification": "still-missing-comparable-metadata",
+    "for367RequiredClassification": "still-missing-comparable-metadata",
+    "for367RowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+    "for367CurrentResidual": 856,
+    "for367SampleCount": 10
+  },
+  "evidenceLine": {
+    "rowId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+    "familyId": "m60-bounded-stroke-cap-join-positive-residual-evidence-target",
+    "sourceKind": "non-arc-target-colorspace-blend-diagnostic",
+    "rowKind": "non-arc",
+    "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "currentResidual": 856,
+    "computedResidual": 856,
+    "sampleCount": 10,
+    "sampleCoordinatesPreservedFromFor367": true,
+    "referenceCurrentComparable": true,
+    "referenceCurrentCandidateComparable": false,
+    "candidatePolicyRgba": {
+      "available": false,
+      "status": "missing-from-committed-m60-artifacts",
+      "refusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample."
+    },
+    "sourceRawRgba": {
+      "available": false,
+      "status": "missing-from-committed-m60-artifacts",
+      "refusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate."
+    },
+    "premulBlendAssumptions": {
+      "available": false,
+      "status": "not-capturable-from-committed-m60-artifacts",
+      "reason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row."
+    },
+    "samples": [
+      {
+        "index": 1,
+        "x": 92,
+        "y": 75,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "missing-from-committed-m60-artifacts",
+        "candidatePolicyRgbaRefusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample.",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "missing-from-committed-m60-artifacts",
+        "sourceRawRgbaRefusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate.",
+        "premulBlendAssumptionStatus": "not-capturable-from-committed-m60-artifacts",
+        "premulBlendAssumptionReason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row.",
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 2,
+        "x": 91,
+        "y": 76,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "missing-from-committed-m60-artifacts",
+        "candidatePolicyRgbaRefusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample.",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "missing-from-committed-m60-artifacts",
+        "sourceRawRgbaRefusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate.",
+        "premulBlendAssumptionStatus": "not-capturable-from-committed-m60-artifacts",
+        "premulBlendAssumptionReason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row.",
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 3,
+        "x": 90,
+        "y": 77,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "missing-from-committed-m60-artifacts",
+        "candidatePolicyRgbaRefusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample.",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "missing-from-committed-m60-artifacts",
+        "sourceRawRgbaRefusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate.",
+        "premulBlendAssumptionStatus": "not-capturable-from-committed-m60-artifacts",
+        "premulBlendAssumptionReason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row.",
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 4,
+        "x": 89,
+        "y": 78,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "missing-from-committed-m60-artifacts",
+        "candidatePolicyRgbaRefusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample.",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "missing-from-committed-m60-artifacts",
+        "sourceRawRgbaRefusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate.",
+        "premulBlendAssumptionStatus": "not-capturable-from-committed-m60-artifacts",
+        "premulBlendAssumptionReason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row.",
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 5,
+        "x": 88,
+        "y": 79,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "missing-from-committed-m60-artifacts",
+        "candidatePolicyRgbaRefusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample.",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "missing-from-committed-m60-artifacts",
+        "sourceRawRgbaRefusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate.",
+        "premulBlendAssumptionStatus": "not-capturable-from-committed-m60-artifacts",
+        "premulBlendAssumptionReason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row.",
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 6,
+        "x": 87,
+        "y": 80,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "sampleResidual": 105,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "missing-from-committed-m60-artifacts",
+        "candidatePolicyRgbaRefusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample.",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "missing-from-committed-m60-artifacts",
+        "sourceRawRgbaRefusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate.",
+        "premulBlendAssumptionStatus": "not-capturable-from-committed-m60-artifacts",
+        "premulBlendAssumptionReason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row.",
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 7,
+        "x": 21,
+        "y": 81,
+        "region": {
+          "id": "butt-bevel",
+          "description": "left band: butt cap with bevel join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          206,
+          213,
+          239,
+          255
+        ],
+        "currentRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "sampleResidual": 56,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "missing-from-committed-m60-artifacts",
+        "candidatePolicyRgbaRefusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample.",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "missing-from-committed-m60-artifacts",
+        "sourceRawRgbaRefusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate.",
+        "premulBlendAssumptionStatus": "not-capturable-from-committed-m60-artifacts",
+        "premulBlendAssumptionReason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row.",
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 8,
+        "x": 93,
+        "y": 74,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          182,
+          192,
+          231,
+          255
+        ],
+        "currentRgba": [
+          206,
+          213,
+          238,
+          255
+        ],
+        "sampleResidual": 52,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "missing-from-committed-m60-artifacts",
+        "candidatePolicyRgbaRefusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample.",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "missing-from-committed-m60-artifacts",
+        "sourceRawRgbaRefusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate.",
+        "premulBlendAssumptionStatus": "not-capturable-from-committed-m60-artifacts",
+        "premulBlendAssumptionReason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row.",
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 9,
+        "x": 17,
+        "y": 77,
+        "region": {
+          "id": "butt-bevel",
+          "description": "left band: butt cap with bevel join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "currentRgba": [
+          157,
+          170,
+          222,
+          255
+        ],
+        "sampleResidual": 52,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "missing-from-committed-m60-artifacts",
+        "candidatePolicyRgbaRefusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample.",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "missing-from-committed-m60-artifacts",
+        "sourceRawRgbaRefusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate.",
+        "premulBlendAssumptionStatus": "not-capturable-from-committed-m60-artifacts",
+        "premulBlendAssumptionReason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row.",
+        "readyForCandidateEvaluation": false
+      },
+      {
+        "index": 10,
+        "x": 69,
+        "y": 81,
+        "region": {
+          "id": "round-round",
+          "description": "middle band: round cap with round join",
+          "edgeZone": "cap-join-aa-boundary"
+        },
+        "referenceRgba": [
+          209,
+          222,
+          209,
+          255
+        ],
+        "currentRgba": [
+          185,
+          204,
+          185,
+          255
+        ],
+        "sampleResidual": 66,
+        "candidatePolicyRgba": null,
+        "candidatePolicyRgbaStatus": "missing-from-committed-m60-artifacts",
+        "candidatePolicyRgbaRefusalReason": "No committed M60 artifact records candidatePolicyRgba samples for policy straight_srgb_quantized_alpha_src_over_white at this coordinate; FOR-368 is evidence-only and cannot render or invent a candidate sample.",
+        "sourceRawRgba": null,
+        "sourceRawRgbaStatus": "missing-from-committed-m60-artifacts",
+        "sourceRawRgbaRefusalReason": "The committed M60 artifacts expose reference/current RGBA samples only; they do not expose source/input/raw RGBA or raw F16 premul/unpremul components for this coordinate.",
+        "premulBlendAssumptionStatus": "not-capturable-from-committed-m60-artifacts",
+        "premulBlendAssumptionReason": "FOR-367 records targetColorSpaceBlend diagnostics, not explicit source F16 premul/blend inputs for a selected candidate row.",
+        "readyForCandidateEvaluation": false
+      }
+    ]
+  },
+  "candidateMetadataReadiness": {
+    "classification": "candidate-metadata-still-missing",
+    "readyForCandidateEvaluation": false,
+    "missingMetadata": [
+      "candidatePolicyRgba samples for the same 10 FOR-367 coordinates",
+      "source/input/raw RGBA for the same 10 FOR-367 coordinates",
+      "explicit F16 premul/blend inputs for a selected candidate row"
+    ],
+    "refusalAcceptedAsEvidence": true,
+    "refusalIsImplementationAuthorization": false
+  },
+  "nonGoalsPreserved": {
+    "rendererBehaviorChanged": false,
+    "scoreIncreased": false,
+    "thresholdChanged": false,
+    "candidateImplementationAuthorized": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "kadreChanged": false,
+    "f16PremulBlendChanged": false,
+    "skBitmapGetPixelChanged": false
+  },
+  "criteriaEvaluation": {
+    "sourceMemoryRecorded": true,
+    "for367InputRecorded": true,
+    "for367DecisionRequired": true,
+    "for367ClassificationRequired": true,
+    "sameTenCoordinatesPreserved": true,
+    "currentResidualKeptAt856": true,
+    "referenceRgbaRecordedForEachSample": true,
+    "currentRgbaRecordedForEachSample": true,
+    "candidatePolicyRgbaStatusRecordedForEachSample": true,
+    "sourceRawRgbaStatusRecordedForEachSample": true,
+    "premulBlendAssumptionStatusRecordedForEachSample": true,
+    "stableRefusalReasonsRecorded": true,
+    "classificationRecorded": true,
+    "rendererBehaviorChanged": false,
+    "scoreIncreased": false,
+    "thresholdChanged": false,
+    "candidateImplementationAuthorized": false
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "selectableCandidateDefined": false,
+    "implementationPlanAuthorized": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+      "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+      "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+      "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+      "rtk python3 scripts/validate_for364_f16_independent_comparable_arc_evidence.py",
+      "rtk python3 scripts/validate_for363_f16_constrained_candidate_search.py",
+      "rtk python3 scripts/validate_for362_f16_rejected_candidate_closeout.py",
+      "rtk python3 scripts/validate_for361_f16_bounded_independent_arc_capture.py",
+      "rtk python3 scripts/validate_for358_f16_real_additional_non_arc_row.py",
+      "rtk python3 scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for368-pycache python3 -m py_compile scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
