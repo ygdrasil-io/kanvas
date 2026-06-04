@@ -1,0 +1,173 @@
+{
+  "linear": "FOR-326",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-repo-owned-skia-selected-cell-renderer-source-ticket",
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_SKIA_SELECTED_CELL_SOURCE_READY",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_SKIA_SELECTED_CELL_SOURCE_READY",
+    "CIRCULAR_ARCS_STROKE_BUTT_SKIA_SELECTED_CELL_SOURCE_MISSING",
+    "CIRCULAR_ARCS_STROKE_BUTT_SKIA_SELECTED_CELL_SOURCE_INVALID"
+  ],
+  "sceneId": "circular-arcs-stroke-butt-skia-selected-cell-source-for326",
+  "sourceReady": true,
+  "skiaPngReady": false,
+  "acceptedSkiaPng": null,
+  "skiaPngPresent": false,
+  "remainingDependency": "remaining upstream Skia build/execution wiring is required before producing skia.png and skia-reference-provenance.json from the repo-owned source",
+  "source": {
+    "path": "tools/skia-reference/circular_arcs_stroke_butt_selected_cell.cpp",
+    "present": true,
+    "sourceReady": true,
+    "dimensions": {
+      "width": 80,
+      "height": 80
+    },
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "outputPathDescribed": "skia.png",
+    "compileOrExecutionAttempted": false,
+    "drawArcCalls": [
+      {
+        "paintColor": "red",
+        "startDegrees": 0,
+        "sweepDegrees": 90
+      },
+      {
+        "paintColor": "blue",
+        "startDegrees": 0,
+        "sweepDegrees": -270
+      }
+    ],
+    "forbiddenSourceTermsAbsent": true
+  },
+  "selectedCell": {
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceFutureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "boundedHarnessGm": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+    "cellCount": 1,
+    "quadrant": "bottom-left",
+    "fullGmCanvasArcRectLTRB": [
+      140,
+      520,
+      180,
+      560
+    ],
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "rowIndex": 0,
+    "columnIndex": 2,
+    "startDegrees": 0,
+    "sweepDegrees": 90,
+    "complementSweepDegrees": -270,
+    "useCenter": false,
+    "aa": true,
+    "style": "kStroke_Style",
+    "strokeWidth": 15,
+    "strokeCap": "kButt_Cap",
+    "includedCaps": [
+      "kButt_Cap"
+    ],
+    "excludedCaps": [
+      "kRound_Cap",
+      "kSquare_Cap"
+    ],
+    "includesHairlineStrokeWidth0": false,
+    "includesFill": false,
+    "includesDash": false,
+    "paintAlpha": 100,
+    "drawArcCalls": [
+      {
+        "paintColor": "red",
+        "startDegrees": 0,
+        "sweepDegrees": 90
+      },
+      {
+        "paintColor": "blue",
+        "startDegrees": 0,
+        "sweepDegrees": -270
+      }
+    ]
+  },
+  "follows": {
+    "for325Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for325/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for325.json",
+    "for324Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for324/circular-arcs-stroke-butt-selected-cell-isolated-skia-reference-for324.json",
+    "for322Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+    "for322RouteGpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-gpu.json",
+    "for322Stats": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json"
+  },
+  "candidateSkiaReference": {
+    "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-skia-selected-cell-source-for326/skia.png",
+    "provenancePath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-skia-selected-cell-source-for326/skia-reference-provenance.json",
+    "present": false,
+    "accepted": false,
+    "skiaPngReady": false,
+    "status": "blocked-build-execution-not-wired",
+    "remainingDependency": "remaining upstream Skia build/execution wiring is required before producing skia.png and skia-reference-provenance.json from the repo-owned source"
+  },
+  "rejectedSources": {
+    "fullGmPng": {
+      "path": "skia-integration-tests/src/test/resources/original-888/circular_arcs_stroke_butt.png",
+      "accepted": false,
+      "reason": "full-GM PNG is not an isolated selected-cell render"
+    },
+    "fullGmCrop": {
+      "accepted": false,
+      "reason": "FOR-326 uses dedicated drawing source instead of slicing an existing image"
+    },
+    "for322CpuPng": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+      "accepted": false,
+      "reason": "FOR-322 cpu.png is Kanvas CPU output, not upstream Skia"
+    },
+    "testSimilarityScores": {
+      "accepted": false,
+      "reason": "scores are not selected-cell reference pixels"
+    }
+  },
+  "strictFutureExecutionRequirements": {
+    "buildAgainstUpstreamSkiaRequired": true,
+    "executeSourceRequired": true,
+    "sourcePath": "tools/skia-reference/circular_arcs_stroke_butt_selected_cell.cpp",
+    "outputRequired": "skia.png",
+    "provenanceRequired": "skia-reference-provenance.json",
+    "dimensions": {
+      "width": 80,
+      "height": 80
+    },
+    "sourceType": "isolated-skia-selected-cell-render",
+    "fullGmSubstitutionAccepted": false,
+    "cpuKanvasOutputAcceptedAsSkia": false
+  },
+  "preservedContracts": {
+    "supportStatus": "not-supported",
+    "fullGmSubstitutionAccepted": false,
+    "fullGmScoreEvidenceAccepted": false,
+    "cpuKanvasOutputAcceptedAsSkia": false,
+    "gpuRouteStatus": "expected-unsupported",
+    "gpuRefusalReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "readinessMovement": false,
+    "releaseGateChanged": false,
+    "productionRendererChanged": false,
+    "wgslChanged": false,
+    "thresholdChanged": false,
+    "fallbackPolicyChanged": false,
+    "kadreNativeDependencyAdded": false
+  },
+  "validation": [
+    "rtk python3 scripts/validate_for326_circular_arcs_stroke_butt_skia_selected_cell_source.py",
+    "rtk python3 scripts/validate_for325_circular_arcs_stroke_butt_isolated_skia_reference_command.py",
+    "rtk python3 scripts/validate_for324_circular_arcs_stroke_butt_isolated_skia_reference.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-skia-selected-cell-source-for326/circular-arcs-stroke-butt-skia-selected-cell-source-for326.json >/dev/null",
+    "rtk ./gradlew pipelineSceneDashboardGate",
+    "rtk git diff --check origin/master...HEAD"
+  ]
+}
