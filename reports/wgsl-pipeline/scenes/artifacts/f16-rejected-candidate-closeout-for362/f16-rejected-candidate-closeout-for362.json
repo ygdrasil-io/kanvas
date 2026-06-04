@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-362",
+  "sceneId": "f16-rejected-candidate-closeout-for362",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-close-rejected-f16-candidate-after-for-361",
+  "sourceFindings": [
+    "global/kanvas/findings/for-361-bounded-independent-f16-arc-capture-rejects-candidate",
+    "global/kanvas/findings/for-360-independent-arc-scene-evidence-remains-partial",
+    "global/kanvas/findings/for-359-f16-candidate-still-requires-independent-arc-scene"
+  ],
+  "decision": "F16_REJECTED_CANDIDATE_CLOSEOUT_AFTER_FOR361",
+  "allowedDecisions": [
+    "F16_REJECTED_CANDIDATE_CLOSEOUT_AFTER_FOR361"
+  ],
+  "decisionReason": "FOR-361 rejected the exact FOR-355 candidate on a bounded independent arc scene: current Kanvas residual stayed 0 while the candidate residual became 37 on for361_arc_right_stroke_center. The candidate is therefore closed as rejected for selection.",
+  "inputValidation": {
+    "for361Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/f16-bounded-independent-arc-capture-for361.json",
+    "for361Decision": "F16_BOUNDED_INDEPENDENT_ARC_CAPTURE_REJECTS_CANDIDATE",
+    "for361RequiredDecision": "F16_BOUNDED_INDEPENDENT_ARC_CAPTURE_REJECTS_CANDIDATE",
+    "for360Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-independent-arc-scene-evidence-for360/f16-independent-arc-scene-evidence-for360.json",
+    "for360Decision": "F16_INDEPENDENT_ARC_SCENE_EVIDENCE_PARTIAL",
+    "for360RequiredDecision": "F16_INDEPENDENT_ARC_SCENE_EVIDENCE_PARTIAL",
+    "for359Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-candidate-after-for358-guard-for359/f16-candidate-after-for358-guard-for359.json",
+    "for359Decision": "F16_GENERALIZED_CANDIDATE_STILL_REQUIRES_INDEPENDENT_ARC_SCENE",
+    "for359RequiredDecision": "F16_GENERALIZED_CANDIDATE_STILL_REQUIRES_INDEPENDENT_ARC_SCENE",
+    "for358Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-real-additional-non-arc-row-for358/f16-real-additional-non-arc-row-for358.json",
+    "for358Decision": "F16_REAL_ADDITIONAL_NON_ARC_ROW_ACCEPTS_CANDIDATE",
+    "for358RequiredDecision": "F16_REAL_ADDITIONAL_NON_ARC_ROW_ACCEPTS_CANDIDATE",
+    "for355Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-generalized-non-scene-arc-delta-candidate-for355/f16-generalized-non-scene-arc-delta-candidate-for355.json",
+    "for355Decision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "for355RequiredDecision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "for345Artifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for345Decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for345RequiredDecision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE"
+  },
+  "candidate": {
+    "policyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+    "family": "nonzero_arc_delta_generalized_non_scene_guard_family",
+    "formula": "Evidence-only generalized non-scene probe: evaluate the FOR-345 non-arc guard first; if it stays exact, preserve current RGBA except for samples with zone `stroke-center` and a captured raw reference alpha in (0, 255), where the candidate computes the raw source RGBA alpha-composited over white. This is artifact evaluation, not renderer logic.",
+    "reusedFromFor355": true,
+    "reusedExactly": true,
+    "newCandidateDefined": false,
+    "selectedForImplementation": false,
+    "implementedInRenderer": false,
+    "rejectedForSelection": true,
+    "rejectionSource": "FOR-361",
+    "rendererBehaviorChanged": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "selectionCloseout": {
+    "candidateSelectable": false,
+    "closedAsRejected": true,
+    "rejectionSource": "FOR-361",
+    "rejectionDecision": "F16_BOUNDED_INDEPENDENT_ARC_CAPTURE_REJECTS_CANDIDATE",
+    "implementationPlanAuthorized": false,
+    "scoreRaised": false,
+    "newCandidateDefinedByFor362": false
+  },
+  "rejectionEvidence": {
+    "source": "FOR-361",
+    "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-bounded-independent-arc-capture-for361/f16-bounded-independent-arc-capture-for361.json",
+    "rowId": "for361-bounded-independent-round-cap-arc-rec2020-f16",
+    "sample": "for361_arc_right_stroke_center",
+    "currentResidual": 0,
+    "candidateResidual": 37,
+    "candidateMinusCurrentResidual": 37,
+    "worsenedSampleCount": 1,
+    "for355RuleAppliedSampleCount": 1,
+    "rejectionSample": {
+      "referenceSrgbRgba": [
+        180,
+        167,
+        255,
+        255
+      ],
+      "currentKanvasSrgbRgba": [
+        180,
+        167,
+        255,
+        255
+      ],
+      "candidateRgba": [
+        155,
+        155,
+        255,
+        255
+      ],
+      "candidateResidual": 37,
+      "candidateWorsensCurrent": true
+    }
+  },
+  "nonArcGuardsPreserved": {
+    "source": "FOR-359",
+    "for345GuardPassed": true,
+    "for358GuardPassed": true,
+    "for345GuardSourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for358GuardSourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/f16-real-additional-non-arc-row-for358/f16-real-additional-non-arc-row-for358.json"
+  },
+  "nextCandidateSearchConstraints": [
+    {
+      "id": "preserve-for345",
+      "source": "FOR-345",
+      "required": "preserve the original non-arc Rec.2020 F16 comparable guard"
+    },
+    {
+      "id": "preserve-for358",
+      "source": "FOR-358",
+      "required": "preserve the additional real non-arc Rec.2020 F16 comparable guard"
+    },
+    {
+      "id": "do-not-worsen-for361",
+      "source": "FOR-361",
+      "required": "do not worsen the bounded independent arc row where current residual is zero"
+    },
+    {
+      "id": "require-independent-comparable-arc-scene",
+      "required": "require at least one independent comparable F16 arc scene"
+    },
+    {
+      "id": "refuse-scene-coordinate-selected-cell-full-gm-crop-branches",
+      "refuse": [
+        "scene branch",
+        "coordinate branch",
+        "selected-cell branch",
+        "full-GM crop branch"
+      ]
+    }
+  ],
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "implementationPlanAuthorized": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for362_f16_rejected_candidate_closeout.py",
+      "rtk python3 scripts/validate_for361_f16_bounded_independent_arc_capture.py",
+      "rtk python3 scripts/validate_for360_f16_independent_arc_scene_evidence.py",
+      "rtk python3 scripts/validate_for359_f16_candidate_after_for358_guard.py",
+      "rtk python3 scripts/validate_for358_f16_real_additional_non_arc_row.py",
+      "rtk python3 scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk python3 -m py_compile scripts/validate_for362_f16_rejected_candidate_closeout.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
