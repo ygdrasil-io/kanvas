@@ -1,0 +1,110 @@
+{
+  "linear": "FOR-304",
+  "parent": "FOR-241",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-renderer-feature-conversion-wave-closeout-ticket",
+  "decision": "FOR_241_CLOSEOUT_NO_READINESS_MOVEMENT",
+  "readiness": {
+    "before": 67.75,
+    "after": 67.75,
+    "pmRounded": "approximately 70%",
+    "movement": 0.0,
+    "reason": "No new counted support conversion was proven by FOR-241 closeout evidence."
+  },
+  "sprintThresholds": {
+    "minimumRequiredConversions": 2,
+    "nominalRequiredConversions": 3,
+    "stretchRequiredConversions": 5,
+    "provenCountedConversions": 0,
+    "minimumMet": false,
+    "nominalMet": false,
+    "stretchMet": false
+  },
+  "gateCounters": {
+    "total": 93,
+    "pass": 70,
+    "expectedUnsupported": 23,
+    "adapterBacked": 66,
+    "inventoryDerived": 45,
+    "generatedEvidence": 91,
+    "staticEvidence": 2,
+    "m61Rows": 1,
+    "m62Rows": 1,
+    "m63Rows": 5,
+    "m64Rows": 4,
+    "m66Rows": 19,
+    "m66ReferenceKindSkiaUpstream": 6,
+    "m66ReferenceKindTestOracle": 6,
+    "m66ReferenceKindCpuOracle": 7
+  },
+  "gateFailures": 0,
+  "warnings": [
+    "m60-bounded-nested-rrect-clip CPU parity remains 97.31 < 99.95",
+    "clip-rect-difference performance remains estimated/reporting-only",
+    "runtime-effect-simple performance remains estimated/reporting-only"
+  ],
+  "preservedFallbacks": [
+    "image-filter.crop-input-nonnull-prepass-required",
+    "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "coverage.nested-clip-visual-parity-below-threshold",
+    "coverage.edge-count-exceeded",
+    "font.complex-shaping-requires-explicit-shaper",
+    "font.color-glyph-emoji-unsupported"
+  ],
+  "workSlices": [
+    {
+      "name": "crop-image-filter residual boundary",
+      "tickets": "FOR-242-FOR-265",
+      "impact": "diagnostic and bounded evidence; no counted support movement"
+    },
+    {
+      "name": "stroke cap/join coverage audits",
+      "tickets": "FOR-266-FOR-268",
+      "impact": "diagnostic only; expected unsupported preserved"
+    },
+    {
+      "name": "M60 nested RRect clip investigation",
+      "tickets": "FOR-269-FOR-286, FOR-288-FOR-303",
+      "impact": "root-cause evidence and guardrails; expected unsupported preserved"
+    },
+    {
+      "name": "unsafe M60 patch evidence",
+      "tickets": "FOR-287",
+      "impact": "canceled historical evidence only"
+    }
+  ],
+  "nextBacklog": [
+    {
+      "priority": 1,
+      "candidate": "measure clip-rect-difference and runtime-effect-simple performance lanes",
+      "supportGate": "Measured CPU/GPU payloads with machine/JDK/backend metadata and quarantine policy."
+    },
+    {
+      "priority": 2,
+      "candidate": "bounded image-filter residual policy",
+      "supportGate": "Local strict parity improvement without threshold weakening or global targetColorSpaceBlend."
+    },
+    {
+      "priority": 3,
+      "candidate": "Path AA edge-budget candidate selection",
+      "supportGate": "Row-specific geometry and CPU/GPU/reference/diff evidence without global budget weakening."
+    },
+    {
+      "priority": 4,
+      "candidate": "text/glyph dependency gate",
+      "supportGate": "Real shaper/font/color-glyph dependency delivery."
+    },
+    {
+      "priority": 5,
+      "candidate": "M60 nested clip follow-up only with a new causal renderer hypothesis",
+      "supportGate": "Must cite FOR-301/FOR-302 supersession; FOR-293 cannot be used as visibility oracle."
+    }
+  ],
+  "strictPreservation": {
+    "rendererChanged": false,
+    "shaderChanged": false,
+    "thresholdChanged": false,
+    "fallbackChanged": false,
+    "sceneStatusChanged": false,
+    "readmeReadinessChanged": false
+  }
+}
