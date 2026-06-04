@@ -1,0 +1,409 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-345",
+  "sceneId": "non-arc-rec2020-f16-reference-row-for345",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-non-arc-rec2020-f16-comparable-reference-row-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-344-broader-non-arc-f16-color-evidence-partial-finding"
+  ],
+  "inputValidation": {
+    "for344Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-broader-non-arc-color-policy-for344/f16-broader-non-arc-color-policy-for344.json",
+    "for344Decision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "for344RequiredDecision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "for344RequiresMoreReferenceRows": true,
+    "for344CandidatePolicyId": "straight_srgb_quantized_alpha_src_over_white"
+  },
+  "decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+  "allowedDecisions": [
+    "F16_NON_ARC_REC2020_REFERENCE_ROW_CAPTURED",
+    "F16_NON_ARC_REC2020_REFERENCE_ROW_PARTIAL_REQUIRES_SKIA_REFERENCE_SOURCE",
+    "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "F16_NON_ARC_REC2020_REFERENCE_ROW_INPUT_INVALID"
+  ],
+  "decisionReason": "FOR-345 captured a genuine non-arc Rec.2020 kRGBA_F16Norm SrcOver row. The current Kanvas CPU F16 samples match the isolated Skia reference on the selected pixels, while the straight_srgb_quantized_alpha_src_over_white candidate worsens all covered rect samples.",
+  "row": {
+    "rowId": "non-arc-rec2020-f16-src-over-rect",
+    "family": "non-arc-solid-rect",
+    "sceneId": "non-arc-rec2020-f16-reference-row-for345",
+    "sourceKind": "isolated-skia-current-kanvas-candidate",
+    "nonArc": true,
+    "excludedScene": "circular_arcs_stroke_butt",
+    "rec2020F16SrcOverOrBlendSignal": true,
+    "referenceCurrentCandidateComparable": true,
+    "reference": {
+      "status": "isolated-skia-non-arc-rec2020-f16-src-over-reference-available",
+      "captureCommand": "rtk python3 tools/skia-reference/build_for345_non_arc_rec2020_f16_reference.py",
+      "samplesPath": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/skia-reference-samples.json",
+      "provenancePath": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/skia-reference-provenance.json",
+      "pngPath": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/skia-reference.png",
+      "referenceJsonSha256": "41a385f503f7fdb2c45a469e2ff4a60a7634399a25625b846a2c14581c9251a0",
+      "referencePngSha256": "b21e6ffaed34d262b1171445727805812b0ed64ef21e6505ca6bd1e68e7e7fc4"
+    },
+    "current": {
+      "status": "current-kanvas-kotlin-cpu-rec2020-f16-src-over-samples-captured",
+      "captureCommand": "KANVAS_FOR345_CURRENT_CAPTURE_OUTPUT=reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/current-kanvas-samples.json rtk ./gradlew --no-daemon --rerun-tasks :skia-integration-tests:test --tests org.skia.tests.For345NonArcRec2020F16CurrentCaptureTest",
+      "samplesPath": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/current-kanvas-samples.json",
+      "captureMethod": "Kanvas SkBitmap + SkCanvas public CPU path, sampled through SkBitmap.getPixelAsSrgb"
+    },
+    "candidate": {
+      "policyId": "straight_srgb_quantized_alpha_src_over_white",
+      "status": "computed-policy-samples-available-not-applied",
+      "formula": "source sRGB non-premul channels, alpha=round((paintAlpha/255)*coverageScale*255)/255, SrcOver over white, floor(channel*256)"
+    },
+    "samples": [
+      {
+        "name": "background_top_left",
+        "zone": "background",
+        "x": 0,
+        "y": 0,
+        "insideDraw": false,
+        "coverageScale": 0.0,
+        "paintSourceRgba": null,
+        "referenceSrgbRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "currentKanvasSrgbRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+        "candidatePolicyRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "currentVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceSumAbsDelta": 0,
+        "candidateVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "candidateVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "candidateVsReferenceSumAbsDelta": 0,
+        "candidateWorsensCurrent": false
+      },
+      {
+        "name": "rect_center",
+        "zone": "fill-center",
+        "x": 16,
+        "y": 16,
+        "insideDraw": true,
+        "coverageScale": 1.0,
+        "paintSourceRgba": [
+          0,
+          0,
+          255,
+          100
+        ],
+        "referenceSrgbRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "currentKanvasSrgbRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+        "candidatePolicyRgba": [
+          155,
+          155,
+          255,
+          255
+        ],
+        "currentVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceSumAbsDelta": 0,
+        "candidateVsReferenceSignedDelta": [
+          -25,
+          -12,
+          0,
+          0
+        ],
+        "candidateVsReferenceAbsDelta": [
+          25,
+          12,
+          0,
+          0
+        ],
+        "candidateVsReferenceSumAbsDelta": 37,
+        "candidateWorsensCurrent": true
+      },
+      {
+        "name": "rect_left_inside",
+        "zone": "fill-left-inside",
+        "x": 8,
+        "y": 16,
+        "insideDraw": true,
+        "coverageScale": 1.0,
+        "paintSourceRgba": [
+          0,
+          0,
+          255,
+          100
+        ],
+        "referenceSrgbRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "currentKanvasSrgbRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+        "candidatePolicyRgba": [
+          155,
+          155,
+          255,
+          255
+        ],
+        "currentVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceSumAbsDelta": 0,
+        "candidateVsReferenceSignedDelta": [
+          -25,
+          -12,
+          0,
+          0
+        ],
+        "candidateVsReferenceAbsDelta": [
+          25,
+          12,
+          0,
+          0
+        ],
+        "candidateVsReferenceSumAbsDelta": 37,
+        "candidateWorsensCurrent": true
+      },
+      {
+        "name": "rect_right_inside",
+        "zone": "fill-right-inside",
+        "x": 23,
+        "y": 16,
+        "insideDraw": true,
+        "coverageScale": 1.0,
+        "paintSourceRgba": [
+          0,
+          0,
+          255,
+          100
+        ],
+        "referenceSrgbRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "currentKanvasSrgbRgba": [
+          180,
+          167,
+          255,
+          255
+        ],
+        "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+        "candidatePolicyRgba": [
+          155,
+          155,
+          255,
+          255
+        ],
+        "currentVsReferenceSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "currentVsReferenceSumAbsDelta": 0,
+        "candidateVsReferenceSignedDelta": [
+          -25,
+          -12,
+          0,
+          0
+        ],
+        "candidateVsReferenceAbsDelta": [
+          25,
+          12,
+          0,
+          0
+        ],
+        "candidateVsReferenceSumAbsDelta": 37,
+        "candidateWorsensCurrent": true
+      }
+    ],
+    "residuals": {
+      "sampleCount": 4,
+      "coveredSampleCount": 3,
+      "currentResidual": 0,
+      "candidateResidual": 111,
+      "candidateMinusCurrentResidual": 111,
+      "residualReduction": -111,
+      "worsenedSampleCount": 3,
+      "improvedSampleCount": 0,
+      "unchangedSampleCount": 1,
+      "maxCurrentSampleResidual": 0,
+      "maxCandidateSampleResidual": 37
+    }
+  },
+  "scene": {
+    "dimensions": {
+      "width": 32,
+      "height": 32
+    },
+    "colorType": "kRGBA_F16Norm",
+    "colorSpace": "Rec.2020",
+    "backgroundRgba": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "draw": {
+      "op": "drawRect",
+      "rectXYWH": [
+        8,
+        8,
+        16,
+        16
+      ],
+      "antiAlias": false,
+      "blendMode": "kSrcOver",
+      "paintArgb": [
+        100,
+        0,
+        0,
+        255
+      ]
+    },
+    "nonArc": true,
+    "fullGmCrop": false,
+    "selectedCellSubstitutionUsed": false,
+    "fixtureOrCoordinateRendererBranchUsed": false
+  },
+  "referenceSource": {
+    "source": {
+      "path": "tools/skia-reference/non_arc_rec2020_f16_reference.cpp",
+      "sha256": "3aec4b7838fa55a61180aa7b7364581e0bc3a25d054edd64f99d4a5213db8b5f",
+      "present": true
+    },
+    "runner": {
+      "path": "tools/skia-reference/build_for345_non_arc_rec2020_f16_reference.py",
+      "present": true,
+      "headless": true
+    },
+    "currentCaptureTest": {
+      "path": "skia-integration-tests/src/test/kotlin/org/skia/tests/For345NonArcRec2020F16CurrentCaptureTest.kt",
+      "present": true,
+      "headless": true
+    }
+  },
+  "referenceCapture": {
+    "sourceType": "isolated-skia-non-arc-rec2020-f16-src-over-rect",
+    "provenance": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/skia-reference-provenance.json"
+  },
+  "currentCapture": {
+    "sourceType": "current-kanvas-non-arc-rec2020-f16-src-over-rect",
+    "samplesPath": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/current-kanvas-samples.json"
+  },
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white"
+  },
+  "implementation": {
+    "rendererBehaviorChanged": false,
+    "evidenceOnly": true,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false
+  },
+  "nonGoalsPreserved": {
+    "globalF16PolicyChange": true,
+    "selectedCellSubstitutionRefused": true,
+    "fixtureBranchRefused": true,
+    "coordinateBranchRefused": true,
+    "fullGmCropRefused": true,
+    "thresholdRelaxationRefused": true,
+    "ganeshGraphitePortNotAdded": true,
+    "skslCompilerVmWorkNotAdded": true,
+    "historicalArtifactsRewritten": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk python3 tools/skia-reference/build_for345_non_arc_rec2020_f16_reference.py",
+      "KANVAS_FOR345_CURRENT_CAPTURE_OUTPUT=reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/current-kanvas-samples.json rtk ./gradlew --no-daemon --rerun-tasks :skia-integration-tests:test --tests org.skia.tests.For345NonArcRec2020F16CurrentCaptureTest",
+      "rtk python3 scripts/validate_for344_f16_broader_non_arc_color_policy_evidence.py",
+      "rtk python3 scripts/validate_for343_f16_color_policy_boundary.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check",
+      "rtk python3 -m py_compile scripts/validate_for345_non_arc_rec2020_f16_reference_row.py"
+    ]
+  }
+}

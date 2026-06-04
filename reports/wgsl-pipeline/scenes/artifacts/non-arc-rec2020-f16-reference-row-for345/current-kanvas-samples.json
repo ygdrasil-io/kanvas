@@ -1,0 +1,38 @@
+        {
+          "linear": "FOR-345",
+          "sceneId": "non-arc-rec2020-f16-reference-row-for345",
+          "sourceType": "current-kanvas-non-arc-rec2020-f16-src-over-rect",
+          "dimensions": {"width": 32, "height": 32},
+          "colorType": "kRGBA_F16Norm",
+          "colorSpace": "Rec.2020",
+          "blendMode": "kSrcOver",
+          "nonArc": true,
+          "excludedScene": "circular_arcs_stroke_butt",
+          "captureMethod": "Kanvas SkBitmap + SkCanvas public CPU path, sampled through SkBitmap.getPixelAsSrgb",
+          "samples": [
+            {
+  "name": "background_top_left",
+  "x": 0,
+  "y": 0,
+  "currentKanvasSrgbRgba": [255, 255, 255, 255]
+},
+{
+  "name": "rect_center",
+  "x": 16,
+  "y": 16,
+  "currentKanvasSrgbRgba": [180, 167, 255, 255]
+},
+{
+  "name": "rect_left_inside",
+  "x": 8,
+  "y": 16,
+  "currentKanvasSrgbRgba": [180, 167, 255, 255]
+},
+{
+  "name": "rect_right_inside",
+  "x": 23,
+  "y": 16,
+  "currentKanvasSrgbRgba": [180, 167, 255, 255]
+}
+          ]
+        }
