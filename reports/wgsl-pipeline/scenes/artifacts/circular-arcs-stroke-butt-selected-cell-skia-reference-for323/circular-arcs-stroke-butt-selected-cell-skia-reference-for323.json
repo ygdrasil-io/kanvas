@@ -1,0 +1,338 @@
+{
+  "linear": "FOR-323",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-circular-arcs-stroke-butt-selected-cell-skia-reference-audit-ticket",
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_FULL_GM_CROP_CONTAMINATED",
+  "sceneId": "circular-arcs-stroke-butt-selected-cell-skia-reference-for323",
+  "skiaPngReady": false,
+  "acceptedSkiaPng": null,
+  "selectedCell": {
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceFutureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "boundedHarnessGm": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+    "cellCount": 1,
+    "quadrant": "bottom-left",
+    "fullGmCanvasArcRectLTRB": [
+      140,
+      520,
+      180,
+      560
+    ],
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "rowIndex": 0,
+    "columnIndex": 2,
+    "startDegrees": 0,
+    "sweepDegrees": 90,
+    "complementSweepDegrees": -270,
+    "useCenter": false,
+    "aa": true,
+    "style": "kStroke_Style",
+    "strokeWidth": 15,
+    "strokeCap": "kButt_Cap",
+    "includedCaps": [
+      "kButt_Cap"
+    ],
+    "excludedCaps": [
+      "kRound_Cap",
+      "kSquare_Cap"
+    ],
+    "includesHairlineStrokeWidth0": false,
+    "includesFill": false,
+    "includesDash": false,
+    "paintAlpha": 100,
+    "drawArcCalls": [
+      {
+        "paintColor": "red",
+        "startDegrees": 0,
+        "sweepDegrees": 90
+      },
+      {
+        "paintColor": "blue",
+        "startDegrees": 0,
+        "sweepDegrees": -270
+      }
+    ]
+  },
+  "follows": {
+    "for319Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-micro-fixture-for319/circular-arcs-stroke-butt-micro-fixture-for319.json",
+    "for320Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-micro-fixture-proof-for320/circular-arcs-stroke-butt-micro-fixture-proof-for320.json",
+    "for321Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-artifacts-for321/circular-arcs-stroke-butt-selected-cell-artifacts-for321.json",
+    "for322Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+    "for322Report": "reports/wgsl-pipeline/2026-06-04-for-322-circular-arcs-stroke-butt-selected-cell-harness.md",
+    "for322Cpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+    "for322RouteGpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-gpu.json",
+    "for322Stats": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json"
+  },
+  "auditedStrategies": {
+    "isolatedSelectedCellSkiaReference": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for323/skia.png",
+      "provenancePath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for323/skia-reference-provenance.json",
+      "present": false,
+      "accepted": false,
+      "status": "blocked-missing",
+      "blockedReasons": [
+        "no selected-cell skia.png is checked in under the FOR-323 artifact directory",
+        "no strict-scope Skia selected-cell renderer artifact is available"
+      ]
+    },
+    "fullGmCrop": {
+      "strategy": "crop-full-gm-reference",
+      "status": "rejected-contaminated",
+      "accepted": false,
+      "decisionIfOnlySource": "CIRCULAR_ARCS_STROKE_BUTT_FULL_GM_CROP_CONTAMINATED",
+      "sourcePng": "skia-integration-tests/src/test/resources/original-888/circular_arcs_stroke_butt.png",
+      "sourceDimensions": {
+        "width": 1000,
+        "height": 1000
+      },
+      "sourceSha256": "44c74bdd7560e633bb1d63daa1f0e88dcce0a801919cf6cdfb64e21ca8ec0a92",
+      "cropBoxLTRB": [
+        120,
+        500,
+        200,
+        580
+      ],
+      "cropDimensions": {
+        "width": 80,
+        "height": 80
+      },
+      "selectedArcRectInCropLTRB": [
+        20,
+        20,
+        60,
+        60
+      ],
+      "selectedStrokeBoundsInCropLTRB": [
+        12.5,
+        12.5,
+        67.5,
+        67.5
+      ],
+      "strokeMarginPx": 7.5,
+      "cellStepPx": 60,
+      "arcDiameterPx": 40,
+      "neighborStrokeOverlap": [
+        {
+          "neighbor": "leftColumnSameRow",
+          "arcRectInCropLTRB": [
+            -40.0,
+            20.0,
+            0.0,
+            60.0
+          ],
+          "strokeBoundsInCropLTRB": [
+            -47.5,
+            12.5,
+            7.5,
+            67.5
+          ],
+          "overlapsCrop": true,
+          "overlapLTRB": [
+            0.0,
+            12.5,
+            7.5,
+            67.5
+          ]
+        },
+        {
+          "neighbor": "rightColumnSameRow",
+          "arcRectInCropLTRB": [
+            80.0,
+            20.0,
+            120.0,
+            60.0
+          ],
+          "strokeBoundsInCropLTRB": [
+            72.5,
+            12.5,
+            127.5,
+            67.5
+          ],
+          "overlapsCrop": true,
+          "overlapLTRB": [
+            72.5,
+            12.5,
+            80.0,
+            67.5
+          ]
+        },
+        {
+          "neighbor": "nextRowSameColumn",
+          "arcRectInCropLTRB": [
+            20.0,
+            80.0,
+            60.0,
+            120.0
+          ],
+          "strokeBoundsInCropLTRB": [
+            12.5,
+            72.5,
+            67.5,
+            127.5
+          ],
+          "overlapsCrop": true,
+          "overlapLTRB": [
+            12.5,
+            72.5,
+            67.5,
+            80.0
+          ]
+        }
+      ],
+      "pixelProbe": {
+        "leftNeighborMargin": {
+          "boxLTRB": [
+            0,
+            0,
+            8,
+            80
+          ],
+          "nonWhitePixels": 226,
+          "totalPixels": 640,
+          "nonWhiteBoundingBoxLTRB": [
+            0,
+            0,
+            7,
+            58
+          ]
+        },
+        "rightNeighborMargin": {
+          "boxLTRB": [
+            73,
+            0,
+            80,
+            80
+          ],
+          "nonWhitePixels": 216,
+          "totalPixels": 560,
+          "nonWhiteBoundingBoxLTRB": [
+            73,
+            0,
+            79,
+            58
+          ]
+        },
+        "lowerNeighborMargin": {
+          "boxLTRB": [
+            0,
+            73,
+            80,
+            80
+          ],
+          "nonWhitePixels": 206,
+          "totalPixels": 560,
+          "nonWhiteBoundingBoxLTRB": [
+            21,
+            73,
+            58,
+            79
+          ]
+        },
+        "topSeparatorMargin": {
+          "boxLTRB": [
+            0,
+            0,
+            80,
+            8
+          ],
+          "nonWhitePixels": 80,
+          "totalPixels": 640,
+          "nonWhiteBoundingBoxLTRB": [
+            0,
+            0,
+            79,
+            0
+          ]
+        }
+      },
+      "contaminated": true,
+      "blockedReasons": [
+        "bounded 80x80 crop requires the selected stroke margin",
+        "left/right/lower neighboring stroke bounds overlap that crop margin",
+        "full-GM crop pixels are non-white in the overlapped margins",
+        "crop provenance is full-GM, not an isolated selected-cell Skia render"
+      ]
+    },
+    "for322CpuOutput": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+      "present": true,
+      "accepted": false,
+      "status": "rejected-cpu-kanvas-not-skia",
+      "dimensions": {
+        "width": 80,
+        "height": 80
+      },
+      "blockedReason": "FOR-322 cpu.png is Kanvas CPU output and must not be called a Skia reference."
+    },
+    "fullGmScoreEvidence": {
+      "accepted": false,
+      "status": "rejected-full-gm-score-not-cell-reference",
+      "blockedReason": "Full-GM similarity scores are not isolated selected-cell Skia pixels."
+    }
+  },
+  "referenceDecision": {
+    "decision": "CIRCULAR_ARCS_STROKE_BUTT_FULL_GM_CROP_CONTAMINATED",
+    "readyDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_SKIA_REFERENCE_READY",
+    "missingDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_SKIA_REFERENCE_MISSING",
+    "contaminatedDecision": "CIRCULAR_ARCS_STROKE_BUTT_FULL_GM_CROP_CONTAMINATED",
+    "ambiguousDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_REFERENCE_AMBIGUOUS",
+    "skiaPngReady": false,
+    "blockedReasons": [
+      "no selected-cell skia.png is checked in under the FOR-323 artifact directory",
+      "no strict-scope Skia selected-cell renderer artifact is available",
+      "bounded 80x80 crop requires the selected stroke margin",
+      "left/right/lower neighboring stroke bounds overlap that crop margin",
+      "full-GM crop pixels are non-white in the overlapped margins",
+      "crop provenance is full-GM, not an isolated selected-cell Skia render"
+    ],
+    "fullGmMissing": false
+  },
+  "geometry": {
+    "fullGmCanvasArcRectLTRB": [
+      140,
+      520,
+      180,
+      560
+    ],
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "startDegrees": 0,
+    "sweepDegrees": 90,
+    "complementSweepDegrees": -270,
+    "useCenter": false,
+    "aa": true,
+    "strokeWidth": 15,
+    "strokeCap": "kButt_Cap",
+    "paintAlpha": 100,
+    "drawArcCallCount": 2
+  },
+  "preservedContracts": {
+    "supportStatus": "not-supported",
+    "fullGmSubstitutionAccepted": false,
+    "fullGmScoreEvidenceAccepted": false,
+    "cpuKanvasOutputAcceptedAsSkia": false,
+    "gpuRouteStatus": "expected-unsupported",
+    "gpuRefusalReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "readinessMovement": false,
+    "releaseGateChanged": false
+  },
+  "nonGoals": [
+    "no production renderer behavior changed",
+    "no WGSL shader changed",
+    "no threshold changed",
+    "no fallback policy changed",
+    "no scene support status changed",
+    "no Kadre or native dependency introduced",
+    "no full-GM PNG, full-GM score, unproven crop, or CPU Kanvas output accepted as skia.png"
+  ]
+}
