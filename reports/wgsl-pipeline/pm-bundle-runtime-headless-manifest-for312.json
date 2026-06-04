@@ -1,0 +1,54 @@
+{
+  "linear": "FOR-312",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-pm-bundle-runtime-headless-manifest-audit-ticket",
+  "decision": "PM_BUNDLE_RUNTIME_HEADLESS_MANIFEST_AUDIT_APPLIED",
+  "sourceManifest": "build/reports/wgsl-pipeline-pm-bundle/manifest.json",
+  "sourceReadme": "build/reports/wgsl-pipeline-pm-bundle/README.md",
+  "manifest": {
+    "generatedBy": "pipelinePmBundle",
+    "generationCommand": "rtk ./gradlew --no-daemon pipelinePmBundle",
+    "commit": "c2eab384cb06b8fc141d6ff1ac154d3bb6b31a68",
+    "dashboardEntry": "dashboard/index.html"
+  },
+  "m90RuntimeInteractive": {
+    "claimLevel": "bounded-kadre-runtime-interactive-evidence",
+    "status": "pass",
+    "demoCommand": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive",
+    "benchmarkCommand": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeBenchmark -PkadreMepNextFrames=300 -PkadreMepNextWarmupFrames=120",
+    "ciEvidenceCommand": "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+    "optionalDirectRuntimeRefreshCommand": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+    "optionalDirectRuntimeRefreshPrecondition": "git submodule update --init --recursive external/poc-koreos or provide local org.graphiks.kadre artifacts",
+    "nonClaims": [
+      "Native demo and benchmark remain opt-in because they open Kadre windows.",
+      "No broad SkCanvas/display-list replay.",
+      "No real OS/window-manager event injection in CI.",
+      "No release-grade frame.kadre-windowed FPS gate.",
+      "No broad observed WebGPU cache telemetry."
+    ]
+  },
+  "m92KadreRuntimeRc": {
+    "claimLevel": "rc-kadre-runtime-product-like-evidence-with-observed-derived-not-observable-telemetry",
+    "status": "pass",
+    "singleNativeRcDemoCommand": "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive",
+    "headlessValidatorCommand": "python3 scripts/validate_mep_rc_runtime.py .",
+    "readinessAfter": 67.75,
+    "readinessDelta": 0.0,
+    "nativeDemoOptIn": true,
+    "releaseBlockingPerformanceGate": false,
+    "telemetryClasses": [
+      "observed",
+      "observed-partial",
+      "derived",
+      "expected-unsupported",
+      "not-observable"
+    ]
+  },
+  "readmeWording": {
+    "m90OptIn": "M90 runtime counters live in `manifest.json` under `m90RuntimeInteractive`; native demo and benchmark commands remain opt-in because they open local Kadre windows.",
+    "m92Headless": "M92 runtime evidence lives in `manifest.json` under `m92KadreRuntimeRc`; the native RC command is opt-in, and headless validation does not open a Kadre window."
+  },
+  "alternateDecisions": {
+    "unsafe": "PM_BUNDLE_RUNTIME_HEADLESS_MANIFEST_UNSAFE_DIRECT_KADRE_CI",
+    "ambiguous": "PM_BUNDLE_RUNTIME_HEADLESS_MANIFEST_AMBIGUOUS"
+  }
+}
