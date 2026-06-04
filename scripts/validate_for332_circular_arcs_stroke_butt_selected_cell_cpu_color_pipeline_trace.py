@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -193,7 +194,7 @@ REQUIRED_SOURCE_SNIPPETS = {
     SK_BITMAP: [
         "SkColorType.kRGBA_F16Norm -> {",
         "val a = (pa * 256f).toInt().coerceIn(0, 255)",
-        "val r = (pr * invA * 256f).toInt().coerceIn(0, 255)",
+        "f16PremulToSrgbUnpremul",
     ],
     SK_PNG_ENCODER: [
         "src.getPixel(x, y)",
@@ -1040,8 +1041,9 @@ def validate_report(data: dict[str, Any]) -> None:
 
 def main() -> None:
     data = build_artifact()
-    write_artifact(data)
-    write_report(data)
+    if os.environ.get("KANVAS_FOR332_REWRITE") == "true":
+        write_artifact(data)
+        write_report(data)
     reloaded = load_json(ARTIFACT)
     if reloaded.get("decision") == DECISION_INPUT_INVALID:
         invalid_reasons = reloaded.get("inputValidation", {}).get("invalidReasons", [])

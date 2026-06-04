@@ -280,6 +280,25 @@ public class SkBitmap(
     @Volatile
     private var eraseColorXformCache: SkColorSpaceXformSteps? = null
 
+    private fun f16PremulToSrgbUnpremul(r: Float, g: Float, b: Float, a: Float): FloatArray {
+        val rgba = floatArrayOf(r, g, b, a)
+        var steps = f16ReadbackToSrgbXformCache
+        if (steps == null) {
+            steps = SkColorSpaceXformSteps(
+                colorSpace,
+                org.skia.core.SkAlphaType.kPremul,
+                SkColorSpace.makeSRGB(),
+                org.skia.core.SkAlphaType.kUnpremul,
+            )
+            f16ReadbackToSrgbXformCache = steps
+        }
+        steps.apply(rgba)
+        return rgba
+    }
+
+    @Volatile
+    private var f16ReadbackToSrgbXformCache: SkColorSpaceXformSteps? = null
+
     /**
      * Mirrors Skia's `SkBitmap::eraseArea(const SkIRect&, SkColor)`
      * ([include/core/SkBitmap.h](https://github.com/google/skia/blob/main/include/core/SkBitmap.h)).
@@ -360,6 +379,33 @@ public class SkBitmap(
             }
             else -> error("SkBitmap.getPixel unsupported for colorType=$colorType")
         }
+    }
+
+    /**
+     * Read a pixel as an untagged sRGB [SkColor] for encoded export.
+     *
+     * [getPixel] preserves the historical internal byte oracle used by
+     * renderer comparison tests. Encoders that write untagged 8-bit RGBA
+     * need an explicit color-space boundary instead: F16 non-sRGB pixels are
+     * transformed from premultiplied bitmap space to unpremultiplied sRGB
+     * before quantization.
+     */
+    public fun getPixelAsSrgb(x: Int, y: Int): SkColor {
+        require(x in 0 until width && y in 0 until height) { "($x, $y) outside ${width}x$height" }
+        if (colorType != SkColorType.kRGBA_F16Norm || colorSpace.isSRGB()) return getPixel(x, y)
+
+        val i = (y * width + x) * 4
+        val pr = pixelsF16[i]
+        val pg = pixelsF16[i + 1]
+        val pb = pixelsF16[i + 2]
+        val pa = pixelsF16[i + 3]
+        val a = (pa * 256f).toInt().coerceIn(0, 255)
+        if (a == 0) return 0
+        val rgba = f16PremulToSrgbUnpremul(pr, pg, pb, pa)
+        val r = (rgba[0] * 256f).toInt().coerceIn(0, 255)
+        val g = (rgba[1] * 256f).toInt().coerceIn(0, 255)
+        val b = (rgba[2] * 256f).toInt().coerceIn(0, 255)
+        return SkColorSetARGB(a, r, g, b)
     }
 
     public fun setPixel(x: Int, y: Int, c: SkColor) {

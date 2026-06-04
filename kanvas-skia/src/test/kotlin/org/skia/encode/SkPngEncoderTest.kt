@@ -2,14 +2,20 @@ package org.skia.encode
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.codec.SkCodec
+import org.skia.core.SkAlphaType
+import org.skia.core.SkColorSpaceXformSteps
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkColorType
+import org.skia.foundation.skcms.SkNamedGamut
+import org.skia.foundation.skcms.SkNamedTransferFn
+import org.graphiks.math.SkColorSetARGB
 import java.io.ByteArrayOutputStream
 
 /**
@@ -182,6 +188,28 @@ class SkPngEncoderTest {
         )
     }
 
+    @Test
+    fun `F16 Rec2020 PNG export uses explicit sRGB readback boundary`() {
+        val bitmap = makeFor333Rec2020F16Sample()
+        val expected = expectedSrgbSkColorFromFor333F16Sample()
+        val oldDirectRec2020Readback = SkColorSetARGB(255, 214, 208, 253)
+
+        assertEquals(
+            oldDirectRec2020Readback,
+            bitmap.getPixel(0, 0),
+            "getPixel remains the historical internal F16 Rec2020 byte oracle",
+        )
+        assertEquals(
+            expected,
+            bitmap.getPixelAsSrgb(0, 0),
+            "explicit sRGB readback must convert F16 Rec2020 before export",
+        )
+
+        val decoded = decode(SkPngEncoder.Encode(bitmap)!!)
+        assertEquals(expected, decoded.getPixel(0, 0), "PNG RGBA row must match explicit sRGB readback")
+        assertNotEquals(oldDirectRec2020Readback, decoded.getPixel(0, 0), "PNG export must not preserve raw Rec2020 bytes")
+    }
+
     private fun makeGradient(width: Int, height: Int): SkBitmap {
         val b = SkBitmap(width, height, SkColorSpace.makeSRGB(), SkColorType.kRGBA_8888)
         for (y in 0 until height) for (x in 0 until width) {
@@ -190,6 +218,33 @@ class SkPngEncoderTest {
             b.pixels[y * width + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or 0x40
         }
         return b
+    }
+
+    private fun makeFor333Rec2020F16Sample(): SkBitmap {
+        val rec2020 = SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, SkNamedGamut.kRec2020)!!
+        val bitmap = SkBitmap(1, 1, rec2020, SkColorType.kRGBA_F16Norm)
+        bitmap.pixelsF16[0] = 0.836928904f
+        bitmap.pixelsF16[1] = 0.813901007f
+        bitmap.pixelsF16[2] = 0.989494443f
+        bitmap.pixelsF16[3] = 1.0f
+        return bitmap
+    }
+
+    private fun expectedSrgbSkColorFromFor333F16Sample(): Int {
+        val rec2020 = SkColorSpace.makeRGB(SkNamedTransferFn.kSRGB, SkNamedGamut.kRec2020)!!
+        val rgba = floatArrayOf(0.836928904f, 0.813901007f, 0.989494443f, 1.0f)
+        SkColorSpaceXformSteps(
+            rec2020,
+            SkAlphaType.kPremul,
+            SkColorSpace.makeSRGB(),
+            SkAlphaType.kUnpremul,
+        ).apply(rgba)
+        return SkColorSetARGB(
+            (rgba[3] * 256f).toInt().coerceIn(0, 255),
+            (rgba[0] * 256f).toInt().coerceIn(0, 255),
+            (rgba[1] * 256f).toInt().coerceIn(0, 255),
+            (rgba[2] * 256f).toInt().coerceIn(0, 255),
+        )
     }
 
     private fun decode(bytes: ByteArray): SkBitmap {

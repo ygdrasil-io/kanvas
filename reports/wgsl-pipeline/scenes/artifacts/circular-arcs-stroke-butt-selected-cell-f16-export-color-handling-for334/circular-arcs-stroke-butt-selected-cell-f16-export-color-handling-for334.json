@@ -1,0 +1,859 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-334",
+  "sceneId": "circular-arcs-stroke-butt-selected-cell-f16-export-color-handling-for334",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-circular-arcs-stroke-butt-selected-cell-f16-readback-png-export-color-handling-ticket",
+  "sourceFinding": "global/kanvas/findings/for-333-circular-arcs-stroke-butt-selected-cell-kotlin-cpu-runtime-trace-boundary-identified-finding",
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_EXPORT_COLOR_HANDLING_CORRECTED",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_EXPORT_COLOR_HANDLING_CORRECTED",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_EXPORT_COLOR_HANDLING_PARTIAL_REQUIRES_COLOR_POLICY_DECISION",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_EXPORT_COLOR_HANDLING_INPUT_INVALID"
+  ],
+  "decisionReason": "F16 Rec2020 export now applies Rec2020-to-sRGB conversion at the explicit SkBitmap.getPixelAsSrgb and SkPngEncoder.rgbaRow boundary. The selected-cell residual is reduced without geometry, coverage, F16 store, GPU, WGSL, threshold, fallback, Kadre, promotion, or score changes.",
+  "selectedCellOnly": true,
+  "inputValidation": {
+    "for333Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-kotlin-cpu-runtime-trace-for333/circular-arcs-stroke-butt-selected-cell-kotlin-cpu-runtime-trace-for333.json",
+    "for333Decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_KOTLIN_CPU_RUNTIME_TRACE_BOUNDARY_IDENTIFIED",
+    "for333RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_KOTLIN_CPU_RUNTIME_TRACE_BOUNDARY_IDENTIFIED",
+    "for333IdentifiedFirstDivergentBoundary": "f16-readback-and-png-encode",
+    "for333RequiredBoundary": "f16-readback-and-png-encode",
+    "for331Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-for331/circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-for331.json",
+    "for331Decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_NORMALIZED_STROKE_TRACE_COLORSPACE_PREMUL_SUSPECTED",
+    "for331RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_NORMALIZED_STROKE_TRACE_COLORSPACE_PREMUL_SUSPECTED"
+  },
+  "implementation": {
+    "skBitmap": "kanvas-skia/src/main/kotlin/org/skia/foundation/SkBitmap.kt",
+    "skPngEncoder": "kanvas-skia/src/main/kotlin/org/skia/encode/SkPngEncoder.kt",
+    "test": "kanvas-skia/src/test/kotlin/org/skia/encode/SkPngEncoderTest.kt",
+    "correctedBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm non-sRGB export readback",
+    "internalGetPixelPreserved": "SkBitmap.getPixel keeps the historical internal F16 non-sRGB byte oracle",
+    "pngCoherence": "SkPngEncoder materializes RGBA rows through SkBitmap.getPixelAsSrgb"
+  },
+  "metrics": {
+    "sampleCount": 13,
+    "strokeSampleCount": 8,
+    "sumAbsDeltaBefore": 231,
+    "sumAbsDeltaAfter": 132,
+    "sumAbsDeltaReduction": 99,
+    "sumAbsDeltaReductionPercent": 42.857143,
+    "improvedSamples": 8,
+    "unchangedSamples": 5,
+    "worsenedSamples": 0,
+    "strokeSumAbsDeltaBefore": 231,
+    "strokeSumAbsDeltaAfter": 132,
+    "maxSampleDeltaBefore": 50,
+    "maxSampleDeltaAfter": 25
+  },
+  "samples": [
+    {
+      "name": "top_left_background",
+      "zone": "background",
+      "paintColor": null,
+      "x": 0,
+      "y": 0,
+      "skiaOverWhiteRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sumAbsDeltaBefore": 0,
+      "sumAbsDeltaAfter": 0,
+      "sumAbsDeltaReduction": 0,
+      "f16PremulAfterRender": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "top_edge_background",
+      "zone": "background",
+      "paintColor": null,
+      "x": 40,
+      "y": 0,
+      "skiaOverWhiteRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sumAbsDeltaBefore": 0,
+      "sumAbsDeltaAfter": 0,
+      "sumAbsDeltaReduction": 0,
+      "f16PremulAfterRender": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "left_edge_background",
+      "zone": "background",
+      "paintColor": null,
+      "x": 0,
+      "y": 40,
+      "skiaOverWhiteRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sumAbsDeltaBefore": 0,
+      "sumAbsDeltaAfter": 0,
+      "sumAbsDeltaReduction": 0,
+      "f16PremulAfterRender": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "blue_left_aa_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "blue",
+      "x": 12,
+      "y": 40,
+      "skiaOverWhiteRgba": [
+        210,
+        210,
+        255,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        214,
+        208,
+        253,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        214,
+        207,
+        255,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        4,
+        -2,
+        -2,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        4,
+        -3,
+        0,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        4,
+        2,
+        2,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        4,
+        3,
+        0,
+        0
+      ],
+      "sumAbsDeltaBefore": 8,
+      "sumAbsDeltaAfter": 7,
+      "sumAbsDeltaReduction": 1,
+      "f16PremulAfterRender": [
+        0.836928904,
+        0.813901007,
+        0.989494443,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "blue_top_outer_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "blue",
+      "x": 40,
+      "y": 12,
+      "skiaOverWhiteRgba": [
+        209,
+        209,
+        255,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        214,
+        208,
+        253,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        214,
+        207,
+        255,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        5,
+        -1,
+        -2,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        5,
+        -2,
+        0,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        5,
+        1,
+        2,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        5,
+        2,
+        0,
+        0
+      ],
+      "sumAbsDeltaBefore": 8,
+      "sumAbsDeltaAfter": 7,
+      "sumAbsDeltaReduction": 1,
+      "f16PremulAfterRender": [
+        0.836928904,
+        0.813901007,
+        0.989494443,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "arc_rect_top_left",
+      "zone": "stroke-aa-edge",
+      "paintColor": "blue",
+      "x": 20,
+      "y": 20,
+      "skiaOverWhiteRgba": [
+        215,
+        215,
+        255,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        224,
+        220,
+        253,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        224,
+        219,
+        255,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        9,
+        5,
+        -2,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        9,
+        4,
+        0,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        9,
+        5,
+        2,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        9,
+        4,
+        0,
+        0
+      ],
+      "sumAbsDeltaBefore": 16,
+      "sumAbsDeltaAfter": 13,
+      "sumAbsDeltaReduction": 3,
+      "f16PremulAfterRender": [
+        0.877696633,
+        0.860414445,
+        0.992102504,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "blue_top_stroke_center",
+      "zone": "stroke-center",
+      "paintColor": "blue",
+      "x": 40,
+      "y": 20,
+      "skiaOverWhiteRgba": [
+        155,
+        155,
+        255,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        172,
+        160,
+        250,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        171,
+        158,
+        255,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        17,
+        5,
+        -5,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        16,
+        3,
+        0,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        17,
+        5,
+        5,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        16,
+        3,
+        0,
+        0
+      ],
+      "sumAbsDeltaBefore": 27,
+      "sumAbsDeltaAfter": 19,
+      "sumAbsDeltaReduction": 8,
+      "f16PremulAfterRender": [
+        0.673857749,
+        0.627847016,
+        0.97906208,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "red_right_stroke_center",
+      "zone": "stroke-center",
+      "paintColor": "red",
+      "x": 60,
+      "y": 40,
+      "skiaOverWhiteRgba": [
+        255,
+        155,
+        155,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        235,
+        178,
+        162,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        255,
+        170,
+        159,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        -20,
+        23,
+        7,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        0,
+        15,
+        4,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        20,
+        23,
+        7,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        0,
+        15,
+        4,
+        0
+      ],
+      "sumAbsDeltaBefore": 50,
+      "sumAbsDeltaAfter": 19,
+      "sumAbsDeltaReduction": 31,
+      "f16PremulAfterRender": [
+        0.9184376,
+        0.69838649,
+        0.636702716,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "red_bottom_stroke_center",
+      "zone": "stroke-center",
+      "paintColor": "red",
+      "x": 40,
+      "y": 60,
+      "skiaOverWhiteRgba": [
+        255,
+        155,
+        155,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        235,
+        178,
+        162,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        255,
+        170,
+        159,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        -20,
+        23,
+        7,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        0,
+        15,
+        4,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        20,
+        23,
+        7,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        0,
+        15,
+        4,
+        0
+      ],
+      "sumAbsDeltaBefore": 50,
+      "sumAbsDeltaAfter": 19,
+      "sumAbsDeltaReduction": 31,
+      "f16PremulAfterRender": [
+        0.9184376,
+        0.69838649,
+        0.636702716,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "red_outer_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "red",
+      "x": 67,
+      "y": 40,
+      "skiaOverWhiteRgba": [
+        255,
+        210,
+        210,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        248,
+        227,
+        221,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        255,
+        224,
+        219,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        -7,
+        17,
+        11,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        0,
+        14,
+        9,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        7,
+        17,
+        11,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        0,
+        14,
+        9,
+        0
+      ],
+      "sumAbsDeltaBefore": 35,
+      "sumAbsDeltaAfter": 23,
+      "sumAbsDeltaReduction": 12,
+      "f16PremulAfterRender": [
+        0.969414115,
+        0.886866748,
+        0.863717794,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "red_bottom_outer_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "red",
+      "x": 40,
+      "y": 67,
+      "skiaOverWhiteRgba": [
+        255,
+        209,
+        209,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        248,
+        227,
+        221,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        255,
+        224,
+        219,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        -7,
+        18,
+        12,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        0,
+        15,
+        10,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        7,
+        18,
+        12,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        0,
+        15,
+        10,
+        0
+      ],
+      "sumAbsDeltaBefore": 37,
+      "sumAbsDeltaAfter": 25,
+      "sumAbsDeltaReduction": 12,
+      "f16PremulAfterRender": [
+        0.969414115,
+        0.886866748,
+        0.863717794,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "cell_center_hole",
+      "zone": "center-hole",
+      "paintColor": null,
+      "x": 40,
+      "y": 40,
+      "skiaOverWhiteRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sumAbsDeltaBefore": 0,
+      "sumAbsDeltaAfter": 0,
+      "sumAbsDeltaReduction": 0,
+      "f16PremulAfterRender": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    },
+    {
+      "name": "bottom_right_background",
+      "zone": "background",
+      "paintColor": null,
+      "x": 79,
+      "y": 79,
+      "skiaOverWhiteRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuBeforeCorrectionRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuAfterCorrectionRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuBeforeMinusSkiaSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuAfterMinusSkiaSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuBeforeVsSkiaAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "cpuAfterVsSkiaAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "sumAbsDeltaBefore": 0,
+      "sumAbsDeltaAfter": 0,
+      "sumAbsDeltaReduction": 0,
+      "f16PremulAfterRender": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "readbackBoundary": "SkBitmap.getPixelAsSrgb kRGBA_F16Norm Rec2020 to sRGB",
+      "pngBoundary": "SkPngEncoder.rgbaRow via SkBitmap.getPixelAsSrgb"
+    }
+  ],
+  "promotion": {
+    "selectedCellPromotionAllowed": false,
+    "reason": "FOR-334 reduces the export residual but does not change promotion or score policy."
+  },
+  "nonGoalsPreserved": {
+    "arcGeometry": true,
+    "coverage": true,
+    "internalF16Store": true,
+    "gpu": true,
+    "wgsl": true,
+    "thresholds": true,
+    "fallbacks": true,
+    "kadre": true,
+    "promotion": true,
+    "score": true,
+    "historicalArtifactsFOR329ToFOR333Rewritten": false
+  },
+  "validation": {
+    "commands": [
+      "rtk ./gradlew --no-daemon :kanvas-skia:test --tests org.skia.encode.SkPngEncoderTest",
+      "rtk python3 scripts/validate_for334_circular_arcs_stroke_butt_selected_cell_f16_export_color_handling.py",
+      "rtk python3 scripts/validate_for333_circular_arcs_stroke_butt_selected_cell_kotlin_cpu_runtime_trace.py",
+      "rtk python3 scripts/validate_for332_circular_arcs_stroke_butt_selected_cell_cpu_color_pipeline_trace.py",
+      "rtk python3 scripts/validate_for331_circular_arcs_stroke_butt_selected_cell_normalized_stroke_trace.py",
+      "rtk python3 scripts/validate_for330_circular_arcs_stroke_butt_selected_cell_white_background_diff.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
