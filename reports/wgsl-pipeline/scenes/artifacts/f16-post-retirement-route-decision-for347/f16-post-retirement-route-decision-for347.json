@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-347",
+  "sceneId": "f16-post-retirement-route-decision-for347",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-post-retirement-route-decision-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-346-f16-global-color-policy-candidate-retired-finding"
+  ],
+  "inputValidation": {
+    "for346Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-global-color-policy-candidate-retired-for346/f16-global-color-policy-candidate-retired-for346.json",
+    "for346Decision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for346RequiredDecision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for345Artifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for345Decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for345RequiredDecision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE"
+  },
+  "decision": "F16_POST_RETIREMENT_ROUTE_SELECTED",
+  "allowedDecisions": [
+    "F16_POST_RETIREMENT_ROUTE_SELECTED",
+    "F16_POST_RETIREMENT_ROUTE_INPUT_INVALID"
+  ],
+  "recommendedRoute": "new-candidate-search",
+  "candidatePolicy": {
+    "policyId": "straight_srgb_quantized_alpha_src_over_white",
+    "globalStatus": "retired",
+    "globalCandidateOpen": false,
+    "stillForbiddenAsGlobalCandidate": true,
+    "mayRaiseGlobalF16Score": false,
+    "mayAuthorizeGlobalF16Migration": false
+  },
+  "evidence": {
+    "for346CurrentResidual": 0,
+    "for346CandidateResidual": 111,
+    "for346WorsenedSampleCount": 3,
+    "for345CurrentResidual": 0,
+    "for345CandidateResidual": 111,
+    "for345WorsenedSampleCount": 3
+  },
+  "routeMatrix": [
+    {
+      "id": "localized-policy",
+      "status": "not-selected",
+      "scorePotential": "limited",
+      "risk": "medium",
+      "reason": "A local policy can be valid only with strict scope and route diagnostics, but it risks reintroducing scene-shaped behavior if used as the immediate score path.",
+      "childTicketSeeds": [
+        "Define exact local policy domain and route diagnostics.",
+        "Collect positive reference/current/candidate rows for the local domain."
+      ]
+    },
+    {
+      "id": "stable-fallback",
+      "status": "not-selected",
+      "scorePotential": "none",
+      "risk": "low",
+      "reason": "A stable fallback is the safest renderer behavior, but it does not move the score objective.",
+      "childTicketSeeds": [
+        "Document unsupported global F16 color-policy migration route.",
+        "Assert refusal diagnostics for unsupported broad migration attempts."
+      ]
+    },
+    {
+      "id": "new-candidate-search",
+      "status": "selected",
+      "scorePotential": "highest",
+      "risk": "controlled-by-evidence",
+      "reason": "After the global candidate was retired, the only score-oriented route is a new candidate search that starts with arc and non-arc evidence instead of generalizing from one scene.",
+      "childTicketSeeds": [
+        "Create an arc plus non-arc F16 candidate-search matrix with reference/current/candidate rows.",
+        "Define candidate rejection criteria before evaluating new formulas.",
+        "Select a replacement candidate only after positive evidence across both families."
+      ]
+    }
+  ],
+  "decisionOnly": {
+    "childTicketsCreatedByThisValidator": false,
+    "scoreIncreaseAuthorized": false,
+    "rendererBehaviorChangeAuthorized": false,
+    "globalF16MigrationAuthorized": false
+  },
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white"
+  },
+  "implementation": {
+    "decisionOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for347_f16_post_retirement_route_decision.py",
+      "rtk python3 scripts/validate_for346_f16_global_color_policy_candidate_retired.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
