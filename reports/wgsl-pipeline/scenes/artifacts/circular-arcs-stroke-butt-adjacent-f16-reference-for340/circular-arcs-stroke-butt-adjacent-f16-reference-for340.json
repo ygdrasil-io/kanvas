@@ -1,0 +1,919 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-340",
+  "sceneId": "circular-arcs-stroke-butt-adjacent-f16-reference-for340",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-isolated-upstream-skia-references-for-adjacent-circular-arcs-stroke-butt-f16-cells-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-339-circular-arcs-stroke-butt-adjacent-f16-runtime-trace-partial-finding"
+  ],
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_REFERENCE_CAPTURED",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_REFERENCE_CAPTURED",
+    "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_REFERENCE_PARTIAL_REQUIRES_UPSTREAM_HARNESS",
+    "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_REFERENCE_INPUT_INVALID"
+  ],
+  "decisionReason": "FOR-340 captured two isolated upstream Skia adjacent-cell renders and computed sample residuals against the current FOR-339 export.",
+  "inputValidation": {
+    "valid": true,
+    "for339Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-runtime-trace-for339/circular-arcs-stroke-butt-adjacent-f16-runtime-trace-for339.json",
+    "for339Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_RUNTIME_TRACE_PARTIAL_REQUIRES_REFERENCE_SOURCE",
+    "for339RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_RUNTIME_TRACE_PARTIAL_REQUIRES_REFERENCE_SOURCE",
+    "for339HistoricalArtifactRewritten": false
+  },
+  "captureStatus": {
+    "targetCellCount": 2,
+    "isolatedSkiaReferenceCellCount": 2,
+    "referenceBoundaryAccessible": true,
+    "residualsComputed": true,
+    "capturedDecisionAllowed": true,
+    "blockedReasons": []
+  },
+  "source": {
+    "path": "tools/skia-reference/circular_arcs_stroke_butt_adjacent_f16_reference.cpp",
+    "sha256": "f4197ab5c360b6d44eaab0f32e8f93be0f92cc887ec94520fc8cac2edc211a71",
+    "present": true
+  },
+  "runner": {
+    "path": "tools/skia-reference/build_for340_circular_arcs_stroke_butt_adjacent_f16_reference.py",
+    "present": true,
+    "headless": true
+  },
+  "provenance": {
+    "linear": "FOR-340",
+    "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-isolated-upstream-skia-references-for-adjacent-circular-arcs-stroke-butt-f16-cells-ticket",
+    "sourceFindings": [
+      "global/kanvas/findings/for-339-circular-arcs-stroke-butt-adjacent-f16-runtime-trace-partial-finding"
+    ],
+    "sceneId": "circular-arcs-stroke-butt-adjacent-f16-reference-for340",
+    "sourceType": "isolated-skia-adjacent-cell-render",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "dimensions": {
+      "width": 80,
+      "height": 80
+    },
+    "command": "rtk python3 tools/skia-reference/build_for340_circular_arcs_stroke_butt_adjacent_f16_reference.py",
+    "commandArgv": [
+      "rtk",
+      "python3",
+      "tools/skia-reference/build_for340_circular_arcs_stroke_butt_adjacent_f16_reference.py"
+    ],
+    "buildCommand": [
+      "/usr/bin/clang++",
+      "-std=c++17",
+      "-I/Users/chaos/workspace/kanvas-forge/skia-main",
+      "-I/Users/chaos/workspace/kanvas-forge/skia-main/include",
+      "-I/Users/chaos/workspace/kanvas-forge/skia-main/include/core",
+      "-I/Users/chaos/workspace/kanvas-forge/skia-main/include/encode",
+      "/Users/chaos/.codex/worktrees/3499/kanvas/tools/skia-reference/circular_arcs_stroke_butt_adjacent_f16_reference.cpp",
+      "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libskia.a",
+      "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libpng.a",
+      "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libzlib.a",
+      "-framework",
+      "CoreFoundation",
+      "-framework",
+      "CoreGraphics",
+      "-framework",
+      "CoreText",
+      "-framework",
+      "Foundation",
+      "-framework",
+      "ImageIO",
+      "-framework",
+      "Metal",
+      "-framework",
+      "QuartzCore",
+      "-o",
+      "/var/folders/81/9k3fbzrd42b_r_vm8fkfy16w0000gn/T/kanvas-for340-skia-1cho1f5x/circular_arcs_stroke_butt_adjacent_f16_reference"
+    ],
+    "executeCommand": [
+      "/var/folders/81/9k3fbzrd42b_r_vm8fkfy16w0000gn/T/kanvas-for340-skia-1cho1f5x/circular_arcs_stroke_butt_adjacent_f16_reference",
+      "/Users/chaos/.codex/worktrees/3499/kanvas/reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep45-skia.png",
+      "/Users/chaos/.codex/worktrees/3499/kanvas/reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep130-skia.png"
+    ],
+    "headless": true,
+    "sourceImplementation": "tools/skia-reference/circular_arcs_stroke_butt_adjacent_f16_reference.cpp",
+    "sourceSha256": "f4197ab5c360b6d44eaab0f32e8f93be0f92cc887ec94520fc8cac2edc211a71",
+    "upstreamSkiaRoot": "/Users/chaos/workspace/kanvas-forge/skia-main",
+    "upstreamSkiaOut": "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release",
+    "upstreamSkiaGitRevision": "defc3a5a92966c32cb2a6a901e2fa3036a13bb8a",
+    "upstreamSkiaGitStatusShort": "?? skia-gm-out/",
+    "upstreamSkiaSourceVersion": "defc3a5a92966c32cb2a6a901e2fa3036a13bb8a",
+    "sourceTypeProof": {
+      "compiledRepoOwnedSource": true,
+      "compiledSourcePath": "tools/skia-reference/circular_arcs_stroke_butt_adjacent_f16_reference.cpp",
+      "linkedAgainstUpstreamSkiaLib": "/Users/chaos/workspace/kanvas-forge/skia-main/out/Release/libskia.a",
+      "executedBinary": true,
+      "isolatedCellOutputs": true
+    },
+    "targetCells": [
+      {
+        "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+        "fixtureId": "circular-arcs-stroke-butt-start0-sweep45-usecenter-false-aa-true",
+        "sourceGm": "CircularArcsStrokeButtGM",
+        "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+        "rowIndex": 0,
+        "columnIndex": 1,
+        "startDegrees": 0,
+        "sweepDegrees": 45,
+        "complementSweepDegrees": -315,
+        "useCenter": false,
+        "aa": true,
+        "style": "kStroke_Style",
+        "strokeWidth": 15,
+        "strokeCap": "kButt_Cap",
+        "paintAlpha": 100,
+        "boundedCanvasArcRectLTRB": [
+          20,
+          20,
+          60,
+          60
+        ],
+        "dimensions": {
+          "width": 80,
+          "height": 80
+        },
+        "outputPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep45-skia.png",
+        "outputSha256": "217e3d4661411db1bb940ef2297be497b4254c8501c17204e84a50013c673c0c",
+        "sourceType": "isolated-skia-adjacent-cell-render",
+        "fullGmCrop": false,
+        "selectedCellExtrapolationUsed": false
+      },
+      {
+        "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+        "fixtureId": "circular-arcs-stroke-butt-start0-sweep130-usecenter-false-aa-true",
+        "sourceGm": "CircularArcsStrokeButtGM",
+        "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+        "rowIndex": 0,
+        "columnIndex": 3,
+        "startDegrees": 0,
+        "sweepDegrees": 130,
+        "complementSweepDegrees": -230,
+        "useCenter": false,
+        "aa": true,
+        "style": "kStroke_Style",
+        "strokeWidth": 15,
+        "strokeCap": "kButt_Cap",
+        "paintAlpha": 100,
+        "boundedCanvasArcRectLTRB": [
+          20,
+          20,
+          60,
+          60
+        ],
+        "dimensions": {
+          "width": 80,
+          "height": 80
+        },
+        "outputPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep130-skia.png",
+        "outputSha256": "fa255283c907d90470211ff22fdfe93bd051e8220f565d9527c70fe39c2d1ac3",
+        "sourceType": "isolated-skia-adjacent-cell-render",
+        "fullGmCrop": false,
+        "selectedCellExtrapolationUsed": false
+      }
+    ],
+    "fullGmCrop": false,
+    "fullGmSubstitutionAccepted": false,
+    "cpuKanvasOutputAcceptedAsSkia": false,
+    "selectedCellExtrapolationUsed": false,
+    "for327SelectedCellReferenceAcceptedAsAdjacent": false,
+    "rejectedSources": {
+      "selectedCellFor327": {
+        "accepted": false
+      },
+      "fullGmPng": {
+        "accepted": false
+      },
+      "fullGmCrop": {
+        "accepted": false
+      },
+      "for339RuntimeExport": {
+        "acceptedAsSkiaReference": false
+      },
+      "cpuKanvasOutput": {
+        "accepted": false
+      }
+    }
+  },
+  "targetCells": [
+    {
+      "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+      "runtimeTraceSource": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-runtime-trace-for339/circular-arcs-stroke-butt-adjacent-f16-runtime-trace-for339.json",
+      "runtimeTraceCaptured": true,
+      "referenceSourceAvailable": true,
+      "dataComparableForPolicyDecision": true,
+      "cell": {
+        "fixtureId": "circular-arcs-stroke-butt-start0-sweep45-usecenter-false-aa-true",
+        "sourceGm": "CircularArcsStrokeButtGM",
+        "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+        "boundedHarnessGm": "circular-arcs-stroke-butt-adjacent-f16-runtime-trace-for339",
+        "rowIndex": 0,
+        "columnIndex": 1,
+        "startDegrees": 0,
+        "sweepDegrees": 45,
+        "complementSweepDegrees": -315,
+        "useCenter": false,
+        "aa": true,
+        "style": "kStroke_Style",
+        "strokeWidth": 15,
+        "strokeCap": "kButt_Cap",
+        "paintAlpha": 100,
+        "isolatedRuntimeCanvasArcRectLTRB": [
+          20,
+          20,
+          60,
+          60
+        ],
+        "localCanvasArcRectLTRB": [
+          20,
+          20,
+          60,
+          60
+        ],
+        "drawArcCalls": [
+          {
+            "paintColor": "red",
+            "startDegrees": 0,
+            "sweepDegrees": 45
+          },
+          {
+            "paintColor": "blue",
+            "startDegrees": 0,
+            "sweepDegrees": -315
+          }
+        ]
+      },
+      "reference": {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep45-skia.png",
+        "provenancePath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/skia-reference-provenance.json",
+        "present": true,
+        "accepted": true,
+        "status": "available-isolated-skia-adjacent-cell-render",
+        "dimensions": {
+          "width": 80,
+          "height": 80
+        },
+        "sha256": "217e3d4661411db1bb940ef2297be497b4254c8501c17204e84a50013c673c0c",
+        "sourceType": "isolated-skia-adjacent-cell-render",
+        "fullGmCrop": false,
+        "selectedCellExtrapolationUsed": false,
+        "for327SelectedCellReferenceAcceptedAsAdjacent": false,
+        "transparentBackground": true
+      },
+      "residualSummary": {
+        "sampleCount": 6,
+        "strokeSampleCount": 5,
+        "rawReferenceSumAbsDelta": 3532,
+        "rawReferenceStrokeSumAbsDelta": 2512,
+        "overWhiteReferenceSumAbsDelta": 187,
+        "overWhiteReferenceStrokeSumAbsDelta": 187,
+        "rawReferenceMaxSampleDelta": 1020,
+        "overWhiteReferenceMaxSampleDelta": 38,
+        "dataComparableForPolicyDecision": true
+      },
+      "samples": [
+        {
+          "name": "sweep45_background_top_left",
+          "zone": "background",
+          "expectedPaintColor": null,
+          "localX": 0,
+          "localY": 0,
+          "for339RootX": 0,
+          "for339RootY": 0,
+          "currentFor339ExportRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rawReferenceSumAbsDelta": 1020,
+          "overWhiteReferenceDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 0,
+          "referenceResidualComputed": true
+        },
+        {
+          "name": "sweep45_blue_top_stroke_center",
+          "zone": "stroke-center",
+          "expectedPaintColor": "blue",
+          "localX": 40,
+          "localY": 20,
+          "for339RootX": 40,
+          "for339RootY": 20,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            180,
+            167,
+            0,
+            155
+          ],
+          "rawReferenceSumAbsDelta": 502,
+          "overWhiteReferenceDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 37,
+          "referenceResidualComputed": true
+        },
+        {
+          "name": "sweep45_blue_left_stroke_center",
+          "zone": "stroke-center",
+          "expectedPaintColor": "blue",
+          "localX": 20,
+          "localY": 40,
+          "for339RootX": 20,
+          "for339RootY": 40,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            180,
+            167,
+            0,
+            155
+          ],
+          "rawReferenceSumAbsDelta": 502,
+          "overWhiteReferenceDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 37,
+          "referenceResidualComputed": true
+        },
+        {
+          "name": "sweep45_red_right_stroke_center",
+          "zone": "stroke-center",
+          "expectedPaintColor": "red",
+          "localX": 60,
+          "localY": 40,
+          "for339RootX": 60,
+          "for339RootY": 40,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            0,
+            179,
+            169,
+            155
+          ],
+          "rawReferenceSumAbsDelta": 503,
+          "overWhiteReferenceDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 38,
+          "referenceResidualComputed": true
+        },
+        {
+          "name": "sweep45_red_inner_sweep_stroke_center",
+          "zone": "stroke-center",
+          "expectedPaintColor": "red",
+          "localX": 59,
+          "localY": 45,
+          "for339RootX": 59,
+          "for339RootY": 45,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            0,
+            179,
+            169,
+            155
+          ],
+          "rawReferenceSumAbsDelta": 503,
+          "overWhiteReferenceDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 38,
+          "referenceResidualComputed": true
+        },
+        {
+          "name": "sweep45_blue_bottom_stroke_center",
+          "zone": "stroke-center",
+          "expectedPaintColor": "blue",
+          "localX": 40,
+          "localY": 60,
+          "for339RootX": 40,
+          "for339RootY": 60,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            180,
+            167,
+            0,
+            155
+          ],
+          "rawReferenceSumAbsDelta": 502,
+          "overWhiteReferenceDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 37,
+          "referenceResidualComputed": true
+        }
+      ]
+    },
+    {
+      "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+      "runtimeTraceSource": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-runtime-trace-for339/circular-arcs-stroke-butt-adjacent-f16-runtime-trace-for339.json",
+      "runtimeTraceCaptured": true,
+      "referenceSourceAvailable": true,
+      "dataComparableForPolicyDecision": true,
+      "cell": {
+        "fixtureId": "circular-arcs-stroke-butt-start0-sweep130-usecenter-false-aa-true",
+        "sourceGm": "CircularArcsStrokeButtGM",
+        "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+        "boundedHarnessGm": "circular-arcs-stroke-butt-adjacent-f16-runtime-trace-for339",
+        "rowIndex": 0,
+        "columnIndex": 3,
+        "startDegrees": 0,
+        "sweepDegrees": 130,
+        "complementSweepDegrees": -230,
+        "useCenter": false,
+        "aa": true,
+        "style": "kStroke_Style",
+        "strokeWidth": 15,
+        "strokeCap": "kButt_Cap",
+        "paintAlpha": 100,
+        "isolatedRuntimeCanvasArcRectLTRB": [
+          100,
+          20,
+          140,
+          60
+        ],
+        "localCanvasArcRectLTRB": [
+          20,
+          20,
+          60,
+          60
+        ],
+        "drawArcCalls": [
+          {
+            "paintColor": "red",
+            "startDegrees": 0,
+            "sweepDegrees": 130
+          },
+          {
+            "paintColor": "blue",
+            "startDegrees": 0,
+            "sweepDegrees": -230
+          }
+        ]
+      },
+      "reference": {
+        "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/sweep130-skia.png",
+        "provenancePath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-reference-for340/skia-reference-provenance.json",
+        "present": true,
+        "accepted": true,
+        "status": "available-isolated-skia-adjacent-cell-render",
+        "dimensions": {
+          "width": 80,
+          "height": 80
+        },
+        "sha256": "fa255283c907d90470211ff22fdfe93bd051e8220f565d9527c70fe39c2d1ac3",
+        "sourceType": "isolated-skia-adjacent-cell-render",
+        "fullGmCrop": false,
+        "selectedCellExtrapolationUsed": false,
+        "for327SelectedCellReferenceAcceptedAsAdjacent": false,
+        "transparentBackground": true
+      },
+      "residualSummary": {
+        "sampleCount": 6,
+        "strokeSampleCount": 5,
+        "rawReferenceSumAbsDelta": 3533,
+        "rawReferenceStrokeSumAbsDelta": 2513,
+        "overWhiteReferenceSumAbsDelta": 188,
+        "overWhiteReferenceStrokeSumAbsDelta": 188,
+        "rawReferenceMaxSampleDelta": 1020,
+        "overWhiteReferenceMaxSampleDelta": 38,
+        "dataComparableForPolicyDecision": true
+      },
+      "samples": [
+        {
+          "name": "sweep130_background_top_left",
+          "zone": "background",
+          "expectedPaintColor": null,
+          "localX": 0,
+          "localY": 0,
+          "for339RootX": 80,
+          "for339RootY": 0,
+          "currentFor339ExportRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rawReferenceSumAbsDelta": 1020,
+          "overWhiteReferenceDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 0,
+          "referenceResidualComputed": true
+        },
+        {
+          "name": "sweep130_blue_top_stroke_center",
+          "zone": "stroke-center",
+          "expectedPaintColor": "blue",
+          "localX": 40,
+          "localY": 20,
+          "for339RootX": 120,
+          "for339RootY": 20,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            180,
+            167,
+            0,
+            155
+          ],
+          "rawReferenceSumAbsDelta": 502,
+          "overWhiteReferenceDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 37,
+          "referenceResidualComputed": true
+        },
+        {
+          "name": "sweep130_red_right_stroke_center",
+          "zone": "stroke-center",
+          "expectedPaintColor": "red",
+          "localX": 60,
+          "localY": 40,
+          "for339RootX": 140,
+          "for339RootY": 40,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            0,
+            179,
+            169,
+            155
+          ],
+          "rawReferenceSumAbsDelta": 503,
+          "overWhiteReferenceDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 38,
+          "referenceResidualComputed": true
+        },
+        {
+          "name": "sweep130_red_bottom_stroke_center",
+          "zone": "stroke-center",
+          "expectedPaintColor": "red",
+          "localX": 40,
+          "localY": 60,
+          "for339RootX": 120,
+          "for339RootY": 60,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            0,
+            179,
+            169,
+            155
+          ],
+          "rawReferenceSumAbsDelta": 503,
+          "overWhiteReferenceDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 38,
+          "referenceResidualComputed": true
+        },
+        {
+          "name": "sweep130_red_inner_sweep_stroke_center",
+          "zone": "stroke-center",
+          "expectedPaintColor": "red",
+          "localX": 33,
+          "localY": 58,
+          "for339RootX": 113,
+          "for339RootY": 58,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            0,
+            179,
+            169,
+            155
+          ],
+          "rawReferenceSumAbsDelta": 503,
+          "overWhiteReferenceDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 38,
+          "referenceResidualComputed": true
+        },
+        {
+          "name": "sweep130_blue_left_stroke_center",
+          "zone": "stroke-center",
+          "expectedPaintColor": "blue",
+          "localX": 20,
+          "localY": 40,
+          "for339RootX": 100,
+          "for339RootY": 40,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaReferenceRawRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawReferenceDeltaAbs": [
+            180,
+            167,
+            0,
+            155
+          ],
+          "rawReferenceSumAbsDelta": 502,
+          "overWhiteReferenceDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "overWhiteReferenceSumAbsDelta": 37,
+          "referenceResidualComputed": true
+        }
+      ]
+    }
+  ],
+  "residualTotals": {
+    "sampleCount": 12,
+    "strokeSampleCount": 10,
+    "rawReferenceSumAbsDelta": 7065,
+    "overWhiteReferenceSumAbsDelta": 375,
+    "residualBasis": [
+      "raw Skia PNG RGBA compared to current FOR-339 getPixelAsSrgb export RGBA",
+      "Skia PNG alpha-composited over white compared to current FOR-339 getPixelAsSrgb export RGBA"
+    ]
+  },
+  "rejectedSources": {
+    "selectedCellFor327": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png",
+      "accepted": false,
+      "reason": "FOR-327 is the selected 90-degree cell, not either adjacent FOR-339 cell"
+    },
+    "fullGmPng": {
+      "accepted": false,
+      "reason": "full-GM PNG is not an isolated adjacent-cell render"
+    },
+    "fullGmCrop": {
+      "accepted": false,
+      "reason": "crop-based adjacent reference is forbidden"
+    },
+    "for339RuntimeExport": {
+      "acceptedAsSkiaReference": false,
+      "reason": "FOR-339 is Kanvas runtime export data, not upstream Skia"
+    }
+  },
+  "implementation": {
+    "rendererBehaviorChanged": false,
+    "evidenceOnly": true,
+    "selectedCellExtrapolationUsed": false
+  },
+  "nonGoalsPreserved": {
+    "colorToF16Premul": true,
+    "blendF16PremulMode": true,
+    "skBitmapGetPixelInternalOracle": true,
+    "skBitmapGetPixelAsSrgbExportBoundary": true,
+    "geometry": true,
+    "coveragePolicy": true,
+    "gpu": true,
+    "wgsl": true,
+    "thresholds": true,
+    "fallbacks": true,
+    "kadre": true,
+    "promotion": true,
+    "score": true,
+    "historicalArtifactsFOR329ToFOR339Rewritten": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for340_circular_arcs_stroke_butt_adjacent_f16_reference.py",
+      "rtk python3 scripts/validate_for339_circular_arcs_stroke_butt_adjacent_f16_runtime_trace.py",
+      "rtk python3 scripts/validate_for338_circular_arcs_stroke_butt_f16_color_policy_comparable_samples.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
