@@ -12,7 +12,8 @@ This slice packages bounded interactive Kadre runtime evidence for the next MEP 
 |---|---:|---|---|
 | demo | yes, opt-in | `rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive` | PM manual window that stays alive until close or configured cap. |
 | benchmark | yes, opt-in | `rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeBenchmark -PkadreMepNextFrames=300 -PkadreMepNextWarmupFrames=120` | Reporting-only native timing sample. |
-| CI evidence | no | `rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive` | Headless JSON/Markdown proof. |
+| checked-in validation | no | `rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive` | Headless validation of checked-in JSON/Markdown proof. |
+| optional direct refresh | no | `rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive` | Optional/provisioned refresh after `external/poc-koreos` or local `org.graphiks.kadre` artifacts are available. |
 
 ## FOR-193 Durable Loop
 
@@ -66,9 +67,20 @@ This slice packages bounded interactive Kadre runtime evidence for the next MEP 
 ## Validation
 
 ```bash
-rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive
+rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive
 python3 -m json.tool reports/wgsl-pipeline/m90-runtime-interactive/evidence.json >/dev/null
 python3 -m json.tool reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json >/dev/null
 python3 -m json.tool reports/wgsl-pipeline/m90-runtime-interactive/scene-switching.json >/dev/null
 rtk git diff --check
 ```
+
+Optional/provisioned evidence refresh:
+
+```bash
+git submodule update --init --recursive external/poc-koreos
+rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive
+```
+
+The direct Kadre refresh may resolve `org.graphiks.kadre:*` and is not a
+required headless validation gate when Kadre source substitution or local
+artifacts are unavailable.
