@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-349",
+  "sceneId": "f16-replacement-candidate-evaluation-for349",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-evaluate-first-replacement-candidate-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-348-f16-new-candidate-search-matrix-ready-finding"
+  ],
+  "inputValidation": {
+    "for348Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-new-candidate-search-matrix-for348/f16-new-candidate-search-matrix-for348.json",
+    "for348Decision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for348RequiredDecision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for347Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-post-retirement-route-decision-for347/f16-post-retirement-route-decision-for347.json",
+    "for347Route": "new-candidate-search",
+    "for347RequiredRoute": "new-candidate-search",
+    "for346Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-global-color-policy-candidate-retired-for346/f16-global-color-policy-candidate-retired-for346.json",
+    "for346Decision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for346RequiredDecision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for345Artifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for345Decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for345RequiredDecision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE"
+  },
+  "decision": "F16_REPLACEMENT_CANDIDATE_EVALUATED_REJECTED",
+  "allowedDecisions": [
+    "F16_REPLACEMENT_CANDIDATE_EVALUATED_REJECTED",
+    "F16_REPLACEMENT_CANDIDATE_EVALUATED_PARTIAL",
+    "F16_REPLACEMENT_CANDIDATE_READY_FOR_POLICY_DECISION",
+    "F16_REPLACEMENT_CANDIDATE_INPUT_INVALID"
+  ],
+  "candidate": {
+    "policyId": "current_color_managed_rec2020_f16_src_over_then_srgb_export_control",
+    "retiredPolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "isRetiredPolicy": false,
+    "formula": "Use the existing color-managed Rec.2020 F16 SrcOver path and export through SkBitmap.getPixelAsSrgb; evaluated as a control baseline, not as an implementation change.",
+    "rendererBehaviorChanged": false,
+    "selectedForImplementation": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "evaluationRows": [
+    {
+      "rowId": "arc-circular-arcs-stroke-butt-adjacent-for341",
+      "family": "arc",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+      "candidatePolicyId": "current_color_managed_rec2020_f16_src_over_then_srgb_export_control",
+      "candidateResidual": 375,
+      "currentResidual": 375,
+      "residualReductionVsCurrent": 0,
+      "worsenedSampleCount": 0,
+      "evaluationStatus": "evaluated-as-current-control-baseline",
+      "notes": [
+        "This control candidate is distinct from the retired straight-sRGB-over-white policy.",
+        "It preserves current behavior by construction and therefore cannot improve the arc residual."
+      ]
+    },
+    {
+      "rowId": "non-arc-rec2020-f16-src-over-rect-for345",
+      "family": "non-arc",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+      "candidatePolicyId": "current_color_managed_rec2020_f16_src_over_then_srgb_export_control",
+      "candidateResidual": 0,
+      "currentResidual": 0,
+      "residualReductionVsCurrent": 0,
+      "worsenedSampleCount": 0,
+      "evaluationStatus": "evaluated-as-current-control-baseline",
+      "notes": [
+        "This control candidate is distinct from the retired straight-sRGB-over-white policy.",
+        "It preserves current behavior by construction and therefore cannot improve the arc residual."
+      ]
+    }
+  ],
+  "criteriaEvaluation": {
+    "for348RejectionCriteria": [
+      {
+        "id": "retired-policy-reuse",
+        "passed": true
+      },
+      {
+        "id": "missing-arc-or-non-arc-row",
+        "passed": true
+      },
+      {
+        "id": "worsens-current-on-any-covered-reference-row",
+        "passed": true
+      },
+      {
+        "id": "scene-shaped-branch",
+        "passed": true
+      },
+      {
+        "id": "score-before-selection",
+        "passed": true
+      }
+    ],
+    "minimumSelectionCriteria": [
+      {
+        "id": "arc-and-non-arc-positive",
+        "passed": false,
+        "reason": "candidate is current-control behavior and produces no residual reduction on either row"
+      },
+      {
+        "id": "no-covered-sample-regression",
+        "passed": true
+      },
+      {
+        "id": "explicit-route-diagnostics",
+        "passed": true
+      },
+      {
+        "id": "no-renderer-change-before-decision",
+        "passed": true
+      }
+    ],
+    "candidateHasAnyPositiveResidualReduction": false,
+    "candidateRejectedReason": "NO_POSITIVE_RESIDUAL_REDUCTION_ON_ARC_AND_NON_ARC_MATRIX"
+  },
+  "decisionReason": "The candidate is distinct from the retired straight-sRGB-over-white policy and does not worsen current, but it is the current-control behavior and provides no positive residual reduction on the arc plus non-arc matrix. It is rejected as a replacement candidate.",
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "retiredPolicyStillForbiddenAsGlobalCandidate": true
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for349_f16_replacement_candidate_evaluation.py",
+      "rtk python3 scripts/validate_for348_f16_new_candidate_search_matrix.py",
+      "rtk python3 scripts/validate_for347_f16_post_retirement_route_decision.py",
+      "rtk python3 scripts/validate_for346_f16_global_color_policy_candidate_retired.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
