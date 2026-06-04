@@ -1,0 +1,1202 @@
+{
+  "linear": "FOR-331",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-circular-arcs-stroke-butt-selected-cell-normalized-stroke-color-cpu-trace-ticket",
+  "sourceFinding": "global/kanvas/findings/for-330-circular-arcs-stroke-butt-selected-cell-white-background-diff-residual-present-finding",
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_NORMALIZED_STROKE_TRACE_COLORSPACE_PREMUL_SUSPECTED",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_NORMALIZED_STROKE_TRACE_COLORSPACE_PREMUL_SUSPECTED",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_NORMALIZED_STROKE_TRACE_COVERAGE_SUSPECTED",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_NORMALIZED_STROKE_TRACE_REQUIRES_INSTRUMENTED_CPU_TRACE",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_NORMALIZED_STROKE_TRACE_INPUT_INVALID"
+  ],
+  "sceneId": "circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-for331",
+  "selectedCell": {
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceFutureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "boundedHarnessGm": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+    "cellCount": 1,
+    "quadrant": "bottom-left",
+    "fullGmCanvasArcRectLTRB": [
+      140,
+      520,
+      180,
+      560
+    ],
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "rowIndex": 0,
+    "columnIndex": 2,
+    "startDegrees": 0,
+    "sweepDegrees": 90,
+    "complementSweepDegrees": -270,
+    "useCenter": false,
+    "aa": true,
+    "style": "kStroke_Style",
+    "strokeWidth": 15,
+    "strokeCap": "kButt_Cap",
+    "includedCaps": [
+      "kButt_Cap"
+    ],
+    "excludedCaps": [
+      "kRound_Cap",
+      "kSquare_Cap"
+    ],
+    "includesHairlineStrokeWidth0": false,
+    "includesFill": false,
+    "includesDash": false,
+    "paintAlpha": 100,
+    "drawArcCalls": [
+      {
+        "paintColor": "red",
+        "startDegrees": 0,
+        "sweepDegrees": 90
+      },
+      {
+        "paintColor": "blue",
+        "startDegrees": 0,
+        "sweepDegrees": -270
+      }
+    ]
+  },
+  "follows": {
+    "for330Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330.json",
+    "for330SkiaOverWhite": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/skia-over-white.png",
+    "for330Diff": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/cpu-vs-skia-over-white-diff.png",
+    "for329Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329.json",
+    "for327Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/circular-arcs-stroke-butt-selected-cell-skia-reference-for327.json",
+    "for327Skia": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png",
+    "for322Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+    "for322Cpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+    "for322Stats": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json",
+    "for322RouteCpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-cpu.json"
+  },
+  "inputs": {
+    "for330Artifact": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330.json",
+      "sourceLinear": "FOR-330",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-white-background-diff-for330",
+      "expectedDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_WHITE_BACKGROUND_DIFF_RESIDUAL_PRESENT",
+      "sha256": "0cc7c1d93225f8d4c2558ca18a8d3709aeb33003f349a6b175459640f4d2570c"
+    },
+    "skia": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png",
+      "sourceLinear": "FOR-327",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-skia-reference-for327",
+      "dimensions": {
+        "width": 80,
+        "height": 80
+      },
+      "sha256": "0b69bc3d36f34f6c2fc0fd8f67d9d120d632cf64264983e52db9f5f7cd679ef0"
+    },
+    "skiaOverWhite": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/skia-over-white.png",
+      "sourceLinear": "FOR-330",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-white-background-diff-for330",
+      "dimensions": {
+        "width": 80,
+        "height": 80
+      },
+      "sha256": "b267d3c48568338fe6b107c4a93f21bae9787ae5dc1fbd7fe39dac0b8fc51368"
+    },
+    "cpu": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+      "sourceLinear": "FOR-322",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+      "dimensions": {
+        "width": 80,
+        "height": 80
+      },
+      "sha256": "8b57311de03c9771cd25327248d0b85afb7283e958dae11b6117790fea3f3b37"
+    },
+    "for330Diff": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/cpu-vs-skia-over-white-diff.png",
+      "sourceLinear": "FOR-330",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-white-background-diff-for330",
+      "dimensions": {
+        "width": 80,
+        "height": 80
+      },
+      "sha256": "833b714cf11d34c6ee8e3163105adfcbef97fb79a431b42c10fe29fdfd733ff8"
+    }
+  },
+  "inputValidation": {
+    "valid": true,
+    "expectedDimensions": {
+      "width": 80,
+      "height": 80
+    },
+    "requiredFor330Decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_WHITE_BACKGROUND_DIFF_RESIDUAL_PRESENT",
+    "expectedFor330NormalizedMetrics": {
+      "totalPixels": 6400,
+      "differentPixels": 2031,
+      "matchingPixels": 4369,
+      "cellSimilarityPercent": 68.265625,
+      "maxDeltaByChannel": {
+        "r": 39,
+        "g": 43,
+        "b": 31,
+        "a": 0
+      },
+      "sumAbsDeltaByChannel": {
+        "r": 33893,
+        "g": 18839,
+        "b": 10795,
+        "a": 0
+      },
+      "sumAbsDeltaTotal": 63527,
+      "differentPixelBoundingBox": {
+        "left": 12,
+        "top": 12,
+        "right": 67,
+        "bottom": 67
+      }
+    },
+    "invalidReasons": []
+  },
+  "trace": {
+    "metrics": {
+      "totalPixels": 6400,
+      "differentPixels": 2031,
+      "matchingPixels": 4369,
+      "cellSimilarityPercent": 68.265625,
+      "maxDeltaByChannel": {
+        "r": 39,
+        "g": 43,
+        "b": 31,
+        "a": 0
+      },
+      "sumAbsDeltaByChannel": {
+        "r": 33893,
+        "g": 18839,
+        "b": 10795,
+        "a": 0
+      },
+      "sumAbsDeltaTotal": 63527,
+      "differentPixelBoundingBox": {
+        "left": 12,
+        "top": 12,
+        "right": 67,
+        "bottom": 67
+      },
+      "differentPixelsOutsideExpectedStrokeBoundingBox": 0
+    },
+    "samples": [
+      {
+        "name": "top_left_background",
+        "zone": "background",
+        "paintColor": null,
+        "x": 0,
+        "y": 0,
+        "withinExpectedStrokeBoundingBox": false,
+        "skiaRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": null,
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": null,
+        "cpuVsNaiveAbsDelta": null
+      },
+      {
+        "name": "top_edge_background",
+        "zone": "background",
+        "paintColor": null,
+        "x": 40,
+        "y": 0,
+        "withinExpectedStrokeBoundingBox": false,
+        "skiaRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": null,
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": null,
+        "cpuVsNaiveAbsDelta": null
+      },
+      {
+        "name": "left_edge_background",
+        "zone": "background",
+        "paintColor": null,
+        "x": 0,
+        "y": 40,
+        "withinExpectedStrokeBoundingBox": false,
+        "skiaRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": null,
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": null,
+        "cpuVsNaiveAbsDelta": null
+      },
+      {
+        "name": "blue_left_aa_edge",
+        "zone": "stroke-aa-edge",
+        "paintColor": "blue",
+        "x": 12,
+        "y": 40,
+        "withinExpectedStrokeBoundingBox": true,
+        "skiaRgba": [
+          0,
+          0,
+          255,
+          45
+        ],
+        "skiaOverWhiteRgba": [
+          210,
+          210,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          214,
+          208,
+          253,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": [
+          210,
+          210,
+          255,
+          255
+        ],
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          4,
+          2,
+          2,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          4,
+          -2,
+          -2,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuVsNaiveAbsDelta": [
+          4,
+          2,
+          2,
+          0
+        ]
+      },
+      {
+        "name": "blue_top_outer_edge",
+        "zone": "stroke-aa-edge",
+        "paintColor": "blue",
+        "x": 40,
+        "y": 12,
+        "withinExpectedStrokeBoundingBox": true,
+        "skiaRgba": [
+          0,
+          0,
+          255,
+          46
+        ],
+        "skiaOverWhiteRgba": [
+          209,
+          209,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          214,
+          208,
+          253,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": [
+          209,
+          209,
+          255,
+          255
+        ],
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          5,
+          1,
+          2,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          5,
+          -1,
+          -2,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuVsNaiveAbsDelta": [
+          5,
+          1,
+          2,
+          0
+        ]
+      },
+      {
+        "name": "arc_rect_top_left",
+        "zone": "stroke-aa-edge",
+        "paintColor": "blue",
+        "x": 20,
+        "y": 20,
+        "withinExpectedStrokeBoundingBox": true,
+        "skiaRgba": [
+          0,
+          0,
+          255,
+          40
+        ],
+        "skiaOverWhiteRgba": [
+          215,
+          215,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          224,
+          220,
+          253,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": [
+          215,
+          215,
+          255,
+          255
+        ],
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          9,
+          5,
+          2,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          9,
+          5,
+          -2,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuVsNaiveAbsDelta": [
+          9,
+          5,
+          2,
+          0
+        ]
+      },
+      {
+        "name": "blue_top_stroke_center",
+        "zone": "stroke-center",
+        "paintColor": "blue",
+        "x": 40,
+        "y": 20,
+        "withinExpectedStrokeBoundingBox": true,
+        "skiaRgba": [
+          0,
+          0,
+          255,
+          100
+        ],
+        "skiaOverWhiteRgba": [
+          155,
+          155,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          172,
+          160,
+          250,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": [
+          155,
+          155,
+          255,
+          255
+        ],
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          17,
+          5,
+          5,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          17,
+          5,
+          -5,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuVsNaiveAbsDelta": [
+          17,
+          5,
+          5,
+          0
+        ]
+      },
+      {
+        "name": "red_right_stroke_center",
+        "zone": "stroke-center",
+        "paintColor": "red",
+        "x": 60,
+        "y": 40,
+        "withinExpectedStrokeBoundingBox": true,
+        "skiaRgba": [
+          255,
+          0,
+          0,
+          100
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          155,
+          155,
+          255
+        ],
+        "cpuRgba": [
+          235,
+          178,
+          162,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": [
+          255,
+          155,
+          155,
+          255
+        ],
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          20,
+          23,
+          7,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          -20,
+          23,
+          7,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuVsNaiveAbsDelta": [
+          20,
+          23,
+          7,
+          0
+        ]
+      },
+      {
+        "name": "red_bottom_stroke_center",
+        "zone": "stroke-center",
+        "paintColor": "red",
+        "x": 40,
+        "y": 60,
+        "withinExpectedStrokeBoundingBox": true,
+        "skiaRgba": [
+          255,
+          0,
+          0,
+          100
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          155,
+          155,
+          255
+        ],
+        "cpuRgba": [
+          235,
+          178,
+          162,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": [
+          255,
+          155,
+          155,
+          255
+        ],
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          20,
+          23,
+          7,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          -20,
+          23,
+          7,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuVsNaiveAbsDelta": [
+          20,
+          23,
+          7,
+          0
+        ]
+      },
+      {
+        "name": "red_outer_edge",
+        "zone": "stroke-aa-edge",
+        "paintColor": "red",
+        "x": 67,
+        "y": 40,
+        "withinExpectedStrokeBoundingBox": true,
+        "skiaRgba": [
+          255,
+          0,
+          0,
+          45
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          210,
+          210,
+          255
+        ],
+        "cpuRgba": [
+          248,
+          227,
+          221,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": [
+          255,
+          210,
+          210,
+          255
+        ],
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          7,
+          17,
+          11,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          -7,
+          17,
+          11,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuVsNaiveAbsDelta": [
+          7,
+          17,
+          11,
+          0
+        ]
+      },
+      {
+        "name": "red_bottom_outer_edge",
+        "zone": "stroke-aa-edge",
+        "paintColor": "red",
+        "x": 40,
+        "y": 67,
+        "withinExpectedStrokeBoundingBox": true,
+        "skiaRgba": [
+          255,
+          0,
+          0,
+          46
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          209,
+          209,
+          255
+        ],
+        "cpuRgba": [
+          248,
+          227,
+          221,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": [
+          255,
+          209,
+          209,
+          255
+        ],
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          7,
+          18,
+          12,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          -7,
+          18,
+          12,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuVsNaiveAbsDelta": [
+          7,
+          18,
+          12,
+          0
+        ]
+      },
+      {
+        "name": "cell_center_hole",
+        "zone": "center-hole",
+        "paintColor": null,
+        "x": 40,
+        "y": 40,
+        "withinExpectedStrokeBoundingBox": true,
+        "skiaRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": null,
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": null,
+        "cpuVsNaiveAbsDelta": null
+      },
+      {
+        "name": "bottom_right_background",
+        "zone": "background",
+        "paintColor": null,
+        "x": 79,
+        "y": 79,
+        "withinExpectedStrokeBoundingBox": false,
+        "skiaRgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "cpuRgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "naiveAlphaOverWhiteRgba": null,
+        "cpuVsSkiaOverWhiteAbsDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "cpuMinusSkiaOverWhiteSignedDelta": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "skiaOverWhiteVsNaiveAbsDelta": null,
+        "cpuVsNaiveAbsDelta": null
+      }
+    ],
+    "sampleValidation": {
+      "valid": true,
+      "zeroDeltaSamples": [
+        "top_left_background",
+        "top_edge_background",
+        "left_edge_background",
+        "cell_center_hole",
+        "bottom_right_background"
+      ],
+      "invalidReasons": []
+    },
+    "naiveAlphaOverWhite": {
+      "method": "round(src_srgb_channel * (alpha / 255) + 255 * (1 - alpha / 255)); output alpha fixed at 255",
+      "paintAlpha": 100,
+      "fullCoverage": {
+        "redOverWhiteRgba": [
+          255,
+          155,
+          155,
+          255
+        ],
+        "blueOverWhiteRgba": [
+          155,
+          155,
+          255,
+          255
+        ]
+      },
+      "sampleSpecific": [
+        {
+          "sample": "blue_left_aa_edge",
+          "paintColor": "blue",
+          "skiaAlphaUsedAsEffectiveAlpha": 45,
+          "naiveAlphaOverWhiteRgba": [
+            210,
+            210,
+            255,
+            255
+          ],
+          "skiaOverWhiteVsNaiveAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cpuVsNaiveAbsDelta": [
+            4,
+            2,
+            2,
+            0
+          ]
+        },
+        {
+          "sample": "blue_top_outer_edge",
+          "paintColor": "blue",
+          "skiaAlphaUsedAsEffectiveAlpha": 46,
+          "naiveAlphaOverWhiteRgba": [
+            209,
+            209,
+            255,
+            255
+          ],
+          "skiaOverWhiteVsNaiveAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cpuVsNaiveAbsDelta": [
+            5,
+            1,
+            2,
+            0
+          ]
+        },
+        {
+          "sample": "arc_rect_top_left",
+          "paintColor": "blue",
+          "skiaAlphaUsedAsEffectiveAlpha": 40,
+          "naiveAlphaOverWhiteRgba": [
+            215,
+            215,
+            255,
+            255
+          ],
+          "skiaOverWhiteVsNaiveAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cpuVsNaiveAbsDelta": [
+            9,
+            5,
+            2,
+            0
+          ]
+        },
+        {
+          "sample": "blue_top_stroke_center",
+          "paintColor": "blue",
+          "skiaAlphaUsedAsEffectiveAlpha": 100,
+          "naiveAlphaOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "skiaOverWhiteVsNaiveAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cpuVsNaiveAbsDelta": [
+            17,
+            5,
+            5,
+            0
+          ]
+        },
+        {
+          "sample": "red_right_stroke_center",
+          "paintColor": "red",
+          "skiaAlphaUsedAsEffectiveAlpha": 100,
+          "naiveAlphaOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "skiaOverWhiteVsNaiveAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cpuVsNaiveAbsDelta": [
+            20,
+            23,
+            7,
+            0
+          ]
+        },
+        {
+          "sample": "red_bottom_stroke_center",
+          "paintColor": "red",
+          "skiaAlphaUsedAsEffectiveAlpha": 100,
+          "naiveAlphaOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "skiaOverWhiteVsNaiveAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cpuVsNaiveAbsDelta": [
+            20,
+            23,
+            7,
+            0
+          ]
+        },
+        {
+          "sample": "red_outer_edge",
+          "paintColor": "red",
+          "skiaAlphaUsedAsEffectiveAlpha": 45,
+          "naiveAlphaOverWhiteRgba": [
+            255,
+            210,
+            210,
+            255
+          ],
+          "skiaOverWhiteVsNaiveAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cpuVsNaiveAbsDelta": [
+            7,
+            17,
+            11,
+            0
+          ]
+        },
+        {
+          "sample": "red_bottom_outer_edge",
+          "paintColor": "red",
+          "skiaAlphaUsedAsEffectiveAlpha": 46,
+          "naiveAlphaOverWhiteRgba": [
+            255,
+            209,
+            209,
+            255
+          ],
+          "skiaOverWhiteVsNaiveAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "cpuVsNaiveAbsDelta": [
+            7,
+            18,
+            12,
+            0
+          ]
+        }
+      ]
+    },
+    "comparisons": {
+      "cpuVsSkiaOverWhite": {
+        "summary": "strict RGBA comparison after FOR-330 white-background normalization",
+        "metrics": {
+          "totalPixels": 6400,
+          "differentPixels": 2031,
+          "matchingPixels": 4369,
+          "cellSimilarityPercent": 68.265625,
+          "maxDeltaByChannel": {
+            "r": 39,
+            "g": 43,
+            "b": 31,
+            "a": 0
+          },
+          "sumAbsDeltaByChannel": {
+            "r": 33893,
+            "g": 18839,
+            "b": 10795,
+            "a": 0
+          },
+          "sumAbsDeltaTotal": 63527,
+          "differentPixelBoundingBox": {
+            "left": 12,
+            "top": 12,
+            "right": 67,
+            "bottom": 67
+          },
+          "differentPixelsOutsideExpectedStrokeBoundingBox": 0
+        }
+      },
+      "skiaVsNaiveAlphaOverWhite": {
+        "summary": "sample-level check that Skia-over-white matches naive alpha-over-white for sampled stroke pixels",
+        "mismatchingSampleNames": []
+      },
+      "cpuVsNaiveAlphaOverWhite": {
+        "summary": "CPU remains offset from the same naive model at stroke-center and AA-edge samples",
+        "strokeCenterRgbDeltaTotal": 127,
+        "aaEdgeRgbDeltaTotal": 104
+      }
+    },
+    "strokeResidualLocalization": {
+      "expectedStrokeBoundingBox": {
+        "left": 12,
+        "top": 12,
+        "right": 67,
+        "bottom": 67
+      },
+      "actualDifferentPixelBoundingBox": {
+        "left": 12,
+        "top": 12,
+        "right": 67,
+        "bottom": 67
+      },
+      "differentPixelsOutsideExpectedStrokeBoundingBox": 0,
+      "backgroundAndCenterHoleMatch": true
+    }
+  },
+  "assessment": {
+    "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_NORMALIZED_STROKE_TRACE_COLORSPACE_PREMUL_SUSPECTED",
+    "classification": "colorspace/premul suspected",
+    "primaryHypothesis": "colorspace/premul suspected",
+    "confidence": "medium",
+    "rationale": "Background and center-hole samples are exact after white normalization, and Skia-over-white matches the naive alpha-over-white model at sampled stroke pixels. The CPU still differs at full paint-alpha stroke centers, so the residual is not explained by background normalization or by edge coverage alone.",
+    "recommendedNextAction": "Add an instrumented CPU trace at paint color conversion, premul/unpremul, F16/Rec.2020 to PNG encode, coverage, and SrcOver store boundaries before changing the CPU renderer.",
+    "hypotheses": [
+      {
+        "id": "colorspace-premul-or-png-encode",
+        "weight": 0.62,
+        "status": "most-likely",
+        "evidence": [
+          "stroke-center samples differ after background normalization",
+          "Skia-over-white equals the naive alpha-over-white sample model",
+          "FOR-329 source audit found CPU uses F16/Rec.2020 output before PNG encoding while Skia reference is N32 premul sRGB"
+        ]
+      },
+      {
+        "id": "stroke-coverage-aa",
+        "weight": 0.24,
+        "status": "secondary",
+        "evidence": [
+          "residual bbox is exactly [12,12]-[67,67]",
+          "AA-edge samples also differ",
+          "coverage cannot explain the stroke-center color offsets by itself from the current samples"
+        ]
+      },
+      {
+        "id": "paint-alpha-or-src-over-formula",
+        "weight": 0.09,
+        "status": "less-likely-from-samples",
+        "evidence": [
+          "naive 100/255 alpha-over-white produces Skia center values [255,155,155,255] and [155,155,255,255]",
+          "CPU remains offset from those values"
+        ]
+      },
+      {
+        "id": "requires-instrumented-cpu-trace-before-fix",
+        "weight": 0.05,
+        "status": "required-next-evidence",
+        "evidence": [
+          "artifact-level PNG samples cannot separate color-space conversion, premul/unpremul, coverage, and store boundaries",
+          "no renderer correction is made by this ticket"
+        ]
+      }
+    ]
+  },
+  "nonGoals": {
+    "cpuRendererFix": false,
+    "gpuOrWgslWork": false,
+    "thresholdChange": false,
+    "fallbackPolicyChange": false,
+    "kadreNativeDependency": false,
+    "scenePromotion": false,
+    "fidelityScore": false,
+    "fullGmCropAccepted": false,
+    "fullGmSubstitutionAccepted": false
+  },
+  "preservedContracts": {
+    "auditScope": "selected-cell-only",
+    "diagnosticOnly": true,
+    "productionRendererChanged": false,
+    "cpuRendererFixed": false,
+    "gpuRendered": false,
+    "wgslChanged": false,
+    "thresholdChanged": false,
+    "fallbackPolicyChanged": false,
+    "kadreNativeDependencyAdded": false,
+    "scenePromotionChanged": false,
+    "fidelityScoreCounted": false,
+    "fullGmScoreAccepted": false,
+    "fullGmCropAccepted": false,
+    "fullGmSubstitutionAccepted": false
+  },
+  "validation": [
+    "rtk python3 scripts/validate_for331_circular_arcs_stroke_butt_selected_cell_normalized_stroke_trace.py",
+    "rtk python3 scripts/validate_for330_circular_arcs_stroke_butt_selected_cell_white_background_diff.py",
+    "rtk python3 scripts/validate_for329_circular_arcs_stroke_butt_selected_cell_cpu_raster_audit.py",
+    "rtk python3 scripts/validate_for328_circular_arcs_stroke_butt_selected_cell_skia_cpu_diff.py",
+    "rtk python3 scripts/validate_for327_circular_arcs_stroke_butt_selected_cell_skia_reference.py",
+    "rtk python3 scripts/validate_for322_circular_arcs_stroke_butt_selected_cell_harness.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-for331/circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-for331.json >/dev/null",
+    "rtk ./gradlew pipelineSceneDashboardGate",
+    "rtk git diff --check origin/master...HEAD"
+  ]
+}
