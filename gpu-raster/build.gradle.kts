@@ -172,6 +172,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.for333.runtimeTrace.write")?.let {
         systemProperty("kanvas.for333.runtimeTrace.write", it)
     }
+    System.getProperty("kanvas.for339.runtimeTrace.write")?.let {
+        systemProperty("kanvas.for339.runtimeTrace.write", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
