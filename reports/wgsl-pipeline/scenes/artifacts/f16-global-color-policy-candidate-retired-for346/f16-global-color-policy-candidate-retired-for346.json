@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-346",
+  "sceneId": "f16-global-color-policy-candidate-retired-for346",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-retire-straight-srgb-quantized-alpha-src-over-white-global-candidate-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-345-non-arc-rec2020-f16-reference-row-rejects-candidate-finding"
+  ],
+  "inputValidation": {
+    "for343Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-color-policy-boundary-for343/f16-color-policy-boundary-for343.json",
+    "for343Decision": "F16_COLOR_POLICY_BOUNDARY_READY_FOR_BROADER_EVIDENCE",
+    "for343RequiredDecision": "F16_COLOR_POLICY_BOUNDARY_READY_FOR_BROADER_EVIDENCE",
+    "for344Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-broader-non-arc-color-policy-for344/f16-broader-non-arc-color-policy-for344.json",
+    "for344Decision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "for344RequiredDecision": "F16_BROADER_NON_ARC_EVIDENCE_PARTIAL_REQUIRES_MORE_REFERENCE_ROWS",
+    "for345Artifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for345Decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for345RequiredDecision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE"
+  },
+  "decision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+  "allowedDecisions": [
+    "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIREMENT_INPUT_INVALID"
+  ],
+  "candidatePolicy": {
+    "policyId": "straight_srgb_quantized_alpha_src_over_white",
+    "globalStatus": "retired",
+    "globalCandidateOpen": false,
+    "mayRaiseGlobalF16Score": false,
+    "mayAuthorizeGlobalF16Migration": false,
+    "retirementReasonCode": "NON_ARC_REC2020_F16_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "retirementBasis": [
+      "FOR-343 keeps global F16 renderer migration behind an explicit color-policy boundary.",
+      "FOR-344 records that non-arc evidence was required before broader policy use.",
+      "FOR-345 supplies the comparable non-arc row and the candidate worsens covered samples."
+    ]
+  },
+  "evidence": {
+    "for345RowId": "non-arc-rec2020-f16-src-over-rect",
+    "nonArc": true,
+    "excludedScene": "circular_arcs_stroke_butt",
+    "colorSpace": "Rec.2020",
+    "colorType": "kRGBA_F16Norm",
+    "blendMode": "kSrcOver",
+    "sampleCount": 4,
+    "coveredSampleCount": 3,
+    "currentResidual": 0,
+    "candidateResidual": 111,
+    "candidateMinusCurrentResidual": 111,
+    "worsenedSampleCount": 3
+  },
+  "remainingOptions": [
+    {
+      "id": "localized-policy",
+      "status": "open",
+      "description": "A narrower policy may still be explored only with explicit scope, route diagnostics, and positive reference/current/candidate evidence."
+    },
+    {
+      "id": "stable-fallback",
+      "status": "open",
+      "description": "Keep the current behavior and document unsupported broader F16 migration routes."
+    },
+    {
+      "id": "new-candidate-search",
+      "status": "open",
+      "description": "Search for a different candidate using non-arc and arc evidence from the start."
+    }
+  ],
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "candidateRetiredAsGlobalPolicy": true
+  },
+  "implementation": {
+    "decisionOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false
+  },
+  "nonGoalsPreserved": {
+    "globalF16PolicyChange": true,
+    "newColorPolicy": true,
+    "scoreIncrease": true,
+    "rendererBehaviorChange": true,
+    "selectedCellSubstitutionRefused": true,
+    "fixtureBranchRefused": true,
+    "coordinateBranchRefused": true,
+    "fullGmCropRefused": true,
+    "thresholdRelaxationRefused": true,
+    "ganeshGraphitePortNotAdded": true,
+    "skslCompilerVmWorkNotAdded": true
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for346_f16_global_color_policy_candidate_retired.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk python3 scripts/validate_for344_f16_broader_non_arc_color_policy_evidence.py",
+      "rtk python3 scripts/validate_for343_f16_color_policy_boundary.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
