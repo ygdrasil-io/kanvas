@@ -1,0 +1,6799 @@
+{
+  "linear": "FOR-300",
+  "parent": "FOR-241",
+  "probe": "m60-active-aa-clip-coverage",
+  "sceneId": "m60-bounded-nested-rrect-clip",
+  "backend": "CPU/RGBA_8888/for299-derived-active-aa-clip-audit",
+  "sourceAudits": {
+    "for288": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-store-order-audit-for288.json",
+    "for289": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-outer-boundary-runtime-write-chronology-for289.json",
+    "for290": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-expanded-runtime-write-trace-for290.json",
+    "for291": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-reconstructed-store-model-audit-for291.json",
+    "for292": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-source-payload-derivation-audit-for292.json",
+    "for293": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-drawrrect-runtime-visibility-audit-for293.json",
+    "for294": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-expanded-red-drawrrect-runtime-trace-for294.json",
+    "for295": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-domain-vs-white-targets-for295.json",
+    "for296": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-red-runtime-spatial-separation-for296.json",
+    "for297": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-candidate-hole-overbreadth-for297.json",
+    "for298": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-a8-srcinpayload-runtime-filter-for298.json",
+    "for299": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-a8-predispatch-filter-trace-for299.json",
+    "for294Raw": "build/reports/for294/m60-expanded-red-drawrrect-runtime-trace-for294.raw.json"
+  },
+  "supportThreshold": 99.95,
+  "supportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+  "decision": "A8_ACTIVE_CLIP_CAUSE_BOUNDED_NO_SAFE_FIX",
+  "exactGap": "The 59 original pixels are inside the A8 source/mask/composite/layer spans and map to mask coordinates by the observed mask origin, but every runtime outcome has activeAaClip coverage 0 while the FOR-293 analytic difference-clip model predicts nonzero coverage. The immediate cause is therefore runtime SkAAClip coverage, not A8 iteration, mask bounds, layer scope, or coordinate offset. The exact SkAAClip band/raster difference cause is bounded but not proved enough for a safe local fix.",
+  "decisionDetails": {
+    "layerScopeRuledOut": true,
+    "coordinateOffsetRuledOut": true,
+    "sourceMaskBoundsRuledOut": true,
+    "runtimeSkAAClipCoverageContradictsFor293AnalyticModel": true,
+    "safeLocalFixApplied": false,
+    "nextRecommendedTicket": "Instrument true SkAAClip getBounds/bands and coverage probes during the M60 clipRRect(kDifference) stack, then compare transformed vs untransformed oval coverage before changing SkAAClip.op or clip CTM handling."
+  },
+  "route": {
+    "gpuStatus": "expected-unsupported",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "cropFallbackPreserved": "image-filter.crop-input-nonnull-prepass-required",
+    "visualParityFallbackPreserved": "coverage.nested-clip-visual-parity-below-threshold",
+    "for288PrimaryClassification": "OTHER_LATER_WRITE_AFTER_RECONSTRUCTED_RED_STORE",
+    "for289Decision": "PROOF_INSUFFICIENT_RUNTIME_WRITE_CHRONOLOGY_GAP",
+    "for290Decision": "NO_RUNTIME_RED_ROOT_STORE_FOUND",
+    "for291Decision": "RECONSTRUCTION_SOURCE_PAYLOAD_MISMATCH",
+    "for292Decision": "RECONSTRUCTED_PAYLOAD_DRAW_MAPPING_MISMATCH",
+    "for293Decision": "RED_DRAWRRECT_RUNTIME_VISIBILITY_STILL_AMBIGUOUS",
+    "for294Decision": "RED_DRAWRRECT_RUNTIME_ROOT_DISPATCH_FOUND_OUTSIDE_TARGETS",
+    "for295Decision": "ORIGINAL_TARGETS_OUTSIDE_RED_RUNTIME_DISPATCH_DOMAIN",
+    "for296Decision": "RED_RUNTIME_DISPATCH_DOMAIN_SPATIALLY_SEPARATE_FROM_ORIGINAL_TARGET_CLUSTER",
+    "for297Decision": "RUNTIME_RED_DISPATCH_REQUIRES_ADDITIONAL_UNMODELED_FILTER",
+    "for298Decision": "A8_SRCINPAYLOAD_FILTER_STILL_UNEXPOSED",
+    "for299Decision": "A8_SRCINPAYLOAD_LAYER_CLIP_INTERSECTION_EXPLAINS_HOLE"
+  },
+  "coverageMetric": {
+    "redCandidatePixels": 22424,
+    "candidateMinusRuntime002Pixels": 3293,
+    "originalTargetPixels": 59,
+    "redRuntimeDispatchPixels": 9088,
+    "rawPredispatchPixels": 22424,
+    "rawOutcomePixels": 22316,
+    "rawDispatchPixels": 9088,
+    "runtimeActiveCoverageZeroPixels": 13192,
+    "runtimeActiveCoverageNonZeroPixels": 9124,
+    "observedNonZeroActiveCoverageBoundsWithinA8Candidate": {
+      "left": 4,
+      "top": 4,
+      "right": 588,
+      "bottom": 588,
+      "rightInclusive": 587,
+      "bottomInclusive": 587
+    },
+    "observedZeroActiveCoverageBoundsWithinA8Candidate": {
+      "left": 16,
+      "top": 16,
+      "right": 576,
+      "bottom": 576,
+      "rightInclusive": 575,
+      "bottomInclusive": 575
+    },
+    "for293MaskFilterBounds": {
+      "left": 2,
+      "top": 2,
+      "right": 590,
+      "bottom": 590,
+      "margin": 5
+    },
+    "for293DifferenceOvalDeviceBounds": [
+      16,
+      16,
+      576,
+      576
+    ],
+    "for293DrawOvalDeviceBounds": [
+      8,
+      8,
+      584,
+      584
+    ],
+    "candidateMinusRuntime002": {
+      "id": "candidate-minus-runtime-002",
+      "pixels": 3293,
+      "bounds": {
+        "left": 18,
+        "top": 18,
+        "right": 262,
+        "bottom": 262,
+        "rightInclusive": 261,
+        "bottomInclusive": 261
+      },
+      "originalTargetPixels": 59,
+      "predispatchPixelCount": 3293,
+      "outcomePixelCount": 3282,
+      "dispatchPixelCount": 0,
+      "blendSkipPixelCount": 3282,
+      "missingPredispatchPixels": 0,
+      "missingOutcomePixels": 11,
+      "activeAaClipCoverage": {
+        "pixels": 3282,
+        "min": 0,
+        "max": 112,
+        "average": 0.146252,
+        "zeroPixels": 3272,
+        "nonZeroPixels": 10,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 0,
+            "pixels": 3272
+          },
+          {
+            "value": 16,
+            "pixels": 4
+          },
+          {
+            "value": 112,
+            "pixels": 2
+          },
+          {
+            "value": 64,
+            "pixels": 2
+          },
+          {
+            "value": 32,
+            "pixels": 2
+          }
+        ]
+      },
+      "skipReasonCounts": {
+        "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO": 3272,
+        "A8_SRCINPAYLOAD_SRC_ALPHA_ZERO_AFTER_COVERAGE": 10
+      },
+      "blurredMaskAlpha": {
+        "pixels": 3293,
+        "min": 0,
+        "max": 255,
+        "average": 193.964166,
+        "zeroPixels": 11,
+        "nonZeroPixels": 3282,
+        "fullPixels": 1501,
+        "topValues": [
+          {
+            "value": 255,
+            "pixels": 1501
+          },
+          {
+            "value": 254,
+            "pixels": 140
+          },
+          {
+            "value": 1,
+            "pixels": 83
+          },
+          {
+            "value": 253,
+            "pixels": 67
+          },
+          {
+            "value": 252,
+            "pixels": 49
+          },
+          {
+            "value": 2,
+            "pixels": 42
+          },
+          {
+            "value": 251,
+            "pixels": 37
+          },
+          {
+            "value": 250,
+            "pixels": 33
+          }
+        ]
+      },
+      "maskedAlphaBeforeBlend": {
+        "pixels": 3293,
+        "min": 0,
+        "max": 255,
+        "average": 193.964166,
+        "zeroPixels": 11,
+        "nonZeroPixels": 3282,
+        "fullPixels": 1501,
+        "topValues": [
+          {
+            "value": 255,
+            "pixels": 1501
+          },
+          {
+            "value": 254,
+            "pixels": 140
+          },
+          {
+            "value": 1,
+            "pixels": 83
+          },
+          {
+            "value": 253,
+            "pixels": 67
+          },
+          {
+            "value": 252,
+            "pixels": 49
+          },
+          {
+            "value": 2,
+            "pixels": 42
+          },
+          {
+            "value": 251,
+            "pixels": 37
+          },
+          {
+            "value": 250,
+            "pixels": 33
+          }
+        ]
+      },
+      "traceBounds": {
+        "activeClipTraceBounds": [
+          {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          }
+        ],
+        "layerBounds": [
+          {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          }
+        ],
+        "sourceLayerBounds": [
+          {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          }
+        ],
+        "compositeBounds": [
+          {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          }
+        ],
+        "a8SpanLeftValues": [
+          2
+        ],
+        "a8SpanRightValues": [
+          590
+        ],
+        "sourceLayerContainsPixels": 3293,
+        "layerContainsPixels": 3293,
+        "compositeContainsPixels": 3293
+      },
+      "maskCoordinateMapping": {
+        "checkedPixels": 3293,
+        "deviceMinusMaskLocalX": {
+          "pixels": 3293,
+          "min": 2,
+          "max": 2,
+          "average": 2.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 3293,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 2,
+              "pixels": 3293
+            }
+          ]
+        },
+        "deviceMinusMaskLocalY": {
+          "pixels": 3293,
+          "min": 2,
+          "max": 2,
+          "average": 2.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 3293,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 2,
+              "pixels": 3293
+            }
+          ]
+        },
+        "matchesMaskOriginPixels": 3293,
+        "allOffsetsMatchMaskOrigin": true
+      },
+      "reconstructedFor293Model": {
+        "maskAlpha": {
+          "pixels": 3293,
+          "min": 1,
+          "max": 255,
+          "average": 195.074097,
+          "zeroPixels": 0,
+          "nonZeroPixels": 3293,
+          "fullPixels": 1517,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 1517
+            },
+            {
+              "value": 254,
+              "pixels": 145
+            },
+            {
+              "value": 1,
+              "pixels": 82
+            },
+            {
+              "value": 253,
+              "pixels": 68
+            },
+            {
+              "value": 2,
+              "pixels": 46
+            },
+            {
+              "value": 252,
+              "pixels": 40
+            },
+            {
+              "value": 251,
+              "pixels": 40
+            },
+            {
+              "value": 250,
+              "pixels": 38
+            }
+          ]
+        },
+        "for293AnalyticClipCoverage": {
+          "pixels": 3293,
+          "min": 16,
+          "max": 255,
+          "average": 240.901002,
+          "zeroPixels": 0,
+          "nonZeroPixels": 3293,
+          "fullPixels": 2937,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2937
+            },
+            {
+              "value": 16,
+              "pixels": 44
+            },
+            {
+              "value": 64,
+              "pixels": 32
+            },
+            {
+              "value": 192,
+              "pixels": 32
+            },
+            {
+              "value": 160,
+              "pixels": 32
+            },
+            {
+              "value": 208,
+              "pixels": 28
+            },
+            {
+              "value": 96,
+              "pixels": 26
+            },
+            {
+              "value": 240,
+              "pixels": 26
+            }
+          ]
+        },
+        "alphaAfterAnalyticClip": {
+          "pixels": 3293,
+          "min": 1,
+          "max": 255,
+          "average": 180.975099,
+          "zeroPixels": 0,
+          "nonZeroPixels": 3293,
+          "fullPixels": 1161,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 1161
+            },
+            {
+              "value": 254,
+              "pixels": 145
+            },
+            {
+              "value": 1,
+              "pixels": 82
+            },
+            {
+              "value": 253,
+              "pixels": 68
+            },
+            {
+              "value": 16,
+              "pixels": 47
+            },
+            {
+              "value": 2,
+              "pixels": 46
+            },
+            {
+              "value": 252,
+              "pixels": 40
+            },
+            {
+              "value": 251,
+              "pixels": 40
+            }
+          ]
+        },
+        "allPixelsPassFor293CandidatePredicate": true
+      },
+      "finalReadback": {
+        "pixels": 3293,
+        "availablePixels": 3293,
+        "counts": {
+          "finalWhiteLayer": 3293
+        },
+        "sample": [
+          {
+            "x": 250,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 251,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 252,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 253,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 254,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 255,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 256,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 257,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 258,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 259,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 260,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 261,
+            "y": 18,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          }
+        ]
+      },
+      "firstPredispatch": {
+        "index": 48170,
+        "x": 250,
+        "y": 18,
+        "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.preDispatch",
+        "coverage": 255,
+        "a8SkipReason": null,
+        "maskLocalX": 248,
+        "maskLocalY": 16,
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "activeClipBounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1164,
+          "bottom": 802
+        },
+        "layerBounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1164,
+          "bottom": 802
+        },
+        "sourceLayerBounds": {
+          "left": 2,
+          "top": 2,
+          "right": 590,
+          "bottom": 590
+        },
+        "compositeBounds": {
+          "left": 2,
+          "top": 2,
+          "right": 590,
+          "bottom": 590
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      "firstOutcome": {
+        "index": 48171,
+        "x": 250,
+        "y": 18,
+        "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.blendSkip",
+        "coverage": 0,
+        "a8SkipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "maskLocalX": 248,
+        "maskLocalY": 16,
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "activeClipBounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1164,
+          "bottom": 802
+        },
+        "layerBounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1164,
+          "bottom": 802
+        },
+        "sourceLayerBounds": {
+          "left": 2,
+          "top": 2,
+          "right": 590,
+          "bottom": 590
+        },
+        "compositeBounds": {
+          "left": 2,
+          "top": 2,
+          "right": 590,
+          "bottom": 590
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      }
+    },
+    "originalTargets": {
+      "id": "original-59-targets",
+      "pixels": 59,
+      "bounds": {
+        "left": 94,
+        "top": 84,
+        "right": 105,
+        "bottom": 94,
+        "rightInclusive": 104,
+        "bottomInclusive": 93
+      },
+      "originalTargetPixels": 59,
+      "predispatchPixelCount": 59,
+      "outcomePixelCount": 59,
+      "dispatchPixelCount": 0,
+      "blendSkipPixelCount": 59,
+      "missingPredispatchPixels": 0,
+      "missingOutcomePixels": 0,
+      "activeAaClipCoverage": {
+        "pixels": 59,
+        "min": 0,
+        "max": 0,
+        "average": 0.0,
+        "zeroPixels": 59,
+        "nonZeroPixels": 0,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 0,
+            "pixels": 59
+          }
+        ]
+      },
+      "skipReasonCounts": {
+        "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO": 59
+      },
+      "blurredMaskAlpha": {
+        "pixels": 59,
+        "min": 5,
+        "max": 250,
+        "average": 155.644068,
+        "zeroPixels": 0,
+        "nonZeroPixels": 59,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 249,
+            "pixels": 4
+          },
+          {
+            "value": 211,
+            "pixels": 2
+          },
+          {
+            "value": 236,
+            "pixels": 2
+          },
+          {
+            "value": 6,
+            "pixels": 2
+          },
+          {
+            "value": 18,
+            "pixels": 2
+          },
+          {
+            "value": 134,
+            "pixels": 2
+          },
+          {
+            "value": 183,
+            "pixels": 2
+          },
+          {
+            "value": 219,
+            "pixels": 2
+          }
+        ]
+      },
+      "maskedAlphaBeforeBlend": {
+        "pixels": 59,
+        "min": 5,
+        "max": 250,
+        "average": 155.644068,
+        "zeroPixels": 0,
+        "nonZeroPixels": 59,
+        "fullPixels": 0,
+        "topValues": [
+          {
+            "value": 249,
+            "pixels": 4
+          },
+          {
+            "value": 211,
+            "pixels": 2
+          },
+          {
+            "value": 236,
+            "pixels": 2
+          },
+          {
+            "value": 6,
+            "pixels": 2
+          },
+          {
+            "value": 18,
+            "pixels": 2
+          },
+          {
+            "value": 134,
+            "pixels": 2
+          },
+          {
+            "value": 183,
+            "pixels": 2
+          },
+          {
+            "value": 219,
+            "pixels": 2
+          }
+        ]
+      },
+      "traceBounds": {
+        "activeClipTraceBounds": [
+          {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          }
+        ],
+        "layerBounds": [
+          {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          }
+        ],
+        "sourceLayerBounds": [
+          {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          }
+        ],
+        "compositeBounds": [
+          {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          }
+        ],
+        "a8SpanLeftValues": [
+          2
+        ],
+        "a8SpanRightValues": [
+          590
+        ],
+        "sourceLayerContainsPixels": 59,
+        "layerContainsPixels": 59,
+        "compositeContainsPixels": 59
+      },
+      "maskCoordinateMapping": {
+        "checkedPixels": 59,
+        "deviceMinusMaskLocalX": {
+          "pixels": 59,
+          "min": 2,
+          "max": 2,
+          "average": 2.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 59,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 2,
+              "pixels": 59
+            }
+          ]
+        },
+        "deviceMinusMaskLocalY": {
+          "pixels": 59,
+          "min": 2,
+          "max": 2,
+          "average": 2.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 59,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 2,
+              "pixels": 59
+            }
+          ]
+        },
+        "matchesMaskOriginPixels": 59,
+        "allOffsetsMatchMaskOrigin": true
+      },
+      "reconstructedFor293Model": {
+        "maskAlpha": {
+          "pixels": 59,
+          "min": 6,
+          "max": 251,
+          "average": 158.694915,
+          "zeroPixels": 0,
+          "nonZeroPixels": 59,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 250,
+              "pixels": 3
+            },
+            {
+              "value": 249,
+              "pixels": 2
+            },
+            {
+              "value": 18,
+              "pixels": 2
+            },
+            {
+              "value": 134,
+              "pixels": 2
+            },
+            {
+              "value": 219,
+              "pixels": 2
+            },
+            {
+              "value": 244,
+              "pixels": 2
+            },
+            {
+              "value": 6,
+              "pixels": 2
+            },
+            {
+              "value": 183,
+              "pixels": 2
+            }
+          ]
+        },
+        "for293AnalyticClipCoverage": {
+          "pixels": 59,
+          "min": 255,
+          "max": 255,
+          "average": 255.0,
+          "zeroPixels": 0,
+          "nonZeroPixels": 59,
+          "fullPixels": 59,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 59
+            }
+          ]
+        },
+        "alphaAfterAnalyticClip": {
+          "pixels": 59,
+          "min": 6,
+          "max": 251,
+          "average": 158.694915,
+          "zeroPixels": 0,
+          "nonZeroPixels": 59,
+          "fullPixels": 0,
+          "topValues": [
+            {
+              "value": 250,
+              "pixels": 3
+            },
+            {
+              "value": 249,
+              "pixels": 2
+            },
+            {
+              "value": 18,
+              "pixels": 2
+            },
+            {
+              "value": 134,
+              "pixels": 2
+            },
+            {
+              "value": 219,
+              "pixels": 2
+            },
+            {
+              "value": 244,
+              "pixels": 2
+            },
+            {
+              "value": 6,
+              "pixels": 2
+            },
+            {
+              "value": 183,
+              "pixels": 2
+            }
+          ]
+        },
+        "allPixelsPassFor293CandidatePredicate": true
+      },
+      "finalReadback": {
+        "pixels": 59,
+        "availablePixels": 59,
+        "counts": {
+          "finalWhiteLayer": 59
+        },
+        "sample": [
+          {
+            "x": 96,
+            "y": 84,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 97,
+            "y": 84,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 98,
+            "y": 84,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 99,
+            "y": 84,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 100,
+            "y": 84,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 101,
+            "y": 84,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 102,
+            "y": 84,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 103,
+            "y": 84,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 104,
+            "y": 84,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 95,
+            "y": 85,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 96,
+            "y": 85,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          },
+          {
+            "x": 97,
+            "y": 85,
+            "rgba": [
+              255,
+              255,
+              255,
+              255
+            ],
+            "class": "finalWhiteLayer"
+          }
+        ]
+      },
+      "firstPredispatch": {
+        "index": 55340,
+        "x": 96,
+        "y": 84,
+        "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.preDispatch",
+        "coverage": 255,
+        "a8SkipReason": null,
+        "maskLocalX": 94,
+        "maskLocalY": 82,
+        "blurredMaskAlpha": 5,
+        "maskedAlphaBeforeBlend": 5,
+        "activeClipBounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1164,
+          "bottom": 802
+        },
+        "layerBounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1164,
+          "bottom": 802
+        },
+        "sourceLayerBounds": {
+          "left": 2,
+          "top": 2,
+          "right": 590,
+          "bottom": 590
+        },
+        "compositeBounds": {
+          "left": 2,
+          "top": 2,
+          "right": 590,
+          "bottom": 590
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      "firstOutcome": {
+        "index": 55341,
+        "x": 96,
+        "y": 84,
+        "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.blendSkip",
+        "coverage": 0,
+        "a8SkipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "maskLocalX": 94,
+        "maskLocalY": 82,
+        "blurredMaskAlpha": 5,
+        "maskedAlphaBeforeBlend": 5,
+        "activeClipBounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1164,
+          "bottom": 802
+        },
+        "layerBounds": {
+          "left": 0,
+          "top": 0,
+          "right": 1164,
+          "bottom": 802
+        },
+        "sourceLayerBounds": {
+          "left": 2,
+          "top": 2,
+          "right": 590,
+          "bottom": 590
+        },
+        "compositeBounds": {
+          "left": 2,
+          "top": 2,
+          "right": 590,
+          "bottom": 590
+        },
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      }
+    },
+    "redRuntimeComponents": [
+      {
+        "id": "red-runtime-000",
+        "pixels": 2275,
+        "bounds": {
+          "left": 158,
+          "top": 4,
+          "right": 434,
+          "bottom": 39,
+          "rightInclusive": 433,
+          "bottomInclusive": 38
+        },
+        "originalTargetPixels": 0,
+        "predispatchPixelCount": 2275,
+        "outcomePixelCount": 2275,
+        "dispatchPixelCount": 2275,
+        "blendSkipPixelCount": 0,
+        "missingPredispatchPixels": 0,
+        "missingOutcomePixels": 0,
+        "activeAaClipCoverage": {
+          "pixels": 2275,
+          "min": 16,
+          "max": 255,
+          "average": 242.132308,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 2045,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2045
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 144,
+              "pixels": 15
+            },
+            {
+              "value": 240,
+              "pixels": 13
+            },
+            {
+              "value": 208,
+              "pixels": 13
+            }
+          ]
+        },
+        "skipReasonCounts": {},
+        "blurredMaskAlpha": {
+          "pixels": 2275,
+          "min": 1,
+          "max": 255,
+          "average": 136.732308,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 430,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 430
+            },
+            {
+              "value": 1,
+              "pixels": 166
+            },
+            {
+              "value": 254,
+              "pixels": 86
+            },
+            {
+              "value": 2,
+              "pixels": 68
+            },
+            {
+              "value": 4,
+              "pixels": 50
+            },
+            {
+              "value": 6,
+              "pixels": 42
+            },
+            {
+              "value": 3,
+              "pixels": 36
+            },
+            {
+              "value": 252,
+              "pixels": 34
+            }
+          ]
+        },
+        "maskedAlphaBeforeBlend": {
+          "pixels": 2275,
+          "min": 1,
+          "max": 255,
+          "average": 136.732308,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 430,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 430
+            },
+            {
+              "value": 1,
+              "pixels": 166
+            },
+            {
+              "value": 254,
+              "pixels": 86
+            },
+            {
+              "value": 2,
+              "pixels": 68
+            },
+            {
+              "value": 4,
+              "pixels": 50
+            },
+            {
+              "value": 6,
+              "pixels": 42
+            },
+            {
+              "value": 3,
+              "pixels": 36
+            },
+            {
+              "value": 252,
+              "pixels": 34
+            }
+          ]
+        },
+        "traceBounds": {
+          "activeClipTraceBounds": [
+            {
+              "left": 0,
+              "top": 0,
+              "right": 1164,
+              "bottom": 802
+            }
+          ],
+          "layerBounds": [
+            {
+              "left": 0,
+              "top": 0,
+              "right": 1164,
+              "bottom": 802
+            }
+          ],
+          "sourceLayerBounds": [
+            {
+              "left": 2,
+              "top": 2,
+              "right": 590,
+              "bottom": 590
+            }
+          ],
+          "compositeBounds": [
+            {
+              "left": 2,
+              "top": 2,
+              "right": 590,
+              "bottom": 590
+            }
+          ],
+          "a8SpanLeftValues": [
+            2
+          ],
+          "a8SpanRightValues": [
+            590
+          ],
+          "sourceLayerContainsPixels": 2275,
+          "layerContainsPixels": 2275,
+          "compositeContainsPixels": 2275
+        },
+        "maskCoordinateMapping": {
+          "checkedPixels": 2275,
+          "deviceMinusMaskLocalX": {
+            "pixels": 2275,
+            "min": 2,
+            "max": 2,
+            "average": 2.0,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 0,
+            "topValues": [
+              {
+                "value": 2,
+                "pixels": 2275
+              }
+            ]
+          },
+          "deviceMinusMaskLocalY": {
+            "pixels": 2275,
+            "min": 2,
+            "max": 2,
+            "average": 2.0,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 0,
+            "topValues": [
+              {
+                "value": 2,
+                "pixels": 2275
+              }
+            ]
+          },
+          "matchesMaskOriginPixels": 2275,
+          "allOffsetsMatchMaskOrigin": true
+        },
+        "reconstructedFor293Model": {
+          "maskAlpha": {
+            "pixels": 2275,
+            "min": 1,
+            "max": 255,
+            "average": 138.114286,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 432,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 432
+              },
+              {
+                "value": 1,
+                "pixels": 154
+              },
+              {
+                "value": 254,
+                "pixels": 94
+              },
+              {
+                "value": 2,
+                "pixels": 70
+              },
+              {
+                "value": 4,
+                "pixels": 48
+              },
+              {
+                "value": 253,
+                "pixels": 36
+              },
+              {
+                "value": 7,
+                "pixels": 34
+              },
+              {
+                "value": 5,
+                "pixels": 34
+              }
+            ]
+          },
+          "for293AnalyticClipCoverage": {
+            "pixels": 2275,
+            "min": 64,
+            "max": 255,
+            "average": 253.757802,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 2253,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2253
+              },
+              {
+                "value": 192,
+                "pixels": 6
+              },
+              {
+                "value": 128,
+                "pixels": 6
+              },
+              {
+                "value": 64,
+                "pixels": 6
+              },
+              {
+                "value": 144,
+                "pixels": 2
+              },
+              {
+                "value": 96,
+                "pixels": 2
+              }
+            ]
+          },
+          "alphaAfterAnalyticClip": {
+            "pixels": 2275,
+            "min": 1,
+            "max": 255,
+            "average": 136.872088,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 410,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 410
+              },
+              {
+                "value": 1,
+                "pixels": 154
+              },
+              {
+                "value": 254,
+                "pixels": 94
+              },
+              {
+                "value": 2,
+                "pixels": 70
+              },
+              {
+                "value": 4,
+                "pixels": 48
+              },
+              {
+                "value": 253,
+                "pixels": 36
+              },
+              {
+                "value": 7,
+                "pixels": 34
+              },
+              {
+                "value": 5,
+                "pixels": 34
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "finalReadback": {
+          "pixels": 2275,
+          "availablePixels": 2275,
+          "counts": {
+            "finalWhiteLayer": 496,
+            "finalRedTint": 1526,
+            "finalOther": 253
+          },
+          "sample": [
+            {
+              "x": 279,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 280,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 281,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 282,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 283,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 284,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 285,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 286,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 287,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 288,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 289,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 290,
+              "y": 4,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            }
+          ]
+        },
+        "firstPredispatch": {
+          "index": 44850,
+          "x": 279,
+          "y": 4,
+          "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.preDispatch",
+          "coverage": 255,
+          "a8SkipReason": null,
+          "maskLocalX": 277,
+          "maskLocalY": 2,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "activeClipBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "layerBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "sourceLayerBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "compositeBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "finalReadbackRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "firstOutcome": {
+          "index": 44851,
+          "x": 279,
+          "y": 4,
+          "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "coverage": 255,
+          "a8SkipReason": null,
+          "maskLocalX": 277,
+          "maskLocalY": 2,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "activeClipBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "layerBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "sourceLayerBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "compositeBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        }
+      },
+      {
+        "id": "red-runtime-001",
+        "pixels": 2275,
+        "bounds": {
+          "left": 158,
+          "top": 553,
+          "right": 434,
+          "bottom": 588,
+          "rightInclusive": 433,
+          "bottomInclusive": 587
+        },
+        "originalTargetPixels": 0,
+        "predispatchPixelCount": 2275,
+        "outcomePixelCount": 2275,
+        "dispatchPixelCount": 2275,
+        "blendSkipPixelCount": 0,
+        "missingPredispatchPixels": 0,
+        "missingOutcomePixels": 0,
+        "activeAaClipCoverage": {
+          "pixels": 2275,
+          "min": 16,
+          "max": 255,
+          "average": 242.132308,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 2045,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2045
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 144,
+              "pixels": 15
+            },
+            {
+              "value": 240,
+              "pixels": 13
+            },
+            {
+              "value": 160,
+              "pixels": 13
+            }
+          ]
+        },
+        "skipReasonCounts": {},
+        "blurredMaskAlpha": {
+          "pixels": 2275,
+          "min": 1,
+          "max": 255,
+          "average": 136.732308,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 430,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 430
+            },
+            {
+              "value": 1,
+              "pixels": 166
+            },
+            {
+              "value": 254,
+              "pixels": 86
+            },
+            {
+              "value": 2,
+              "pixels": 68
+            },
+            {
+              "value": 4,
+              "pixels": 50
+            },
+            {
+              "value": 6,
+              "pixels": 42
+            },
+            {
+              "value": 3,
+              "pixels": 36
+            },
+            {
+              "value": 252,
+              "pixels": 34
+            }
+          ]
+        },
+        "maskedAlphaBeforeBlend": {
+          "pixels": 2275,
+          "min": 1,
+          "max": 255,
+          "average": 136.732308,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2275,
+          "fullPixels": 430,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 430
+            },
+            {
+              "value": 1,
+              "pixels": 166
+            },
+            {
+              "value": 254,
+              "pixels": 86
+            },
+            {
+              "value": 2,
+              "pixels": 68
+            },
+            {
+              "value": 4,
+              "pixels": 50
+            },
+            {
+              "value": 6,
+              "pixels": 42
+            },
+            {
+              "value": 3,
+              "pixels": 36
+            },
+            {
+              "value": 252,
+              "pixels": 34
+            }
+          ]
+        },
+        "traceBounds": {
+          "activeClipTraceBounds": [
+            {
+              "left": 0,
+              "top": 0,
+              "right": 1164,
+              "bottom": 802
+            }
+          ],
+          "layerBounds": [
+            {
+              "left": 0,
+              "top": 0,
+              "right": 1164,
+              "bottom": 802
+            }
+          ],
+          "sourceLayerBounds": [
+            {
+              "left": 2,
+              "top": 2,
+              "right": 590,
+              "bottom": 590
+            }
+          ],
+          "compositeBounds": [
+            {
+              "left": 2,
+              "top": 2,
+              "right": 590,
+              "bottom": 590
+            }
+          ],
+          "a8SpanLeftValues": [
+            2
+          ],
+          "a8SpanRightValues": [
+            590
+          ],
+          "sourceLayerContainsPixels": 2275,
+          "layerContainsPixels": 2275,
+          "compositeContainsPixels": 2275
+        },
+        "maskCoordinateMapping": {
+          "checkedPixels": 2275,
+          "deviceMinusMaskLocalX": {
+            "pixels": 2275,
+            "min": 2,
+            "max": 2,
+            "average": 2.0,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 0,
+            "topValues": [
+              {
+                "value": 2,
+                "pixels": 2275
+              }
+            ]
+          },
+          "deviceMinusMaskLocalY": {
+            "pixels": 2275,
+            "min": 2,
+            "max": 2,
+            "average": 2.0,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 0,
+            "topValues": [
+              {
+                "value": 2,
+                "pixels": 2275
+              }
+            ]
+          },
+          "matchesMaskOriginPixels": 2275,
+          "allOffsetsMatchMaskOrigin": true
+        },
+        "reconstructedFor293Model": {
+          "maskAlpha": {
+            "pixels": 2275,
+            "min": 1,
+            "max": 255,
+            "average": 138.114286,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 432,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 432
+              },
+              {
+                "value": 1,
+                "pixels": 154
+              },
+              {
+                "value": 254,
+                "pixels": 94
+              },
+              {
+                "value": 2,
+                "pixels": 70
+              },
+              {
+                "value": 4,
+                "pixels": 48
+              },
+              {
+                "value": 253,
+                "pixels": 36
+              },
+              {
+                "value": 5,
+                "pixels": 34
+              },
+              {
+                "value": 7,
+                "pixels": 34
+              }
+            ]
+          },
+          "for293AnalyticClipCoverage": {
+            "pixels": 2275,
+            "min": 64,
+            "max": 255,
+            "average": 253.757802,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 2253,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2253
+              },
+              {
+                "value": 192,
+                "pixels": 6
+              },
+              {
+                "value": 128,
+                "pixels": 6
+              },
+              {
+                "value": 64,
+                "pixels": 6
+              },
+              {
+                "value": 96,
+                "pixels": 2
+              },
+              {
+                "value": 144,
+                "pixels": 2
+              }
+            ]
+          },
+          "alphaAfterAnalyticClip": {
+            "pixels": 2275,
+            "min": 1,
+            "max": 255,
+            "average": 136.872088,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2275,
+            "fullPixels": 410,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 410
+              },
+              {
+                "value": 1,
+                "pixels": 154
+              },
+              {
+                "value": 254,
+                "pixels": 94
+              },
+              {
+                "value": 2,
+                "pixels": 70
+              },
+              {
+                "value": 4,
+                "pixels": 48
+              },
+              {
+                "value": 253,
+                "pixels": 36
+              },
+              {
+                "value": 5,
+                "pixels": 34
+              },
+              {
+                "value": 7,
+                "pixels": 34
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "finalReadback": {
+          "pixels": 2275,
+          "availablePixels": 2275,
+          "counts": {
+            "finalRedTint": 1526,
+            "finalOther": 253,
+            "finalWhiteLayer": 496
+          },
+          "sample": [
+            {
+              "x": 158,
+              "y": 553,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 159,
+              "y": 553,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 160,
+              "y": 553,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 431,
+              "y": 553,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 432,
+              "y": 553,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 433,
+              "y": 553,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 160,
+              "y": 554,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 161,
+              "y": 554,
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 162,
+              "y": 554,
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 163,
+              "y": 554,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 428,
+              "y": 554,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 429,
+              "y": 554,
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            }
+          ]
+        },
+        "firstPredispatch": {
+          "index": 83146,
+          "x": 158,
+          "y": 553,
+          "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.preDispatch",
+          "coverage": 255,
+          "a8SkipReason": null,
+          "maskLocalX": 156,
+          "maskLocalY": 551,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "activeClipBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "layerBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "sourceLayerBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "compositeBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "finalReadbackRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "firstOutcome": {
+          "index": 83147,
+          "x": 158,
+          "y": 553,
+          "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "coverage": 240,
+          "a8SkipReason": null,
+          "maskLocalX": 156,
+          "maskLocalY": 551,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "activeClipBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "layerBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "sourceLayerBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "compositeBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        }
+      },
+      {
+        "id": "red-runtime-002",
+        "pixels": 2270,
+        "bounds": {
+          "left": 4,
+          "top": 158,
+          "right": 39,
+          "bottom": 434,
+          "rightInclusive": 38,
+          "bottomInclusive": 433
+        },
+        "originalTargetPixels": 0,
+        "predispatchPixelCount": 2270,
+        "outcomePixelCount": 2270,
+        "dispatchPixelCount": 2270,
+        "blendSkipPixelCount": 0,
+        "missingPredispatchPixels": 0,
+        "missingOutcomePixels": 0,
+        "activeAaClipCoverage": {
+          "pixels": 2270,
+          "min": 16,
+          "max": 255,
+          "average": 242.047577,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2270,
+          "fullPixels": 2040,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2040
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 144,
+              "pixels": 16
+            },
+            {
+              "value": 224,
+              "pixels": 14
+            },
+            {
+              "value": 240,
+              "pixels": 12
+            }
+          ]
+        },
+        "skipReasonCounts": {},
+        "blurredMaskAlpha": {
+          "pixels": 2270,
+          "min": 1,
+          "max": 255,
+          "average": 137.140088,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2270,
+          "fullPixels": 432,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 432
+            },
+            {
+              "value": 1,
+              "pixels": 162
+            },
+            {
+              "value": 254,
+              "pixels": 82
+            },
+            {
+              "value": 2,
+              "pixels": 58
+            },
+            {
+              "value": 4,
+              "pixels": 52
+            },
+            {
+              "value": 3,
+              "pixels": 48
+            },
+            {
+              "value": 6,
+              "pixels": 44
+            },
+            {
+              "value": 252,
+              "pixels": 38
+            }
+          ]
+        },
+        "maskedAlphaBeforeBlend": {
+          "pixels": 2270,
+          "min": 1,
+          "max": 255,
+          "average": 137.140088,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2270,
+          "fullPixels": 432,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 432
+            },
+            {
+              "value": 1,
+              "pixels": 162
+            },
+            {
+              "value": 254,
+              "pixels": 82
+            },
+            {
+              "value": 2,
+              "pixels": 58
+            },
+            {
+              "value": 4,
+              "pixels": 52
+            },
+            {
+              "value": 3,
+              "pixels": 48
+            },
+            {
+              "value": 6,
+              "pixels": 44
+            },
+            {
+              "value": 252,
+              "pixels": 38
+            }
+          ]
+        },
+        "traceBounds": {
+          "activeClipTraceBounds": [
+            {
+              "left": 0,
+              "top": 0,
+              "right": 1164,
+              "bottom": 802
+            }
+          ],
+          "layerBounds": [
+            {
+              "left": 0,
+              "top": 0,
+              "right": 1164,
+              "bottom": 802
+            }
+          ],
+          "sourceLayerBounds": [
+            {
+              "left": 2,
+              "top": 2,
+              "right": 590,
+              "bottom": 590
+            }
+          ],
+          "compositeBounds": [
+            {
+              "left": 2,
+              "top": 2,
+              "right": 590,
+              "bottom": 590
+            }
+          ],
+          "a8SpanLeftValues": [
+            2
+          ],
+          "a8SpanRightValues": [
+            590
+          ],
+          "sourceLayerContainsPixels": 2270,
+          "layerContainsPixels": 2270,
+          "compositeContainsPixels": 2270
+        },
+        "maskCoordinateMapping": {
+          "checkedPixels": 2270,
+          "deviceMinusMaskLocalX": {
+            "pixels": 2270,
+            "min": 2,
+            "max": 2,
+            "average": 2.0,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2270,
+            "fullPixels": 0,
+            "topValues": [
+              {
+                "value": 2,
+                "pixels": 2270
+              }
+            ]
+          },
+          "deviceMinusMaskLocalY": {
+            "pixels": 2270,
+            "min": 2,
+            "max": 2,
+            "average": 2.0,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2270,
+            "fullPixels": 0,
+            "topValues": [
+              {
+                "value": 2,
+                "pixels": 2270
+              }
+            ]
+          },
+          "matchesMaskOriginPixels": 2270,
+          "allOffsetsMatchMaskOrigin": true
+        },
+        "reconstructedFor293Model": {
+          "maskAlpha": {
+            "pixels": 2270,
+            "min": 1,
+            "max": 255,
+            "average": 138.52511,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2270,
+            "fullPixels": 436,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 436
+              },
+              {
+                "value": 1,
+                "pixels": 142
+              },
+              {
+                "value": 254,
+                "pixels": 88
+              },
+              {
+                "value": 2,
+                "pixels": 60
+              },
+              {
+                "value": 3,
+                "pixels": 48
+              },
+              {
+                "value": 4,
+                "pixels": 42
+              },
+              {
+                "value": 5,
+                "pixels": 38
+              },
+              {
+                "value": 252,
+                "pixels": 38
+              }
+            ]
+          },
+          "for293AnalyticClipCoverage": {
+            "pixels": 2270,
+            "min": 64,
+            "max": 255,
+            "average": 253.755066,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2270,
+            "fullPixels": 2248,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2248
+              },
+              {
+                "value": 192,
+                "pixels": 6
+              },
+              {
+                "value": 64,
+                "pixels": 6
+              },
+              {
+                "value": 128,
+                "pixels": 6
+              },
+              {
+                "value": 144,
+                "pixels": 2
+              },
+              {
+                "value": 96,
+                "pixels": 2
+              }
+            ]
+          },
+          "alphaAfterAnalyticClip": {
+            "pixels": 2270,
+            "min": 1,
+            "max": 255,
+            "average": 137.280176,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2270,
+            "fullPixels": 414,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 414
+              },
+              {
+                "value": 1,
+                "pixels": 142
+              },
+              {
+                "value": 254,
+                "pixels": 88
+              },
+              {
+                "value": 2,
+                "pixels": 60
+              },
+              {
+                "value": 3,
+                "pixels": 48
+              },
+              {
+                "value": 4,
+                "pixels": 42
+              },
+              {
+                "value": 5,
+                "pixels": 38
+              },
+              {
+                "value": 252,
+                "pixels": 38
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "finalReadback": {
+          "pixels": 2270,
+          "availablePixels": 2270,
+          "counts": {
+            "finalRedTint": 1528,
+            "finalWhiteLayer": 488,
+            "finalOther": 254
+          },
+          "sample": [
+            {
+              "x": 38,
+              "y": 158,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 38,
+              "y": 159,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 37,
+              "y": 160,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 38,
+              "y": 160,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 37,
+              "y": 161,
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 36,
+              "y": 162,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 37,
+              "y": 162,
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 36,
+              "y": 163,
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 37,
+              "y": 163,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 35,
+              "y": 164,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 36,
+              "y": 164,
+              "rgba": [
+                254,
+                253,
+                252,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 35,
+              "y": 165,
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            }
+          ]
+        },
+        "firstPredispatch": {
+          "index": 60048,
+          "x": 38,
+          "y": 158,
+          "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.preDispatch",
+          "coverage": 255,
+          "a8SkipReason": null,
+          "maskLocalX": 36,
+          "maskLocalY": 156,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "activeClipBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "layerBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "sourceLayerBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "compositeBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "finalReadbackRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "firstOutcome": {
+          "index": 60049,
+          "x": 38,
+          "y": 158,
+          "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "coverage": 240,
+          "a8SkipReason": null,
+          "maskLocalX": 36,
+          "maskLocalY": 156,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "activeClipBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "layerBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "sourceLayerBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "compositeBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        }
+      },
+      {
+        "id": "red-runtime-003",
+        "pixels": 2268,
+        "bounds": {
+          "left": 553,
+          "top": 158,
+          "right": 588,
+          "bottom": 434,
+          "rightInclusive": 587,
+          "bottomInclusive": 433
+        },
+        "originalTargetPixels": 0,
+        "predispatchPixelCount": 2268,
+        "outcomePixelCount": 2268,
+        "dispatchPixelCount": 2268,
+        "blendSkipPixelCount": 0,
+        "missingPredispatchPixels": 0,
+        "missingOutcomePixels": 0,
+        "activeAaClipCoverage": {
+          "pixels": 2268,
+          "min": 16,
+          "max": 255,
+          "average": 242.14903,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2268,
+          "fullPixels": 2038,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 2038
+            },
+            {
+              "value": 64,
+              "pixels": 38
+            },
+            {
+              "value": 128,
+              "pixels": 30
+            },
+            {
+              "value": 192,
+              "pixels": 22
+            },
+            {
+              "value": 48,
+              "pixels": 20
+            },
+            {
+              "value": 240,
+              "pixels": 14
+            },
+            {
+              "value": 160,
+              "pixels": 14
+            },
+            {
+              "value": 208,
+              "pixels": 14
+            }
+          ]
+        },
+        "skipReasonCounts": {},
+        "blurredMaskAlpha": {
+          "pixels": 2268,
+          "min": 1,
+          "max": 255,
+          "average": 137.045855,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2268,
+          "fullPixels": 432,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 432
+            },
+            {
+              "value": 1,
+              "pixels": 162
+            },
+            {
+              "value": 254,
+              "pixels": 82
+            },
+            {
+              "value": 2,
+              "pixels": 58
+            },
+            {
+              "value": 4,
+              "pixels": 52
+            },
+            {
+              "value": 3,
+              "pixels": 48
+            },
+            {
+              "value": 6,
+              "pixels": 44
+            },
+            {
+              "value": 252,
+              "pixels": 38
+            }
+          ]
+        },
+        "maskedAlphaBeforeBlend": {
+          "pixels": 2268,
+          "min": 1,
+          "max": 255,
+          "average": 137.045855,
+          "zeroPixels": 0,
+          "nonZeroPixels": 2268,
+          "fullPixels": 432,
+          "topValues": [
+            {
+              "value": 255,
+              "pixels": 432
+            },
+            {
+              "value": 1,
+              "pixels": 162
+            },
+            {
+              "value": 254,
+              "pixels": 82
+            },
+            {
+              "value": 2,
+              "pixels": 58
+            },
+            {
+              "value": 4,
+              "pixels": 52
+            },
+            {
+              "value": 3,
+              "pixels": 48
+            },
+            {
+              "value": 6,
+              "pixels": 44
+            },
+            {
+              "value": 252,
+              "pixels": 38
+            }
+          ]
+        },
+        "traceBounds": {
+          "activeClipTraceBounds": [
+            {
+              "left": 0,
+              "top": 0,
+              "right": 1164,
+              "bottom": 802
+            }
+          ],
+          "layerBounds": [
+            {
+              "left": 0,
+              "top": 0,
+              "right": 1164,
+              "bottom": 802
+            }
+          ],
+          "sourceLayerBounds": [
+            {
+              "left": 2,
+              "top": 2,
+              "right": 590,
+              "bottom": 590
+            }
+          ],
+          "compositeBounds": [
+            {
+              "left": 2,
+              "top": 2,
+              "right": 590,
+              "bottom": 590
+            }
+          ],
+          "a8SpanLeftValues": [
+            2
+          ],
+          "a8SpanRightValues": [
+            590
+          ],
+          "sourceLayerContainsPixels": 2268,
+          "layerContainsPixels": 2268,
+          "compositeContainsPixels": 2268
+        },
+        "maskCoordinateMapping": {
+          "checkedPixels": 2268,
+          "deviceMinusMaskLocalX": {
+            "pixels": 2268,
+            "min": 2,
+            "max": 2,
+            "average": 2.0,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2268,
+            "fullPixels": 0,
+            "topValues": [
+              {
+                "value": 2,
+                "pixels": 2268
+              }
+            ]
+          },
+          "deviceMinusMaskLocalY": {
+            "pixels": 2268,
+            "min": 2,
+            "max": 2,
+            "average": 2.0,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2268,
+            "fullPixels": 0,
+            "topValues": [
+              {
+                "value": 2,
+                "pixels": 2268
+              }
+            ]
+          },
+          "matchesMaskOriginPixels": 2268,
+          "allOffsetsMatchMaskOrigin": true
+        },
+        "reconstructedFor293Model": {
+          "maskAlpha": {
+            "pixels": 2268,
+            "min": 1,
+            "max": 255,
+            "average": 138.432099,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2268,
+            "fullPixels": 436,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 436
+              },
+              {
+                "value": 1,
+                "pixels": 142
+              },
+              {
+                "value": 254,
+                "pixels": 88
+              },
+              {
+                "value": 2,
+                "pixels": 60
+              },
+              {
+                "value": 3,
+                "pixels": 48
+              },
+              {
+                "value": 4,
+                "pixels": 42
+              },
+              {
+                "value": 252,
+                "pixels": 38
+              },
+              {
+                "value": 5,
+                "pixels": 38
+              }
+            ]
+          },
+          "for293AnalyticClipCoverage": {
+            "pixels": 2268,
+            "min": 64,
+            "max": 255,
+            "average": 253.753968,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2268,
+            "fullPixels": 2246,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 2246
+              },
+              {
+                "value": 128,
+                "pixels": 6
+              },
+              {
+                "value": 192,
+                "pixels": 6
+              },
+              {
+                "value": 64,
+                "pixels": 6
+              },
+              {
+                "value": 144,
+                "pixels": 2
+              },
+              {
+                "value": 96,
+                "pixels": 2
+              }
+            ]
+          },
+          "alphaAfterAnalyticClip": {
+            "pixels": 2268,
+            "min": 1,
+            "max": 255,
+            "average": 137.186067,
+            "zeroPixels": 0,
+            "nonZeroPixels": 2268,
+            "fullPixels": 414,
+            "topValues": [
+              {
+                "value": 255,
+                "pixels": 414
+              },
+              {
+                "value": 1,
+                "pixels": 142
+              },
+              {
+                "value": 254,
+                "pixels": 88
+              },
+              {
+                "value": 2,
+                "pixels": 60
+              },
+              {
+                "value": 3,
+                "pixels": 48
+              },
+              {
+                "value": 4,
+                "pixels": 42
+              },
+              {
+                "value": 252,
+                "pixels": 38
+              },
+              {
+                "value": 5,
+                "pixels": 38
+              }
+            ]
+          },
+          "allPixelsPassFor293CandidatePredicate": true
+        },
+        "finalReadback": {
+          "pixels": 2268,
+          "availablePixels": 2268,
+          "counts": {
+            "finalRedTint": 1528,
+            "finalOther": 252,
+            "finalWhiteLayer": 488
+          },
+          "sample": [
+            {
+              "x": 553,
+              "y": 158,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 553,
+              "y": 159,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 553,
+              "y": 160,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 554,
+              "y": 160,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 554,
+              "y": 161,
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 554,
+              "y": 162,
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 555,
+              "y": 162,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 554,
+              "y": 163,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 555,
+              "y": 163,
+              "rgba": [
+                255,
+                253,
+                253,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 555,
+              "y": 164,
+              "rgba": [
+                254,
+                253,
+                252,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 556,
+              "y": 164,
+              "rgba": [
+                255,
+                254,
+                254,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            },
+            {
+              "x": 555,
+              "y": 165,
+              "rgba": [
+                254,
+                253,
+                252,
+                255
+              ],
+              "class": "finalWhiteLayer"
+            }
+          ]
+        },
+        "firstPredispatch": {
+          "index": 60106,
+          "x": 553,
+          "y": 158,
+          "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.preDispatch",
+          "coverage": 255,
+          "a8SkipReason": null,
+          "maskLocalX": 551,
+          "maskLocalY": 156,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "activeClipBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "layerBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "sourceLayerBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "compositeBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "finalReadbackRgba": [
+            255,
+            255,
+            255,
+            255
+          ]
+        },
+        "firstOutcome": {
+          "index": 60107,
+          "x": 553,
+          "y": 158,
+          "source": "SkBitmapDevice.drawPathWithMaskFilter.A8.srcInPayload",
+          "coverage": 240,
+          "a8SkipReason": null,
+          "maskLocalX": 551,
+          "maskLocalY": 156,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "activeClipBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "layerBounds": {
+            "left": 0,
+            "top": 0,
+            "right": 1164,
+            "bottom": 802
+          },
+          "sourceLayerBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "compositeBounds": {
+            "left": 2,
+            "top": 2,
+            "right": 590,
+            "bottom": 590
+          },
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        }
+      }
+    ]
+  },
+  "perPixelSamples": {
+    "originalTargets": [
+      {
+        "x": 96,
+        "y": 84,
+        "deviceCoord": {
+          "x": 96,
+          "y": 84
+        },
+        "maskCoord": {
+          "x": 94,
+          "y": 82
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 5,
+        "maskedAlphaBeforeBlend": 5,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 6,
+        "for293AlphaAfterClip": 6,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 97,
+        "y": 84,
+        "deviceCoord": {
+          "x": 97,
+          "y": 84
+        },
+        "maskCoord": {
+          "x": 95,
+          "y": 82
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 15,
+        "maskedAlphaBeforeBlend": 15,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 18,
+        "for293AlphaAfterClip": 18,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 98,
+        "y": 84,
+        "deviceCoord": {
+          "x": 98,
+          "y": 84
+        },
+        "maskCoord": {
+          "x": 96,
+          "y": 82
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 37,
+        "maskedAlphaBeforeBlend": 37,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 42,
+        "for293AlphaAfterClip": 42,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 99,
+        "y": 84,
+        "deviceCoord": {
+          "x": 99,
+          "y": 84
+        },
+        "maskCoord": {
+          "x": 97,
+          "y": 82
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 73,
+        "maskedAlphaBeforeBlend": 73,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 79,
+        "for293AlphaAfterClip": 79,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 100,
+        "y": 84,
+        "deviceCoord": {
+          "x": 100,
+          "y": 84
+        },
+        "maskCoord": {
+          "x": 98,
+          "y": 82
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 121,
+        "maskedAlphaBeforeBlend": 121,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 126,
+        "for293AlphaAfterClip": 126,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 101,
+        "y": 84,
+        "deviceCoord": {
+          "x": 101,
+          "y": 84
+        },
+        "maskCoord": {
+          "x": 99,
+          "y": 82
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 171,
+        "maskedAlphaBeforeBlend": 171,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 174,
+        "for293AlphaAfterClip": 174,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 102,
+        "y": 84,
+        "deviceCoord": {
+          "x": 102,
+          "y": 84
+        },
+        "maskCoord": {
+          "x": 100,
+          "y": 82
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 211,
+        "maskedAlphaBeforeBlend": 211,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 212,
+        "for293AlphaAfterClip": 212,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 103,
+        "y": 84,
+        "deviceCoord": {
+          "x": 103,
+          "y": 84
+        },
+        "maskCoord": {
+          "x": 101,
+          "y": 82
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 236,
+        "maskedAlphaBeforeBlend": 236,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 236,
+        "for293AlphaAfterClip": 236,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 104,
+        "y": 84,
+        "deviceCoord": {
+          "x": 104,
+          "y": 84
+        },
+        "maskCoord": {
+          "x": 102,
+          "y": 82
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 248,
+        "maskedAlphaBeforeBlend": 248,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 248,
+        "for293AlphaAfterClip": 248,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 95,
+        "y": 85,
+        "deviceCoord": {
+          "x": 95,
+          "y": 85
+        },
+        "maskCoord": {
+          "x": 93,
+          "y": 83
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 6,
+        "maskedAlphaBeforeBlend": 6,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 6,
+        "for293AlphaAfterClip": 6,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 96,
+        "y": 85,
+        "deviceCoord": {
+          "x": 96,
+          "y": 85
+        },
+        "maskCoord": {
+          "x": 94,
+          "y": 83
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 17,
+        "maskedAlphaBeforeBlend": 17,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 18,
+        "for293AlphaAfterClip": 18,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 97,
+        "y": 85,
+        "deviceCoord": {
+          "x": 97,
+          "y": 85
+        },
+        "maskCoord": {
+          "x": 95,
+          "y": 83
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 39,
+        "maskedAlphaBeforeBlend": 39,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 43,
+        "for293AlphaAfterClip": 43,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 98,
+        "y": 85,
+        "deviceCoord": {
+          "x": 98,
+          "y": 85
+        },
+        "maskCoord": {
+          "x": 96,
+          "y": 83
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 75,
+        "maskedAlphaBeforeBlend": 75,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 83,
+        "for293AlphaAfterClip": 83,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 99,
+        "y": 85,
+        "deviceCoord": {
+          "x": 99,
+          "y": 85
+        },
+        "maskCoord": {
+          "x": 97,
+          "y": 83
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 122,
+        "maskedAlphaBeforeBlend": 122,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 131,
+        "for293AlphaAfterClip": 131,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 100,
+        "y": 85,
+        "deviceCoord": {
+          "x": 100,
+          "y": 85
+        },
+        "maskCoord": {
+          "x": 98,
+          "y": 83
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 172,
+        "maskedAlphaBeforeBlend": 172,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 178,
+        "for293AlphaAfterClip": 178,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 101,
+        "y": 85,
+        "deviceCoord": {
+          "x": 101,
+          "y": 85
+        },
+        "maskCoord": {
+          "x": 99,
+          "y": 83
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 211,
+        "maskedAlphaBeforeBlend": 211,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 215,
+        "for293AlphaAfterClip": 215,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 102,
+        "y": 85,
+        "deviceCoord": {
+          "x": 102,
+          "y": 85
+        },
+        "maskCoord": {
+          "x": 100,
+          "y": 83
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 236,
+        "maskedAlphaBeforeBlend": 236,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 237,
+        "for293AlphaAfterClip": 237,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 103,
+        "y": 85,
+        "deviceCoord": {
+          "x": 103,
+          "y": 85
+        },
+        "maskCoord": {
+          "x": 101,
+          "y": 83
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 249,
+        "maskedAlphaBeforeBlend": 249,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 249,
+        "for293AlphaAfterClip": 249,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 94,
+        "y": 86,
+        "deviceCoord": {
+          "x": 94,
+          "y": 86
+        },
+        "maskCoord": {
+          "x": 92,
+          "y": 84
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 6,
+        "maskedAlphaBeforeBlend": 6,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 7,
+        "for293AlphaAfterClip": 7,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 95,
+        "y": 86,
+        "deviceCoord": {
+          "x": 95,
+          "y": 86
+        },
+        "maskCoord": {
+          "x": 93,
+          "y": 84
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 18,
+        "maskedAlphaBeforeBlend": 18,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 19,
+        "for293AlphaAfterClip": 19,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 96,
+        "y": 86,
+        "deviceCoord": {
+          "x": 96,
+          "y": 86
+        },
+        "maskCoord": {
+          "x": 94,
+          "y": 84
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 42,
+        "maskedAlphaBeforeBlend": 42,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 44,
+        "for293AlphaAfterClip": 44,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 97,
+        "y": 86,
+        "deviceCoord": {
+          "x": 97,
+          "y": 86
+        },
+        "maskCoord": {
+          "x": 95,
+          "y": 84
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 79,
+        "maskedAlphaBeforeBlend": 79,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 84,
+        "for293AlphaAfterClip": 84,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 98,
+        "y": 86,
+        "deviceCoord": {
+          "x": 98,
+          "y": 86
+        },
+        "maskCoord": {
+          "x": 96,
+          "y": 84
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 126,
+        "maskedAlphaBeforeBlend": 126,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 134,
+        "for293AlphaAfterClip": 134,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 99,
+        "y": 86,
+        "deviceCoord": {
+          "x": 99,
+          "y": 86
+        },
+        "maskCoord": {
+          "x": 97,
+          "y": 84
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 174,
+        "maskedAlphaBeforeBlend": 174,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 181,
+        "for293AlphaAfterClip": 181,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 100,
+        "y": 86,
+        "deviceCoord": {
+          "x": 100,
+          "y": 86
+        },
+        "maskCoord": {
+          "x": 98,
+          "y": 84
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 212,
+        "maskedAlphaBeforeBlend": 212,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 217,
+        "for293AlphaAfterClip": 217,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 101,
+        "y": 86,
+        "deviceCoord": {
+          "x": 101,
+          "y": 86
+        },
+        "maskCoord": {
+          "x": 99,
+          "y": 84
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 237,
+        "maskedAlphaBeforeBlend": 237,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 239,
+        "for293AlphaAfterClip": 239,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 102,
+        "y": 86,
+        "deviceCoord": {
+          "x": 102,
+          "y": 86
+        },
+        "maskCoord": {
+          "x": 100,
+          "y": 84
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 249,
+        "maskedAlphaBeforeBlend": 249,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 249,
+        "for293AlphaAfterClip": 249,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 94,
+        "y": 87,
+        "deviceCoord": {
+          "x": 94,
+          "y": 87
+        },
+        "maskCoord": {
+          "x": 92,
+          "y": 85
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 18,
+        "maskedAlphaBeforeBlend": 18,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 20,
+        "for293AlphaAfterClip": 20,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 95,
+        "y": 87,
+        "deviceCoord": {
+          "x": 95,
+          "y": 87
+        },
+        "maskCoord": {
+          "x": 93,
+          "y": 85
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 43,
+        "maskedAlphaBeforeBlend": 43,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 45,
+        "for293AlphaAfterClip": 45,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 96,
+        "y": 87,
+        "deviceCoord": {
+          "x": 96,
+          "y": 87
+        },
+        "maskCoord": {
+          "x": 94,
+          "y": 85
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 83,
+        "maskedAlphaBeforeBlend": 83,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 85,
+        "for293AlphaAfterClip": 85,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 97,
+        "y": 87,
+        "deviceCoord": {
+          "x": 97,
+          "y": 87
+        },
+        "maskCoord": {
+          "x": 95,
+          "y": 85
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 131,
+        "maskedAlphaBeforeBlend": 131,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 134,
+        "for293AlphaAfterClip": 134,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 98,
+        "y": 87,
+        "deviceCoord": {
+          "x": 98,
+          "y": 87
+        },
+        "maskCoord": {
+          "x": 96,
+          "y": 85
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 178,
+        "maskedAlphaBeforeBlend": 178,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 183,
+        "for293AlphaAfterClip": 183,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 99,
+        "y": 87,
+        "deviceCoord": {
+          "x": 99,
+          "y": 87
+        },
+        "maskCoord": {
+          "x": 97,
+          "y": 85
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 215,
+        "maskedAlphaBeforeBlend": 215,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 219,
+        "for293AlphaAfterClip": 219,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 100,
+        "y": 87,
+        "deviceCoord": {
+          "x": 100,
+          "y": 87
+        },
+        "maskCoord": {
+          "x": 98,
+          "y": 85
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 238,
+        "maskedAlphaBeforeBlend": 238,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 240,
+        "for293AlphaAfterClip": 240,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 101,
+        "y": 87,
+        "deviceCoord": {
+          "x": 101,
+          "y": 87
+        },
+        "maskCoord": {
+          "x": 99,
+          "y": 85
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 249,
+        "maskedAlphaBeforeBlend": 249,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 250,
+        "for293AlphaAfterClip": 250,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 94,
+        "y": 88,
+        "deviceCoord": {
+          "x": 94,
+          "y": 88
+        },
+        "maskCoord": {
+          "x": 92,
+          "y": 86
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 44,
+        "maskedAlphaBeforeBlend": 44,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 47,
+        "for293AlphaAfterClip": 47,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 95,
+        "y": 88,
+        "deviceCoord": {
+          "x": 95,
+          "y": 88
+        },
+        "maskCoord": {
+          "x": 93,
+          "y": 86
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 84,
+        "maskedAlphaBeforeBlend": 84,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 87,
+        "for293AlphaAfterClip": 87,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 96,
+        "y": 88,
+        "deviceCoord": {
+          "x": 96,
+          "y": 88
+        },
+        "maskCoord": {
+          "x": 94,
+          "y": 86
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 134,
+        "maskedAlphaBeforeBlend": 134,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 136,
+        "for293AlphaAfterClip": 136,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 97,
+        "y": 88,
+        "deviceCoord": {
+          "x": 97,
+          "y": 88
+        },
+        "maskCoord": {
+          "x": 95,
+          "y": 86
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 181,
+        "maskedAlphaBeforeBlend": 181,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 183,
+        "for293AlphaAfterClip": 183,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 98,
+        "y": 88,
+        "deviceCoord": {
+          "x": 98,
+          "y": 88
+        },
+        "maskCoord": {
+          "x": 96,
+          "y": 86
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 217,
+        "maskedAlphaBeforeBlend": 217,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 219,
+        "for293AlphaAfterClip": 219,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 99,
+        "y": 88,
+        "deviceCoord": {
+          "x": 99,
+          "y": 88
+        },
+        "maskCoord": {
+          "x": 97,
+          "y": 86
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 239,
+        "maskedAlphaBeforeBlend": 239,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 241,
+        "for293AlphaAfterClip": 241,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 100,
+        "y": 88,
+        "deviceCoord": {
+          "x": 100,
+          "y": 88
+        },
+        "maskCoord": {
+          "x": 98,
+          "y": 86
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 249,
+        "maskedAlphaBeforeBlend": 249,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 250,
+        "for293AlphaAfterClip": 250,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 94,
+        "y": 89,
+        "deviceCoord": {
+          "x": 94,
+          "y": 89
+        },
+        "maskCoord": {
+          "x": 92,
+          "y": 87
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 85,
+        "maskedAlphaBeforeBlend": 85,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 91,
+        "for293AlphaAfterClip": 91,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 95,
+        "y": 89,
+        "deviceCoord": {
+          "x": 95,
+          "y": 89
+        },
+        "maskCoord": {
+          "x": 93,
+          "y": 87
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 134,
+        "maskedAlphaBeforeBlend": 134,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 140,
+        "for293AlphaAfterClip": 140,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 96,
+        "y": 89,
+        "deviceCoord": {
+          "x": 96,
+          "y": 89
+        },
+        "maskCoord": {
+          "x": 94,
+          "y": 87
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 183,
+        "maskedAlphaBeforeBlend": 183,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 185,
+        "for293AlphaAfterClip": 185,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 97,
+        "y": 89,
+        "deviceCoord": {
+          "x": 97,
+          "y": 89
+        },
+        "maskCoord": {
+          "x": 95,
+          "y": 87
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 219,
+        "maskedAlphaBeforeBlend": 219,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 220,
+        "for293AlphaAfterClip": 220,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 98,
+        "y": 89,
+        "deviceCoord": {
+          "x": 98,
+          "y": 89
+        },
+        "maskCoord": {
+          "x": 96,
+          "y": 87
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 240,
+        "maskedAlphaBeforeBlend": 240,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 241,
+        "for293AlphaAfterClip": 241,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 99,
+        "y": 89,
+        "deviceCoord": {
+          "x": 99,
+          "y": 89
+        },
+        "maskCoord": {
+          "x": 97,
+          "y": 87
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 250,
+        "maskedAlphaBeforeBlend": 250,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 250,
+        "for293AlphaAfterClip": 250,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 94,
+        "y": 90,
+        "deviceCoord": {
+          "x": 94,
+          "y": 90
+        },
+        "maskCoord": {
+          "x": 92,
+          "y": 88
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 136,
+        "maskedAlphaBeforeBlend": 136,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 144,
+        "for293AlphaAfterClip": 144,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 95,
+        "y": 90,
+        "deviceCoord": {
+          "x": 95,
+          "y": 90
+        },
+        "maskCoord": {
+          "x": 93,
+          "y": 88
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 183,
+        "maskedAlphaBeforeBlend": 183,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 189,
+        "for293AlphaAfterClip": 189,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 96,
+        "y": 90,
+        "deviceCoord": {
+          "x": 96,
+          "y": 90
+        },
+        "maskCoord": {
+          "x": 94,
+          "y": 88
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 219,
+        "maskedAlphaBeforeBlend": 219,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 222,
+        "for293AlphaAfterClip": 222,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 97,
+        "y": 90,
+        "deviceCoord": {
+          "x": 97,
+          "y": 90
+        },
+        "maskCoord": {
+          "x": 95,
+          "y": 88
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 241,
+        "maskedAlphaBeforeBlend": 241,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 242,
+        "for293AlphaAfterClip": 242,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 98,
+        "y": 90,
+        "deviceCoord": {
+          "x": 98,
+          "y": 90
+        },
+        "maskCoord": {
+          "x": 96,
+          "y": 88
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 250,
+        "maskedAlphaBeforeBlend": 250,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 251,
+        "for293AlphaAfterClip": 251,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 94,
+        "y": 91,
+        "deviceCoord": {
+          "x": 94,
+          "y": 91
+        },
+        "maskCoord": {
+          "x": 92,
+          "y": 89
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 185,
+        "maskedAlphaBeforeBlend": 185,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 192,
+        "for293AlphaAfterClip": 192,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 95,
+        "y": 91,
+        "deviceCoord": {
+          "x": 95,
+          "y": 91
+        },
+        "maskCoord": {
+          "x": 93,
+          "y": 89
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 220,
+        "maskedAlphaBeforeBlend": 220,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 225,
+        "for293AlphaAfterClip": 225,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 96,
+        "y": 91,
+        "deviceCoord": {
+          "x": 96,
+          "y": 91
+        },
+        "maskCoord": {
+          "x": 94,
+          "y": 89
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 241,
+        "maskedAlphaBeforeBlend": 241,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 243,
+        "for293AlphaAfterClip": 243,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 94,
+        "y": 92,
+        "deviceCoord": {
+          "x": 94,
+          "y": 92
+        },
+        "maskCoord": {
+          "x": 92,
+          "y": 90
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 222,
+        "maskedAlphaBeforeBlend": 222,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 226,
+        "for293AlphaAfterClip": 226,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 95,
+        "y": 92,
+        "deviceCoord": {
+          "x": 95,
+          "y": 92
+        },
+        "maskCoord": {
+          "x": 93,
+          "y": 90
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 242,
+        "maskedAlphaBeforeBlend": 242,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 244,
+        "for293AlphaAfterClip": 244,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 94,
+        "y": 93,
+        "deviceCoord": {
+          "x": 94,
+          "y": 93
+        },
+        "maskCoord": {
+          "x": 92,
+          "y": 91
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 243,
+        "maskedAlphaBeforeBlend": 243,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 244,
+        "for293AlphaAfterClip": 244,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      }
+    ],
+    "candidateMinusRuntime002": [
+      {
+        "x": 250,
+        "y": 18,
+        "deviceCoord": {
+          "x": 250,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 248,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 251,
+        "y": 18,
+        "deviceCoord": {
+          "x": 251,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 249,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 252,
+        "y": 18,
+        "deviceCoord": {
+          "x": 252,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 250,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 253,
+        "y": 18,
+        "deviceCoord": {
+          "x": 253,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 251,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 254,
+        "y": 18,
+        "deviceCoord": {
+          "x": 254,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 252,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 255,
+        "y": 18,
+        "deviceCoord": {
+          "x": 255,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 253,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 256,
+        "y": 18,
+        "deviceCoord": {
+          "x": 256,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 254,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 192,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 192,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 257,
+        "y": 18,
+        "deviceCoord": {
+          "x": 257,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 255,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 176,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 176,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 258,
+        "y": 18,
+        "deviceCoord": {
+          "x": 258,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 256,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 128,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 128,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 259,
+        "y": 18,
+        "deviceCoord": {
+          "x": 259,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 257,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 96,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 96,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 260,
+        "y": 18,
+        "deviceCoord": {
+          "x": 260,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 258,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 64,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 64,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 261,
+        "y": 18,
+        "deviceCoord": {
+          "x": 261,
+          "y": 18
+        },
+        "maskCoord": {
+          "x": 259,
+          "y": 16
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 32,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 32,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 240,
+        "y": 19,
+        "deviceCoord": {
+          "x": 240,
+          "y": 19
+        },
+        "maskCoord": {
+          "x": 238,
+          "y": 17
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 241,
+        "y": 19,
+        "deviceCoord": {
+          "x": 241,
+          "y": 19
+        },
+        "maskCoord": {
+          "x": 239,
+          "y": 17
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 242,
+        "y": 19,
+        "deviceCoord": {
+          "x": 242,
+          "y": 19
+        },
+        "maskCoord": {
+          "x": 240,
+          "y": 17
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 243,
+        "y": 19,
+        "deviceCoord": {
+          "x": 243,
+          "y": 19
+        },
+        "maskCoord": {
+          "x": 241,
+          "y": 17
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 244,
+        "y": 19,
+        "deviceCoord": {
+          "x": 244,
+          "y": 19
+        },
+        "maskCoord": {
+          "x": 242,
+          "y": 17
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 245,
+        "y": 19,
+        "deviceCoord": {
+          "x": 245,
+          "y": 19
+        },
+        "maskCoord": {
+          "x": 243,
+          "y": 17
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 246,
+        "y": 19,
+        "deviceCoord": {
+          "x": 246,
+          "y": 19
+        },
+        "maskCoord": {
+          "x": 244,
+          "y": 17
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      },
+      {
+        "x": 247,
+        "y": 19,
+        "deviceCoord": {
+          "x": 247,
+          "y": 19
+        },
+        "maskCoord": {
+          "x": 245,
+          "y": 17
+        },
+        "maskOrigin": {
+          "left": 2,
+          "top": 2
+        },
+        "activeAaClipCoverage": 0,
+        "skipReason": "A8_SRCINPAYLOAD_ACTIVE_CLIP_COVERAGE_ZERO",
+        "blurredMaskAlpha": 255,
+        "maskedAlphaBeforeBlend": 255,
+        "for293AnalyticClipCoverage": 255,
+        "for293MaskAlpha": 255,
+        "for293AlphaAfterClip": 255,
+        "finalReadbackRgba": [
+          255,
+          255,
+          255,
+          255
+        ]
+      }
+    ],
+    "redRuntimeComponents": {
+      "red-runtime-000": [
+        {
+          "x": 279,
+          "y": 4,
+          "deviceCoord": {
+            "x": 279,
+            "y": 4
+          },
+          "maskCoord": {
+            "x": 277,
+            "y": 2
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 280,
+          "y": 4,
+          "deviceCoord": {
+            "x": 280,
+            "y": 4
+          },
+          "maskCoord": {
+            "x": 278,
+            "y": 2
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 281,
+          "y": 4,
+          "deviceCoord": {
+            "x": 281,
+            "y": 4
+          },
+          "maskCoord": {
+            "x": 279,
+            "y": 2
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 282,
+          "y": 4,
+          "deviceCoord": {
+            "x": 282,
+            "y": 4
+          },
+          "maskCoord": {
+            "x": 280,
+            "y": 2
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 283,
+          "y": 4,
+          "deviceCoord": {
+            "x": 283,
+            "y": 4
+          },
+          "maskCoord": {
+            "x": 281,
+            "y": 2
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 284,
+          "y": 4,
+          "deviceCoord": {
+            "x": 284,
+            "y": 4
+          },
+          "maskCoord": {
+            "x": 282,
+            "y": 2
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 285,
+          "y": 4,
+          "deviceCoord": {
+            "x": 285,
+            "y": 4
+          },
+          "maskCoord": {
+            "x": 283,
+            "y": 2
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 286,
+          "y": 4,
+          "deviceCoord": {
+            "x": 286,
+            "y": 4
+          },
+          "maskCoord": {
+            "x": 284,
+            "y": 2
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        }
+      ],
+      "red-runtime-001": [
+        {
+          "x": 158,
+          "y": 553,
+          "deviceCoord": {
+            "x": 158,
+            "y": 553
+          },
+          "maskCoord": {
+            "x": 156,
+            "y": 551
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 240,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 159,
+          "y": 553,
+          "deviceCoord": {
+            "x": 159,
+            "y": 553
+          },
+          "maskCoord": {
+            "x": 157,
+            "y": 551
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 160,
+          "skipReason": null,
+          "blurredMaskAlpha": 2,
+          "maskedAlphaBeforeBlend": 2,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 2,
+          "for293AlphaAfterClip": 2,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 160,
+          "y": 553,
+          "deviceCoord": {
+            "x": 160,
+            "y": 553
+          },
+          "maskCoord": {
+            "x": 158,
+            "y": 551
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 48,
+          "skipReason": null,
+          "blurredMaskAlpha": 4,
+          "maskedAlphaBeforeBlend": 4,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 4,
+          "for293AlphaAfterClip": 4,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 431,
+          "y": 553,
+          "deviceCoord": {
+            "x": 431,
+            "y": 553
+          },
+          "maskCoord": {
+            "x": 429,
+            "y": 551
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 48,
+          "skipReason": null,
+          "blurredMaskAlpha": 4,
+          "maskedAlphaBeforeBlend": 4,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 4,
+          "for293AlphaAfterClip": 4,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 432,
+          "y": 553,
+          "deviceCoord": {
+            "x": 432,
+            "y": 553
+          },
+          "maskCoord": {
+            "x": 430,
+            "y": 551
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 160,
+          "skipReason": null,
+          "blurredMaskAlpha": 2,
+          "maskedAlphaBeforeBlend": 2,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 2,
+          "for293AlphaAfterClip": 2,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 433,
+          "y": 553,
+          "deviceCoord": {
+            "x": 433,
+            "y": 553
+          },
+          "maskCoord": {
+            "x": 431,
+            "y": 551
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 240,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 160,
+          "y": 554,
+          "deviceCoord": {
+            "x": 160,
+            "y": 554
+          },
+          "maskCoord": {
+            "x": 158,
+            "y": 552
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 161,
+          "y": 554,
+          "deviceCoord": {
+            "x": 161,
+            "y": 554
+          },
+          "maskCoord": {
+            "x": 159,
+            "y": 552
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 224,
+          "skipReason": null,
+          "blurredMaskAlpha": 2,
+          "maskedAlphaBeforeBlend": 2,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 2,
+          "for293AlphaAfterClip": 2,
+          "finalReadbackRgba": [
+            255,
+            253,
+            253,
+            255
+          ]
+        }
+      ],
+      "red-runtime-002": [
+        {
+          "x": 38,
+          "y": 158,
+          "deviceCoord": {
+            "x": 38,
+            "y": 158
+          },
+          "maskCoord": {
+            "x": 36,
+            "y": 156
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 240,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 38,
+          "y": 159,
+          "deviceCoord": {
+            "x": 38,
+            "y": 159
+          },
+          "maskCoord": {
+            "x": 36,
+            "y": 157
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 160,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 2,
+          "for293AlphaAfterClip": 2,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 37,
+          "y": 160,
+          "deviceCoord": {
+            "x": 37,
+            "y": 160
+          },
+          "maskCoord": {
+            "x": 35,
+            "y": 158
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 38,
+          "y": 160,
+          "deviceCoord": {
+            "x": 38,
+            "y": 160
+          },
+          "maskCoord": {
+            "x": 36,
+            "y": 158
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 48,
+          "skipReason": null,
+          "blurredMaskAlpha": 4,
+          "maskedAlphaBeforeBlend": 4,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 4,
+          "for293AlphaAfterClip": 4,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 37,
+          "y": 161,
+          "deviceCoord": {
+            "x": 37,
+            "y": 161
+          },
+          "maskCoord": {
+            "x": 35,
+            "y": 159
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 224,
+          "skipReason": null,
+          "blurredMaskAlpha": 2,
+          "maskedAlphaBeforeBlend": 2,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 2,
+          "for293AlphaAfterClip": 2,
+          "finalReadbackRgba": [
+            255,
+            253,
+            253,
+            255
+          ]
+        },
+        {
+          "x": 36,
+          "y": 162,
+          "deviceCoord": {
+            "x": 36,
+            "y": 162
+          },
+          "maskCoord": {
+            "x": 34,
+            "y": 160
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 37,
+          "y": 162,
+          "deviceCoord": {
+            "x": 37,
+            "y": 162
+          },
+          "maskCoord": {
+            "x": 35,
+            "y": 160
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 112,
+          "skipReason": null,
+          "blurredMaskAlpha": 4,
+          "maskedAlphaBeforeBlend": 4,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 4,
+          "for293AlphaAfterClip": 4,
+          "finalReadbackRgba": [
+            255,
+            253,
+            253,
+            255
+          ]
+        },
+        {
+          "x": 36,
+          "y": 163,
+          "deviceCoord": {
+            "x": 36,
+            "y": 163
+          },
+          "maskCoord": {
+            "x": 34,
+            "y": 161
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 2,
+          "maskedAlphaBeforeBlend": 2,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 2,
+          "for293AlphaAfterClip": 2,
+          "finalReadbackRgba": [
+            255,
+            253,
+            253,
+            255
+          ]
+        }
+      ],
+      "red-runtime-003": [
+        {
+          "x": 553,
+          "y": 158,
+          "deviceCoord": {
+            "x": 553,
+            "y": 158
+          },
+          "maskCoord": {
+            "x": 551,
+            "y": 156
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 240,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 553,
+          "y": 159,
+          "deviceCoord": {
+            "x": 553,
+            "y": 159
+          },
+          "maskCoord": {
+            "x": 551,
+            "y": 157
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 160,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 2,
+          "for293AlphaAfterClip": 2,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 553,
+          "y": 160,
+          "deviceCoord": {
+            "x": 553,
+            "y": 160
+          },
+          "maskCoord": {
+            "x": 551,
+            "y": 158
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 48,
+          "skipReason": null,
+          "blurredMaskAlpha": 4,
+          "maskedAlphaBeforeBlend": 4,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 4,
+          "for293AlphaAfterClip": 4,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 554,
+          "y": 160,
+          "deviceCoord": {
+            "x": 554,
+            "y": 160
+          },
+          "maskCoord": {
+            "x": 552,
+            "y": 158
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 554,
+          "y": 161,
+          "deviceCoord": {
+            "x": 554,
+            "y": 161
+          },
+          "maskCoord": {
+            "x": 552,
+            "y": 159
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 208,
+          "skipReason": null,
+          "blurredMaskAlpha": 2,
+          "maskedAlphaBeforeBlend": 2,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 2,
+          "for293AlphaAfterClip": 2,
+          "finalReadbackRgba": [
+            255,
+            253,
+            253,
+            255
+          ]
+        },
+        {
+          "x": 554,
+          "y": 162,
+          "deviceCoord": {
+            "x": 554,
+            "y": 162
+          },
+          "maskCoord": {
+            "x": 552,
+            "y": 160
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 112,
+          "skipReason": null,
+          "blurredMaskAlpha": 4,
+          "maskedAlphaBeforeBlend": 4,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 4,
+          "for293AlphaAfterClip": 4,
+          "finalReadbackRgba": [
+            255,
+            253,
+            253,
+            255
+          ]
+        },
+        {
+          "x": 555,
+          "y": 162,
+          "deviceCoord": {
+            "x": 555,
+            "y": 162
+          },
+          "maskCoord": {
+            "x": 553,
+            "y": 160
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 255,
+          "skipReason": null,
+          "blurredMaskAlpha": 1,
+          "maskedAlphaBeforeBlend": 1,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 1,
+          "for293AlphaAfterClip": 1,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        },
+        {
+          "x": 554,
+          "y": 163,
+          "deviceCoord": {
+            "x": 554,
+            "y": 163
+          },
+          "maskCoord": {
+            "x": 552,
+            "y": 161
+          },
+          "maskOrigin": {
+            "left": 2,
+            "top": 2
+          },
+          "activeAaClipCoverage": 16,
+          "skipReason": null,
+          "blurredMaskAlpha": 9,
+          "maskedAlphaBeforeBlend": 9,
+          "for293AnalyticClipCoverage": 255,
+          "for293MaskAlpha": 10,
+          "for293AlphaAfterClip": 10,
+          "finalReadbackRgba": [
+            255,
+            254,
+            254,
+            255
+          ]
+        }
+      ]
+    }
+  },
+  "interpretation": {
+    "activeClipTraceBoundsAreDrawClipParameterNotSkAAClipGetBounds": true,
+    "trueSkAAClipBoundsAndBandsNotSerialized": true,
+    "observedCoverageIsRuntimeActiveAaClipCoverageFromBlend": true,
+    "layerScopeExplainsOriginalTargets": false,
+    "coordinateOffsetExplainsOriginalTargets": false,
+    "maskOrSourceBoundsExplainOriginalTargets": false,
+    "skAAClipDifferenceOrClipStackCoverageRemainsNamedGap": true,
+    "recommendedFollowUp": "Instrument true SkAAClip getBounds/bands and coverage probes during the M60 clipRRect(kDifference) stack, then compare transformed vs untransformed oval coverage before changing SkAAClip.op or clip CTM handling."
+  },
+  "sourceNeedles": {
+    "a8BlendSkipRecordsActiveClipCoverageZero": true,
+    "blendSamplesActiveAaClipCoverage": true,
+    "a8TraceCarriesMaskAndLayerBounds": true,
+    "canvasDifferenceUsesSkAAClipDifference": true,
+    "clipPathDifferenceRasterizesWithCurrentMatrix": true,
+    "skAAClipDifferenceCombinesAlpha": true
+  },
+  "sourcePreservation": {
+    "for288ClassificationPreserved": true,
+    "for289DecisionPreserved": true,
+    "for290DecisionPreserved": true,
+    "for291DecisionPreserved": true,
+    "for292DecisionPreserved": true,
+    "for293DecisionPreserved": true,
+    "for294DecisionPreserved": true,
+    "for295DecisionPreserved": true,
+    "for296DecisionPreserved": true,
+    "for297DecisionPreserved": true,
+    "for298DecisionPreserved": true,
+    "for299DecisionPreserved": true
+  },
+  "strictPreservation": {
+    "supportPromotionChanged": false,
+    "supportThresholdChanged": false,
+    "wideClipStackSupportAdded": false,
+    "fallbackOrReadbackAdded": false,
+    "productionRendererChanged": false,
+    "normalRenderingChanged": false,
+    "cpuInstrumentationAdded": false,
+    "gpuRendererChanged": false,
+    "globalBlendChanged": false,
+    "setPixelSemanticsChanged": false,
+    "m60Promoted": false,
+    "ganeshOrGraphiteAdded": false,
+    "skSLCompilerAdded": false
+  }
+}
