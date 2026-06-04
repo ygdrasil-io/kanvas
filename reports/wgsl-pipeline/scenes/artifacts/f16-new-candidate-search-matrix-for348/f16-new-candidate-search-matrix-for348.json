@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-348",
+  "sceneId": "f16-new-candidate-search-matrix-for348",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-arc-non-arc-candidate-search-matrix-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-347-f16-post-retirement-route-selected-finding"
+  ],
+  "inputValidation": {
+    "for347Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-post-retirement-route-decision-for347/f16-post-retirement-route-decision-for347.json",
+    "for347Decision": "F16_POST_RETIREMENT_ROUTE_SELECTED",
+    "for347RequiredDecision": "F16_POST_RETIREMENT_ROUTE_SELECTED",
+    "for347Route": "new-candidate-search",
+    "for347RequiredRoute": "new-candidate-search",
+    "for346Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-global-color-policy-candidate-retired-for346/f16-global-color-policy-candidate-retired-for346.json",
+    "for346Decision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for346RequiredDecision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for345Artifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for345Decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for345RequiredDecision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for341Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+    "for341Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION",
+    "for341RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION"
+  },
+  "decision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+  "allowedDecisions": [
+    "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "F16_NEW_CANDIDATE_SEARCH_MATRIX_INPUT_INVALID"
+  ],
+  "candidatePolicy": {
+    "retiredPolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "retiredPolicyStillForbiddenAsGlobalCandidate": true,
+    "newCandidateSelectedInThisTicket": false,
+    "scoreIncreaseAuthorized": false,
+    "globalF16MigrationAuthorized": false
+  },
+  "matrix": {
+    "rowCount": 2,
+    "arcRowCount": 1,
+    "nonArcRowCount": 1,
+    "rows": [
+      {
+        "rowId": "arc-circular-arcs-stroke-butt-adjacent-for341",
+        "family": "arc",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+        "referenceStatus": "available-isolated-skia-adjacent-cell-render",
+        "currentStatus": "available-current-for339-export-rgba",
+        "candidateStatus": "historical-retired-candidate-baseline-only",
+        "retiredCandidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+        "sampleCount": 12,
+        "currentResidual": 375,
+        "candidateResidual": 0,
+        "worsenedSampleCount": 0,
+        "dataComparableForSearchMatrix": true,
+        "remainingGaps": [
+          "The candidate that fits this arc row is retired globally and cannot be selected.",
+          "A new formula must be evaluated against this row and at least one non-arc row."
+        ]
+      },
+      {
+        "rowId": "non-arc-rec2020-f16-src-over-rect-for345",
+        "family": "non-arc",
+        "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+        "referenceStatus": "available-isolated-skia-non-arc-rec2020-f16-src-over-reference",
+        "currentStatus": "available-current-kanvas-kotlin-cpu-rec2020-f16-src-over-samples",
+        "candidateStatus": "historical-retired-candidate-rejected",
+        "retiredCandidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+        "sampleCount": 4,
+        "currentResidual": 0,
+        "candidateResidual": 111,
+        "worsenedSampleCount": 3,
+        "dataComparableForSearchMatrix": true,
+        "remainingGaps": [
+          "Only one non-arc row exists in this matrix.",
+          "A future candidate should add more non-arc rows before any score or renderer decision."
+        ]
+      }
+    ]
+  },
+  "rejectionCriteriaBeforeEvaluation": [
+    {
+      "id": "retired-policy-reuse",
+      "rejectWhen": "candidate policy id is `straight_srgb_quantized_alpha_src_over_white` or algebraically identical without new evidence"
+    },
+    {
+      "id": "missing-arc-or-non-arc-row",
+      "rejectWhen": "candidate lacks at least one comparable arc row and one comparable non-arc row"
+    },
+    {
+      "id": "worsens-current-on-any-covered-reference-row",
+      "rejectWhen": "candidate residual exceeds current residual on any covered comparable sample group"
+    },
+    {
+      "id": "scene-shaped-branch",
+      "rejectWhen": "candidate requires fixture, coordinate, selected-cell, or full-GM-crop branching"
+    },
+    {
+      "id": "score-before-selection",
+      "rejectWhen": "candidate is used to raise F16 score before selection evidence is complete"
+    }
+  ],
+  "minimumSelectionCriteria": [
+    {
+      "id": "arc-and-non-arc-positive",
+      "requires": "positive residual evidence on both arc and non-arc comparable rows"
+    },
+    {
+      "id": "no-covered-sample-regression",
+      "requires": "zero covered samples worsened versus current across the required matrix"
+    },
+    {
+      "id": "explicit-route-diagnostics",
+      "requires": "stable diagnostics for unsupported or out-of-domain routes"
+    },
+    {
+      "id": "no-renderer-change-before-decision",
+      "requires": "candidate remains evidence-only until a later implementation ticket"
+    }
+  ],
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "candidatePolicyId": "straight_srgb_quantized_alpha_src_over_white"
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "newCandidateSelected": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for348_f16_new_candidate_search_matrix.py",
+      "rtk python3 scripts/validate_for347_f16_post_retirement_route_decision.py",
+      "rtk python3 scripts/validate_for346_f16_global_color_policy_candidate_retired.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
