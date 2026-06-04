@@ -1,0 +1,1287 @@
+{
+  "linear": "FOR-332",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-circular-arcs-stroke-butt-selected-cell-instrumented-cpu-color-pipeline-trace-ticket",
+  "sourceFinding": "global/kanvas/findings/for-331-circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-colorspace-premul-suspected-finding",
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_CPU_COLOR_PIPELINE_TRACE_REQUIRES_KOTLIN_INSTRUMENTATION",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_CPU_COLOR_PIPELINE_TRACE_BOUNDARY_IDENTIFIED",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_CPU_COLOR_PIPELINE_TRACE_REQUIRES_KOTLIN_INSTRUMENTATION",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_CPU_COLOR_PIPELINE_TRACE_INPUT_INVALID"
+  ],
+  "sceneId": "circular-arcs-stroke-butt-selected-cell-cpu-color-pipeline-trace-for332",
+  "traceType": "static-cpu-color-pipeline-boundary-audit",
+  "selectedCell": {
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceFutureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "boundedHarnessGm": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+    "cellCount": 1,
+    "quadrant": "bottom-left",
+    "fullGmCanvasArcRectLTRB": [
+      140,
+      520,
+      180,
+      560
+    ],
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "rowIndex": 0,
+    "columnIndex": 2,
+    "startDegrees": 0,
+    "sweepDegrees": 90,
+    "complementSweepDegrees": -270,
+    "useCenter": false,
+    "aa": true,
+    "style": "kStroke_Style",
+    "strokeWidth": 15,
+    "strokeCap": "kButt_Cap",
+    "includedCaps": [
+      "kButt_Cap"
+    ],
+    "excludedCaps": [
+      "kRound_Cap",
+      "kSquare_Cap"
+    ],
+    "includesHairlineStrokeWidth0": false,
+    "includesFill": false,
+    "includesDash": false,
+    "paintAlpha": 100,
+    "drawArcCalls": [
+      {
+        "paintColor": "red",
+        "startDegrees": 0,
+        "sweepDegrees": 90
+      },
+      {
+        "paintColor": "blue",
+        "startDegrees": 0,
+        "sweepDegrees": -270
+      }
+    ]
+  },
+  "follows": {
+    "for331Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-for331/circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-for331.json",
+    "for331Report": "reports/wgsl-pipeline/2026-06-04-for-331-circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace.md",
+    "for331Validator": "scripts/validate_for331_circular_arcs_stroke_butt_selected_cell_normalized_stroke_trace.py",
+    "for330Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330.json",
+    "for329Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329.json",
+    "for327Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/circular-arcs-stroke-butt-selected-cell-skia-reference-for327.json",
+    "for322Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+    "for322RouteCpu": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-cpu.json"
+  },
+  "inputs": {
+    "for331Artifact": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-for331/circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-for331.json",
+      "sourceLinear": "FOR-331",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-normalized-stroke-trace-for331",
+      "requiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_NORMALIZED_STROKE_TRACE_COLORSPACE_PREMUL_SUSPECTED",
+      "sha256": "d264023b29b71f41749fc0ee7ad17696b06cd2d95b09dc35f354ed11d323a47b"
+    },
+    "for330Artifact": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330/circular-arcs-stroke-butt-selected-cell-white-background-diff-for330.json",
+      "sourceLinear": "FOR-330",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-white-background-diff-for330",
+      "requiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_WHITE_BACKGROUND_DIFF_RESIDUAL_PRESENT",
+      "sha256": "0cc7c1d93225f8d4c2558ca18a8d3709aeb33003f349a6b175459640f4d2570c"
+    },
+    "for329Artifact": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329.json",
+      "sourceLinear": "FOR-329",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329",
+      "requiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_CPU_RASTER_AUDIT_CAUSE_IDENTIFIED",
+      "sha256": "e89d99fd930ccf903fc62166bb8c8716b789ed7006dcd45df092fadfd174ae26"
+    },
+    "for327Artifact": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/circular-arcs-stroke-butt-selected-cell-skia-reference-for327.json",
+      "sourceLinear": "FOR-327",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-skia-reference-for327",
+      "requiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_SKIA_REFERENCE_READY",
+      "sha256": "4e716ebe4f04b3f65abad88e53796b1793ca66342af1009ac29384b4749c348c"
+    },
+    "for322Artifact": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+      "sourceLinear": "FOR-322",
+      "sourceSceneId": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+      "requiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_HARNESS_READY",
+      "sha256": "4a060140307f3cfe3d6d876a1b088243013f4a23ac6b66595fa8f2503f436906"
+    },
+    "inspectedSources": [
+      {
+        "path": "cpu-raster/src/main/kotlin/org/skia/testing/TestUtils.kt",
+        "sha256": "0d68134f4b51b3353262786dac7babad45f08a04a97f47ff397ddff792a4b29c",
+        "requiredSnippets": [
+          "public fun runGmTest(gm: GM): SkBitmap",
+          "RasterSinkF16(DM_REFERENCE_COLOR_SPACE)"
+        ]
+      },
+      {
+        "path": "cpu-raster/src/main/kotlin/org/skia/dm/RasterSinkF16.kt",
+        "sha256": "4aa9e87e410b9bd97929bdd58dc940f014239bae778e684643a32caf0d2ac696",
+        "requiredSnippets": [
+          "SkColorType.kRGBA_F16Norm",
+          "bitmap.eraseColor(src.bgColor())"
+        ]
+      },
+      {
+        "path": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CircularArcsStrokeButtSelectedCellCaptureTest.kt",
+        "sha256": "5a896b05ebbdc8e8e416fb6f892f773a0ff35b1a5cd9132e2bcf7043f7efcee0",
+        "requiredSnippets": [
+          "TestUtils.runGmTest(gm)",
+          "SkPngEncoder.Encode(bitmap)",
+          "this.color = (100 shl 24) or (color and 0x00FFFFFF)",
+          "c.drawArc(ARC_RECT, 0f, 90f, useCenter = false, paint = red)",
+          "c.drawArc(ARC_RECT, 0f, -270f, useCenter = false, paint = blue)"
+        ]
+      },
+      {
+        "path": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+        "sha256": "8ca915740a66f56351d43d4f853c1155112f1cfde1798b289ebed455ebd62af5",
+        "requiredSnippets": [
+          "private fun transformPaintColor(c: SkColor4f): SkColor4f",
+          "private fun colorToF16Premul(c: SkColor4f, out: FloatArray)",
+          "fillPath(outline, ctm, clip, color4f, baseA, supers, shader, mode, blender)",
+          "blendF16PremulMode(x, y, sr * cov, sg * cov, sb * cov, saCov, mode)",
+          "pixels[i]     = sr + pixels[i]     * invSa"
+        ]
+      },
+      {
+        "path": "kanvas-skia/src/main/kotlin/org/skia/foundation/SkBitmap.kt",
+        "sha256": "dd736181277cd0ebf0185b45b56adc447090b6a044f6e2de372a1d110c2acf46",
+        "requiredSnippets": [
+          "SkColorType.kRGBA_F16Norm -> {",
+          "val a = (pa * 256f).toInt().coerceIn(0, 255)",
+          "val r = (pr * invA * 256f).toInt().coerceIn(0, 255)"
+        ]
+      },
+      {
+        "path": "kanvas-skia/src/main/kotlin/org/skia/encode/SkPngEncoder.kt",
+        "sha256": "dc6acb45b1edab5cb4e4b2956324f5031e1a09a875993ba43586b8f221674c6f",
+        "requiredSnippets": [
+          "src.getPixel(x, y)",
+          "row[offset++] = ((argb ushr 16) and 0xFF).toByte()",
+          "the caller's [SkBitmap.colorSpace] is **not**"
+        ]
+      }
+    ]
+  },
+  "inputValidation": {
+    "valid": true,
+    "requiredFor331Decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_NORMALIZED_STROKE_TRACE_COLORSPACE_PREMUL_SUSPECTED",
+    "expectedFor331Metrics": {
+      "totalPixels": 6400,
+      "differentPixels": 2031,
+      "matchingPixels": 4369,
+      "cellSimilarityPercent": 68.265625,
+      "maxDeltaByChannel": {
+        "r": 39,
+        "g": 43,
+        "b": 31,
+        "a": 0
+      },
+      "sumAbsDeltaByChannel": {
+        "r": 33893,
+        "g": 18839,
+        "b": 10795,
+        "a": 0
+      },
+      "sumAbsDeltaTotal": 63527,
+      "differentPixelBoundingBox": {
+        "left": 12,
+        "top": 12,
+        "right": 67,
+        "bottom": 67
+      },
+      "differentPixelsOutsideExpectedStrokeBoundingBox": 0
+    },
+    "expectedPrimaryHypothesis": {
+      "id": "colorspace-premul-or-png-encode",
+      "weight": 0.62,
+      "status": "most-likely"
+    },
+    "invalidReasons": []
+  },
+  "for331ResidualEvidence": {
+    "metrics": {
+      "totalPixels": 6400,
+      "differentPixels": 2031,
+      "matchingPixels": 4369,
+      "cellSimilarityPercent": 68.265625,
+      "maxDeltaByChannel": {
+        "r": 39,
+        "g": 43,
+        "b": 31,
+        "a": 0
+      },
+      "sumAbsDeltaByChannel": {
+        "r": 33893,
+        "g": 18839,
+        "b": 10795,
+        "a": 0
+      },
+      "sumAbsDeltaTotal": 63527,
+      "differentPixelBoundingBox": {
+        "left": 12,
+        "top": 12,
+        "right": 67,
+        "bottom": 67
+      },
+      "differentPixelsOutsideExpectedStrokeBoundingBox": 0
+    },
+    "hypotheses": [
+      {
+        "id": "colorspace-premul-or-png-encode",
+        "weight": 0.62,
+        "status": "most-likely",
+        "evidence": [
+          "stroke-center samples differ after background normalization",
+          "Skia-over-white equals the naive alpha-over-white sample model",
+          "FOR-329 source audit found CPU uses F16/Rec.2020 output before PNG encoding while Skia reference is N32 premul sRGB"
+        ]
+      },
+      {
+        "id": "stroke-coverage-aa",
+        "weight": 0.24,
+        "status": "secondary",
+        "evidence": [
+          "residual bbox is exactly [12,12]-[67,67]",
+          "AA-edge samples also differ",
+          "coverage cannot explain the stroke-center color offsets by itself from the current samples"
+        ]
+      },
+      {
+        "id": "paint-alpha-or-src-over-formula",
+        "weight": 0.09,
+        "status": "less-likely-from-samples",
+        "evidence": [
+          "naive 100/255 alpha-over-white produces Skia center values [255,155,155,255] and [155,155,255,255]",
+          "CPU remains offset from those values"
+        ]
+      },
+      {
+        "id": "requires-instrumented-cpu-trace-before-fix",
+        "weight": 0.05,
+        "status": "required-next-evidence",
+        "evidence": [
+          "artifact-level PNG samples cannot separate color-space conversion, premul/unpremul, coverage, and store boundaries",
+          "no renderer correction is made by this ticket"
+        ]
+      }
+    ],
+    "strokeResidualLocalization": {
+      "expectedStrokeBoundingBox": {
+        "left": 12,
+        "top": 12,
+        "right": 67,
+        "bottom": 67
+      },
+      "actualDifferentPixelBoundingBox": {
+        "left": 12,
+        "top": 12,
+        "right": 67,
+        "bottom": 67
+      },
+      "differentPixelsOutsideExpectedStrokeBoundingBox": 0,
+      "backgroundAndCenterHoleMatch": true
+    }
+  },
+  "samples": [
+    {
+      "name": "top_left_background",
+      "zone": "background",
+      "paintColor": null,
+      "x": 0,
+      "y": 0,
+      "skiaRgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": null,
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": null,
+      "probableBoundaryClassification": "background-or-center-hole-exact-after-white-normalization",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "top_edge_background",
+      "zone": "background",
+      "paintColor": null,
+      "x": 40,
+      "y": 0,
+      "skiaRgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": null,
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": null,
+      "probableBoundaryClassification": "background-or-center-hole-exact-after-white-normalization",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "left_edge_background",
+      "zone": "background",
+      "paintColor": null,
+      "x": 0,
+      "y": 40,
+      "skiaRgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": null,
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": null,
+      "probableBoundaryClassification": "background-or-center-hole-exact-after-white-normalization",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "blue_left_aa_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "blue",
+      "x": 12,
+      "y": 40,
+      "skiaRgba": [
+        0,
+        0,
+        255,
+        45
+      ],
+      "skiaOverWhiteRgba": [
+        210,
+        210,
+        255,
+        255
+      ],
+      "cpuRgba": [
+        214,
+        208,
+        253,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": [
+        210,
+        210,
+        255,
+        255
+      ],
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        4,
+        2,
+        2,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        4,
+        2,
+        2,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        214,
+        208,
+        2,
+        210
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        4,
+        -2,
+        -2,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "probableBoundaryClassification": "coverage-plus-colorspace-premul-boundary-candidate-runtime-unresolved",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "blue_top_outer_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "blue",
+      "x": 40,
+      "y": 12,
+      "skiaRgba": [
+        0,
+        0,
+        255,
+        46
+      ],
+      "skiaOverWhiteRgba": [
+        209,
+        209,
+        255,
+        255
+      ],
+      "cpuRgba": [
+        214,
+        208,
+        253,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": [
+        209,
+        209,
+        255,
+        255
+      ],
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        5,
+        1,
+        2,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        5,
+        1,
+        2,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        214,
+        208,
+        2,
+        209
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        5,
+        -1,
+        -2,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "probableBoundaryClassification": "coverage-plus-colorspace-premul-boundary-candidate-runtime-unresolved",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "arc_rect_top_left",
+      "zone": "stroke-aa-edge",
+      "paintColor": "blue",
+      "x": 20,
+      "y": 20,
+      "skiaRgba": [
+        0,
+        0,
+        255,
+        40
+      ],
+      "skiaOverWhiteRgba": [
+        215,
+        215,
+        255,
+        255
+      ],
+      "cpuRgba": [
+        224,
+        220,
+        253,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": [
+        215,
+        215,
+        255,
+        255
+      ],
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        9,
+        5,
+        2,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        9,
+        5,
+        2,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        224,
+        220,
+        2,
+        215
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        9,
+        5,
+        -2,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "probableBoundaryClassification": "coverage-plus-colorspace-premul-boundary-candidate-runtime-unresolved",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "blue_top_stroke_center",
+      "zone": "stroke-center",
+      "paintColor": "blue",
+      "x": 40,
+      "y": 20,
+      "skiaRgba": [
+        0,
+        0,
+        255,
+        100
+      ],
+      "skiaOverWhiteRgba": [
+        155,
+        155,
+        255,
+        255
+      ],
+      "cpuRgba": [
+        172,
+        160,
+        250,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": [
+        155,
+        155,
+        255,
+        255
+      ],
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        17,
+        5,
+        5,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        17,
+        5,
+        5,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        172,
+        160,
+        5,
+        155
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        17,
+        5,
+        -5,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "probableBoundaryClassification": "colorspace-premul-or-png-encode-boundary-candidate-runtime-unresolved",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "red_right_stroke_center",
+      "zone": "stroke-center",
+      "paintColor": "red",
+      "x": 60,
+      "y": 40,
+      "skiaRgba": [
+        255,
+        0,
+        0,
+        100
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        155,
+        155,
+        255
+      ],
+      "cpuRgba": [
+        235,
+        178,
+        162,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": [
+        255,
+        155,
+        155,
+        255
+      ],
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        20,
+        23,
+        7,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        20,
+        23,
+        7,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        20,
+        178,
+        162,
+        155
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        -20,
+        23,
+        7,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "probableBoundaryClassification": "colorspace-premul-or-png-encode-boundary-candidate-runtime-unresolved",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "red_bottom_stroke_center",
+      "zone": "stroke-center",
+      "paintColor": "red",
+      "x": 40,
+      "y": 60,
+      "skiaRgba": [
+        255,
+        0,
+        0,
+        100
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        155,
+        155,
+        255
+      ],
+      "cpuRgba": [
+        235,
+        178,
+        162,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": [
+        255,
+        155,
+        155,
+        255
+      ],
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        20,
+        23,
+        7,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        20,
+        23,
+        7,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        20,
+        178,
+        162,
+        155
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        -20,
+        23,
+        7,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "probableBoundaryClassification": "colorspace-premul-or-png-encode-boundary-candidate-runtime-unresolved",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "red_outer_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "red",
+      "x": 67,
+      "y": 40,
+      "skiaRgba": [
+        255,
+        0,
+        0,
+        45
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        210,
+        210,
+        255
+      ],
+      "cpuRgba": [
+        248,
+        227,
+        221,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": [
+        255,
+        210,
+        210,
+        255
+      ],
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        7,
+        17,
+        11,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        7,
+        17,
+        11,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        7,
+        227,
+        221,
+        210
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        -7,
+        17,
+        11,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "probableBoundaryClassification": "coverage-plus-colorspace-premul-boundary-candidate-runtime-unresolved",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "red_bottom_outer_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "red",
+      "x": 40,
+      "y": 67,
+      "skiaRgba": [
+        255,
+        0,
+        0,
+        46
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        209,
+        209,
+        255
+      ],
+      "cpuRgba": [
+        248,
+        227,
+        221,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": [
+        255,
+        209,
+        209,
+        255
+      ],
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        7,
+        18,
+        12,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        7,
+        18,
+        12,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        7,
+        227,
+        221,
+        209
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        -7,
+        18,
+        12,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "probableBoundaryClassification": "coverage-plus-colorspace-premul-boundary-candidate-runtime-unresolved",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "cell_center_hole",
+      "zone": "center-hole",
+      "paintColor": null,
+      "x": 40,
+      "y": 40,
+      "skiaRgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": null,
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": null,
+      "probableBoundaryClassification": "background-or-center-hole-exact-after-white-normalization",
+      "boundaryProofStrength": "static-final-pixel-only"
+    },
+    {
+      "name": "bottom_right_background",
+      "zone": "background",
+      "paintColor": null,
+      "x": 79,
+      "y": 79,
+      "skiaRgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "naiveAlphaOverWhiteRgba": null,
+      "cpuVsSkiaOverWhiteAbsDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "deltaCpuVsSkiaOverWhiteRgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "deltaCpuVsSkiaRgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "cpuMinusSkiaOverWhiteSignedDelta": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "skiaOverWhiteVsNaiveAbsDelta": null,
+      "probableBoundaryClassification": "background-or-center-hole-exact-after-white-normalization",
+      "boundaryProofStrength": "static-final-pixel-only"
+    }
+  ],
+  "cpuPipelineBoundaryAudit": [
+    {
+      "boundaryId": "selected-cell-input-and-paint",
+      "boundary": "selected-cell harness draw order, paint color, alpha, stroke, and PNG write request",
+      "inspectedPoints": [
+        {
+          "file": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CircularArcsStrokeButtSelectedCellCaptureTest.kt",
+          "symbols": [
+            "SelectedCellGM.onDraw",
+            "SelectedCellGM.paint",
+            "writePng"
+          ],
+          "staticEvidence": [
+            "red arc 0..90 and blue arc 0..-270 are drawn into the 80x80 bounded cell",
+            "paint color packs alpha 100 with SK_ColorRED/SK_ColorBLUE RGB",
+            "evidence PNG is written through SkPngEncoder.Encode(bitmap)"
+          ]
+        }
+      ],
+      "proved": [
+        "paint source alpha is 100/255 for both arcs",
+        "geometry and draw order match the selected cell audited by FOR-329/FOR-331"
+      ],
+      "notProved": [
+        "post-color-xform float RGBA for any selected sample",
+        "post-store F16 premul value for any selected sample"
+      ],
+      "runtimeValuesCaptured": false,
+      "boundaryIdentified": false
+    },
+    {
+      "boundaryId": "testutils-raster-sink-f16",
+      "boundary": "GM execution surface creation and background/store format",
+      "inspectedPoints": [
+        {
+          "file": "cpu-raster/src/main/kotlin/org/skia/testing/TestUtils.kt",
+          "symbols": [
+            "TestUtils.runGmTest"
+          ],
+          "staticEvidence": [
+            "runGmTest routes through RasterSinkF16(DM_REFERENCE_COLOR_SPACE)"
+          ]
+        },
+        {
+          "file": "cpu-raster/src/main/kotlin/org/skia/dm/RasterSinkF16.kt",
+          "symbols": [
+            "RasterSinkF16.draw"
+          ],
+          "staticEvidence": [
+            "bitmap is kRGBA_F16Norm",
+            "bitmap is tagged with DM_REFERENCE_COLOR_SPACE",
+            "bitmap.eraseColor(src.bgColor()) seeds the GM background"
+          ]
+        }
+      ],
+      "proved": [
+        "Kanvas CPU selected-cell output is rendered into F16 Rec.2020 before PNG encoding",
+        "the CPU harness starts from GM background white, not transparent"
+      ],
+      "notProved": [
+        "whether the residual is introduced before store or only during F16 readback/PNG encode"
+      ],
+      "runtimeValuesCaptured": false,
+      "boundaryIdentified": false
+    },
+    {
+      "boundaryId": "paint-color-xform-and-premul",
+      "boundary": "paint color conversion from sRGB/unpremul into device-space premul F16 source",
+      "inspectedPoints": [
+        {
+          "file": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+          "symbols": [
+            "transformPaintColor(SkColor4f)",
+            "colorToF16Premul(SkColor4f)"
+          ],
+          "staticEvidence": [
+            "drawPath transforms solid paint color into bitmap color space as SkColor4f",
+            "F16 path premultiplies color4f before coverage and blend"
+          ]
+        }
+      ],
+      "proved": [
+        "the selected-cell CPU stroke uses a color-space conversion plus premul source contract before F16 blend"
+      ],
+      "notProved": [
+        "the exact converted red/blue float values at the sampled stroke pixels",
+        "whether converted values already match the final CPU residual direction"
+      ],
+      "runtimeValuesCaptured": false,
+      "boundaryIdentified": false
+    },
+    {
+      "boundaryId": "stroke-coverage",
+      "boundary": "drawArc stroke lowering and AA coverage modulation",
+      "inspectedPoints": [
+        {
+          "file": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+          "symbols": [
+            "drawPath",
+            "fillPath",
+            "blendF16PremulMode"
+          ],
+          "staticEvidence": [
+            "stroke style is lowered through SkStroker.fromPaint(...).stroke(effectivePath)",
+            "AA fillPath uses supersampling and folds coverage into premul source before blend"
+          ]
+        }
+      ],
+      "proved": [
+        "coverage participates before the F16 SrcOver store boundary",
+        "FOR-331 residual remains inside the expected stroke bbox with 0 different pixels outside"
+      ],
+      "notProved": [
+        "per-sample coverage values for the FOR-331 stroke-center and AA-edge samples",
+        "whether AA coverage alone can explain edge samples after color/readback effects are removed"
+      ],
+      "runtimeValuesCaptured": false,
+      "boundaryIdentified": false
+    },
+    {
+      "boundaryId": "src-over-f16-store",
+      "boundary": "premul F16 SrcOver blend and in-place store",
+      "inspectedPoints": [
+        {
+          "file": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+          "symbols": [
+            "blendF16PremulMode",
+            "blendF16Premul"
+          ],
+          "staticEvidence": [
+            "kSrcOver writes sr + dst * (1 - sa) directly into pixelsF16",
+            "no 8-bit quantization occurs inside the pure premul-float F16 SrcOver body"
+          ]
+        }
+      ],
+      "proved": [
+        "the final CPU store before PNG is premul float in the destination bitmap buffer"
+      ],
+      "notProved": [
+        "stored premul float RGBA before readback for any selected sample",
+        "whether store math or prior color/coverage inputs first diverge from Skia-over-white"
+      ],
+      "runtimeValuesCaptured": false,
+      "boundaryIdentified": false
+    },
+    {
+      "boundaryId": "f16-readback-and-png-encode",
+      "boundary": "F16 premul readback to unpremul 8-bit RGBA and PNG encoding",
+      "inspectedPoints": [
+        {
+          "file": "kanvas-skia/src/main/kotlin/org/skia/foundation/SkBitmap.kt",
+          "symbols": [
+            "SkBitmap.getPixel"
+          ],
+          "staticEvidence": [
+            "kRGBA_F16Norm getPixel converts premul float to non-premul 8-bit ARGB",
+            "conversion uses floor-style truncation via (channel * 256f).toInt()"
+          ]
+        },
+        {
+          "file": "kanvas-skia/src/main/kotlin/org/skia/encode/SkPngEncoder.kt",
+          "symbols": [
+            "SkPngEncoder.rgbaRow"
+          ],
+          "staticEvidence": [
+            "PNG rows are produced from src.getPixel(x, y)",
+            "PNG writes 8-bit RGBA samples",
+            "the encoder does not embed the bitmap color-space tag as iCCP"
+          ]
+        }
+      ],
+      "proved": [
+        "PNG evidence samples are downstream of an F16 premul to 8-bit unpremul readback boundary",
+        "the color-space tag is not preserved in the checked PNG output"
+      ],
+      "notProved": [
+        "whether the residual first appears at readback/encode rather than earlier color conversion or store"
+      ],
+      "runtimeValuesCaptured": false,
+      "boundaryIdentified": false
+    }
+  ],
+  "boundaryAssessment": {
+    "conclusion": "kotlin-instrumentation-required",
+    "correctionTargetable": false,
+    "kotlinInstrumentationRequired": true,
+    "provedBoundaries": [],
+    "candidateBoundaryCluster": [
+      "paint-color-xform-and-premul",
+      "stroke-coverage",
+      "src-over-f16-store",
+      "f16-readback-and-png-encode"
+    ],
+    "rationale": "FOR-331 final-pixel evidence and static source inspection keep the residual in the color-space/premul/F16-readback/PNG cluster, but no inspected boundary captures runtime pre/post values for the selected samples. A renderer correction is not targetable yet.",
+    "recommendedNextAction": "Add targeted Kotlin instrumentation around transformPaintColor/colorToF16Premul, coverage, blendF16PremulMode store, SkBitmap.getPixel F16 readback, and SkPngEncoder.rgbaRow for the selected FOR-331 samples."
+  },
+  "preservedContracts": {
+    "auditScope": "selected-cell-only",
+    "diagnosticOnly": true,
+    "productionRendererChanged": false,
+    "cpuRendererFixed": false,
+    "gpuRendered": false,
+    "wgslChanged": false,
+    "thresholdChanged": false,
+    "fallbackPolicyChanged": false,
+    "kadreNativeDependencyAdded": false,
+    "scenePromotionChanged": false,
+    "fidelityScoreCounted": false,
+    "fullGmScoreAccepted": false,
+    "fullGmCropAccepted": false,
+    "fullGmSubstitutionAccepted": false
+  },
+  "validation": [
+    "rtk python3 scripts/validate_for332_circular_arcs_stroke_butt_selected_cell_cpu_color_pipeline_trace.py",
+    "rtk python3 scripts/validate_for331_circular_arcs_stroke_butt_selected_cell_normalized_stroke_trace.py",
+    "rtk python3 scripts/validate_for330_circular_arcs_stroke_butt_selected_cell_white_background_diff.py",
+    "rtk python3 scripts/validate_for329_circular_arcs_stroke_butt_selected_cell_cpu_raster_audit.py",
+    "rtk python3 scripts/validate_for328_circular_arcs_stroke_butt_selected_cell_skia_cpu_diff.py",
+    "rtk python3 scripts/validate_for327_circular_arcs_stroke_butt_selected_cell_skia_reference.py",
+    "rtk python3 scripts/validate_for322_circular_arcs_stroke_butt_selected_cell_harness.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-cpu-color-pipeline-trace-for332/circular-arcs-stroke-butt-selected-cell-cpu-color-pipeline-trace-for332.json >/dev/null",
+    "rtk ./gradlew pipelineSceneDashboardGate",
+    "rtk git diff --check origin/master...HEAD"
+  ]
+}
