@@ -152,15 +152,22 @@ def validate_modes(evidence: dict[str, Any]) -> dict[str, Any]:
     demo = modes.get("demo")
     benchmark = modes.get("benchmark")
     ci_evidence = modes.get("ciEvidence")
-    if not isinstance(demo, dict) or not isinstance(benchmark, dict) or not isinstance(ci_evidence, dict):
-        fail("M90 modes must contain demo, benchmark, and ciEvidence objects")
+    optional_refresh = modes.get("optionalDirectRuntimeRefresh")
+    if (
+        not isinstance(demo, dict)
+        or not isinstance(benchmark, dict)
+        or not isinstance(ci_evidence, dict)
+        or not isinstance(optional_refresh, dict)
+    ):
+        fail("M90 modes must contain demo, benchmark, ciEvidence, and optionalDirectRuntimeRefresh objects")
 
     expected_demo_command = "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeInteractive"
     expected_benchmark_command = (
         "rtk ./gradlew --no-daemon :kadre-runtime:runMepNextKadreNativeBenchmark "
         "-PkadreMepNextFrames=300 -PkadreMepNextWarmupFrames=120"
     )
-    expected_ci_command = "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive"
+    expected_ci_command = "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive"
+    expected_optional_refresh_command = "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive"
 
     if demo.get("nativeWindow") is not True or demo.get("optIn") is not True:
         fail("demo mode must remain native-window opt-in")
@@ -182,8 +189,17 @@ def validate_modes(evidence: dict[str, Any]) -> dict[str, Any]:
         fail("CI evidence must remain headless and non-opt-in")
     if ci_evidence.get("usesKadreNativeSubmodule") is not False:
         fail("CI evidence must not require the Kadre native submodule")
+    if ci_evidence.get("validatesCheckedInArtifacts") is not True:
+        fail("CI evidence must validate checked-in artifacts")
     if ci_evidence.get("command") != expected_ci_command:
         fail("CI evidence command changed unexpectedly")
+    if optional_refresh.get("command") != expected_optional_refresh_command:
+        fail("optional direct runtime refresh command changed unexpectedly")
+    if optional_refresh.get("ciGate") is not False:
+        fail("optional direct runtime refresh must not be a CI gate")
+    precondition = str(optional_refresh.get("submodulePrecondition", ""))
+    if "external/poc-koreos" not in precondition and "org.graphiks.kadre" not in precondition:
+        fail("optional direct runtime refresh must document Kadre provisioning")
 
     return {
         "demo": {
@@ -203,7 +219,15 @@ def validate_modes(evidence: dict[str, Any]) -> dict[str, Any]:
             "nativeWindow": ci_evidence["nativeWindow"],
             "optIn": ci_evidence["optIn"],
             "usesKadreNativeSubmodule": ci_evidence["usesKadreNativeSubmodule"],
+            "validatesCheckedInArtifacts": ci_evidence["validatesCheckedInArtifacts"],
             "command": ci_evidence["command"],
+        },
+        "optionalDirectRuntimeRefresh": {
+            "nativeWindow": optional_refresh["nativeWindow"],
+            "optIn": optional_refresh["optIn"],
+            "ciGate": optional_refresh["ciGate"],
+            "command": optional_refresh["command"],
+            "submodulePrecondition": precondition,
         },
     }
 
@@ -579,7 +603,8 @@ timing, visual threshold, scene status, fallback, or readiness score changed.
 |---|---:|---:|---|
 | demo | {modes["demo"]["nativeWindow"]} | {modes["demo"]["optIn"]} | opens long window in CI: `{modes["demo"]["opensLongWindowInCi"]}` |
 | benchmark | {modes["benchmark"]["nativeWindow"]} | {modes["benchmark"]["optIn"]} | `{modes["benchmark"]["gatePhase"]}`, release blocking: `{modes["benchmark"]["releaseBlocking"]}` |
-| CI evidence | {modes["ciEvidence"]["nativeWindow"]} | {modes["ciEvidence"]["optIn"]} | Kadre native submodule required: `{modes["ciEvidence"]["usesKadreNativeSubmodule"]}` |
+| CI evidence | {modes["ciEvidence"]["nativeWindow"]} | {modes["ciEvidence"]["optIn"]} | Checked-in validator: `{modes["ciEvidence"]["command"]}`; Kadre native submodule required: `{modes["ciEvidence"]["usesKadreNativeSubmodule"]}` |
+| Optional direct refresh | {modes["optionalDirectRuntimeRefresh"]["nativeWindow"]} | {modes["optionalDirectRuntimeRefresh"]["optIn"]} | `{modes["optionalDirectRuntimeRefresh"]["command"]}`; CI gate: `{modes["optionalDirectRuntimeRefresh"]["ciGate"]}` |
 
 ## Telemetry Classification
 

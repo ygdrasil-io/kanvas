@@ -28,8 +28,16 @@
         "ciEvidence": {
             "nativeWindow": false,
             "optIn": false,
+            "command": "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+            "usesKadreNativeSubmodule": false,
+            "validatesCheckedInArtifacts": true
+        },
+        "optionalDirectRuntimeRefresh": {
+            "nativeWindow": false,
+            "optIn": true,
             "command": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
-            "usesKadreNativeSubmodule": false
+            "ciGate": false,
+            "submodulePrecondition": "git submodule update --init --recursive external/poc-koreos or provide local org.graphiks.kadre artifacts"
         }
     },
     "durableLoop": {

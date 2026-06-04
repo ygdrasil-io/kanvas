@@ -44,7 +44,15 @@
       "nativeWindow": false,
       "optIn": false,
       "usesKadreNativeSubmodule": false,
-      "command": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive"
+      "validatesCheckedInArtifacts": true,
+      "command": "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive"
+    },
+    "optionalDirectRuntimeRefresh": {
+      "nativeWindow": false,
+      "optIn": true,
+      "ciGate": false,
+      "command": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+      "submodulePrecondition": "git submodule update --init --recursive external/poc-koreos or provide local org.graphiks.kadre artifacts"
     }
   },
   "telemetrySourceClassification": {

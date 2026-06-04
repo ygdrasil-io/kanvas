@@ -30,7 +30,8 @@ timing, visual threshold, scene status, fallback, or readiness score changed.
 |---|---:|---:|---|
 | demo | True | True | opens long window in CI: `False` |
 | benchmark | True | True | `candidate-reporting-only`, release blocking: `False` |
-| CI evidence | False | False | Kadre native submodule required: `False` |
+| CI evidence | False | False | Checked-in validator: `rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive`; Kadre native submodule required: `False` |
+| Optional direct refresh | False | True | `rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive`; CI gate: `False` |
 
 ## Telemetry Classification
 

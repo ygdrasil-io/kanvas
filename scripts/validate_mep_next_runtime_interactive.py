@@ -41,7 +41,24 @@ def main() -> int:
     require(modes.get("demo", {}).get("optIn") is True, "native demo must remain opt-in")
     require(modes.get("benchmark", {}).get("releaseBlocking") is False, "benchmark must not become release-blocking")
     require(modes.get("ciEvidence", {}).get("nativeWindow") is False, "CI evidence must stay headless")
+    require(
+        modes.get("ciEvidence", {}).get("command") == "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+        "CI evidence must use the checked-in validator",
+    )
     require(modes.get("ciEvidence", {}).get("usesKadreNativeSubmodule") is False, "root validation must not require Kadre submodule")
+    require(modes.get("ciEvidence", {}).get("validatesCheckedInArtifacts") is True, "CI evidence must validate checked-in artifacts")
+    optional_refresh = modes.get("optionalDirectRuntimeRefresh", {})
+    require(
+        optional_refresh.get("command")
+        == "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+        "optional direct runtime refresh command missing",
+    )
+    require(optional_refresh.get("ciGate") is False, "optional direct refresh must not be a CI gate")
+    require(
+        "external/poc-koreos" in optional_refresh.get("submodulePrecondition", "")
+        or "org.graphiks.kadre" in optional_refresh.get("submodulePrecondition", ""),
+        "optional direct refresh must document Kadre provisioning",
+    )
 
     durable = evidence.get("durableLoop", {})
     require(durable.get("autonomousFrameClock") is True, "autonomous frame clock must be explicit")

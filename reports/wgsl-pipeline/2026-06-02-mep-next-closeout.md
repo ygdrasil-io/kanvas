@@ -27,17 +27,22 @@ release-blocking timing gate, or claim broad Skia parity.
 Headless gates:
 
 ```bash
+./gradlew --no-daemon validateMepNextRuntimeInteractive
 python3 scripts/validate_mep_next_feature_breadth.py .
 python3 scripts/validate_mep_next_runtime_interactive.py .
 ./gradlew --no-daemon pipelinePmBundle
 ```
 
-Kadre runtime generation with local submodule:
+Optional/provisioned Kadre runtime refresh:
 
 ```bash
 git submodule update --init --recursive external/poc-koreos
 ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive
 ```
+
+The direct Kadre refresh may resolve `org.graphiks.kadre:*` and is not a
+required headless gate when Kadre source substitution or local artifacts are
+unavailable.
 
 Opt-in native PM demo commands:
 

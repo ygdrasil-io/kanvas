@@ -1,0 +1,78 @@
+{
+  "linear": "FOR-313",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-runtime-docs-kadre-headless-policy-audit-ticket",
+  "decision": "M90_RUNTIME_DOCS_KADRE_HEADLESS_POLICY_AUDIT_APPLIED",
+  "documents": [
+    {
+      "path": "reports/wgsl-pipeline/2026-06-02-mep-next-runtime-interactive.md",
+      "checkedInValidator": "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+      "directRefreshLines": [
+        "| optional direct refresh | no | `rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive` | Optional/provisioned refresh after `external/poc-koreos` or local `org.graphiks.kadre` artifacts are available. |",
+        "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive"
+      ],
+      "optionalProvisioning": [
+        "external/poc-koreos",
+        "org.graphiks.kadre"
+      ]
+    },
+    {
+      "path": "reports/wgsl-pipeline/m90-runtime-interactive/pm-report.md",
+      "checkedInValidator": "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+      "directRefreshLines": [
+        "| optional direct refresh | no | `rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive` | Optional/provisioned refresh after `external/poc-koreos` or local `org.graphiks.kadre` artifacts are available. |",
+        "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive"
+      ],
+      "optionalProvisioning": [
+        "external/poc-koreos",
+        "org.graphiks.kadre"
+      ]
+    },
+    {
+      "path": "reports/wgsl-pipeline/2026-06-02-mep-next-closeout.md",
+      "headlessValidator": "./gradlew --no-daemon validateMepNextRuntimeInteractive",
+      "optionalDirectRefresh": "./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+      "optionalProvisioning": [
+        "external/poc-koreos",
+        "org.graphiks.kadre"
+      ]
+    }
+  ],
+  "evidenceJson": {
+    "path": "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json",
+    "ciEvidenceCommand": "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+    "validatesCheckedInArtifacts": true,
+    "optionalDirectRefresh": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+    "optionalRefreshCiGate": false,
+    "optionalProvisioning": [
+      "external/poc-koreos",
+      "org.graphiks.kadre"
+    ]
+  },
+  "generator": {
+    "path": "kadre-runtime/src/main/kotlin/org/skia/kadre/runtime/MepNextRuntimeInteractive.kt",
+    "emitsCheckedInEvidenceJson": true,
+    "emitsCheckedInValidator": true,
+    "emitsOptionalDirectRefresh": true
+  },
+  "policy": {
+    "requiredHeadlessValidator": "rtk ./gradlew --no-daemon validateMepNextRuntimeInteractive",
+    "directKadreRefresh": "rtk ./gradlew --no-daemon :kadre-runtime:pipelineMepNextRuntimeInteractive",
+    "directKadreRefreshGate": "optional/provisioned-only",
+    "provisioningAccepted": [
+      "external/poc-koreos",
+      "org.graphiks.kadre"
+    ]
+  },
+  "unchangedClaims": {
+    "rendererChanged": false,
+    "shaderChanged": false,
+    "gradleDependencyChanged": false,
+    "sceneScoreChanged": false,
+    "readinessPercentChanged": false,
+    "telemetryCountChanged": false
+  },
+  "alternateDecisions": {
+    "unsafe": "M90_RUNTIME_DOCS_DIRECT_KADRE_TASK_REQUIRED",
+    "ambiguous": "M90_RUNTIME_DOCS_KADRE_HEADLESS_POLICY_AMBIGUOUS"
+  }
+}
