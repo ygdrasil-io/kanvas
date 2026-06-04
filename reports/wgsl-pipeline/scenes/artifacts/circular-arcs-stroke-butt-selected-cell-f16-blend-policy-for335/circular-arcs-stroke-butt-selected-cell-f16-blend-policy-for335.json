@@ -1,0 +1,1095 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-335",
+  "sceneId": "circular-arcs-stroke-butt-selected-cell-f16-blend-policy-for335",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-circular-arcs-stroke-butt-selected-cell-f16-blend-color-policy-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-334-circular-arcs-stroke-butt-f16-export-color-handling-corrected-finding",
+    "global/kanvas/findings/for-333-circular-arcs-stroke-butt-selected-cell-kotlin-cpu-runtime-trace-boundary-identified-finding"
+  ],
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_BLEND_POLICY_REQUIRES_RENDERER_COLOR_POLICY_DECISION",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_BLEND_POLICY_BOUNDARY_IDENTIFIED",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_BLEND_POLICY_CORRECTED",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_BLEND_POLICY_REQUIRES_RENDERER_COLOR_POLICY_DECISION",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_BLEND_POLICY_INPUT_INVALID"
+  ],
+  "decisionReason": "The remaining full-coverage stroke residual disappears under a straight sRGB SrcOver-over-white policy, while the current CPU path stores a Rec2020 F16 working-space SrcOver result before export. The best bounded candidate reduces the 8-stroke residual but worsens two existing FOR-334 samples, so this is not safe as a local renderer patch without an explicit renderer color policy decision.",
+  "identifiedRemainingBoundary": "paintColorXformAndPremul/source premul plus SkBitmapDevice.blendF16PremulMode.kSrcOver working-space blend policy before SkBitmap.getPixelAsSrgb export",
+  "selectedCellOnly": true,
+  "inputValidation": {
+    "for334Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-f16-export-color-handling-for334/circular-arcs-stroke-butt-selected-cell-f16-export-color-handling-for334.json",
+    "for334Decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_EXPORT_COLOR_HANDLING_CORRECTED",
+    "for334RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_EXPORT_COLOR_HANDLING_CORRECTED",
+    "for334StrokeResidualAfterExport": 132,
+    "for333Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-kotlin-cpu-runtime-trace-for333/circular-arcs-stroke-butt-selected-cell-kotlin-cpu-runtime-trace-for333.json",
+    "for333Decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_KOTLIN_CPU_RUNTIME_TRACE_BOUNDARY_IDENTIFIED",
+    "for333RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_KOTLIN_CPU_RUNTIME_TRACE_BOUNDARY_IDENTIFIED"
+  },
+  "policyComparison": {
+    "currentPolicy": {
+      "policyId": "current_cpu_rec2020_f16_src_over_then_srgb_export",
+      "formula": "paint color transformed into destination Rec2020, premultiplied as F16, coverage applied in F16 premul, SrcOver blended into the F16 destination, then exported through SkBitmap.getPixelAsSrgb"
+    },
+    "candidatePolicies": [
+      {
+        "policyId": "straight_srgb_float_coverage_src_over_white",
+        "description": "Use original sRGB source channels and float coverage alpha for SrcOver over white."
+      },
+      {
+        "policyId": "straight_srgb_quantized_alpha_src_over_white",
+        "description": "Use original sRGB source channels and 8-bit rounded covered alpha for SrcOver over white."
+      }
+    ]
+  },
+  "metrics": {
+    "strokeSampleCount": 8,
+    "currentCpuAfterFor334StrokeSumAbsDelta": 132,
+    "candidatePolicySumAbsDelta": {
+      "straight_srgb_float_coverage_src_over_white": 58,
+      "straight_srgb_quantized_alpha_src_over_white": 52
+    },
+    "candidatePolicyWorsenedSamplesVsCurrent": {
+      "straight_srgb_float_coverage_src_over_white": 2,
+      "straight_srgb_quantized_alpha_src_over_white": 2
+    },
+    "bestCandidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "bestCandidatePolicySumAbsDelta": 52,
+    "bestCandidateWorsenedSamplesVsCurrent": 2,
+    "strokeCenterCurrentCpuAfterFor334SumAbsDelta": 57,
+    "strokeCenterBestCandidateSumAbsDelta": 0
+  },
+  "samples": [
+    {
+      "name": "blue_left_aa_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "blue",
+      "x": 12,
+      "y": 40,
+      "coverage": {
+        "coverageSamples": 8,
+        "coverageMaxSamples": 16,
+        "coverageScale": 0.5
+      },
+      "paintSourceRgba": [
+        0,
+        0,
+        255,
+        100
+      ],
+      "paintColor4fAfterXform": [
+        0.168337375,
+        0.051079843,
+        0.946721673,
+        0.392156899
+      ],
+      "srcPremulBeforeCoverageF16": [
+        0.066014662,
+        0.020031312,
+        0.371263444,
+        0.392156899
+      ],
+      "srcPremulAfterCoverageF16": [
+        0.033007331,
+        0.010015656,
+        0.185631722,
+        0.196078449
+      ],
+      "dstPremulBeforeStoreF16": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "dstPremulAfterStoreF16": [
+        0.836928904,
+        0.813901007,
+        0.989494443,
+        1.0
+      ],
+      "skiaOverWhiteRgba": [
+        210,
+        210,
+        255,
+        255
+      ],
+      "currentCpuAfterFor334Rgba": [
+        214,
+        207,
+        255,
+        255
+      ],
+      "currentCpuAfterFor334MinusSkiaSignedDelta": [
+        4,
+        -3,
+        0,
+        0
+      ],
+      "currentCpuAfterFor334VsSkiaAbsDelta": [
+        4,
+        3,
+        0,
+        0
+      ],
+      "currentCpuAfterFor334SumAbsDelta": 7,
+      "candidatePolicies": [
+        {
+          "policyId": "straight_srgb_float_coverage_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=(paintAlpha/255)*coverageScale, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            205,
+            205,
+            255,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            -5,
+            -5,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            5,
+            5,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 10,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": 3,
+          "worsensCurrentCpuAfterFor334": true
+        },
+        {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=round((paintAlpha/255)*coverageScale*255)/255, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            205,
+            205,
+            255,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            -5,
+            -5,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            5,
+            5,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 10,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": 3,
+          "worsensCurrentCpuAfterFor334": true
+        }
+      ]
+    },
+    {
+      "name": "blue_top_outer_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "blue",
+      "x": 40,
+      "y": 12,
+      "coverage": {
+        "coverageSamples": 8,
+        "coverageMaxSamples": 16,
+        "coverageScale": 0.5
+      },
+      "paintSourceRgba": [
+        0,
+        0,
+        255,
+        100
+      ],
+      "paintColor4fAfterXform": [
+        0.168337375,
+        0.051079843,
+        0.946721673,
+        0.392156899
+      ],
+      "srcPremulBeforeCoverageF16": [
+        0.066014662,
+        0.020031312,
+        0.371263444,
+        0.392156899
+      ],
+      "srcPremulAfterCoverageF16": [
+        0.033007331,
+        0.010015656,
+        0.185631722,
+        0.196078449
+      ],
+      "dstPremulBeforeStoreF16": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "dstPremulAfterStoreF16": [
+        0.836928904,
+        0.813901007,
+        0.989494443,
+        1.0
+      ],
+      "skiaOverWhiteRgba": [
+        209,
+        209,
+        255,
+        255
+      ],
+      "currentCpuAfterFor334Rgba": [
+        214,
+        207,
+        255,
+        255
+      ],
+      "currentCpuAfterFor334MinusSkiaSignedDelta": [
+        5,
+        -2,
+        0,
+        0
+      ],
+      "currentCpuAfterFor334VsSkiaAbsDelta": [
+        5,
+        2,
+        0,
+        0
+      ],
+      "currentCpuAfterFor334SumAbsDelta": 7,
+      "candidatePolicies": [
+        {
+          "policyId": "straight_srgb_float_coverage_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=(paintAlpha/255)*coverageScale, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            205,
+            205,
+            255,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            -4,
+            -4,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            4,
+            4,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 8,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": 1,
+          "worsensCurrentCpuAfterFor334": true
+        },
+        {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=round((paintAlpha/255)*coverageScale*255)/255, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            205,
+            205,
+            255,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            -4,
+            -4,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            4,
+            4,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 8,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": 1,
+          "worsensCurrentCpuAfterFor334": true
+        }
+      ]
+    },
+    {
+      "name": "arc_rect_top_left",
+      "zone": "stroke-aa-edge",
+      "paintColor": "blue",
+      "x": 20,
+      "y": 20,
+      "coverage": {
+        "coverageSamples": 6,
+        "coverageMaxSamples": 16,
+        "coverageScale": 0.375
+      },
+      "paintSourceRgba": [
+        0,
+        0,
+        255,
+        100
+      ],
+      "paintColor4fAfterXform": [
+        0.168337375,
+        0.051079843,
+        0.946721673,
+        0.392156899
+      ],
+      "srcPremulBeforeCoverageF16": [
+        0.066014662,
+        0.020031312,
+        0.371263444,
+        0.392156899
+      ],
+      "srcPremulAfterCoverageF16": [
+        0.024755498,
+        0.007511742,
+        0.139223784,
+        0.147058845
+      ],
+      "dstPremulBeforeStoreF16": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "dstPremulAfterStoreF16": [
+        0.877696633,
+        0.860414445,
+        0.992102504,
+        1.0
+      ],
+      "skiaOverWhiteRgba": [
+        215,
+        215,
+        255,
+        255
+      ],
+      "currentCpuAfterFor334Rgba": [
+        224,
+        219,
+        255,
+        255
+      ],
+      "currentCpuAfterFor334MinusSkiaSignedDelta": [
+        9,
+        4,
+        0,
+        0
+      ],
+      "currentCpuAfterFor334VsSkiaAbsDelta": [
+        9,
+        4,
+        0,
+        0
+      ],
+      "currentCpuAfterFor334SumAbsDelta": 13,
+      "candidatePolicies": [
+        {
+          "policyId": "straight_srgb_float_coverage_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=(paintAlpha/255)*coverageScale, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            218,
+            218,
+            255,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            3,
+            3,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            3,
+            3,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 6,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -7,
+          "worsensCurrentCpuAfterFor334": false
+        },
+        {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=round((paintAlpha/255)*coverageScale*255)/255, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            217,
+            217,
+            255,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            2,
+            2,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            2,
+            2,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 4,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -9,
+          "worsensCurrentCpuAfterFor334": false
+        }
+      ]
+    },
+    {
+      "name": "blue_top_stroke_center",
+      "zone": "stroke-center",
+      "paintColor": "blue",
+      "x": 40,
+      "y": 20,
+      "coverage": {
+        "coverageSamples": 16,
+        "coverageMaxSamples": 16,
+        "coverageScale": 1.0
+      },
+      "paintSourceRgba": [
+        0,
+        0,
+        255,
+        100
+      ],
+      "paintColor4fAfterXform": [
+        0.168337375,
+        0.051079843,
+        0.946721673,
+        0.392156899
+      ],
+      "srcPremulBeforeCoverageF16": [
+        0.066014662,
+        0.020031312,
+        0.371263444,
+        0.392156899
+      ],
+      "srcPremulAfterCoverageF16": [
+        0.066014662,
+        0.020031312,
+        0.371263444,
+        0.392156899
+      ],
+      "dstPremulBeforeStoreF16": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "dstPremulAfterStoreF16": [
+        0.673857749,
+        0.627847016,
+        0.97906208,
+        1.0
+      ],
+      "skiaOverWhiteRgba": [
+        155,
+        155,
+        255,
+        255
+      ],
+      "currentCpuAfterFor334Rgba": [
+        171,
+        158,
+        255,
+        255
+      ],
+      "currentCpuAfterFor334MinusSkiaSignedDelta": [
+        16,
+        3,
+        0,
+        0
+      ],
+      "currentCpuAfterFor334VsSkiaAbsDelta": [
+        16,
+        3,
+        0,
+        0
+      ],
+      "currentCpuAfterFor334SumAbsDelta": 19,
+      "candidatePolicies": [
+        {
+          "policyId": "straight_srgb_float_coverage_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=(paintAlpha/255)*coverageScale, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 0,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -19,
+          "worsensCurrentCpuAfterFor334": false
+        },
+        {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=round((paintAlpha/255)*coverageScale*255)/255, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 0,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -19,
+          "worsensCurrentCpuAfterFor334": false
+        }
+      ]
+    },
+    {
+      "name": "red_right_stroke_center",
+      "zone": "stroke-center",
+      "paintColor": "red",
+      "x": 60,
+      "y": 40,
+      "coverage": {
+        "coverageSamples": 16,
+        "coverageMaxSamples": 16,
+        "coverageScale": 1.0
+      },
+      "paintSourceRgba": [
+        255,
+        0,
+        0,
+        100
+      ],
+      "paintColor4fAfterXform": [
+        0.792015851,
+        0.230955511,
+        0.073705338,
+        0.392156899
+      ],
+      "srcPremulBeforeCoverageF16": [
+        0.310594469,
+        0.0905708,
+        0.028904056,
+        0.392156899
+      ],
+      "srcPremulAfterCoverageF16": [
+        0.310594469,
+        0.0905708,
+        0.028904056,
+        0.392156899
+      ],
+      "dstPremulBeforeStoreF16": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "dstPremulAfterStoreF16": [
+        0.9184376,
+        0.69838649,
+        0.636702716,
+        1.0
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        155,
+        155,
+        255
+      ],
+      "currentCpuAfterFor334Rgba": [
+        255,
+        170,
+        159,
+        255
+      ],
+      "currentCpuAfterFor334MinusSkiaSignedDelta": [
+        0,
+        15,
+        4,
+        0
+      ],
+      "currentCpuAfterFor334VsSkiaAbsDelta": [
+        0,
+        15,
+        4,
+        0
+      ],
+      "currentCpuAfterFor334SumAbsDelta": 19,
+      "candidatePolicies": [
+        {
+          "policyId": "straight_srgb_float_coverage_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=(paintAlpha/255)*coverageScale, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 0,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -19,
+          "worsensCurrentCpuAfterFor334": false
+        },
+        {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=round((paintAlpha/255)*coverageScale*255)/255, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 0,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -19,
+          "worsensCurrentCpuAfterFor334": false
+        }
+      ]
+    },
+    {
+      "name": "red_bottom_stroke_center",
+      "zone": "stroke-center",
+      "paintColor": "red",
+      "x": 40,
+      "y": 60,
+      "coverage": {
+        "coverageSamples": 16,
+        "coverageMaxSamples": 16,
+        "coverageScale": 1.0
+      },
+      "paintSourceRgba": [
+        255,
+        0,
+        0,
+        100
+      ],
+      "paintColor4fAfterXform": [
+        0.792015851,
+        0.230955511,
+        0.073705338,
+        0.392156899
+      ],
+      "srcPremulBeforeCoverageF16": [
+        0.310594469,
+        0.0905708,
+        0.028904056,
+        0.392156899
+      ],
+      "srcPremulAfterCoverageF16": [
+        0.310594469,
+        0.0905708,
+        0.028904056,
+        0.392156899
+      ],
+      "dstPremulBeforeStoreF16": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "dstPremulAfterStoreF16": [
+        0.9184376,
+        0.69838649,
+        0.636702716,
+        1.0
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        155,
+        155,
+        255
+      ],
+      "currentCpuAfterFor334Rgba": [
+        255,
+        170,
+        159,
+        255
+      ],
+      "currentCpuAfterFor334MinusSkiaSignedDelta": [
+        0,
+        15,
+        4,
+        0
+      ],
+      "currentCpuAfterFor334VsSkiaAbsDelta": [
+        0,
+        15,
+        4,
+        0
+      ],
+      "currentCpuAfterFor334SumAbsDelta": 19,
+      "candidatePolicies": [
+        {
+          "policyId": "straight_srgb_float_coverage_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=(paintAlpha/255)*coverageScale, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 0,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -19,
+          "worsensCurrentCpuAfterFor334": false
+        },
+        {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=round((paintAlpha/255)*coverageScale*255)/255, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 0,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -19,
+          "worsensCurrentCpuAfterFor334": false
+        }
+      ]
+    },
+    {
+      "name": "red_outer_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "red",
+      "x": 67,
+      "y": 40,
+      "coverage": {
+        "coverageSamples": 6,
+        "coverageMaxSamples": 16,
+        "coverageScale": 0.375
+      },
+      "paintSourceRgba": [
+        255,
+        0,
+        0,
+        100
+      ],
+      "paintColor4fAfterXform": [
+        0.792015851,
+        0.230955511,
+        0.073705338,
+        0.392156899
+      ],
+      "srcPremulBeforeCoverageF16": [
+        0.310594469,
+        0.0905708,
+        0.028904056,
+        0.392156899
+      ],
+      "srcPremulAfterCoverageF16": [
+        0.11647293,
+        0.033964049,
+        0.010839021,
+        0.147058845
+      ],
+      "dstPremulBeforeStoreF16": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "dstPremulAfterStoreF16": [
+        0.969414115,
+        0.886866748,
+        0.863717794,
+        1.0
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        210,
+        210,
+        255
+      ],
+      "currentCpuAfterFor334Rgba": [
+        255,
+        224,
+        219,
+        255
+      ],
+      "currentCpuAfterFor334MinusSkiaSignedDelta": [
+        0,
+        14,
+        9,
+        0
+      ],
+      "currentCpuAfterFor334VsSkiaAbsDelta": [
+        0,
+        14,
+        9,
+        0
+      ],
+      "currentCpuAfterFor334SumAbsDelta": 23,
+      "candidatePolicies": [
+        {
+          "policyId": "straight_srgb_float_coverage_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=(paintAlpha/255)*coverageScale, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            255,
+            218,
+            218,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            0,
+            8,
+            8,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            0,
+            8,
+            8,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 16,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -7,
+          "worsensCurrentCpuAfterFor334": false
+        },
+        {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=round((paintAlpha/255)*coverageScale*255)/255, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            255,
+            217,
+            217,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            0,
+            7,
+            7,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            0,
+            7,
+            7,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 14,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -9,
+          "worsensCurrentCpuAfterFor334": false
+        }
+      ]
+    },
+    {
+      "name": "red_bottom_outer_edge",
+      "zone": "stroke-aa-edge",
+      "paintColor": "red",
+      "x": 40,
+      "y": 67,
+      "coverage": {
+        "coverageSamples": 6,
+        "coverageMaxSamples": 16,
+        "coverageScale": 0.375
+      },
+      "paintSourceRgba": [
+        255,
+        0,
+        0,
+        100
+      ],
+      "paintColor4fAfterXform": [
+        0.792015851,
+        0.230955511,
+        0.073705338,
+        0.392156899
+      ],
+      "srcPremulBeforeCoverageF16": [
+        0.310594469,
+        0.0905708,
+        0.028904056,
+        0.392156899
+      ],
+      "srcPremulAfterCoverageF16": [
+        0.11647293,
+        0.033964049,
+        0.010839021,
+        0.147058845
+      ],
+      "dstPremulBeforeStoreF16": [
+        1.0,
+        0.999954939,
+        0.999926805,
+        1.0
+      ],
+      "dstPremulAfterStoreF16": [
+        0.969414115,
+        0.886866748,
+        0.863717794,
+        1.0
+      ],
+      "skiaOverWhiteRgba": [
+        255,
+        209,
+        209,
+        255
+      ],
+      "currentCpuAfterFor334Rgba": [
+        255,
+        224,
+        219,
+        255
+      ],
+      "currentCpuAfterFor334MinusSkiaSignedDelta": [
+        0,
+        15,
+        10,
+        0
+      ],
+      "currentCpuAfterFor334VsSkiaAbsDelta": [
+        0,
+        15,
+        10,
+        0
+      ],
+      "currentCpuAfterFor334SumAbsDelta": 25,
+      "candidatePolicies": [
+        {
+          "policyId": "straight_srgb_float_coverage_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=(paintAlpha/255)*coverageScale, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            255,
+            218,
+            218,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            0,
+            9,
+            9,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            0,
+            9,
+            9,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 18,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -7,
+          "worsensCurrentCpuAfterFor334": false
+        },
+        {
+          "policyId": "straight_srgb_quantized_alpha_src_over_white",
+          "formula": "source sRGB non-premul channels, alpha=round((paintAlpha/255)*coverageScale*255)/255, SrcOver over white, floor(channel*256)",
+          "rgba": [
+            255,
+            217,
+            217,
+            255
+          ],
+          "minusSkiaSignedDelta": [
+            0,
+            8,
+            8,
+            0
+          ],
+          "vsSkiaAbsDelta": [
+            0,
+            8,
+            8,
+            0
+          ],
+          "sumAbsDeltaVsSkia": 16,
+          "sumAbsDeltaVsCurrentCpuAfterFor334": -9,
+          "worsensCurrentCpuAfterFor334": false
+        }
+      ]
+    }
+  ],
+  "implementation": {
+    "codeCorrectionApplied": false,
+    "reason": "The best local candidate is a renderer-wide color/blend policy change and would worsen two FOR-334 stroke samples in this bounded artifact."
+  },
+  "promotion": {
+    "selectedCellPromotionAllowed": false,
+    "reason": "FOR-335 only traces and bounds blend policy; it does not change score or promotion policy."
+  },
+  "nonGoalsPreserved": {
+    "arcGeometry": true,
+    "coverage": true,
+    "gpu": true,
+    "wgsl": true,
+    "thresholds": true,
+    "fallbacks": true,
+    "kadre": true,
+    "promotion": true,
+    "score": true,
+    "skBitmapGetPixelInternalOracle": true,
+    "skBitmapGetPixelAsSrgbExportBoundary": true,
+    "historicalArtifactsFOR329ToFOR334Rewritten": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for335_circular_arcs_stroke_butt_selected_cell_f16_blend_policy.py",
+      "rtk python3 scripts/validate_for334_circular_arcs_stroke_butt_selected_cell_f16_export_color_handling.py",
+      "rtk python3 scripts/validate_for333_circular_arcs_stroke_butt_selected_cell_kotlin_cpu_runtime_trace.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
