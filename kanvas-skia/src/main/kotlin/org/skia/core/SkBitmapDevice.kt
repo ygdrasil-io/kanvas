@@ -125,6 +125,14 @@ public object SkCpuWriteChronologyTrace {
         public val valueBefore: SkColor,
         public val valueWritten: SkColor,
         public val valueReadAfter: SkColor,
+        public val coverageScale: Float? = null,
+        public val coverageSamples: Int? = null,
+        public val coverageMaxSamples: Int? = null,
+        public val paintColor4f: List<Float>? = null,
+        public val srcPremulBeforeCoverageF16: List<Float>? = null,
+        public val srcPremulAfterCoverageF16: List<Float>? = null,
+        public val dstPremulBeforeStoreF16: List<Float>? = null,
+        public val dstPremulAfterStoreF16: List<Float>? = null,
         public val maskLocalX: Int? = null,
         public val maskLocalY: Int? = null,
         public val maskOriginLeft: Int? = null,
@@ -311,6 +319,75 @@ public object SkCpuWriteChronologyTrace {
                 sourceLayerBounds = a8SrcInPayloadTrace?.sourceLayerBounds,
             )
         }
+    }
+
+    internal fun recordF16PremulStore(
+        x: Int,
+        y: Int,
+        source: String,
+        callsite: String,
+        branch: String,
+        mode: SkBlendMode,
+        coverage: Int,
+        coverageScale: Float?,
+        coverageSamples: Int?,
+        coverageMaxSamples: Int?,
+        paintColor4f: SkColor4f?,
+        srcPremulBeforeCoverageF16: FloatArray?,
+        srcPremulAfterCoverageF16: FloatArray,
+        dstPremulBeforeStoreF16: FloatArray,
+        dstPremulAfterStoreF16: FloatArray,
+        bitmapWidth: Int,
+        bitmapHeight: Int,
+    ) {
+        synchronized(lock) {
+            if (!enabled || Target(x, y) !in targetPixels) return
+            val root =
+                (targetWidth == null || targetWidth == bitmapWidth) &&
+                    (targetHeight == null || targetHeight == bitmapHeight)
+            events += Event(
+                index = events.size,
+                x = x,
+                y = y,
+                bitmapWidth = bitmapWidth,
+                bitmapHeight = bitmapHeight,
+                deviceKind = if (root) "root" else "temporary",
+                rootDevice = root,
+                source = source,
+                callsite = callsite,
+                branch = branch,
+                mode = mode.name,
+                blender = "null",
+                coverage = coverage,
+                srcInput = premulF16ToSkColor(srcPremulBeforeCoverageF16 ?: srcPremulAfterCoverageF16),
+                srcAfterCoverage = premulF16ToSkColor(srcPremulAfterCoverageF16),
+                valueBefore = premulF16ToSkColor(dstPremulBeforeStoreF16),
+                valueWritten = premulF16ToSkColor(dstPremulAfterStoreF16),
+                valueReadAfter = premulF16ToSkColor(dstPremulAfterStoreF16),
+                coverageScale = coverageScale,
+                coverageSamples = coverageSamples,
+                coverageMaxSamples = coverageMaxSamples,
+                paintColor4f = paintColor4f?.let { listOf(it.fR, it.fG, it.fB, it.fA) },
+                srcPremulBeforeCoverageF16 = srcPremulBeforeCoverageF16?.toTraceList(),
+                srcPremulAfterCoverageF16 = srcPremulAfterCoverageF16.toTraceList(),
+                dstPremulBeforeStoreF16 = dstPremulBeforeStoreF16.toTraceList(),
+                dstPremulAfterStoreF16 = dstPremulAfterStoreF16.toTraceList(),
+            )
+        }
+    }
+
+    private fun FloatArray.toTraceList(): List<Float> =
+        listOf(this[0], this[1], this[2], this[3])
+
+    private fun premulF16ToSkColor(values: FloatArray): SkColor {
+        val pa = values[3]
+        val a = (pa * 256f).toInt().coerceIn(0, 255)
+        if (a == 0 || pa <= 0f) return 0
+        val invA = 1f / pa
+        val r = (values[0] * invA * 256f).toInt().coerceIn(0, 255)
+        val g = (values[1] * invA * 256f).toInt().coerceIn(0, 255)
+        val b = (values[2] * invA * 256f).toInt().coerceIn(0, 255)
+        return SkColorSetARGB(a, r, g, b)
     }
 
     internal fun recordA8SrcInPayloadPreDispatch(
@@ -3103,7 +3180,22 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                     val cov = if (samples >= maxSamples) 1f else samples * invMaxSamples
                     val sa = sa0 * cov
                     if (sa <= 0f && !mustBlendZero) continue
-                    blendF16PremulMode(clip.left + xOff, py, sr0 * cov, sg0 * cov, sb0 * cov, sa, mode)
+                    blendF16PremulMode(
+                        clip.left + xOff,
+                        py,
+                        sr0 * cov,
+                        sg0 * cov,
+                        sb0 * cov,
+                        sa,
+                        mode,
+                        traceSource = "SkBitmapDevice.scanFillPath.solidF16",
+                        traceCallsite = "SkBitmapDevice.scanFillPath",
+                        tracePaintColor4f = color4f,
+                        traceSrcPremulBeforeCoverageF16 = solidF16,
+                        traceCoverageSamples = samples,
+                        traceCoverageMaxSamples = maxSamples,
+                        traceCoverageScale = cov,
+                    )
                 }
             } else if (shader != null && shaderRow != null) {
                 // 8-bit shader path: same code as before (also covers the
@@ -4278,6 +4370,13 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
         x: Int, y: Int,
         srIn: Float, sgIn: Float, sbIn: Float, saIn: Float,
         mode: SkBlendMode,
+        traceSource: String = "SkBitmapDevice.blendF16PremulMode",
+        traceCallsite: String = "SkBitmapDevice.blendF16PremulMode",
+        tracePaintColor4f: SkColor4f? = null,
+        traceSrcPremulBeforeCoverageF16: FloatArray? = null,
+        traceCoverageSamples: Int? = null,
+        traceCoverageMaxSamples: Int? = null,
+        traceCoverageScale: Float? = null,
     ) {
         // Phase 7q — clip-mask modulation in premul-float space.
         // R-suivi.20 — fold the clip-shader coverage on top.
@@ -4306,11 +4405,43 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             if (sa <= 0f) return
             val pixels = bitmap.pixelsF16
             val i = (y * bitmap.width + x) * 4
+            val trace = SkCpuWriteChronologyTrace.shouldTrace(x, y, width, height)
+            val beforeF16 = if (trace) {
+                floatArrayOf(pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3])
+            } else {
+                null
+            }
             val invSa = 1f - sa
             pixels[i]     = sr + pixels[i]     * invSa
             pixels[i + 1] = sg + pixels[i + 1] * invSa
             pixels[i + 2] = sb + pixels[i + 2] * invSa
             pixels[i + 3] = sa + pixels[i + 3] * invSa
+            if (trace && beforeF16 != null) {
+                SkCpuWriteChronologyTrace.recordF16PremulStore(
+                    x = x,
+                    y = y,
+                    source = traceSource,
+                    callsite = traceCallsite,
+                    branch = "SkBitmapDevice.blendF16PremulMode.${mode.name}.f16Store",
+                    mode = mode,
+                    coverage = cov,
+                    coverageScale = traceCoverageScale,
+                    coverageSamples = traceCoverageSamples,
+                    coverageMaxSamples = traceCoverageMaxSamples,
+                    paintColor4f = tracePaintColor4f,
+                    srcPremulBeforeCoverageF16 = traceSrcPremulBeforeCoverageF16,
+                    srcPremulAfterCoverageF16 = floatArrayOf(sr, sg, sb, sa),
+                    dstPremulBeforeStoreF16 = beforeF16,
+                    dstPremulAfterStoreF16 = floatArrayOf(
+                        pixels[i],
+                        pixels[i + 1],
+                        pixels[i + 2],
+                        pixels[i + 3],
+                    ),
+                    bitmapWidth = width,
+                    bitmapHeight = height,
+                )
+            }
             return
         }
         val pixels = bitmap.pixelsF16
