@@ -1,0 +1,412 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-351",
+  "sceneId": "f16-non-arc-preserving-arc-constraints-for351",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-derive-non-arc-preserving-arc-improving-candidate-constraints-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-350-f16-arc-improving-non-arc-safe-candidate-rejected"
+  ],
+  "inputValidation": {
+    "for350Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-arc-improving-non-arc-safe-candidate-for350/f16-arc-improving-non-arc-safe-candidate-for350.json",
+    "for350Decision": "F16_ARC_IMPROVING_NON_ARC_SAFE_CANDIDATE_REJECTED",
+    "for350RequiredDecision": "F16_ARC_IMPROVING_NON_ARC_SAFE_CANDIDATE_REJECTED",
+    "for348Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-new-candidate-search-matrix-for348/f16-new-candidate-search-matrix-for348.json",
+    "for348Decision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for348RequiredDecision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for346Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-global-color-policy-candidate-retired-for346/f16-global-color-policy-candidate-retired-for346.json",
+    "for346Decision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for346RequiredDecision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for345Artifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for345Decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for345RequiredDecision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for341Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+    "for341Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION",
+    "for341RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION"
+  },
+  "decision": "F16_NON_ARC_PRESERVING_ARC_CONSTRAINTS_READY",
+  "allowedDecisions": [
+    "F16_NON_ARC_PRESERVING_ARC_CONSTRAINTS_READY",
+    "F16_NON_ARC_PRESERVING_ARC_CONSTRAINTS_INPUT_INVALID"
+  ],
+  "constraints": {
+    "nonArcPreserving": {
+      "rowId": "non-arc-rec2020-f16-src-over-rect",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+      "requiredResidual": 0,
+      "requiredWorsenedSampleCount": 0,
+      "currentResidual": 0,
+      "retiredPolicyResidual": 111,
+      "retiredPolicyWorsenedSampleCount": 3,
+      "coveredSampleCount": 3,
+      "constraints": [
+        {
+          "id": "preserve-current-reference-equality",
+          "requires": "future candidate residual must stay exactly 0 on the FOR-345 row",
+          "evidence": "current Kanvas samples equal the isolated Skia reference on every sampled point"
+        },
+        {
+          "id": "forbid-over-white-shift-on-covered-non-arc-samples",
+          "requires": "covered non-arc samples must not move toward the retired over-white policy",
+          "evidence": "retired policy residual is 111 with 3 worsened covered samples"
+        },
+        {
+          "id": "non-arc-first-selection-gate",
+          "requires": "arc improvement cannot count unless non-arc residual remains 0 and worsened samples remain 0",
+          "evidence": "FOR-350 improved arc but was rejected after producing non-arc residual 56"
+        }
+      ],
+      "guardedSamples": [
+        {
+          "sample": "rect_center",
+          "zone": "fill-center",
+          "referenceSrgbRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "currentKanvasSrgbRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "retiredPolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "retiredPolicyResidual": 37,
+          "retiredPolicyWorsensCurrent": true
+        },
+        {
+          "sample": "rect_left_inside",
+          "zone": "fill-left-inside",
+          "referenceSrgbRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "currentKanvasSrgbRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "retiredPolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "retiredPolicyResidual": 37,
+          "retiredPolicyWorsensCurrent": true
+        },
+        {
+          "sample": "rect_right_inside",
+          "zone": "fill-right-inside",
+          "referenceSrgbRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "currentKanvasSrgbRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "retiredPolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "retiredPolicyResidual": 37,
+          "retiredPolicyWorsensCurrent": true
+        }
+      ]
+    },
+    "arcResidualTargets": {
+      "rowId": "arc-circular-arcs-stroke-butt-adjacent-for341",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+      "currentResidual": 375,
+      "requiredResidualReductionForPerfectArcFit": 375,
+      "retiredPolicyResidual": 0,
+      "targetSampleCount": 10,
+      "targets": [
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_blue_top_stroke_center",
+          "zone": "stroke-center",
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaOverWhiteTargetRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "currentResidual": 37,
+          "requiredResidualReduction": 37,
+          "retiredPolicyResidual": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_blue_left_stroke_center",
+          "zone": "stroke-center",
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaOverWhiteTargetRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "currentResidual": 37,
+          "requiredResidualReduction": 37,
+          "retiredPolicyResidual": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_red_right_stroke_center",
+          "zone": "stroke-center",
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaOverWhiteTargetRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "currentResidual": 38,
+          "requiredResidualReduction": 38,
+          "retiredPolicyResidual": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_red_inner_sweep_stroke_center",
+          "zone": "stroke-center",
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaOverWhiteTargetRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "currentResidual": 38,
+          "requiredResidualReduction": 38,
+          "retiredPolicyResidual": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_blue_bottom_stroke_center",
+          "zone": "stroke-center",
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaOverWhiteTargetRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "currentResidual": 37,
+          "requiredResidualReduction": 37,
+          "retiredPolicyResidual": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_blue_top_stroke_center",
+          "zone": "stroke-center",
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaOverWhiteTargetRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "currentResidual": 37,
+          "requiredResidualReduction": 37,
+          "retiredPolicyResidual": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_red_right_stroke_center",
+          "zone": "stroke-center",
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaOverWhiteTargetRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "currentResidual": 38,
+          "requiredResidualReduction": 38,
+          "retiredPolicyResidual": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_red_bottom_stroke_center",
+          "zone": "stroke-center",
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaOverWhiteTargetRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "currentResidual": 38,
+          "requiredResidualReduction": 38,
+          "retiredPolicyResidual": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_red_inner_sweep_stroke_center",
+          "zone": "stroke-center",
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "skiaOverWhiteTargetRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "currentResidual": 38,
+          "requiredResidualReduction": 38,
+          "retiredPolicyResidual": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_blue_left_stroke_center",
+          "zone": "stroke-center",
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "skiaOverWhiteTargetRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "currentResidual": 37,
+          "requiredResidualReduction": 37,
+          "retiredPolicyResidual": 0
+        }
+      ]
+    },
+    "for350RejectedInterpolation": {
+      "candidatePolicyId": "halfway_to_retired_over_white_candidate",
+      "arcResidualReduction": 187,
+      "nonArcResidualRegression": 56,
+      "nonArcWorsenedSampleCount": 3,
+      "rejectionReason": "linear movement toward the retired over-white policy improves arc but violates non-arc identity"
+    }
+  },
+  "nextCandidateFamilies": [
+    {
+      "id": "non_arc_identity_guarded_arc_delta_candidate_family",
+      "status": "recommended-for-next-evaluation",
+      "selectionStatus": "not-selected",
+      "description": "Evaluate formulas whose first invariant is FOR-345 non-arc residual 0, then measure whether they reduce FOR-341 arc residuals.",
+      "mandatoryRejectWhen": [
+        "FOR-345 candidate residual is greater than 0",
+        "FOR-345 worsened sample count is greater than 0",
+        "candidate reuses the retired over-white policy globally",
+        "candidate requires fixture, coordinate, selected-cell, or scene branching"
+      ]
+    },
+    {
+      "id": "additional_non_arc_rows_before_selection",
+      "status": "recommended-validation-expansion",
+      "selectionStatus": "not-selected",
+      "description": "Add more non-arc rows before any renderer implementation decision if a future candidate passes the current FOR-345 guard.",
+      "mandatoryRejectWhen": [
+        "candidate has only arc evidence",
+        "candidate has no comparable non-arc Rec.2020 F16 SrcOver or blend evidence"
+      ]
+    }
+  ],
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "retiredPolicyStillForbiddenAsGlobalCandidate": true,
+    "scoreIncreaseAuthorized": false
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for351_f16_non_arc_preserving_arc_constraints.py",
+      "rtk python3 scripts/validate_for350_f16_arc_improving_non_arc_safe_candidate.py",
+      "rtk python3 scripts/validate_for349_f16_replacement_candidate_evaluation.py",
+      "rtk python3 scripts/validate_for348_f16_new_candidate_search_matrix.py",
+      "rtk python3 scripts/validate_for346_f16_global_color_policy_candidate_retired.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
