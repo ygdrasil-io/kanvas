@@ -1,0 +1,293 @@
+{
+  "alternateDecisions": {
+    "missingEvidence": "RUNTIME_CACHE_TELEMETRY_CLOSEOUT_MISSING_EVIDENCE",
+    "unsafeClaim": "RUNTIME_CACHE_TELEMETRY_CLOSEOUT_UNSAFE_CLAIM_FOUND"
+  },
+  "claimBoundary": {
+    "derivedClaim": "M85 and M90 cache hit/miss ledger values remain derived selected-scene evidence.",
+    "noPromotion": "M85/M90/M92 are not promoted to observed broad cache callbacks.",
+    "notObservableClaim": "Broad Kadre/wgpu4k cache callbacks, bind-group callbacks, native frees, and adapter memory snapshots remain not-observable.",
+    "observedClaim": "Only the FOR-315 Kanvas headless WebGPU cacheTelemetrySnapshot() scenario is observed.",
+    "observedPartialClaim": "M90/M92 selected native route create/allocation rows remain observed-partial and reporting-only."
+  },
+  "classificationStates": {
+    "blockers": [
+      "kadre-runtime.native-cache-counter-unavailable",
+      "kadre-runtime.resource-lifetime-observation-partial"
+    ],
+    "bridge": {
+      "broadKadreWgpu4kCallbacksClaimed": false,
+      "linearIssue": "FOR-315",
+      "notKadreNativeCallbacks": true,
+      "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+      "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+      "sourceClass": "kanvas-headless-webgpu-observed"
+    },
+    "derived": [
+      {
+        "id": "m85.selected-scene-resource-ledger",
+        "nonClaim": "selected-scene deterministic ledger, not observed WebGPU runtime cache telemetry",
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "sourceClass": "derived"
+      },
+      {
+        "boundary": "Derived from selected ledger evidence, not observed broad callbacks.",
+        "id": "m90.cache-hits-misses",
+        "sourceArtifacts": [
+          "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json",
+          "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json"
+        ],
+        "sourceClass": "derived"
+      }
+    ],
+    "not-observable": [
+      {
+        "blocker": "kadre-runtime.native-cache-counter-unavailable",
+        "classification": "not-observable",
+        "id": "broad-webgpu-cache-hit-callbacks",
+        "releaseGate": false
+      },
+      {
+        "blocker": "kadre-runtime.native-cache-counter-unavailable",
+        "classification": "not-observable",
+        "id": "bind-group-cache-callbacks",
+        "releaseGate": false
+      },
+      {
+        "blocker": "kadre-runtime.resource-lifetime-observation-partial",
+        "classification": "not-observable",
+        "id": "native-resource-free-callbacks",
+        "releaseGate": false
+      },
+      {
+        "blocker": "kadre-runtime.resource-lifetime-observation-partial",
+        "classification": "not-observable",
+        "id": "adapter-owned-memory-snapshots",
+        "releaseGate": false
+      }
+    ],
+    "observed": [
+      {
+        "adapter": "Apple M2 Max",
+        "boundary": "Kanvas headless WebGPU only; not Kadre/wgpu4k native callbacks.",
+        "coldPipelineCacheHits": 0,
+        "coldPipelineCacheMisses": 1,
+        "id": "for315.kanvas-headless-webgpu-cache-telemetry-snapshot",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceClass": "kanvas-headless-webgpu-observed",
+        "warmPipelineCacheHits": 1
+      }
+    ],
+    "observed-partial": [
+      {
+        "boundary": "Selected route creation/churn only.",
+        "id": "m90.native-route-allocations",
+        "sourceArtifacts": [
+          "reports/wgsl-pipeline/m90-runtime-interactive/evidence.json",
+          "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json"
+        ],
+        "sourceClass": "observed-partial"
+      },
+      {
+        "id": "m92.selected-route-create-rows",
+        "rows": {
+          "pipeline-creates-selected-route": "observed-partial",
+          "shader-module-creates-selected-route": "observed-partial"
+        },
+        "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json"
+      }
+    ]
+  },
+  "date": "2026-06-04",
+  "decision": "RUNTIME_CACHE_TELEMETRY_CLOSEOUT_APPLIED",
+  "evidence": [
+    {
+      "artifacts": [
+        "reports/wgsl-pipeline/2026-06-04-for-310-m90-runtime-telemetry-classification-guard.md",
+        "reports/wgsl-pipeline/m90-runtime-interactive/m90-runtime-telemetry-classification-guard-for310.json",
+        "scripts/validate_for310_m90_runtime_telemetry_classification_guard.py"
+      ],
+      "closeoutDecisionName": "KEEP_M90_RUNTIME_TELEMETRY_BOUNDED_AND_REPORTING_ONLY",
+      "commits": [
+        "d3263164191355189a5a6c00ccf40559a21212dc",
+        "9c3ed8c192a28baccf72068c3506f75af6a49613"
+      ],
+      "decision": "M90_RUNTIME_TELEMETRY_CLASSIFICATION_GUARD_APPLIED",
+      "impact": "Protected M90 as bounded reporting evidence: native frame timing observed, selected-route allocations observed-partial, cache hits/misses derived, broad callbacks unavailable.",
+      "linearIssue": "FOR-310",
+      "pullRequest": 1402,
+      "title": "M90 telemetry classification guard"
+    },
+    {
+      "artifacts": [
+        "reports/wgsl-pipeline/2026-06-04-for-311-m92-rc-headless-kadre-dependency-policy.md",
+        "reports/wgsl-pipeline/m92-kadre-runtime-rc/m92-rc-headless-kadre-dependency-policy-for311.json",
+        "scripts/validate_for311_m92_rc_headless_kadre_dependency_policy.py"
+      ],
+      "closeoutDecisionName": "KEEP_M92_RC_REQUIRED_VALIDATION_HEADLESS_AND_CHECKED_IN",
+      "commits": [
+        "c2eab384cb06b8fc141d6ff1ac154d3bb6b31a68",
+        "22765e247785819945a92623aeaf3a3e99864522"
+      ],
+      "decision": "M92_RC_HEADLESS_KADRE_DEPENDENCY_POLICY_GUARD_APPLIED",
+      "impact": "Kept required RC validation headless and checked-in; native Kadre refresh remains optional/provisioned.",
+      "linearIssue": "FOR-311",
+      "pullRequest": 1403,
+      "title": "M92 RC headless Kadre dependency policy"
+    },
+    {
+      "artifacts": [
+        "reports/wgsl-pipeline/2026-06-04-for-312-pm-bundle-runtime-headless-manifest.md",
+        "reports/wgsl-pipeline/pm-bundle-runtime-headless-manifest-for312.json",
+        "scripts/validate_for312_pm_bundle_runtime_headless_manifest.py"
+      ],
+      "closeoutDecisionName": "PM_BUNDLE_RUNTIME_HEADLESS_MANIFEST_AUDIT_APPLIED",
+      "commits": [
+        "cde6f3a4a28569f8a3b0add11c066c12a057693a",
+        "bb041e795f02507aaf79aa4dc1b446cd280fc434"
+      ],
+      "decision": "PM_BUNDLE_RUNTIME_HEADLESS_MANIFEST_AUDIT_APPLIED",
+      "impact": "Proved the PM package carries the FOR-311 headless/optional-native boundary.",
+      "linearIssue": "FOR-312",
+      "pullRequest": 1404,
+      "title": "PM bundle runtime headless manifest audit"
+    },
+    {
+      "artifacts": [
+        "reports/wgsl-pipeline/2026-06-04-for-313-runtime-docs-kadre-headless-policy.md",
+        "reports/wgsl-pipeline/runtime-docs-kadre-headless-policy-for313.json",
+        "scripts/validate_for313_runtime_docs_kadre_headless_policy.py"
+      ],
+      "closeoutDecisionName": "M90_RUNTIME_DOCS_KADRE_HEADLESS_POLICY_AUDIT_APPLIED",
+      "commits": [
+        "9385f438c5a67e60954ed390125074eaad8a96e7",
+        "7fad651b616b48aff7974011322f1c7a63db1933"
+      ],
+      "decision": "M90_RUNTIME_DOCS_KADRE_HEADLESS_POLICY_AUDIT_APPLIED",
+      "impact": "Aligned M90/MEP-NEXT docs and generated Markdown wording with required headless validation and optional/provisioned Kadre refresh.",
+      "linearIssue": "FOR-313",
+      "pullRequest": 1405,
+      "title": "Runtime docs Kadre headless policy audit"
+    },
+    {
+      "artifacts": [
+        "reports/wgsl-pipeline/2026-06-04-for-314-runtime-cache-counter-source-map.md",
+        "reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json",
+        "scripts/validate_for314_runtime_cache_counter_source_map.py"
+      ],
+      "closeoutDecisionName": "runtime-cache-counter-source-map-applied",
+      "commits": [
+        "1bf5ff69e464f8710022675efa2cb3e037276f00",
+        "a5a5d3bcc7c0d8301d63d722dc26f4ff90f2e194"
+      ],
+      "decision": "structured-evidence-without-top-level-decision",
+      "impact": "Mapped observed candidate, derived ledger, observed-partial selected route counters, and not-observable Kadre/wgpu4k blockers.",
+      "linearIssue": "FOR-314",
+      "pullRequest": 1406,
+      "title": "Runtime cache counter source map"
+    },
+    {
+      "artifacts": [
+        "reports/wgsl-pipeline/2026-06-04-for-315-headless-webgpu-cache-counters.md",
+        "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "scripts/validate_for315_headless_webgpu_cache_counters.py"
+      ],
+      "closeoutDecisionName": "headless-webgpu-cache-counter-evidence-applied",
+      "commits": [
+        "970eff34eeb60e9c36c6dcb8ecdd8804f53cb2d7",
+        "a7ac5eb34b0b0c996cca43b84b0ea7188cab7896"
+      ],
+      "decision": "structured-evidence-without-top-level-decision",
+      "impact": "Published the named observed Kanvas headless WebGPU artifact from cacheTelemetrySnapshot().",
+      "linearIssue": "FOR-315",
+      "pullRequest": 1407,
+      "title": "Headless WebGPU cache counter evidence"
+    },
+    {
+      "artifacts": [
+        "reports/wgsl-pipeline/2026-06-04-for-316-runtime-cache-counter-evidence-bridge.md",
+        "reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json",
+        "scripts/validate_for316_runtime_cache_counter_evidence_bridge.py"
+      ],
+      "closeoutDecisionName": "RUNTIME_CACHE_COUNTER_EVIDENCE_BRIDGE_APPLIED",
+      "commits": [
+        "c67433d37ed42ae66b9618ae3cd6f65b76a940dc",
+        "e90157d73f1758535e2a2273dfc0e9d4eb98c37d"
+      ],
+      "decision": "RUNTIME_CACHE_COUNTER_EVIDENCE_BRIDGE_APPLIED",
+      "impact": "Linked the FOR-315 observed artifact into the FOR-314 source map via observedEvidenceBridge while preserving M90/M92 boundaries.",
+      "linearIssue": "FOR-316",
+      "pullRequest": 1408,
+      "title": "Runtime cache counter evidence bridge"
+    }
+  ],
+  "expectedArtifacts": {
+    "reports/wgsl-pipeline/2026-06-04-for-310-m90-runtime-telemetry-classification-guard.md": "present",
+    "reports/wgsl-pipeline/2026-06-04-for-311-m92-rc-headless-kadre-dependency-policy.md": "present",
+    "reports/wgsl-pipeline/2026-06-04-for-312-pm-bundle-runtime-headless-manifest.md": "present",
+    "reports/wgsl-pipeline/2026-06-04-for-313-runtime-docs-kadre-headless-policy.md": "present",
+    "reports/wgsl-pipeline/2026-06-04-for-314-runtime-cache-counter-source-map.md": "present",
+    "reports/wgsl-pipeline/2026-06-04-for-315-headless-webgpu-cache-counters.md": "present",
+    "reports/wgsl-pipeline/2026-06-04-for-316-runtime-cache-counter-evidence-bridge.md": "present",
+    "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json": "present",
+    "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json": "present",
+    "reports/wgsl-pipeline/m90-runtime-interactive/m90-runtime-telemetry-classification-guard-for310.json": "present",
+    "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json": "present",
+    "reports/wgsl-pipeline/m92-kadre-runtime-rc/m92-rc-headless-kadre-dependency-policy-for311.json": "present",
+    "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json": "present",
+    "reports/wgsl-pipeline/pm-bundle-runtime-headless-manifest-for312.json": "present",
+    "reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json": "present",
+    "reports/wgsl-pipeline/runtime-docs-kadre-headless-policy-for313.json": "present",
+    "scripts/validate_for310_m90_runtime_telemetry_classification_guard.py": "present",
+    "scripts/validate_for311_m92_rc_headless_kadre_dependency_policy.py": "present",
+    "scripts/validate_for312_pm_bundle_runtime_headless_manifest.py": "present",
+    "scripts/validate_for313_runtime_docs_kadre_headless_policy.py": "present",
+    "scripts/validate_for314_runtime_cache_counter_source_map.py": "present",
+    "scripts/validate_for315_headless_webgpu_cache_counters.py": "present",
+    "scripts/validate_for316_runtime_cache_counter_evidence_bridge.py": "present"
+  },
+  "guardrailsValidatedBy": [
+    "rtk python3 scripts/validate_for314_runtime_cache_counter_source_map.py",
+    "rtk python3 scripts/validate_for315_headless_webgpu_cache_counters.py",
+    "rtk python3 scripts/validate_for316_runtime_cache_counter_evidence_bridge.py"
+  ],
+  "kadreWgpu4kUnblockConditions": [
+    {
+      "condition": "Expose observed shader, pipeline, bind-group, and cache hit/miss callbacks from the native route.",
+      "id": "kadre-runtime.native-cache-counter-unavailable",
+      "owner": "Kadre/wgpu4k native integration"
+    },
+    {
+      "condition": "Expose allocation/free/resource lifetime snapshots for surface resize and scene switch transitions.",
+      "id": "kadre-runtime.resource-lifetime-observation-partial",
+      "owner": "Kadre/wgpu4k native integration"
+    },
+    {
+      "condition": "Add a new narrow ticket with observed native callback artifacts, source paths, headless validation policy, and unchanged renderer/gate boundaries before any broad promotion.",
+      "id": "kanvas-wide-cache-callback-promotion-evidence",
+      "owner": "Kanvas follow-up"
+    }
+  ],
+  "linearIssue": "FOR-317",
+  "nonChanges": {
+    "fallbacks": "unchanged",
+    "gradle": "unchanged",
+    "instrumentation": "no-new-runtime-instrumentation",
+    "kadreNativeBehavior": "unchanged",
+    "kadreProvisioning": "unchanged",
+    "readiness": "unchanged",
+    "releaseGateStatus": "unchanged",
+    "rendererBehavior": "unchanged",
+    "runtimeBehavior": "unchanged",
+    "sceneStatus": "unchanged",
+    "score": "unchanged",
+    "shaders": "unchanged",
+    "supportClaims": "no-new-support-or-rendering-claim",
+    "thresholds": "unchanged"
+  },
+  "schemaVersion": 1,
+  "scope": "FOR-310..FOR-316 runtime cache telemetry closeout",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-runtime-cache-telemetry-closeout-ticket",
+  "status": "reporting-only-closeout"
+}
