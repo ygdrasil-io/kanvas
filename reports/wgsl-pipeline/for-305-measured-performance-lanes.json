@@ -1,0 +1,97 @@
+{
+  "linear": "FOR-305",
+  "related": [
+    "FOR-304",
+    "FOR-241"
+  ],
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-measured-performance-lanes-for-clip-rect-difference-and-simple-rt-ticket",
+  "decision": "PERFORMANCE_LANES_MEASURED_REPORTING_ONLY",
+  "baselineCommit": "94ed720b280c85aa8fde0c48be496961fe70c80f",
+  "environment": {
+    "host": "Omega",
+    "os": "Mac OS X 26.5 aarch64",
+    "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+    "cpuBackend": "CPU scalar Kotlin dashboard benchmark",
+    "gpuCacheBackend": "WebGPU cache/timing dashboard benchmark",
+    "gpuCacheAdapter": "Apple M2 Max"
+  },
+  "commands": {
+    "cpu": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
+    "gpuCache": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance"
+  },
+  "lanes": [
+    {
+      "sceneId": "clip-rect-difference",
+      "lane": "CPU",
+      "statusBefore": "estimated",
+      "statusAfter": "measured",
+      "sampleCount": 30,
+      "medianMs": 0.3325,
+      "p95Ms": 0.495917,
+      "gateMode": "reporting-only",
+      "route": "cpu.coverage.clip-rect-difference",
+      "rawMetrics": "artifacts/clip-rect-difference/cpu-performance.json"
+    },
+    {
+      "sceneId": "clip-rect-difference",
+      "lane": "GPU",
+      "statusBefore": "estimated",
+      "statusAfter": "measured",
+      "sampleCount": 30,
+      "medianMs": 0.002666,
+      "p95Ms": 0.003375,
+      "gateMode": "reporting-only",
+      "adapter": "Apple M2 Max",
+      "pipelineKey": "clipOp=kDifference shape=rect+rrect maskFilter=blur",
+      "route": "webgpu.coverage.clip-difference.analytic-rrect-mask",
+      "rawMetrics": "artifacts/clip-rect-difference/gpu-performance.json"
+    },
+    {
+      "sceneId": "runtime-effect-simple",
+      "lane": "CPU",
+      "statusBefore": "estimated",
+      "statusAfter": "measured",
+      "sampleCount": 30,
+      "medianMs": 0.058666,
+      "p95Ms": 0.388917,
+      "gateMode": "reporting-only",
+      "route": "cpu.runtime-effect.descriptor.simple_rt",
+      "rawMetrics": "artifacts/runtime-effect-simple/cpu-performance.json"
+    },
+    {
+      "sceneId": "runtime-effect-simple",
+      "lane": "GPU",
+      "statusBefore": "estimated",
+      "statusAfter": "measured",
+      "sampleCount": 30,
+      "medianMs": 0.002792,
+      "p95Ms": 0.003208,
+      "gateMode": "reporting-only",
+      "adapter": "Apple M2 Max",
+      "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+      "route": "webgpu.runtime-effect.descriptor.simple_rt",
+      "rawMetrics": "artifacts/runtime-effect-simple/gpu-performance.json"
+    }
+  ],
+  "estimatedWarningsTargeted": [
+    "clip-rect-difference/CPU trend is estimated",
+    "clip-rect-difference/GPU/cache trend is estimated",
+    "runtime-effect-simple/CPU trend is estimated",
+    "runtime-effect-simple/GPU/cache trend is estimated"
+  ],
+  "gateEvidence": {
+    "sceneDashboardEstimatedWarningsForTargetScenes": 0,
+    "performanceTrendWarnings": 0,
+    "measuredCpuRows": 11,
+    "measuredGpuCacheRows": 11,
+    "refreshPolicy": "pipelineGeneratedSceneExport refreshes row-local performanceTrend payloads from rawMetrics JSON only when payload sceneId matches the dashboard row."
+  },
+  "strictPreservation": {
+    "rendererChanged": false,
+    "shaderChanged": false,
+    "thresholdChanged": false,
+    "fallbackChanged": false,
+    "sceneStatusChanged": false,
+    "releaseBlockingGateChanged": false
+  }
+}

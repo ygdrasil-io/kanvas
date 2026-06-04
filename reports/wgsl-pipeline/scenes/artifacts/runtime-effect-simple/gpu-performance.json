@@ -1,29 +1,76 @@
 {
-  "sceneId": "runtime-effect-simple",
-  "lane": "GPU",
-  "status": "estimated",
-  "sampleCount": 30,
-  "timing": {
-    "medianMs": 0.105,
-    "p95Ms": 0.15
-  },
-  "counters": {
-    "routeInvocations": 1,
-    "pipelineCacheHits": 29,
-    "pipelineCacheMisses": 1,
-    "bindGroupCount": 1,
-    "resourceBytes": 4096
-  },
-  "baseline": {
-    "name": "m40-gpu-cache-static-seed",
-    "commit": "fbbdf674734798ffe265cab16241e6ee3939f1fa"
-  },
-  "regression": {
-    "label": "unknown"
-  },
-  "environment": "macOS local WebGPU-capable validation host; informational until native GPU benchmark harness lands",
-  "adapter": "local WebGPU adapter available during GRA-185/GRA-186 validation; exact adapter name not serialized by static seed",
-  "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
-  "route": "webgpu.runtime-effect.descriptor.simple_rt",
-  "rawMetrics": "artifacts/runtime-effect-simple/gpu-performance.json"
+    "sceneId": "runtime-effect-simple",
+    "lane": "GPU",
+    "status": "measured",
+    "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+    "phase": "webgpu-cache-dashboard-row",
+    "sampleCount": 30,
+    "timing": {
+        "medianMs": 0.002792,
+        "p95Ms": 0.003208
+    },
+    "environment": {
+        "host": "Omega",
+        "os": "Mac OS X 26.5 aarch64",
+        "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+        "backend": "WebGPU cache/timing dashboard benchmark",
+        "adapter": "Apple M2 Max"
+    },
+    "adapter": "Apple M2 Max",
+    "counters": {
+        "routeInvocations": 1,
+        "pipelineCacheHits": 29,
+        "pipelineCacheMisses": 1,
+        "bindGroupCount": 1,
+        "resourceBytes": 4096
+    },
+    "baseline": {
+        "name": "m43-gpu-cache-measured-local",
+        "commit": "94ed720b280c85aa8fde0c48be496961fe70c80f",
+        "owner": "Kanvas rendering release owner"
+    },
+    "regression": {
+        "label": "unknown"
+    },
+    "gate": {
+        "mode": "reporting-only",
+        "owner": "Kanvas rendering release owner",
+        "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist"
+    },
+    "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+    "route": "webgpu.runtime-effect.descriptor.simple_rt",
+    "rawMetrics": "artifacts/runtime-effect-simple/gpu-performance.json",
+    "rawSamples": [
+        0.002875,
+        0.002917,
+        0.003458,
+        0.00275,
+        0.00275,
+        0.003208,
+        0.00275,
+        0.002792,
+        0.003084,
+        0.00275,
+        0.00275,
+        0.003,
+        0.002792,
+        0.00275,
+        0.002875,
+        0.00275,
+        0.002791,
+        0.002917,
+        0.00275,
+        0.002791,
+        0.003,
+        0.00275,
+        0.00275,
+        0.003,
+        0.003042,
+        0.003125,
+        0.002917,
+        0.002792,
+        0.00275,
+        0.003042
+    ],
+    "checksum": -1543912199
 }
