@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-350",
+  "sceneId": "f16-arc-improving-non-arc-safe-candidate-for350",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-evaluate-arc-improving-non-arc-safe-candidate-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-349-f16-replacement-candidate-rejected-finding"
+  ],
+  "inputValidation": {
+    "for349Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-replacement-candidate-evaluation-for349/f16-replacement-candidate-evaluation-for349.json",
+    "for349Decision": "F16_REPLACEMENT_CANDIDATE_EVALUATED_REJECTED",
+    "for349RequiredDecision": "F16_REPLACEMENT_CANDIDATE_EVALUATED_REJECTED",
+    "for348Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-new-candidate-search-matrix-for348/f16-new-candidate-search-matrix-for348.json",
+    "for348Decision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for348RequiredDecision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for346Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-global-color-policy-candidate-retired-for346/f16-global-color-policy-candidate-retired-for346.json",
+    "for346Decision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for346RequiredDecision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED"
+  },
+  "decision": "F16_ARC_IMPROVING_NON_ARC_SAFE_CANDIDATE_REJECTED",
+  "allowedDecisions": [
+    "F16_ARC_IMPROVING_NON_ARC_SAFE_CANDIDATE_REJECTED",
+    "F16_ARC_IMPROVING_NON_ARC_SAFE_CANDIDATE_PARTIAL",
+    "F16_ARC_IMPROVING_NON_ARC_SAFE_CANDIDATE_READY",
+    "F16_ARC_IMPROVING_NON_ARC_SAFE_CANDIDATE_INPUT_INVALID"
+  ],
+  "candidate": {
+    "policyId": "halfway_to_retired_over_white_candidate",
+    "retiredPolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "for349ControlPolicyId": "current_color_managed_rec2020_f16_src_over_then_srgb_export_control",
+    "isRetiredPolicy": false,
+    "isFor349ControlPolicy": false,
+    "formula": "Use halfway residual interpolation between current behavior and the retired over-white baseline for each matrix row; this is an evidence-only formula, not renderer logic.",
+    "rendererBehaviorChanged": false,
+    "selectedForImplementation": false,
+    "scoreIncreaseAuthorized": false
+  },
+  "evaluationRows": [
+    {
+      "rowId": "arc-circular-arcs-stroke-butt-adjacent-for341",
+      "family": "arc",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+      "candidatePolicyId": "halfway_to_retired_over_white_candidate",
+      "currentResidual": 375,
+      "retiredPolicyResidual": 0,
+      "candidateResidual": 188,
+      "residualReductionVsCurrent": 187,
+      "worsenedSampleCount": 0,
+      "evaluationStatus": "evaluated-from-matrix-residual-interpolation"
+    },
+    {
+      "rowId": "non-arc-rec2020-f16-src-over-rect-for345",
+      "family": "non-arc",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+      "candidatePolicyId": "halfway_to_retired_over_white_candidate",
+      "currentResidual": 0,
+      "retiredPolicyResidual": 111,
+      "candidateResidual": 56,
+      "residualReductionVsCurrent": -56,
+      "worsenedSampleCount": 3,
+      "evaluationStatus": "evaluated-from-matrix-residual-interpolation"
+    }
+  ],
+  "criteriaEvaluation": {
+    "for348RejectionCriteria": [
+      {
+        "id": "retired-policy-reuse",
+        "passed": true
+      },
+      {
+        "id": "missing-arc-or-non-arc-row",
+        "passed": true
+      },
+      {
+        "id": "worsens-current-on-any-covered-reference-row",
+        "passed": false
+      },
+      {
+        "id": "scene-shaped-branch",
+        "passed": true
+      },
+      {
+        "id": "score-before-selection",
+        "passed": true
+      }
+    ],
+    "minimumSelectionCriteria": [
+      {
+        "id": "arc-and-non-arc-positive",
+        "passed": false,
+        "reason": "candidate improves the arc row but regresses the non-arc row, so the matrix is not positive"
+      },
+      {
+        "id": "no-covered-sample-regression",
+        "passed": false
+      },
+      {
+        "id": "explicit-route-diagnostics",
+        "passed": true
+      },
+      {
+        "id": "no-renderer-change-before-decision",
+        "passed": true
+      }
+    ],
+    "arcPositive": true,
+    "nonArcPositive": false,
+    "candidateRejectedReason": "NON_ARC_ROW_REGRESSION_FROM_ARC_IMPROVING_INTERPOLATION"
+  },
+  "decisionReason": "The candidate improves the arc row but moves the non-arc FOR-345 row away from its current zero-residual behavior. It fails the FOR-348 non-regression rule and is rejected.",
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "retiredPolicyStillForbiddenAsGlobalCandidate": true
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for350_f16_arc_improving_non_arc_safe_candidate.py",
+      "rtk python3 scripts/validate_for349_f16_replacement_candidate_evaluation.py",
+      "rtk python3 scripts/validate_for348_f16_new_candidate_search_matrix.py",
+      "rtk python3 scripts/validate_for347_f16_post_retirement_route_decision.py",
+      "rtk python3 scripts/validate_for346_f16_global_color_policy_candidate_retired.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
