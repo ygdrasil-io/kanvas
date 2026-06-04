@@ -1,0 +1,172 @@
+{
+  "linear": "FOR-308",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-text-glyph-dependency-gate-ticket",
+  "decision": "TEXT_GLYPH_DEPENDENCY_GATE_APPLIED",
+  "supportDecision": "KEEP_TEXT_GLYPH_DEPENDENCY_GATED_UNTIL_REAL_DELIVERY",
+  "sourceReports": {
+    "reports/wgsl-pipeline/2026-05-31-m50-font-text-evidence-pack.md": "verified",
+    "reports/wgsl-pipeline/2026-06-01-m62-font-text-baseline-audit.md": "verified",
+    "reports/wgsl-pipeline/2026-06-01-m62-glyph-route-dashboard-diagnostics.md": "verified",
+    "reports/wgsl-pipeline/2026-06-01-m62-missing-glyph-fallback-evidence.md": "verified",
+    "reports/wgsl-pipeline/2026-06-04-for-304-renderer-feature-conversion-wave-closeout.md": "verified",
+    ".upstream/specs/font/README.md": "verified",
+    ".upstream/specs/font/05-color-fonts-emoji-and-fixtures.md": "verified",
+    ".upstream/specs/font/06-validation-and-conformance.md": "verified"
+  },
+  "supportedBoundary": [
+    {
+      "id": "font-latin-outline-drawstring",
+      "status": "pass",
+      "route": "webgpu.text.outline.simple-latin",
+      "pipelineKey": "textRoute=simple-latin glyphRepresentation=outline state=[blendMode=kSrcOver]",
+      "fallbackReason": "none"
+    },
+    {
+      "id": "font-textblob-positioned-glyph-run",
+      "status": "pass",
+      "route": "webgpu.text.outline.positioned-glyph-run",
+      "pipelineKey": "textRoute=positioned-glyph-run glyphRepresentation=outline state=[blendMode=kSrcOver]",
+      "fallbackReason": "none"
+    },
+    {
+      "id": "font-kerning-style-fixture",
+      "status": "pass",
+      "route": "webgpu.text.outline.kerning-style-fixture",
+      "pipelineKey": "textRoute=kerning-style glyphRepresentation=outline state=[blendMode=kSrcOver]",
+      "fallbackReason": "none"
+    },
+    {
+      "id": "m66-font-latin-outline-cpu-oracle",
+      "status": "pass",
+      "route": "webgpu.text.outline.simple-latin",
+      "pipelineKey": "textRoute=simple-latin glyphRepresentation=outline state=[blendMode=kSrcOver] milestone=M66",
+      "fallbackReason": "none"
+    },
+    {
+      "id": "m66-font-positioned-glyph-run-cpu-oracle",
+      "status": "pass",
+      "route": "webgpu.text.outline.positioned-glyph-run",
+      "pipelineKey": "textRoute=positioned-glyph-run glyphRepresentation=outline state=[blendMode=kSrcOver] milestone=M66",
+      "fallbackReason": "none"
+    },
+    {
+      "id": "m66-font-kerning-style-cpu-oracle",
+      "status": "pass",
+      "route": "webgpu.text.outline.kerning-style-fixture",
+      "pipelineKey": "textRoute=kerning-style-fixture glyphRepresentation=outline state=[blendMode=kSrcOver] milestone=M66",
+      "fallbackReason": "none"
+    }
+  ],
+  "preservedRefusals": [
+    {
+      "id": "font-emoji-color-glyph-refusal",
+      "status": "expected-unsupported",
+      "route": "webgpu.text.refuse",
+      "pipelineKey": "textRoute=emoji-color-glyph glyphRepresentation=unsupported",
+      "fallbackReason": "font.color-glyph-emoji-unsupported"
+    },
+    {
+      "id": "font-complex-shaping-refusal",
+      "status": "expected-unsupported",
+      "route": "webgpu.text.refuse",
+      "pipelineKey": "textRoute=complex-shaping glyphRepresentation=unsupported",
+      "fallbackReason": "font.complex-shaping-requires-explicit-shaper"
+    },
+    {
+      "id": "m52-color-emoji-blendmodes-refusal",
+      "status": "expected-unsupported",
+      "route": "webgpu.text.refuse",
+      "pipelineKey": "textRoute=colorEmoji blendModes=true glyphRepresentation=unsupported source=ColoremojiBlendmodesGM",
+      "fallbackReason": "font.color-glyph-emoji-unsupported"
+    },
+    {
+      "id": "m62-missing-glyph-fallback-refusal",
+      "status": "expected-unsupported",
+      "route": "webgpu.text.refuse.missing-glyph-fallback",
+      "pipelineKey": "textRoute=missing-glyph-fallback glyphRepresentation=unsupported fallbackFamily=required source=LiberationSans-Regular",
+      "fallbackReason": "font.missing-glyph-fallback-unsupported"
+    },
+    {
+      "id": "m66-font-complex-shaping-refusal",
+      "status": "expected-unsupported",
+      "route": "webgpu.text.refuse.complex-shaping",
+      "pipelineKey": "textRoute=complex-shaping glyphRepresentation=unsupported shaper=missing milestone=M66",
+      "fallbackReason": "font.complex-shaping-requires-explicit-shaper"
+    }
+  ],
+  "forbiddenSubstitutes": [
+    "hidden HarfBuzz/FreeType/Fontations/CoreText/DirectWrite/fontconfig/JNI dependency",
+    "native emoji renderer",
+    "platform font fallback",
+    "different font or glyph substitution",
+    "glyph atlas, mask, SDF, or LCD claim without artifacts",
+    "fallback reason or status relabel without implementation evidence"
+  ],
+  "requiredFuturePromotionProof": [
+    "owning font spec section",
+    "font fixture and provenance",
+    "text input and shaping mode",
+    "glyph diagnostics",
+    "reference or CPU oracle",
+    "CPU artifact and stats",
+    "adapter-backed GPU artifact and stats when support is claimed",
+    "CPU/GPU diff artifacts when support is claimed",
+    "route diagnostics",
+    "stable fallback policy for non-selected rows",
+    "focused font or WebGPU text tests"
+  ],
+  "policyCases": [
+    {
+      "name": "FOR-308 diagnostic dependency gate",
+      "decision": "diagnostic-gate",
+      "allowed": true,
+      "reason": "Diagnostic guard is allowed because it preserves existing support and refusal boundaries."
+    },
+    {
+      "name": "Hidden shaping or font library substitute is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Hidden dependency, native API, or font/glyph substitution cannot clear text/glyph gates."
+    },
+    {
+      "name": "Native emoji or platform fallback is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Hidden dependency, native API, or font/glyph substitution cannot clear text/glyph gates."
+    },
+    {
+      "name": "Different font or glyph substitution is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Hidden dependency, native API, or font/glyph substitution cannot clear text/glyph gates."
+    },
+    {
+      "name": "Fallback relabel without implementation proof is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Changing a refusal reason or status requires a dedicated implementation proof."
+    },
+    {
+      "name": "Atlas or glyph mask claim without artifacts is forbidden",
+      "decision": "forbidden",
+      "allowed": false,
+      "reason": "Atlas/mask/SDF/LCD claims require explicit artifacts and diagnostics."
+    },
+    {
+      "name": "Support claim without full proof is ambiguous",
+      "decision": "ambiguous",
+      "allowed": false,
+      "reason": "Support claim lacks the complete text/glyph promotion proof set."
+    },
+    {
+      "name": "Complete local proof can become a future promotion candidate",
+      "decision": "future-promotion-candidate",
+      "allowed": true,
+      "reason": "Complete proof belongs in a future implementation ticket, not this gate-only ticket."
+    }
+  ],
+  "alternateDecisions": {
+    "unsafe": "TEXT_GLYPH_DEPENDENCY_UNSAFE_SUBSTITUTE_FOUND",
+    "ambiguous": "TEXT_GLYPH_DEPENDENCY_GATE_AMBIGUOUS"
+  }
+}
