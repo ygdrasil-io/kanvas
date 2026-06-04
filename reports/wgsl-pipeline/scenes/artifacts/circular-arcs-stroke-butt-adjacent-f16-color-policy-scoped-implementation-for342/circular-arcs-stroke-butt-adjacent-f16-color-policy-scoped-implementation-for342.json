@@ -1,0 +1,857 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-342",
+  "sceneId": "circular-arcs-stroke-butt-adjacent-f16-color-policy-scoped-implementation-for342",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-scoped-implementation-of-adjacent-circular-arcs-stroke-butt-f16-color-policy-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-341-circular-arcs-stroke-butt-adjacent-f16-color-policy-ready-for-scoped-implementation-finding"
+  ],
+  "inputValidation": {
+    "for341Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+    "for341Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION",
+    "for341RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION",
+    "for341ReadyForScopedImplementation": true,
+    "for341AuthorizedPolicyId": "adjacent_circular_arcs_stroke_butt_f16_straight_srgb_quantized_alpha_src_over_white",
+    "rawTransparentPngBasisAcceptedForImplementation": false,
+    "skiaOverWhiteBasisAcceptedForImplementation": true
+  },
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_SCOPED_IMPLEMENTATION_PARTIAL_REQUIRES_SAFER_ROUTE",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_SCOPED_IMPLEMENTATION_APPLIED",
+    "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_SCOPED_IMPLEMENTATION_PARTIAL_REQUIRES_SAFER_ROUTE",
+    "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_SCOPED_IMPLEMENTATION_INPUT_INVALID"
+  ],
+  "decisionReason": "FOR-341 proves the candidate policy would reduce the exact adjacent-cell over-white residual from 375 to 0, but the only renderer hooks found are global F16 color conversion, global F16 blending, and the global encoded-export boundary. Applying the policy to only these two cells would require fixture/coordinate-specific renderer branching; applying it generally would be a color-management migration outside FOR-342. Renderer behavior is therefore left unchanged and this ticket records the safer-route decision.",
+  "policy": {
+    "authorizedPolicyId": "adjacent_circular_arcs_stroke_butt_f16_straight_srgb_quantized_alpha_src_over_white",
+    "sourceCandidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "candidatePolicyDescription": "straight sRGB source channels with rounded covered alpha, SrcOver composited over white",
+    "rawTransparentPngBasisAcceptedForImplementation": false,
+    "skiaOverWhiteBasisAcceptedForImplementation": true,
+    "affectedCells": [
+      "adjacent_arc_stroke_start0_sweep45_target",
+      "adjacent_arc_stroke_start0_sweep130_target"
+    ]
+  },
+  "implementation": {
+    "rendererBehaviorChanged": false,
+    "implementationApplied": false,
+    "partialDecisionStable": true,
+    "partialDecisionReason": "no-safe-scoped-renderer-route-without-fixture-branch-or-global-color-migration",
+    "unsafeRoutesRejected": [
+      "fixture-or-coordinate-specific renderer branch for only the two FOR-339/FOR-340 cells",
+      "global colorToF16Premul change",
+      "global blendF16PremulMode change",
+      "global SkBitmap.getPixelAsSrgb export-boundary change",
+      "selected-cell extrapolation or FOR-327 substitution"
+    ],
+    "safeFutureRouteRequired": [
+      "introduce an explicit, product-approved color policy boundary rather than a fixture branch",
+      "prove the boundary on broader non-arc F16 fixtures before changing global F16 renderer behavior",
+      "keep SkBitmap.getPixel as the internal renderer/test oracle unless separately approved",
+      "keep SkBitmap.getPixelAsSrgb as the encoded export boundary unless separately approved"
+    ]
+  },
+  "residualTotals": {
+    "sampleCount": 12,
+    "strokeSampleCount": 10,
+    "oldCurrentOverWhiteResidual": 375,
+    "actualNewOverWhiteResidual": 375,
+    "candidateNewOverWhiteResidual": 0,
+    "candidateResidualReductionIfSafeRouteExists": 375,
+    "rendererResidualReductionApplied": 0,
+    "rawTransparentPngResidualRejected": 7065
+  },
+  "nonGoalsPreserved": {
+    "colorToF16Premul": true,
+    "blendF16PremulMode": true,
+    "skBitmapGetPixelInternalOracle": true,
+    "skBitmapGetPixelAsSrgbExportBoundary": true,
+    "geometry": true,
+    "coveragePolicy": true,
+    "gpu": true,
+    "wgsl": true,
+    "thresholds": true,
+    "fallbacks": true,
+    "kadre": true,
+    "promotion": true,
+    "score": true,
+    "historicalArtifactsFOR329ToFOR341Rewritten": false
+  },
+  "oldNewEvidence": [
+    {
+      "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+      "cell": {
+        "fixtureId": "circular-arcs-stroke-butt-start0-sweep45-usecenter-false-aa-true",
+        "sourceGm": "CircularArcsStrokeButtGM",
+        "rowIndex": 0,
+        "columnIndex": 1,
+        "startDegrees": 0,
+        "sweepDegrees": 45,
+        "strokeCap": "kButt_Cap",
+        "aa": true,
+        "paintAlpha": 100
+      },
+      "implementationScopeMatched": true,
+      "oldNewEvidenceSampleCount": 6,
+      "strokeSampleCount": 5,
+      "oldCurrentOverWhiteResidual": 187,
+      "actualNewOverWhiteResidual": 187,
+      "candidateNewOverWhiteResidual": 0,
+      "samples": [
+        {
+          "name": "sweep45_background_top_left",
+          "zone": "background",
+          "localX": 0,
+          "localY": 0,
+          "oldCurrentFor339ExportRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualNewRendererRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 0,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        },
+        {
+          "name": "sweep45_blue_top_stroke_center",
+          "zone": "stroke-center",
+          "localX": 40,
+          "localY": 20,
+          "oldCurrentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "actualNewRendererRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 37,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 37,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        },
+        {
+          "name": "sweep45_blue_left_stroke_center",
+          "zone": "stroke-center",
+          "localX": 20,
+          "localY": 40,
+          "oldCurrentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "actualNewRendererRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 37,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 37,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        },
+        {
+          "name": "sweep45_red_right_stroke_center",
+          "zone": "stroke-center",
+          "localX": 60,
+          "localY": 40,
+          "oldCurrentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "actualNewRendererRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 38,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 38,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        },
+        {
+          "name": "sweep45_red_inner_sweep_stroke_center",
+          "zone": "stroke-center",
+          "localX": 59,
+          "localY": 45,
+          "oldCurrentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "actualNewRendererRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 38,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 38,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        },
+        {
+          "name": "sweep45_blue_bottom_stroke_center",
+          "zone": "stroke-center",
+          "localX": 40,
+          "localY": 60,
+          "oldCurrentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "actualNewRendererRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 37,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 37,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        }
+      ]
+    },
+    {
+      "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+      "cell": {
+        "fixtureId": "circular-arcs-stroke-butt-start0-sweep130-usecenter-false-aa-true",
+        "sourceGm": "CircularArcsStrokeButtGM",
+        "rowIndex": 0,
+        "columnIndex": 3,
+        "startDegrees": 0,
+        "sweepDegrees": 130,
+        "strokeCap": "kButt_Cap",
+        "aa": true,
+        "paintAlpha": 100
+      },
+      "implementationScopeMatched": true,
+      "oldNewEvidenceSampleCount": 6,
+      "strokeSampleCount": 5,
+      "oldCurrentOverWhiteResidual": 188,
+      "actualNewOverWhiteResidual": 188,
+      "candidateNewOverWhiteResidual": 0,
+      "samples": [
+        {
+          "name": "sweep130_background_top_left",
+          "zone": "background",
+          "localX": 0,
+          "localY": 0,
+          "oldCurrentFor339ExportRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "actualNewRendererRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 0,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        },
+        {
+          "name": "sweep130_blue_top_stroke_center",
+          "zone": "stroke-center",
+          "localX": 40,
+          "localY": 20,
+          "oldCurrentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "actualNewRendererRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 37,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 37,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        },
+        {
+          "name": "sweep130_red_right_stroke_center",
+          "zone": "stroke-center",
+          "localX": 60,
+          "localY": 40,
+          "oldCurrentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "actualNewRendererRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 38,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 38,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        },
+        {
+          "name": "sweep130_red_bottom_stroke_center",
+          "zone": "stroke-center",
+          "localX": 40,
+          "localY": 60,
+          "oldCurrentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "actualNewRendererRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 38,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 38,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        },
+        {
+          "name": "sweep130_red_inner_sweep_stroke_center",
+          "zone": "stroke-center",
+          "localX": 33,
+          "localY": 58,
+          "oldCurrentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "actualNewRendererRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 38,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            24,
+            14,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 38,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        },
+        {
+          "name": "sweep130_blue_left_stroke_center",
+          "zone": "stroke-center",
+          "localX": 20,
+          "localY": 40,
+          "oldCurrentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "actualNewRendererRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateNewPolicyRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "skiaReferenceOverWhiteRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawTransparentPngReferenceRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "oldVsSkiaOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "oldVsSkiaOverWhiteSumAbsDelta": 37,
+          "actualNewVsSkiaOverWhiteDeltaAbs": [
+            25,
+            12,
+            0,
+            0
+          ],
+          "actualNewVsSkiaOverWhiteSumAbsDelta": 37,
+          "candidateNewVsSkiaOverWhiteDeltaAbs": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "candidateNewVsSkiaOverWhiteSumAbsDelta": 0,
+          "candidateMatchesSkiaOverWhite": true,
+          "implementationAppliedToRenderer": false,
+          "oldNewEvidenceKind": "old-current-plus-candidate-new-policy-no-renderer-change"
+        }
+      ]
+    }
+  ],
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for342_circular_arcs_stroke_butt_adjacent_f16_color_policy_scoped_implementation.py",
+      "rtk python3 scripts/validate_for341_circular_arcs_stroke_butt_adjacent_f16_color_policy_decision.py",
+      "rtk python3 scripts/validate_for340_circular_arcs_stroke_butt_adjacent_f16_reference.py",
+      "rtk python3 scripts/validate_for339_circular_arcs_stroke_butt_adjacent_f16_runtime_trace.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
