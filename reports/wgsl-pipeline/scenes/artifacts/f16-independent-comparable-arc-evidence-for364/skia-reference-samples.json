@@ -1,0 +1,18 @@
+{
+  "sceneId": "f16-independent-comparable-arc-evidence-for364",
+  "sourceType": "isolated-skia-independent-arc-rec2020-f16-for364-butt-cap",
+  "dimensions": {"width": 72, "height": 72},
+  "colorType": "kRGBA_F16Norm",
+  "colorSpace": "Rec.2020",
+  "blendMode": "kSrcOver",
+  "arcScene": true,
+  "independentFromFor361": true,
+  "independentFromFor340For341AdjacentGroups": true,
+  "excludedScene": "for361_and_circular_arcs_stroke_butt_adjacent_groups",
+  "samples": [
+    {"name": "for364_background_top_left", "zone": "background", "x": 0, "y": 0, "rawReferenceRgba": [0, 0, 0, 0], "referenceSrgbRgba": [255, 255, 255, 255]},
+    {"name": "for364_arc_diagonal_stroke_center", "zone": "stroke-center", "x": 16, "y": 16, "rawReferenceRgba": [255, 0, 0, 128], "referenceSrgbRgba": [255, 156, 144, 255]},
+    {"name": "for364_arc_top_stroke_center", "zone": "stroke-center", "x": 32, "y": 10, "rawReferenceRgba": [255, 0, 0, 128], "referenceSrgbRgba": [255, 156, 144, 255]},
+    {"name": "for364_arc_interior_clear", "zone": "interior-clear", "x": 32, "y": 32, "rawReferenceRgba": [0, 0, 0, 0], "referenceSrgbRgba": [255, 255, 255, 255]}
+  ]
+}
