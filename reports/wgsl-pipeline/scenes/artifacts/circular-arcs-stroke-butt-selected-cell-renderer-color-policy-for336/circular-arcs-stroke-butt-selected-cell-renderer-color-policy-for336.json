@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-336",
+  "sceneId": "circular-arcs-stroke-butt-selected-cell-renderer-color-policy-for336",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-renderer-color-policy-decision-for-circular-arcs-stroke-butt-f16-blend",
+  "sourceFindings": [
+    "global/kanvas/findings/for-335-circular-arcs-stroke-butt-f16-blend-policy-requires-renderer-color-policy-decision-finding"
+  ],
+  "inputValidation": {
+    "for335Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-f16-blend-policy-for335/circular-arcs-stroke-butt-selected-cell-f16-blend-policy-for335.json",
+    "for335Decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_BLEND_POLICY_REQUIRES_RENDERER_COLOR_POLICY_DECISION",
+    "for335RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_F16_BLEND_POLICY_REQUIRES_RENDERER_COLOR_POLICY_DECISION",
+    "for335BestCandidatePolicyId": "straight_srgb_quantized_alpha_src_over_white"
+  },
+  "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_RENDERER_COLOR_POLICY_NEEDS_CROSS_SCENE_EVIDENCE",
+  "allowedDecisions": [
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_RENDERER_COLOR_POLICY_KEEP_WORKING_SPACE_BLEND",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_RENDERER_COLOR_POLICY_ADOPT_STRAIGHT_SRGB_REFERENCE",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_RENDERER_COLOR_POLICY_NEEDS_CROSS_SCENE_EVIDENCE",
+    "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_RENDERER_COLOR_POLICY_INPUT_INVALID"
+  ],
+  "decisionReason": "FOR-335 proves a local selected-cell improvement signal, but not a renderer-wide color policy. The straight-sRGB candidate reduces total residual and clears the full-coverage stroke centers, while worsening two antialiased edge samples that FOR-334 already improved. A behavior change touching F16 premul or SrcOver policy therefore needs cross-scene CPU/GPU evidence before implementation.",
+  "selectedPolicy": {
+    "policyId": "require_cross_scene_evidence_before_renderer_color_policy_change",
+    "selected": true,
+    "codeChangeAllowedInThisTicket": false
+  },
+  "candidatePolicies": [
+    {
+      "policyId": "keep_current_rec2020_f16_working_space_blend",
+      "title": "Keep Rec.2020 F16 working-space blend",
+      "expectedBehavior": "Keep paintColorXformAndPremul, F16 premul coverage, and SkBitmapDevice.blendF16PremulMode.kSrcOver as the renderer truth; SkBitmap.getPixel remains the internal oracle and SkBitmap.getPixelAsSrgb remains only the encoded export boundary.",
+      "knownResidualImpact": "Preserves the current selected-cell residual of 132; full-coverage stroke centers remain at 57 residual.",
+      "regressionRisk": "Lowest immediate regression risk because existing CPU/GPU comparison oracles stay stable, but it leaves the selected-cell mismatch unresolved.",
+      "requiredValidationGates": [
+        "FOR-335 remains complete with its renderer-policy decision gate.",
+        "GPU smoke and scene dashboard gates continue to compare against the current CPU oracle.",
+        "No historical FOR-329..FOR-335 artifact is rewritten."
+      ],
+      "recommendation": "Do not claim selected-cell support complete; keep as the fallback default unless cross-scene evidence contradicts it.",
+      "acceptedInFor336": false
+    },
+    {
+      "policyId": "adopt_straight_srgb_reference_for_selected_cell_class",
+      "title": "Adopt straight-sRGB reference",
+      "expectedBehavior": "Treat selected-cell evidence for this class as straight sRGB SrcOver over white, with the best FOR-335 candidate using quantized covered alpha.",
+      "knownResidualImpact": "Reduces selected-cell stroke residual from 132 to 52; full-coverage centers go from 57 to 0.",
+      "regressionRisk": "Not accepted in FOR-336: the candidate worsens 2 edge samples (blue_left_aa_edge, blue_top_outer_edge), so applying it locally could hide coverage or quantization regressions.",
+      "requiredValidationGates": [
+        "CPU old/new pixel table for this selected cell and adjacent arc stroke cells.",
+        "GPU smoke proof that internal byte-oracle comparisons do not move unexpectedly.",
+        "Explicit test coverage for edge samples worsened by FOR-335.",
+        "No change to SkBitmap.getPixel or SkBitmap.getPixelAsSrgb semantics."
+      ],
+      "recommendation": "Prepare an evidence ticket before any implementation ticket; acceptance requires no silent edge regression.",
+      "acceptedInFor336": false
+    },
+    {
+      "policyId": "require_cross_scene_evidence_before_renderer_color_policy_change",
+      "title": "Require cross-scene evidence",
+      "expectedBehavior": "Block renderer color behavior changes until the same policy is evaluated against selected-cell, adjacent cells, CPU dashboard evidence, and GPU comparison gates.",
+      "knownResidualImpact": "Keeps FOR-334/FOR-335 runtime behavior unchanged for now; records the candidate improvement 132->52 and center improvement 57->0 as evidence, not as behavior.",
+      "regressionRisk": "Balanced risk: avoids committing a global F16 blend policy from one selected cell while preserving a clear path to prove or reject it.",
+      "requiredValidationGates": [
+        "FOR-336 validator passes and confirms FOR-335 prerequisite state.",
+        "Next ticket samples at least selected cell, adjacent arc-stroke cells, and one non-arc F16/blend scene.",
+        "CPU and GPU gates must pass before any change to colorToF16Premul or blendF16PremulMode.",
+        "Any proposed comparison-policy migration must explicitly keep or replace SkBitmap.getPixel as oracle."
+      ],
+      "recommendation": "Open the next ticket as a cross-scene evidence artifact, not a renderer patch. The implementation ticket can follow only if it proves no hidden edge, GPU, threshold, or fallback regression.",
+      "acceptedInFor336": true
+    }
+  ],
+  "metrics": {
+    "selectedCellStrokeSampleCount": 8,
+    "currentWorkingSpaceResidual": 132,
+    "bestStraightSrgbCandidatePolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "bestStraightSrgbResidual": 52,
+    "residualReduction": 80,
+    "currentStrokeCenterResidual": 57,
+    "bestStraightSrgbStrokeCenterResidual": 0,
+    "worsenedEdgeSampleCount": 2,
+    "worsenedEdgeSamples": [
+      "blue_left_aa_edge",
+      "blue_top_outer_edge"
+    ]
+  },
+  "futureCodeChangeAcceptanceCriteria": [
+    "Do not change colorToF16Premul unless the artifact proves the policy across selected-cell and cross-scene evidence.",
+    "Do not change blendF16PremulMode unless old/new CPU samples and GPU smoke checks prove no silent oracle movement.",
+    "Do not change SkBitmap.getPixel unless a complete comparison-oracle migration is explicitly approved.",
+    "Do not change SkBitmap.getPixelAsSrgb unless encoded export behavior and PNG evidence are covered.",
+    "Do not change geometry, coverage, WGSL, thresholds, fallback policy, Kadre, promotion, or score in a color-policy ticket."
+  ],
+  "nextTicketRecommendation": {
+    "type": "cross_scene_evidence_artifact",
+    "title": "Prouver la politique couleur F16 renderer sur plusieurs scenes avant correction",
+    "objective": "Compare current Rec.2020 F16 working-space blend against straight-sRGB reference policy on selected-cell, adjacent CircularArcsStrokeButt cells, and at least one non-arc F16/blend scene before any renderer behavior change.",
+    "mustUseMemoryFirst": true,
+    "mustNotImplementRendererPatch": true
+  },
+  "implementation": {
+    "rendererBehaviorChanged": false,
+    "reason": "FOR-336 is a decision gate; the selected decision requires more evidence before code changes."
+  },
+  "nonGoalsPreserved": {
+    "colorToF16Premul": true,
+    "blendF16PremulMode": true,
+    "skBitmapGetPixelInternalOracle": true,
+    "skBitmapGetPixelAsSrgbExportBoundary": true,
+    "arcGeometry": true,
+    "coverage": true,
+    "gpu": true,
+    "wgsl": true,
+    "thresholds": true,
+    "fallbacks": true,
+    "kadre": true,
+    "promotion": true,
+    "score": true,
+    "historicalArtifactsFOR329ToFOR335Rewritten": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for336_circular_arcs_stroke_butt_selected_cell_renderer_color_policy.py",
+      "rtk python3 scripts/validate_for335_circular_arcs_stroke_butt_selected_cell_f16_blend_policy.py",
+      "rtk python3 scripts/validate_for334_circular_arcs_stroke_butt_selected_cell_f16_export_color_handling.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
