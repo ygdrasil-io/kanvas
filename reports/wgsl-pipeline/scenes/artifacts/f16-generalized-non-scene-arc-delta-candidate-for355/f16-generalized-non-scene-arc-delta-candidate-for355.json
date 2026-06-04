@@ -1,0 +1,742 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-355",
+  "sceneId": "f16-generalized-non-scene-arc-delta-candidate-for355",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-for-next-f16-evaluate-generalized-non-scene-arc-delta-candidate-ticket",
+  "sourceFindings": [
+    "global/kanvas/findings/for-354-f16-nonzero-arc-delta-generalization-constraints-ready"
+  ],
+  "inputValidation": {
+    "for354Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-nonzero-arc-delta-generalization-constraints-for354/f16-nonzero-arc-delta-generalization-constraints-for354.json",
+    "for354Decision": "F16_NONZERO_ARC_DELTA_GENERALIZATION_CONSTRAINTS_READY",
+    "for354RequiredDecision": "F16_NONZERO_ARC_DELTA_GENERALIZATION_CONSTRAINTS_READY",
+    "for353Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-nonzero-arc-delta-with-non-arc-guard-for353/f16-nonzero-arc-delta-with-non-arc-guard-for353.json",
+    "for353Decision": "F16_NONZERO_ARC_DELTA_WITH_NON_ARC_GUARD_PARTIAL",
+    "for353RequiredDecision": "F16_NONZERO_ARC_DELTA_WITH_NON_ARC_GUARD_PARTIAL",
+    "for351Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-non-arc-preserving-arc-constraints-for351/f16-non-arc-preserving-arc-constraints-for351.json",
+    "for351Decision": "F16_NON_ARC_PRESERVING_ARC_CONSTRAINTS_READY",
+    "for351RequiredDecision": "F16_NON_ARC_PRESERVING_ARC_CONSTRAINTS_READY",
+    "for348Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-new-candidate-search-matrix-for348/f16-new-candidate-search-matrix-for348.json",
+    "for348Decision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for348RequiredDecision": "F16_NEW_CANDIDATE_SEARCH_MATRIX_READY",
+    "for346Artifact": "reports/wgsl-pipeline/scenes/artifacts/f16-global-color-policy-candidate-retired-for346/f16-global-color-policy-candidate-retired-for346.json",
+    "for346Decision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for346RequiredDecision": "F16_GLOBAL_COLOR_POLICY_CANDIDATE_RETIRED",
+    "for345Artifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "for345Decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for345RequiredDecision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+    "for341Artifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+    "for341Decision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION",
+    "for341RequiredDecision": "CIRCULAR_ARCS_STROKE_BUTT_ADJACENT_F16_COLOR_POLICY_READY_FOR_SCOPED_IMPLEMENTATION"
+  },
+  "decision": "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+  "allowedDecisions": [
+    "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_REJECTED",
+    "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_PARTIAL",
+    "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_READY_FOR_BROADER_EVIDENCE",
+    "F16_GENERALIZED_NON_SCENE_ARC_DELTA_CANDIDATE_INPUT_INVALID"
+  ],
+  "candidate": {
+    "policyId": "nonzero_stroke_center_alpha_composite_delta_with_non_arc_identity_guard",
+    "family": "nonzero_arc_delta_generalized_non_scene_guard_family",
+    "retiredPolicyId": "straight_srgb_quantized_alpha_src_over_white",
+    "for350RejectedCandidateId": "halfway_to_retired_over_white_candidate",
+    "for352RejectedCandidateId": "non_arc_identity_guarded_arc_delta_zero_probe",
+    "for353PartialCandidateId": "nonzero_analytic_arc_delta_with_non_arc_identity_guard",
+    "isRetiredPolicy": false,
+    "isFor350RejectedCandidate": false,
+    "isFor352RejectedCandidate": false,
+    "isFor353PartialCandidate": false,
+    "formula": "Evidence-only generalized non-scene probe: evaluate the FOR-345 non-arc guard first; if it stays exact, preserve current RGBA except for samples with zone `stroke-center` and a captured raw reference alpha in (0, 255), where the candidate computes the raw source RGBA alpha-composited over white. This is artifact evaluation, not renderer logic.",
+    "guardFirst": true,
+    "nonzeroArcDelta": true,
+    "appliesRetiredFormulaGlobally": false,
+    "rendererSelectable": false,
+    "selectedForImplementation": false,
+    "rendererBehaviorChanged": false,
+    "scoreIncreaseAuthorized": false,
+    "shaping": {
+      "targetSetShaped": false,
+      "sceneShaped": false,
+      "fixtureShaped": false,
+      "coordinateShaped": false,
+      "selectedCellShaped": false,
+      "fullGmCropShaped": false,
+      "familyZoneShaped": true,
+      "familyZone": "stroke-center",
+      "shapingBasis": "The candidate uses the cross-artifact sample zone and partial raw-alpha evidence; it does not use target sample ids, scene ids, fixture ids, coordinates, selected cells, or full-GM crops."
+    }
+  },
+  "evaluationOrder": [
+    "FOR-345 non-arc guard",
+    "FOR-341 arc residual evaluation only when FOR-345 passes"
+  ],
+  "evaluation": {
+    "nonArcGuard": {
+      "rowId": "non-arc-rec2020-f16-src-over-rect",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+      "guardEvaluatedFirst": true,
+      "requiredResidual": 0,
+      "candidateResidual": 0,
+      "requiredWorsenedSampleCount": 0,
+      "candidateWorsenedSampleCount": 0,
+      "passed": true,
+      "sampleCount": 4,
+      "coveredSampleCount": 3,
+      "candidateBehavior": "preserve-current-reference-equality-on-non-stroke-center-non-arc-samples",
+      "sampleEvaluations": [
+        {
+          "sample": "background_top_left",
+          "zone": "background",
+          "insideDraw": false,
+          "candidateRuleApplied": false,
+          "currentRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "referenceRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "currentResidual": 0,
+          "candidateResidual": 0,
+          "worsenedCurrent": false
+        },
+        {
+          "sample": "rect_center",
+          "zone": "fill-center",
+          "insideDraw": true,
+          "candidateRuleApplied": false,
+          "currentRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "referenceRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "currentResidual": 0,
+          "candidateResidual": 0,
+          "worsenedCurrent": false
+        },
+        {
+          "sample": "rect_left_inside",
+          "zone": "fill-left-inside",
+          "insideDraw": true,
+          "candidateRuleApplied": false,
+          "currentRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "referenceRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "currentResidual": 0,
+          "candidateResidual": 0,
+          "worsenedCurrent": false
+        },
+        {
+          "sample": "rect_right_inside",
+          "zone": "fill-right-inside",
+          "insideDraw": true,
+          "candidateRuleApplied": false,
+          "currentRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "referenceRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "currentResidual": 0,
+          "candidateResidual": 0,
+          "worsenedCurrent": false
+        }
+      ]
+    },
+    "arcEvaluation": {
+      "rowId": "arc-circular-arcs-stroke-butt-adjacent-for341",
+      "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341/circular-arcs-stroke-butt-adjacent-f16-color-policy-decision-for341.json",
+      "evaluatedAfterNonArcGuard": true,
+      "currentResidual": 375,
+      "candidateResidual": 0,
+      "residualReductionVsCurrent": 375,
+      "positiveArcReduction": true,
+      "sampleCount": 12,
+      "candidateRuleAppliedSampleCount": 10,
+      "candidateBehavior": "apply-stroke-center-partial-alpha-over-white-delta-from-captured-raw-reference-evidence",
+      "sampleEvaluations": [
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_background_top_left",
+          "zone": "background",
+          "candidateRuleApplied": false,
+          "currentFor339ExportRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "targetRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rawReferenceRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "currentResidual": 0,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_blue_top_stroke_center",
+          "zone": "stroke-center",
+          "candidateRuleApplied": true,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "targetRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawReferenceRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "currentResidual": 37,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 37
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_blue_left_stroke_center",
+          "zone": "stroke-center",
+          "candidateRuleApplied": true,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "targetRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawReferenceRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "currentResidual": 37,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 37
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_red_right_stroke_center",
+          "zone": "stroke-center",
+          "candidateRuleApplied": true,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "candidateRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "targetRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawReferenceRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "currentResidual": 38,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 38
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_red_inner_sweep_stroke_center",
+          "zone": "stroke-center",
+          "candidateRuleApplied": true,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "candidateRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "targetRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawReferenceRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "currentResidual": 38,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 38
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep45_target",
+          "sample": "sweep45_blue_bottom_stroke_center",
+          "zone": "stroke-center",
+          "candidateRuleApplied": true,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "targetRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawReferenceRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "currentResidual": 37,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 37
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_background_top_left",
+          "zone": "background",
+          "candidateRuleApplied": false,
+          "currentFor339ExportRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "targetRgba": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "rawReferenceRgba": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "currentResidual": 0,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 0
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_blue_top_stroke_center",
+          "zone": "stroke-center",
+          "candidateRuleApplied": true,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "targetRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawReferenceRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "currentResidual": 37,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 37
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_red_right_stroke_center",
+          "zone": "stroke-center",
+          "candidateRuleApplied": true,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "candidateRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "targetRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawReferenceRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "currentResidual": 38,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 38
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_red_bottom_stroke_center",
+          "zone": "stroke-center",
+          "candidateRuleApplied": true,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "candidateRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "targetRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawReferenceRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "currentResidual": 38,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 38
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_red_inner_sweep_stroke_center",
+          "zone": "stroke-center",
+          "candidateRuleApplied": true,
+          "currentFor339ExportRgba": [
+            255,
+            179,
+            169,
+            255
+          ],
+          "candidateRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "targetRgba": [
+            255,
+            155,
+            155,
+            255
+          ],
+          "rawReferenceRgba": [
+            255,
+            0,
+            0,
+            100
+          ],
+          "currentResidual": 38,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 38
+        },
+        {
+          "groupId": "adjacent_arc_stroke_start0_sweep130_target",
+          "sample": "sweep130_blue_left_stroke_center",
+          "zone": "stroke-center",
+          "candidateRuleApplied": true,
+          "currentFor339ExportRgba": [
+            180,
+            167,
+            255,
+            255
+          ],
+          "candidateRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "targetRgba": [
+            155,
+            155,
+            255,
+            255
+          ],
+          "rawReferenceRgba": [
+            0,
+            0,
+            255,
+            100
+          ],
+          "currentResidual": 37,
+          "candidateResidual": 0,
+          "residualReductionVsCurrent": 37
+        }
+      ]
+    }
+  },
+  "criteriaEvaluation": {
+    "nonArcGuardPassed": true,
+    "arcResidualReductionPositive": true,
+    "for348RejectionCriteria": [
+      {
+        "id": "retired-policy-reuse",
+        "passed": true
+      },
+      {
+        "id": "missing-arc-or-non-arc-row",
+        "passed": true
+      },
+      {
+        "id": "worsens-current-on-any-covered-reference-row",
+        "passed": true
+      },
+      {
+        "id": "scene-shaped-branch",
+        "passed": true
+      },
+      {
+        "id": "score-before-selection",
+        "passed": true
+      }
+    ],
+    "minimumSelectionCriteria": [
+      {
+        "id": "non-arc-residual-zero",
+        "passed": true
+      },
+      {
+        "id": "non-arc-worsened-sample-zero",
+        "passed": true
+      },
+      {
+        "id": "positive-arc-residual-reduction",
+        "passed": true
+      },
+      {
+        "id": "not-retired-policy",
+        "passed": true
+      },
+      {
+        "id": "not-for350-candidate",
+        "passed": true
+      },
+      {
+        "id": "not-for352-candidate",
+        "passed": true
+      },
+      {
+        "id": "not-for353-candidate",
+        "passed": true
+      },
+      {
+        "id": "not-target-set-shaped",
+        "passed": true
+      },
+      {
+        "id": "not-scene-shaped",
+        "passed": true
+      },
+      {
+        "id": "not-fixture-shaped",
+        "passed": true
+      },
+      {
+        "id": "not-coordinate-shaped",
+        "passed": true
+      },
+      {
+        "id": "not-selected-cell-shaped",
+        "passed": true
+      },
+      {
+        "id": "not-full-gm-crop-shaped",
+        "passed": true
+      },
+      {
+        "id": "no-renderer-change-before-decision",
+        "passed": true
+      },
+      {
+        "id": "score-not-raised",
+        "passed": true
+      }
+    ],
+    "candidateReadyReason": "FOR-345 remains residual 0 with 0 worsened samples, and FOR-341 residual drops from 375 to 0 without target-set, scene, fixture, coordinate, selected-cell, or full-GM-crop shaping."
+  },
+  "decisionReason": "The candidate is ready for broader evidence because it preserves the FOR-345 non-arc guard, then reduces the FOR-341 arc residual from 375 to 0. It remains evidence-only and cannot be selected, implemented, promoted, or used for score in FOR-355.",
+  "boundary": {
+    "id": "cpu-raster-f16-color-policy-boundary",
+    "rendererBehaviorChanged": false,
+    "globalF16RendererChangeAllowedNow": false,
+    "retiredPolicyStillForbiddenAsGlobalCandidate": true,
+    "scoreIncreaseAuthorized": false,
+    "rendererImplementationAuthorized": false
+  },
+  "implementation": {
+    "evidenceOnly": true,
+    "rendererBehaviorChanged": false,
+    "newColorPolicyImplemented": false,
+    "candidateSelectedForImplementation": false,
+    "colorToF16PremulChanged": false,
+    "blendF16PremulModeChanged": false,
+    "skBitmapGetPixelChanged": false,
+    "skBitmapGetPixelAsSrgbChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryChanged": false,
+    "coverageChanged": false,
+    "fallbackChanged": false,
+    "thresholdsChanged": false,
+    "promotionChanged": false,
+    "scoreChanged": false,
+    "kadreChanged": false,
+    "rendererFixtureOrCoordinateBranchAdded": false,
+    "rendererSceneBranchAdded": false,
+    "rendererSelectedCellOrFullGmCropBranchAdded": false
+  },
+  "validation": {
+    "commands": [
+      "rtk python3 scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk python3 scripts/validate_for354_f16_nonzero_arc_delta_generalization_constraints.py",
+      "rtk python3 scripts/validate_for353_f16_nonzero_arc_delta_with_non_arc_guard.py",
+      "rtk python3 scripts/validate_for351_f16_non_arc_preserving_arc_constraints.py",
+      "rtk python3 scripts/validate_for348_f16_new_candidate_search_matrix.py",
+      "rtk python3 scripts/validate_for346_f16_global_color_policy_candidate_retired.py",
+      "rtk python3 scripts/validate_for345_non_arc_rec2020_f16_reference_row.py",
+      "rtk python3 -m py_compile scripts/validate_for355_f16_generalized_non_scene_arc_delta_candidate.py",
+      "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+      "rtk git diff --check"
+    ]
+  }
+}
