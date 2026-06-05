@@ -187,6 +187,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16BoundedCorrectionApplicationPointDiagnostic.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16BoundedCorrectionApplicationPointDiagnostic.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16CoverageStencilContributionMap.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16CoverageStencilContributionMap.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
