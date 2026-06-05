@@ -1,0 +1,3809 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-422",
+          "sceneId": "m60-f16-aa-stencil-cover-verified-source-comparison-for422",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-422-m60-f16-comparer-source-verifiee-color-target-et-sortie-finale",
+          "sourceFinding": "global/kanvas/findings/for-421-retour-wgsl-instrumente-verifie-storage-non-nul",
+          "sourceArtifacts": {
+            "for421": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-return-path-diagnostic-for421/m60-f16-aa-stencil-cover-verified-return-path-diagnostic-for421.json",
+            "for417": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417/m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417.json",
+            "for414": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-draw-readback-for414/m60-f16-aa-stencil-cover-post-draw-readback-for414.json",
+            "for418": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-storage-vs-color-target-for418/m60-f16-aa-stencil-cover-storage-vs-color-target-for418.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "classification": "verified-source-matches-scratch-and-final-mutation",
+          "globalClassification": "verified-source-matches-scratch-and-final-mutation",
+          "allowedClassifications": [
+            "verified-source-matches-scratch-and-final-mutation",
+            "verified-source-matches-scratch-but-final-blend-diverges",
+            "verified-source-diverges-from-scratch",
+            "verified-source-comparison-incomplete"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "guards": {
+            "finalWgslDiagnostic": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false},
+            "shaderReturnStorageZeroCause": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false},
+            "predrawDstReadback": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverPredrawDstReadback.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false},
+            "postPassReadback": {"guardId": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false}
+          },
+          "comparisonPolicy": {
+            "sourceMeaning": "sourceColorSentToBlend is the non-synthetic vec4f captured by the verified FOR-421 return-path instrumentation.",
+            "scratchMeaning": "scratchOutputRgbaFloat is the RGBA16Float no-blend color-target output captured from the same diagnostic draw pass.",
+            "finalMeaning": "dstAfterRgbaFloat is the immediate post-draw destination sample observed by the FOR-405/FOR-414 readback path.",
+            "math": "premultiplied float SrcOver: out = src + dst * (1 - src.a)",
+            "sourceScratchTolerance": 6.0E-4,
+            "scratchFinalTolerance": 6.0E-4,
+            "boundedRecordPolicy": "One record per selected pixel and sampled draw; no WGSL source dump or full framebuffer dump is stored."
+          },
+          "structuralSummary": {
+            "diagnosticReturnPathVerified": true,
+            "selectedPixelCount": 16,
+            "localComparisonCount": 48,
+            "decisiveComparisonCount": 16,
+            "verifiedSourceSubdrawCount": 32,
+            "nonzeroVerifiedSourceSubdrawCount": 32,
+            "scratchColorTargetObservedCount": 48,
+            "nonzeroScratchColorTargetCount": 16,
+            "dstBeforeObservedCount": 48,
+            "dstAfterObservedCount": 48,
+            "sourceMatchesScratchCount": 16,
+            "scratchReconstructsFinalCount": 48,
+            "classificationCounts": {
+              "verified-source-matches-scratch-and-final-mutation": 16,
+              "verified-source-matches-scratch-but-final-blend-diverges": 0,
+              "verified-source-diverges-from-scratch": 0,
+              "verified-source-comparison-incomplete": 32
+            }
+          },
+          "localComparisons": [
+                        {
+              "x": 101,
+              "y": 37,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 37,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 100,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 101,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 103,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 104,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 98,
+              "y": 39,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 39,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 92,
+              "y": 75,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+                "scratchOutputRgba8": [22, 32, 71, 96],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-0.290527344, -0.251464844, -0.098144531, 0.000000000],
+  "absoluteRgbaFloat": [0.290527344, 0.251464844, 0.098144531, 0.000000000],
+  "absoluteTotalFloat": 0.640136719,
+  "maxChannelFloat": 0.290527344,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteTotalFloat": 0.000150613,
+  "maxChannelFloat": 0.000111073,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709777832, 0.749023438, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000793457,
+  "maxChannelFloat": 0.000488281,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 91,
+              "y": 76,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+                "scratchOutputRgba8": [22, 32, 71, 96],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-0.290527344, -0.251464844, -0.098144531, 0.000000000],
+  "absoluteRgbaFloat": [0.290527344, 0.251464844, 0.098144531, 0.000000000],
+  "absoluteTotalFloat": 0.640136719,
+  "maxChannelFloat": 0.290527344,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteTotalFloat": 0.000150613,
+  "maxChannelFloat": 0.000111073,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709777832, 0.749023438, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000793457,
+  "maxChannelFloat": 0.000488281,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 90,
+              "y": 77,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+                "scratchOutputRgba8": [22, 32, 71, 96],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-0.290527344, -0.251464844, -0.098144531, 0.000000000],
+  "absoluteRgbaFloat": [0.290527344, 0.251464844, 0.098144531, 0.000000000],
+  "absoluteTotalFloat": 0.640136719,
+  "maxChannelFloat": 0.290527344,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteTotalFloat": 0.000150613,
+  "maxChannelFloat": 0.000111073,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709777832, 0.749023438, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000793457,
+  "maxChannelFloat": 0.000488281,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 89,
+              "y": 78,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+                "scratchOutputRgba8": [22, 32, 71, 96],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-0.290527344, -0.251464844, -0.098144531, 0.000000000],
+  "absoluteRgbaFloat": [0.290527344, 0.251464844, 0.098144531, 0.000000000],
+  "absoluteTotalFloat": 0.640136719,
+  "maxChannelFloat": 0.290527344,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteTotalFloat": 0.000150613,
+  "maxChannelFloat": 0.000111073,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709777832, 0.749023438, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000793457,
+  "maxChannelFloat": 0.000488281,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 88,
+              "y": 79,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+                "scratchOutputRgba8": [22, 32, 71, 96],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-0.290527344, -0.251464844, -0.098144531, 0.000000000],
+  "absoluteRgbaFloat": [0.290527344, 0.251464844, 0.098144531, 0.000000000],
+  "absoluteTotalFloat": 0.640136719,
+  "maxChannelFloat": 0.290527344,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteTotalFloat": 0.000150613,
+  "maxChannelFloat": 0.000111073,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709777832, 0.749023438, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000793457,
+  "maxChannelFloat": 0.000488281,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 87,
+              "y": 80,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": false,
+                          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+          "absoluteTotalFloat": 0.000150613,
+          "maxChannelFloat": 0.000111073,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+                "scratchOutputRgba8": [22, 32, 71, 96],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-0.290527344, -0.251464844, -0.098144531, 0.000000000],
+  "absoluteRgbaFloat": [0.290527344, 0.251464844, 0.098144531, 0.000000000],
+  "absoluteTotalFloat": 0.640136719,
+  "maxChannelFloat": 0.290527344,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteRgbaFloat": [0.000031836, 0.000001922, 0.000111073, 0.000005782],
+  "absoluteTotalFloat": 0.000150613,
+  "maxChannelFloat": 0.000111073,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709777832, 0.749023438, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000305176, 0.000488281, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000793457,
+  "maxChannelFloat": 0.000488281,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 101,
+              "y": 37,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "scratchOutputRgba8": [0, 138, 76, 255],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-1.000000000, -0.458984375, -0.702148438, 0.000000000],
+  "absoluteRgbaFloat": [1.000000000, 0.458984375, 0.702148438, 0.000000000],
+  "absoluteTotalFloat": 2.161132813,
+  "maxChannelFloat": 1.000000000,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteTotalFloat": 0.000348538,
+  "maxChannelFloat": 0.000187665,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 37,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "scratchOutputRgba8": [0, 138, 76, 255],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-1.000000000, -0.458984375, -0.702148438, 0.000000000],
+  "absoluteRgbaFloat": [1.000000000, 0.458984375, 0.702148438, 0.000000000],
+  "absoluteTotalFloat": 2.161132813,
+  "maxChannelFloat": 1.000000000,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteTotalFloat": 0.000348538,
+  "maxChannelFloat": 0.000187665,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "scratchOutputRgba8": [0, 138, 76, 255],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-1.000000000, -0.458984375, -0.702148438, 0.000000000],
+  "absoluteRgbaFloat": [1.000000000, 0.458984375, 0.702148438, 0.000000000],
+  "absoluteTotalFloat": 2.161132813,
+  "maxChannelFloat": 1.000000000,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteTotalFloat": 0.000348538,
+  "maxChannelFloat": 0.000187665,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 100,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "scratchOutputRgba8": [0, 138, 76, 255],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-1.000000000, -0.458984375, -0.702148438, 0.000000000],
+  "absoluteRgbaFloat": [1.000000000, 0.458984375, 0.702148438, 0.000000000],
+  "absoluteTotalFloat": 2.161132813,
+  "maxChannelFloat": 1.000000000,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteTotalFloat": 0.000348538,
+  "maxChannelFloat": 0.000187665,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 101,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "scratchOutputRgba8": [0, 138, 76, 255],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-1.000000000, -0.458984375, -0.702148438, 0.000000000],
+  "absoluteRgbaFloat": [1.000000000, 0.458984375, 0.702148438, 0.000000000],
+  "absoluteTotalFloat": 2.161132813,
+  "maxChannelFloat": 1.000000000,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteTotalFloat": 0.000348538,
+  "maxChannelFloat": 0.000187665,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "scratchOutputRgba8": [0, 138, 76, 255],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-1.000000000, -0.458984375, -0.702148438, 0.000000000],
+  "absoluteRgbaFloat": [1.000000000, 0.458984375, 0.702148438, 0.000000000],
+  "absoluteTotalFloat": 2.161132813,
+  "maxChannelFloat": 1.000000000,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteTotalFloat": 0.000348538,
+  "maxChannelFloat": 0.000187665,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 103,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "scratchOutputRgba8": [0, 138, 76, 255],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-1.000000000, -0.458984375, -0.702148438, 0.000000000],
+  "absoluteRgbaFloat": [1.000000000, 0.458984375, 0.702148438, 0.000000000],
+  "absoluteTotalFloat": 2.161132813,
+  "maxChannelFloat": 1.000000000,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteTotalFloat": 0.000348538,
+  "maxChannelFloat": 0.000187665,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 104,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "scratchOutputRgba8": [0, 138, 76, 255],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-1.000000000, -0.458984375, -0.702148438, 0.000000000],
+  "absoluteRgbaFloat": [1.000000000, 0.458984375, 0.702148438, 0.000000000],
+  "absoluteTotalFloat": 2.161132813,
+  "maxChannelFloat": 1.000000000,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteTotalFloat": 0.000348538,
+  "maxChannelFloat": 0.000187665,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 98,
+              "y": 39,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "scratchOutputRgba8": [0, 138, 76, 255],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.500000000, 0.500000000, 0.500000000, 1.000000000],
+                "dstBeforeRgba8": [128, 128, 128, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-0.500000000, 0.041015625, -0.202148438, 0.000000000],
+  "absoluteRgbaFloat": [0.500000000, 0.041015625, 0.202148438, 0.000000000],
+  "absoluteTotalFloat": 0.743164063,
+  "maxChannelFloat": 0.500000000,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteTotalFloat": 0.000348538,
+  "maxChannelFloat": 0.000187665,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 39,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-matches-scratch-and-final-mutation",
+              "classificationReason": "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance.",
+              "sourceSubdraws": [
+                                    {
+                          "subdrawOrdinal": 0,
+                          "subdrawRole": "inside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        },
+                        {
+                          "subdrawOrdinal": 1,
+                          "subdrawRole": "outside",
+                          "shaderObserved": true,
+                          "captureSynthetic": false,
+                          "candidateBranchReached": true,
+                          "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                          "sourceVsScratchDelta": {
+          "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+          "absoluteTotalFloat": 0.000348538,
+          "maxChannelFloat": 0.000187665,
+          "withinTolerance": true,
+          "tolerance": 0.000600000
+        },
+                          "classification": "storage-color-target-comparison-storage-captured",
+                          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target."
+                        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "scratchOutputRgba8": [0, 138, 76, 255],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstBeforeRgba8": [255, 255, 255, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [-1.000000000, -0.458984375, -0.702148438, 0.000000000],
+  "absoluteRgbaFloat": [1.000000000, 0.458984375, 0.702148438, 0.000000000],
+  "absoluteTotalFloat": 2.161132813,
+  "maxChannelFloat": 1.000000000,
+  "withinTolerance": false,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta":                 {
+                  "subdrawOrdinal": 0,
+                  "subdrawRole": "inside",
+                  "delta": {
+  "signedRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000160873, 0.000187665, 0.000000000],
+  "absoluteTotalFloat": 0.000348538,
+  "maxChannelFloat": 0.000187665,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+                },
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 92,
+              "y": 75,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 91,
+              "y": 76,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 90,
+              "y": 77,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 89,
+              "y": 78,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 88,
+              "y": 79,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 87,
+              "y": 80,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 101,
+              "y": 37,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstBeforeRgba8": [0, 138, 76, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 37,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstBeforeRgba8": [0, 138, 76, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstBeforeRgba8": [0, 138, 76, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 100,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstBeforeRgba8": [0, 138, 76, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 101,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstBeforeRgba8": [0, 138, 76, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstBeforeRgba8": [0, 138, 76, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 103,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstBeforeRgba8": [0, 138, 76, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 104,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstBeforeRgba8": [0, 138, 76, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 98,
+              "y": 39,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstBeforeRgba8": [0, 138, 76, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 39,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstBeforeRgba8": [0, 138, 76, 255],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 92,
+              "y": 75,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 91,
+              "y": 76,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 90,
+              "y": 77,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 89,
+              "y": 78,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 88,
+              "y": 79,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            },
+            {
+              "x": 87,
+              "y": 80,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "verified-source-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable.",
+              "sourceSubdraws": [
+                    {
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        },
+        {
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "candidateBranchReached": false,
+          "sourceColorSentToBlend": null,
+          "sourceVsScratchDelta": null,
+          "classification": "storage-color-target-comparison-storage-unavailable",
+          "reason": "The FOR-418 scratch+storage pass did not observe this coordinate for this subdraw."
+        }
+              ],
+              "scratchColorTarget": {
+                "available": true,
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+                "scratchOutputRgba8": [0, 0, 0, 0],
+                "classification": "storage-color-target-comparison-color-target-observed",
+                "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage."
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterMinusBeforeDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000001000
+}
+              },
+              "bestSourceVsScratchDelta": null,
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+}
+              }
+            }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "renderingFixApplied": false,
+            "wgsl4kModified": false,
+            "fullWgslDumpStored": false
+          },
+          "classificationReason": "For the decisive M60 F16 samples, the verified return-path source matches the no-blend color target and the SrcOver reconstruction reproduces the immediate final mutation.",
+          "nextStep": "Stop treating the storage side-channel as suspect; use the verified source values to target the remaining color/coverage residual against the reference scene.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+            "rtk python3 scripts/validate_for421_m60_f16_aa_stencil_cover_verified_return_path_diagnostic.py",
+            "rtk python3 scripts/validate_for420_m60_f16_aa_stencil_cover_final_wgsl_diagnostic.py",
+            "rtk python3 scripts/validate_for419_m60_f16_aa_stencil_cover_shader_return_storage_zero_cause.py",
+            "rtk python3 scripts/validate_for418_m60_f16_aa_stencil_cover_storage_vs_color_target.py",
+            "rtk python3 scripts/validate_for417_m60_f16_aa_stencil_cover_isolated_color_target_runtime.py",
+            "rtk python3 scripts/validate_for416_m60_f16_aa_stencil_cover_isolated_color_target.py",
+            "rtk python3 scripts/validate_for415_m60_f16_aa_stencil_cover_blend_render_pass_state.py",
+            "rtk python3 scripts/validate_for414_m60_f16_aa_stencil_cover_post_draw_readback.py",
+            "rtk python3 scripts/validate_for413_m60_f16_aa_stencil_cover_draw_transition_correlation.py",
+            "rtk python3 scripts/validate_for412_m60_f16_aa_stencil_cover_shader_return_diagnostic.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for422-pycache python3 -m py_compile scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+            "rtk git diff --check",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+          ]
+        }

@@ -543,6 +543,19 @@ class StrokeCapJoinSceneCaptureTest {
                 adapter = adapter,
             )
         }
+        if (aaStencilCoverFinalWgslDiagnosticSnapshot.enabled &&
+            aaStencilCoverShaderReturnStorageZeroCauseSnapshot.enabled &&
+            aaStencilCoverPredrawDstReadbackSnapshot.enabled &&
+            aaStencilCoverContributionIsolationPostPassSnapshot.enabled
+        ) {
+            writeM60F16AaStencilCoverVerifiedSourceComparison(
+                finalWgslSnapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
+                storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                predrawSnapshot = aaStencilCoverPredrawDstReadbackSnapshot,
+                postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
+                adapter = adapter,
+            )
+        }
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -2557,6 +2570,350 @@ class StrokeCapJoinSceneCaptureTest {
               ]
             }
         """.trimIndent() + "\n"
+    }
+
+    private fun writeM60F16AaStencilCoverVerifiedSourceComparison(
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-aa-stencil-cover-verified-source-comparison-for422"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16AaStencilCoverVerifiedSourceComparisonJson(
+                sceneId = sceneId,
+                finalWgslSnapshot = finalWgslSnapshot,
+                storageSnapshot = storageSnapshot,
+                predrawSnapshot = predrawSnapshot,
+                postPassSnapshot = postPassSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16AaStencilCoverVerifiedSourceComparisonJson(
+        sceneId: String,
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ): String {
+        val summaries = finalWgslSnapshot.variants.map { m60F16FinalWgslVariantSummary(it) }
+        val diagnosticSummaries = summaries.filter { it.logicalName != "normal-bounded-runtime-correction" }
+        val diagnosticReturnPathVerified = diagnosticSummaries.all { summary ->
+            summary.functions["fs_inside"]?.returnsApplicationPointOutput == true &&
+                summary.functions["fs_outside"]?.returnsApplicationPointOutput == true
+        }
+        val storageByKey = storageSnapshot.storageEvents
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val colorByKey = storageSnapshot.colorTargetEvents
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, values) -> values.firstOrNull { it.second.readbackAvailable } ?: values.first() }
+        val predrawByKey = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, values) -> values.firstOrNull { it.second.readbackAvailable } ?: values.first() }
+        val postPassByKey = postPassSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, values) -> values.firstOrNull { it.second.readbackAvailable } ?: values.first() }
+
+        val selectedPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.toSet()
+        val keys = colorByKey.keys
+            .filter { selectedPoints.contains(it.x to it.y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.drawIndex }.thenBy { it.y }.thenBy { it.x })
+        val comparisons = keys.map { key ->
+            val sourceRecords = storageByKey[key].orEmpty()
+                .sortedWith(
+                    compareBy<Pair<
+                        SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                        SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                        >> { it.second.subdrawOrdinal }.thenBy { it.second.subdrawRole },
+                )
+            val verifiedSources = sourceRecords.filter { (_, sample) ->
+                sample.shaderObserved && !sample.captureSynthetic && sample.sourceColorSentToBlend != null
+            }
+            val colorTarget = colorByKey[key]
+            val predraw = predrawByKey[key]
+            val postPass = postPassByKey[key]
+            val scratch = colorTarget?.second?.scratchOutputRgbaFloat
+            val dstBefore = predraw?.second?.dstBeforeRgbaFloat
+            val dstAfter = postPass?.second?.observedRgbaFloat
+            val sourceDeltas = if (scratch != null) {
+                verifiedSources.mapNotNull { (_, sample) ->
+                    sample.sourceColorSentToBlend?.let {
+                        M60F16VerifiedSourceDelta(sample.subdrawOrdinal, sample.subdrawRole, rgbaDelta(it, scratch, FOR417_RECONSTRUCTION_TOLERANCE))
+                    }
+                }
+            } else {
+                emptyList()
+            }
+            val bestSourceDelta = sourceDeltas.minByOrNull { it.delta.maxChannel }
+            val reconstructed = if (scratch != null && dstBefore != null) {
+                sourceOverPremul(scratch, dstBefore)
+            } else {
+                null
+            }
+            val finalDelta = if (reconstructed != null && dstAfter != null) {
+                rgbaDelta(reconstructed, dstAfter, FOR417_RECONSTRUCTION_TOLERANCE)
+            } else {
+                null
+            }
+            val dstMutationDelta = if (dstBefore != null && dstAfter != null) {
+                rgbaDelta(dstAfter, dstBefore, FOR412_MATCH_TOLERANCE)
+            } else {
+                null
+            }
+            val decisive = scratch.isNonzeroFloatArray() ||
+                verifiedSources.any { it.second.sourceColorSentToBlend.isNonzeroFloatArray() } ||
+                dstMutationDelta?.withinTolerance == false
+            val classification = when {
+                !diagnosticReturnPathVerified || verifiedSources.isEmpty() ||
+                    scratch == null || dstBefore == null || dstAfter == null ->
+                    "verified-source-comparison-incomplete"
+                bestSourceDelta?.delta?.withinTolerance != true ->
+                    "verified-source-diverges-from-scratch"
+                finalDelta?.withinTolerance == true ->
+                    "verified-source-matches-scratch-and-final-mutation"
+                else ->
+                    "verified-source-matches-scratch-but-final-blend-diverges"
+            }
+            M60F16VerifiedSourceComparisonRecord(
+                key = key,
+                sourceRecords = sourceRecords,
+                colorTarget = colorTarget,
+                predraw = predraw,
+                postPass = postPass,
+                reconstructedSrcOver = reconstructed,
+                sourceDeltas = sourceDeltas,
+                bestSourceDelta = bestSourceDelta,
+                scratchSourceOverVsFinalDelta = finalDelta,
+                dstMutationDelta = dstMutationDelta,
+                decisive = decisive,
+                classification = classification,
+            )
+        }
+        val decisiveComparisons = comparisons.filter { it.decisive }
+        val globalClassification = when {
+            decisiveComparisons.isEmpty() ||
+                decisiveComparisons.any { it.classification == "verified-source-comparison-incomplete" } ->
+                "verified-source-comparison-incomplete"
+            decisiveComparisons.any { it.classification == "verified-source-diverges-from-scratch" } ->
+                "verified-source-diverges-from-scratch"
+            decisiveComparisons.all { it.classification == "verified-source-matches-scratch-and-final-mutation" } ->
+                "verified-source-matches-scratch-and-final-mutation"
+            else -> "verified-source-matches-scratch-but-final-blend-diverges"
+        }
+        val comparisonsJson = comparisons.joinToString(",\n") { comparison ->
+            m60F16VerifiedSourceComparisonRecordJson(comparison).prependIndent("    ")
+        }
+        val classificationCounts = comparisons.groupingBy { it.classification }.eachCount()
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-422",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-422-m60-f16-comparer-source-verifiee-color-target-et-sortie-finale",
+              "sourceFinding": "global/kanvas/findings/for-421-retour-wgsl-instrumente-verifie-storage-non-nul",
+              "sourceArtifacts": {
+                "for421": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-return-path-diagnostic-for421/m60-f16-aa-stencil-cover-verified-return-path-diagnostic-for421.json",
+                "for417": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417/m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417.json",
+                "for414": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-draw-readback-for414/m60-f16-aa-stencil-cover-post-draw-readback-for414.json",
+                "for418": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-storage-vs-color-target-for418/m60-f16-aa-stencil-cover-storage-vs-color-target-for418.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${globalClassification.jsonString()},
+              "globalClassification": ${globalClassification.jsonString()},
+              "allowedClassifications": [
+                "verified-source-matches-scratch-and-final-mutation",
+                "verified-source-matches-scratch-but-final-blend-diverges",
+                "verified-source-diverges-from-scratch",
+                "verified-source-comparison-incomplete"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "guards": {
+                "finalWgslDiagnostic": {"guardId": ${finalWgslSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${finalWgslSnapshot.enabled}, "enabledByDefault": false},
+                "shaderReturnStorageZeroCause": {"guardId": ${storageSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${storageSnapshot.enabled}, "enabledByDefault": false},
+                "predrawDstReadback": {"guardId": ${predrawSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${predrawSnapshot.enabled}, "enabledByDefault": false},
+                "postPassReadback": {"guardId": ${postPassSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${postPassSnapshot.enabled}, "enabledByDefault": false}
+              },
+              "comparisonPolicy": {
+                "sourceMeaning": "sourceColorSentToBlend is the non-synthetic vec4f captured by the verified FOR-421 return-path instrumentation.",
+                "scratchMeaning": "scratchOutputRgbaFloat is the RGBA16Float no-blend color-target output captured from the same diagnostic draw pass.",
+                "finalMeaning": "dstAfterRgbaFloat is the immediate post-draw destination sample observed by the FOR-405/FOR-414 readback path.",
+                "math": "premultiplied float SrcOver: out = src + dst * (1 - src.a)",
+                "sourceScratchTolerance": $FOR417_RECONSTRUCTION_TOLERANCE,
+                "scratchFinalTolerance": $FOR417_RECONSTRUCTION_TOLERANCE,
+                "boundedRecordPolicy": "One record per selected pixel and sampled draw; no WGSL source dump or full framebuffer dump is stored."
+              },
+              "structuralSummary": {
+                "diagnosticReturnPathVerified": $diagnosticReturnPathVerified,
+                "selectedPixelCount": ${selectedPoints.size},
+                "localComparisonCount": ${comparisons.size},
+                "decisiveComparisonCount": ${decisiveComparisons.size},
+                "verifiedSourceSubdrawCount": ${comparisons.sumOf { record -> record.sourceRecords.count { it.second.sourceColorSentToBlend != null && it.second.shaderObserved && !it.second.captureSynthetic } }},
+                "nonzeroVerifiedSourceSubdrawCount": ${comparisons.sumOf { record -> record.sourceRecords.count { it.second.sourceColorSentToBlend.isNonzeroFloatArray() } }},
+                "scratchColorTargetObservedCount": ${comparisons.count { it.colorTarget?.second?.scratchOutputRgbaFloat != null }},
+                "nonzeroScratchColorTargetCount": ${comparisons.count { it.colorTarget?.second?.scratchOutputRgbaFloat.isNonzeroFloatArray() }},
+                "dstBeforeObservedCount": ${comparisons.count { it.predraw?.second?.dstBeforeRgbaFloat != null }},
+                "dstAfterObservedCount": ${comparisons.count { it.postPass?.second?.observedRgbaFloat != null }},
+                "sourceMatchesScratchCount": ${comparisons.count { it.bestSourceDelta?.delta?.withinTolerance == true }},
+                "scratchReconstructsFinalCount": ${comparisons.count { it.scratchSourceOverVsFinalDelta?.withinTolerance == true }},
+                "classificationCounts": {
+                  "verified-source-matches-scratch-and-final-mutation": ${classificationCounts["verified-source-matches-scratch-and-final-mutation"] ?: 0},
+                  "verified-source-matches-scratch-but-final-blend-diverges": ${classificationCounts["verified-source-matches-scratch-but-final-blend-diverges"] ?: 0},
+                  "verified-source-diverges-from-scratch": ${classificationCounts["verified-source-diverges-from-scratch"] ?: 0},
+                  "verified-source-comparison-incomplete": ${classificationCounts["verified-source-comparison-incomplete"] ?: 0}
+                }
+              },
+              "localComparisons": [
+            $comparisonsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "renderingFixApplied": false,
+                "wgsl4kModified": false,
+                "fullWgslDumpStored": false
+              },
+              "classificationReason": ${m60F16VerifiedSourceGlobalReason(globalClassification).jsonString()},
+              "nextStep": ${m60F16VerifiedSourceNextStep(globalClassification).jsonString()},
+              "validationCommands": [
+                "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+                "rtk python3 scripts/validate_for421_m60_f16_aa_stencil_cover_verified_return_path_diagnostic.py",
+                "rtk python3 scripts/validate_for420_m60_f16_aa_stencil_cover_final_wgsl_diagnostic.py",
+                "rtk python3 scripts/validate_for419_m60_f16_aa_stencil_cover_shader_return_storage_zero_cause.py",
+                "rtk python3 scripts/validate_for418_m60_f16_aa_stencil_cover_storage_vs_color_target.py",
+                "rtk python3 scripts/validate_for417_m60_f16_aa_stencil_cover_isolated_color_target_runtime.py",
+                "rtk python3 scripts/validate_for416_m60_f16_aa_stencil_cover_isolated_color_target.py",
+                "rtk python3 scripts/validate_for415_m60_f16_aa_stencil_cover_blend_render_pass_state.py",
+                "rtk python3 scripts/validate_for414_m60_f16_aa_stencil_cover_post_draw_readback.py",
+                "rtk python3 scripts/validate_for413_m60_f16_aa_stencil_cover_draw_transition_correlation.py",
+                "rtk python3 scripts/validate_for412_m60_f16_aa_stencil_cover_shader_return_diagnostic.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for422-pycache python3 -m py_compile scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16VerifiedSourceComparisonRecordJson(
+        record: M60F16VerifiedSourceComparisonRecord,
+    ): String {
+        val sourceSubdrawsJson = record.sourceRecords.joinToString(",\n") { (_, sample) ->
+            val source = sample.sourceColorSentToBlend
+            val sourceDelta = record.colorTarget?.second?.scratchOutputRgbaFloat?.let { scratch ->
+                source?.let { rgbaDelta(it, scratch, FOR417_RECONSTRUCTION_TOLERANCE) }
+            }
+            """
+                {
+                  "subdrawOrdinal": ${sample.subdrawOrdinal},
+                  "subdrawRole": ${sample.subdrawRole.jsonString()},
+                  "shaderObserved": ${sample.shaderObserved},
+                  "captureSynthetic": ${sample.captureSynthetic},
+                  "candidateBranchReached": ${sample.candidateBranchReached},
+                  "sourceColorSentToBlend": ${source.floatArrayOrNullJson()},
+                  "sourceVsScratchDelta": ${sourceDelta?.let { rgbaDeltaJson(it) } ?: "null"},
+                  "classification": ${sample.classification.jsonString()},
+                  "reason": ${sample.reason.jsonString()}
+                }
+            """.trimIndent().prependIndent("        ")
+        }
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "pipelineFamily": ${record.colorTarget?.first?.pipelineFamily?.jsonString() ?: "null"},
+              "blendMode": ${record.colorTarget?.first?.blendMode?.jsonString() ?: "null"},
+              "decisiveForGlobalClassification": ${record.decisive},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16VerifiedSourceLocalReason(record).jsonString()},
+              "sourceSubdraws": [
+            $sourceSubdrawsJson
+              ],
+              "scratchColorTarget": {
+                "available": ${record.colorTarget?.second?.scratchOutputRgbaFloat != null},
+                "scratchFormat": "RGBA16Float",
+                "scratchOutputRgbaFloat": ${record.colorTarget?.second?.scratchOutputRgbaFloat.floatArrayOrNullJson()},
+                "scratchOutputRgba8": ${record.colorTarget?.second?.scratchOutputRgba8.intArrayOrNullJson()},
+                "classification": ${record.colorTarget?.second?.classification?.jsonString() ?: "null"},
+                "reason": ${record.colorTarget?.second?.reason?.jsonString() ?: "null"}
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": ${record.predraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                "dstBeforeRgba8": ${record.predraw?.second?.dstBeforeRgba8.intArrayOrNullJson()},
+                "dstAfterRgbaFloat": ${record.postPass?.second?.observedRgbaFloat.floatArrayOrNullJson()},
+                "dstAfterRgba8": ${record.postPass?.second?.observedRgba8.intArrayOrNullJson()},
+                "dstAfterMinusBeforeDelta": ${record.dstMutationDelta?.let { rgbaDeltaJson(it) } ?: "null"}
+              },
+              "bestSourceVsScratchDelta": ${record.bestSourceDelta?.let { best ->
+            """
+                {
+                  "subdrawOrdinal": ${best.subdrawOrdinal},
+                  "subdrawRole": ${best.subdrawRole.jsonString()},
+                  "delta": ${rgbaDeltaJson(best.delta)}
+                }
+            """.trimIndent()
+        } ?: "null"},
+              "reconstruction": {
+                "formula": "SrcOver(scratchOutputRgbaFloat, dstBeforeRgbaFloat)",
+                "reconstructedRgbaFloat": ${record.reconstructedSrcOver.floatArrayOrNullJson()},
+                "reconstructedVsDstAfterDelta": ${record.scratchSourceOverVsFinalDelta?.let { rgbaDeltaJson(it) } ?: "null"}
+              }
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16VerifiedSourceLocalReason(record: M60F16VerifiedSourceComparisonRecord): String = when (record.classification) {
+        "verified-source-matches-scratch-and-final-mutation" ->
+            "The verified source matches the RGBA16Float scratch output, and SrcOver(scratch, dstBefore) reconstructs the immediate post-draw destination within F16 tolerance."
+        "verified-source-matches-scratch-but-final-blend-diverges" ->
+            "The verified source matches the scratch output, but SrcOver(scratch, dstBefore) does not reconstruct the immediate post-draw destination."
+        "verified-source-diverges-from-scratch" ->
+            "The verified return-path source does not match the no-blend scratch color-target output for this draw/pixel."
+        else ->
+            "The comparison is incomplete because a verified source, scratch output, dstBefore, dstAfter, or final WGSL return-path proof is unavailable."
+    }
+
+    private fun m60F16VerifiedSourceGlobalReason(classification: String): String = when (classification) {
+        "verified-source-matches-scratch-and-final-mutation" ->
+            "For the decisive M60 F16 samples, the verified return-path source matches the no-blend color target and the SrcOver reconstruction reproduces the immediate final mutation."
+        "verified-source-matches-scratch-but-final-blend-diverges" ->
+            "The verified return-path source matches the scratch color target, but the fixed-function blend/store result diverges from the SrcOver reconstruction."
+        "verified-source-diverges-from-scratch" ->
+            "At least one decisive sample has a verified return-path source that diverges from the no-blend scratch color-target output."
+        else ->
+            "The run does not contain enough verified source, scratch, dstBefore, and dstAfter data to localize the M60 F16 residue."
+    }
+
+    private fun m60F16VerifiedSourceNextStep(classification: String): String = when (classification) {
+        "verified-source-matches-scratch-and-final-mutation" ->
+            "Stop treating the storage side-channel as suspect; use the verified source values to target the remaining color/coverage residual against the reference scene."
+        "verified-source-matches-scratch-but-final-blend-diverges" ->
+            "Inspect fixed-function blend, destination load/store, and attachment format behavior for the decisive M60 F16 samples."
+        "verified-source-diverges-from-scratch" ->
+            "Inspect the diagnostic pass difference between return-path storage and no-blend color-target writes before changing rendering behavior."
+        else ->
+            "Rerun the bounded diagnostics with FOR-421, scratch color target, predraw, and post-draw readbacks enabled."
     }
 
     private data class M60F16FinalWgslFunctionSummary(
@@ -5215,7 +5572,11 @@ class StrokeCapJoinSceneCaptureTest {
     private fun sourceOverPremul(src: FloatArray, dst: FloatArray): FloatArray =
         FloatArray(4) { index -> src[index] + dst[index] * (1f - src[3]) }
 
-    private fun rgbaDelta(actual: FloatArray, expected: FloatArray): RgbaFloatDelta {
+    private fun rgbaDelta(
+        actual: FloatArray,
+        expected: FloatArray,
+        tolerance: Float = FOR412_MATCH_TOLERANCE,
+    ): RgbaFloatDelta {
         val signed = FloatArray(4) { index -> actual[index] - expected[index] }
         val absolute = FloatArray(4) { index -> kotlin.math.abs(signed[index]) }
         return RgbaFloatDelta(
@@ -5223,7 +5584,8 @@ class StrokeCapJoinSceneCaptureTest {
             absolute = absolute,
             absoluteTotal = absolute.sum(),
             maxChannel = absolute.maxOrNull() ?: 0f,
-            withinTolerance = (absolute.maxOrNull() ?: 0f) <= FOR412_MATCH_TOLERANCE,
+            withinTolerance = (absolute.maxOrNull() ?: 0f) <= tolerance,
+            tolerance = tolerance,
         )
     }
 
@@ -5237,7 +5599,7 @@ class StrokeCapJoinSceneCaptureTest {
           "absoluteTotalFloat": ${String.format(Locale.US, "%.9f", delta.absoluteTotal)},
           "maxChannelFloat": ${String.format(Locale.US, "%.9f", delta.maxChannel)},
           "withinTolerance": ${delta.withinTolerance},
-          "tolerance": $FOR412_MATCH_TOLERANCE
+          "tolerance": ${String.format(Locale.US, "%.9f", delta.tolerance)}
         }
     """.trimIndent()
 
@@ -5513,6 +5875,48 @@ class StrokeCapJoinSceneCaptureTest {
         val absoluteTotal: Float,
         val maxChannel: Float,
         val withinTolerance: Boolean,
+        val tolerance: Float,
+    )
+
+    private data class M60F16DrawPixelKey(
+        val drawIndex: Int,
+        val x: Int,
+        val y: Int,
+    )
+
+    private data class M60F16VerifiedSourceDelta(
+        val subdrawOrdinal: Int,
+        val subdrawRole: String,
+        val delta: RgbaFloatDelta,
+    )
+
+    private data class M60F16VerifiedSourceComparisonRecord(
+        val key: M60F16DrawPixelKey,
+        val sourceRecords: List<
+            Pair<
+                SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                >,
+            >,
+        val colorTarget: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetSample,
+            >?,
+        val predraw: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSample,
+            >?,
+        val postPass: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSample,
+            >?,
+        val reconstructedSrcOver: FloatArray?,
+        val sourceDeltas: List<M60F16VerifiedSourceDelta>,
+        val bestSourceDelta: M60F16VerifiedSourceDelta?,
+        val scratchSourceOverVsFinalDelta: RgbaFloatDelta?,
+        val dstMutationDelta: RgbaFloatDelta?,
+        val decisive: Boolean,
+        val classification: String,
     )
 
     private data class SourceOverReplayPixelModel(
@@ -12406,6 +12810,7 @@ class StrokeCapJoinSceneCaptureTest {
         private const val FOR420_FINAL_WGSL_DIAGNOSTIC_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled"
         private const val FOR412_MATCH_TOLERANCE = 0.000001f
+        private const val FOR417_RECONSTRUCTION_TOLERANCE = 0.0006f
         private const val FOR401_FINAL_RESIDUAL_ORIGIN_MAP_SAMPLE_LIMIT = 16
         private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
