@@ -38,6 +38,8 @@ public object WebGpuSink {
             SkWebGpuDevice.M60F16AaStencilCoverPostPassRuntimeHookSnapshot,
         val aaStencilCoverPostPassReadbackSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        val aaStencilCoverContributionIsolationSnapshot:
+            SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
     )
 
     /**
@@ -99,6 +101,8 @@ public object WebGpuSink {
                     device.m60F16AaStencilCoverPostPassRuntimeHookSnapshot(),
                 aaStencilCoverPostPassReadbackSnapshot =
                     device.m60F16AaStencilCoverPostPassReadbackSnapshot(),
+                aaStencilCoverContributionIsolationSnapshot =
+                    device.m60F16AaStencilCoverContributionIsolationSnapshot(),
             )
         }
     }
