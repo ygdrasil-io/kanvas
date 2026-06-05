@@ -31,6 +31,7 @@ public object WebGpuSink {
     public data class DrawWithM60F16FragmentLaneDiagnosticSnapshotResult(
         val bitmap: SkBitmap,
         val snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
+        val applicationPointSnapshot: SkWebGpuDevice.M60F16BoundedCorrectionApplicationPointSnapshot,
     )
 
     /**
@@ -85,6 +86,7 @@ public object WebGpuSink {
             return DrawWithM60F16FragmentLaneDiagnosticSnapshotResult(
                 bitmap = rgbaBytesToBitmap(rgba, w, h),
                 snapshot = device.m60F16FragmentLaneDiagnosticSnapshot(),
+                applicationPointSnapshot = device.m60F16BoundedCorrectionApplicationPointSnapshot(),
             )
         }
     }
