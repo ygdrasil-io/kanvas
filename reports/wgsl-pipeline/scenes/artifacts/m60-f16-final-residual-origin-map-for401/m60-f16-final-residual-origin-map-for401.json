@@ -1,0 +1,347 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-401",
+          "sceneId": "m60-f16-final-residual-origin-map-for401",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-coverage-stencil-contribution-map-for400/m60-f16-coverage-stencil-contribution-map-for400.json",
+          "sourceMemory": "global/kanvas/findings/for-400-prouve-que-la-fenetre-coverage-stencil-m60-f16-autour-des-pixels-for-397-ne-contribue-pas",
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "decision": "M60_F16_FINAL_RESIDUAL_ORIGIN_MAP_RECORDED",
+          "classification": "residual-visible-only-at-final-readback",
+          "allowedClassifications": [
+            "residual-carried-outside-for400-window",
+            "residual-carried-by-other-draw-path",
+            "residual-visible-only-at-final-readback",
+            "residual-origin-inconclusive"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "correctionAppliedByDefault": false,
+          "guards": {
+            "experimentalStrokeRenderer": {
+              "guardId": "kanvas.webgpu.strokeCapJoin.experimentalRender",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "bandMetadataTransport": {
+              "guardId": "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "fragmentLaneDiagnostic": {
+              "guardId": "kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "boundedRuntimeCorrection": {
+              "guardId": "kanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "coverageStencilContributionMap": {
+              "guardId": "kanvas.webgpu.m60F16CoverageStencilContributionMap.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "finalResidualOriginMap": {
+              "guardId": "kanvas.webgpu.m60F16FinalResidualOriginMap.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            }
+          },
+          "historicalEvidence": {
+            "for397PixelCount": 8,
+            "for400WindowRadius": 1,
+            "for400WindowPixelCount": 48,
+            "for400RawReadbackSampleCount": 144,
+            "for400EffectiveContributionCount": 0,
+            "for400Classification": "predicate-window-zero-contribution",
+            "for400ResidualBefore": 62748,
+            "for400ResidualAfter": 62748,
+            "for400SupportClaim": false,
+            "for400Promoted": false
+          },
+          "selectionPolicy": {
+            "description": "Select final pixels with non-zero total residual, sort by total residual descending, then y ascending, then x ascending, and take a bounded fixed sample.",
+            "residualMetric": "sum(abs(referenceRgba-currentGpuRgba)) over r,g,b,a bytes",
+            "sampleLimit": 16,
+            "deterministicTieBreak": ["residualTotal desc", "y asc", "x asc"],
+            "selectedPixelCount": 16
+          },
+          "for397PredicatePixels": [
+            {"x": 93, "y": 74},
+{"x": 92, "y": 75},
+{"x": 91, "y": 76},
+{"x": 17, "y": 77},
+{"x": 90, "y": 77},
+{"x": 89, "y": 78},
+{"x": 88, "y": 79},
+{"x": 87, "y": 80}
+          ],
+          "for400WindowPixels": [
+            {"x": 92, "y": 73},
+{"x": 93, "y": 73},
+{"x": 94, "y": 73},
+{"x": 91, "y": 74},
+{"x": 92, "y": 74},
+{"x": 93, "y": 74},
+{"x": 94, "y": 74},
+{"x": 90, "y": 75},
+{"x": 91, "y": 75},
+{"x": 92, "y": 75},
+{"x": 93, "y": 75},
+{"x": 94, "y": 75},
+{"x": 16, "y": 76},
+{"x": 17, "y": 76},
+{"x": 18, "y": 76},
+{"x": 89, "y": 76},
+{"x": 90, "y": 76},
+{"x": 91, "y": 76},
+{"x": 92, "y": 76},
+{"x": 93, "y": 76},
+{"x": 16, "y": 77},
+{"x": 17, "y": 77},
+{"x": 18, "y": 77},
+{"x": 88, "y": 77},
+{"x": 89, "y": 77},
+{"x": 90, "y": 77},
+{"x": 91, "y": 77},
+{"x": 92, "y": 77},
+{"x": 16, "y": 78},
+{"x": 17, "y": 78},
+{"x": 18, "y": 78},
+{"x": 87, "y": 78},
+{"x": 88, "y": 78},
+{"x": 89, "y": 78},
+{"x": 90, "y": 78},
+{"x": 91, "y": 78},
+{"x": 86, "y": 79},
+{"x": 87, "y": 79},
+{"x": 88, "y": 79},
+{"x": 89, "y": 79},
+{"x": 90, "y": 79},
+{"x": 86, "y": 80},
+{"x": 87, "y": 80},
+{"x": 88, "y": 80},
+{"x": 89, "y": 80},
+{"x": 86, "y": 81},
+{"x": 87, "y": 81},
+{"x": 88, "y": 81}
+          ],
+          "residualOriginSummary": {
+            "currentTotalResidual": 62748,
+            "currentMismatchPixels": 1615,
+            "selectedResidualTotal": 1560,
+            "selectedInFor397PredicateCount": 6,
+            "selectedInFor400WindowCount": 6,
+            "selectedOutsideFor400WindowCount": 10,
+            "writtenByM60AaStencilCoverCount": 0,
+            "writtenByOtherPathCount": 0,
+            "readbackOnlyUnknownCount": 16
+          },
+          "candidateAttribution": {
+            "availableRuntimeWriterEvidence": "FOR-400 radius-1 M60 AA stencil-cover contribution samples only",
+            "writtenByM60AaStencilCoverRule": "selected pixel has a FOR-400 sample with non-zero coverage, source alpha, and blend input",
+            "writtenByOtherPathRule": "reserved for future draw/pass writer evidence; unavailable in this bounded artifact",
+            "readbackOnlyUnknownRule": "final residual is visible, but no available FOR-400 effective contribution sample identifies the writer"
+          },
+          "selectedPixels": [
+            {
+  "x": 92,
+  "y": 75,
+  "currentGpuRgba": [181, 191, 230, 255],
+  "referenceRgba": [133, 150, 214, 255],
+  "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+  "residualTotal": 105,
+  "belongsToFor397Predicate": true,
+  "belongsToFor400Window": true,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 91,
+  "y": 76,
+  "currentGpuRgba": [181, 191, 230, 255],
+  "referenceRgba": [133, 150, 214, 255],
+  "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+  "residualTotal": 105,
+  "belongsToFor397Predicate": true,
+  "belongsToFor400Window": true,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 90,
+  "y": 77,
+  "currentGpuRgba": [181, 191, 230, 255],
+  "referenceRgba": [133, 150, 214, 255],
+  "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+  "residualTotal": 105,
+  "belongsToFor397Predicate": true,
+  "belongsToFor400Window": true,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 89,
+  "y": 78,
+  "currentGpuRgba": [181, 191, 230, 255],
+  "referenceRgba": [133, 150, 214, 255],
+  "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+  "residualTotal": 105,
+  "belongsToFor397Predicate": true,
+  "belongsToFor400Window": true,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 88,
+  "y": 79,
+  "currentGpuRgba": [181, 191, 230, 255],
+  "referenceRgba": [133, 150, 214, 255],
+  "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+  "residualTotal": 105,
+  "belongsToFor397Predicate": true,
+  "belongsToFor400Window": true,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 87,
+  "y": 80,
+  "currentGpuRgba": [181, 191, 230, 255],
+  "referenceRgba": [133, 150, 214, 255],
+  "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+  "residualTotal": 105,
+  "belongsToFor397Predicate": true,
+  "belongsToFor400Window": true,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 101,
+  "y": 37,
+  "currentGpuRgba": [0, 138, 76, 255],
+  "referenceRgba": [68, 121, 68, 255],
+  "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+  "residualTotal": 93,
+  "belongsToFor397Predicate": false,
+  "belongsToFor400Window": false,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 102,
+  "y": 37,
+  "currentGpuRgba": [0, 138, 76, 255],
+  "referenceRgba": [68, 121, 68, 255],
+  "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+  "residualTotal": 93,
+  "belongsToFor397Predicate": false,
+  "belongsToFor400Window": false,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 99,
+  "y": 38,
+  "currentGpuRgba": [0, 138, 76, 255],
+  "referenceRgba": [68, 121, 68, 255],
+  "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+  "residualTotal": 93,
+  "belongsToFor397Predicate": false,
+  "belongsToFor400Window": false,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 100,
+  "y": 38,
+  "currentGpuRgba": [0, 138, 76, 255],
+  "referenceRgba": [68, 121, 68, 255],
+  "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+  "residualTotal": 93,
+  "belongsToFor397Predicate": false,
+  "belongsToFor400Window": false,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 101,
+  "y": 38,
+  "currentGpuRgba": [0, 138, 76, 255],
+  "referenceRgba": [68, 121, 68, 255],
+  "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+  "residualTotal": 93,
+  "belongsToFor397Predicate": false,
+  "belongsToFor400Window": false,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 102,
+  "y": 38,
+  "currentGpuRgba": [0, 138, 76, 255],
+  "referenceRgba": [68, 121, 68, 255],
+  "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+  "residualTotal": 93,
+  "belongsToFor397Predicate": false,
+  "belongsToFor400Window": false,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 103,
+  "y": 38,
+  "currentGpuRgba": [0, 138, 76, 255],
+  "referenceRgba": [68, 121, 68, 255],
+  "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+  "residualTotal": 93,
+  "belongsToFor397Predicate": false,
+  "belongsToFor400Window": false,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 104,
+  "y": 38,
+  "currentGpuRgba": [0, 138, 76, 255],
+  "referenceRgba": [68, 121, 68, 255],
+  "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+  "residualTotal": 93,
+  "belongsToFor397Predicate": false,
+  "belongsToFor400Window": false,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 98,
+  "y": 39,
+  "currentGpuRgba": [0, 138, 76, 255],
+  "referenceRgba": [68, 121, 68, 255],
+  "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+  "residualTotal": 93,
+  "belongsToFor397Predicate": false,
+  "belongsToFor400Window": false,
+  "attributionCandidate": "readbackOnlyUnknown"
+},
+{
+  "x": 99,
+  "y": 39,
+  "currentGpuRgba": [0, 138, 76, 255],
+  "referenceRgba": [68, 121, 68, 255],
+  "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+  "residualTotal": 93,
+  "belongsToFor397Predicate": false,
+  "belongsToFor400Window": false,
+  "attributionCandidate": "readbackOnlyUnknown"
+}
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "correctionApplied": false,
+            "for380BroadCorrectionReintroduced": false,
+            "generalizedOutsideM60F16": false
+          },
+          "classificationReason": "Selected residual pixels are visible in the final GPU/reference readback, but available FOR-400 pass metadata does not identify an effective writer.",
+          "nextStep": "Add the smallest readback-boundary or pass-write probe that can distinguish final readback packing from a prior draw output.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for401_m60_f16_final_residual_origin_map.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for401-pycache-agent python3 -m py_compile scripts/validate_for401_m60_f16_final_residual_origin_map.py",
+            "rtk git diff --check",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true -Dkanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled=true -Dkanvas.webgpu.m60F16CoverageStencilContributionMap.enabled=true -Dkanvas.webgpu.m60F16FinalResidualOriginMap.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+          ]
+        }
