@@ -166,6 +166,7 @@ class StrokeCapJoinSceneCaptureTest {
         writeM60F16EffectiveDestinationCandidate(residualStats, adapter)
         writeM60F16CompositionQuantizationCandidate(residualStats, adapter)
         writeM60F16LinearSrgbPlausibilityAudit(residualStats, adapter)
+        writeM60F16DirectSourceColorEvidence(residualStats, adapter)
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -600,6 +601,44 @@ class StrokeCapJoinSceneCaptureTest {
         }
     }
 
+    private class BoundedStrokeCapJoinTransparentSourceGM : GM() {
+        init {
+            setBGColor(0x00000000)
+        }
+
+        override fun getName(): String = "m60_bounded_stroke_cap_join_transparent_source_for378"
+        override fun getISize(): SkISize = SkISize.Make(192, 128)
+
+        override fun onDraw(canvas: SkCanvas?) {
+            val c = canvas ?: return
+            val path = SkPathBuilder()
+                .moveTo(18f, 78f)
+                .lineTo(54f, 42f)
+                .lineTo(90f, 78f)
+                .detach()
+            val cases = listOf(
+                StrokeCase(0f, SkPaint.Cap.kButt_Cap, SkPaint.Join.kBevel_Join, 0xFF0066CC.toInt()),
+                StrokeCase(48f, SkPaint.Cap.kRound_Cap, SkPaint.Join.kRound_Join, 0xFF008A4C.toInt()),
+                StrokeCase(96f, SkPaint.Cap.kSquare_Cap, SkPaint.Join.kBevel_Join, 0xFFB33C00.toInt()),
+            )
+            for (case in cases) {
+                c.save()
+                c.translate(case.dx, 0f)
+                val paint = SkPaint().apply {
+                    color = case.color
+                    isAntiAlias = true
+                    style = SkPaint.Style.kStroke_Style
+                    strokeWidth = 10f
+                    strokeCap = case.cap
+                    strokeJoin = case.join
+                    strokeMiter = 4f
+                }
+                c.drawPath(path, paint)
+                c.restore()
+            }
+        }
+    }
+
     private class NeutralAaCoverageGM : GM() {
         override fun getName(): String = "m60_neutral_aa_coverage"
         override fun getISize(): SkISize = SkISize.Make(4, 1)
@@ -843,6 +882,18 @@ class StrokeCapJoinSceneCaptureTest {
         ).apply { mkdirs() }
         File(dir, "m60-f16-linear-srgb-plausibility-audit-for377.json").writeText(
             m60F16LinearSrgbPlausibilityAuditJson(residualStats, adapter),
+        )
+    }
+
+    private fun writeM60F16DirectSourceColorEvidence(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-direct-source-color-evidence-for378",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-direct-source-color-evidence-for378.json").writeText(
+            m60F16DirectSourceColorEvidenceJson(residualStats, adapter),
         )
     }
 
@@ -1380,6 +1431,129 @@ class StrokeCapJoinSceneCaptureTest {
                 "destinationAppliedToRenderer": false,
                 "destinationReadFromRenderer": false,
                 "destinationReadFromGpuImage": false,
+                "rendererSceneBranchAdded": false,
+                "rendererCoordinateBranchAdded": false,
+                "rendererSelectedCellBranchAdded": false,
+                "fullGmCropPathAdded": false
+              },
+              "command": "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16DirectSourceColorEvidenceJson(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val transparentSource = TestUtils.runGmTest(BoundedStrokeCapJoinTransparentSourceGM())
+        val samples = residualStats.highDeltaSamples.take(FOR378_REQUIRED_SAMPLE_COUNT)
+        val for374Samples = samples.mapIndexed { index, sample ->
+            candidateRegressionSample(candidatePolicySample(index + 1, sample, coverageMask))
+        }
+        val for375Samples = for374Samples.map { effectiveDestinationCandidateSample(it) }
+        val for376Samples = for375Samples.map { compositionQuantizationCandidateSample(it) }
+        val for377Samples = for376Samples.map { linearSrgbPlausibilityAuditSample(it) }
+        val directSamples = for377Samples.map { directSourceColorEvidenceSample(it, transparentSource) }
+        val currentResidual = directSamples.sumOf { it.currentResidual }
+        val for373CandidateTotalResidual = directSamples.sumOf { it.for373CandidateResidual }
+        val for375CandidateTotalResidual = directSamples.sumOf { it.for375CandidateResidual }
+        val linearSrgbTotalResidual = directSamples.sumOf { it.linearSrgbResidual }
+        val directRecomposedTotalResidual = directSamples.sumOf { it.directRecomposedOnWhiteResidual }
+        val sourceCoverageAlphaDeltaAbsTotal = directSamples.sumOf { it.sourceCoverageAlphaDeltaAbs }
+        val sourceCoverageAlphaDeltaAbsMax = directSamples.maxOfOrNull { it.sourceCoverageAlphaDeltaAbs } ?: 0
+        val paintSourceColorDeltaAbsMax = directSamples.maxOfOrNull { it.paintSourceUnpremultipliedRgbDeltaAbsMax } ?: 0
+        val classification = directSourceColorClassification(
+            sampleCount = directSamples.size,
+            directRecomposedTotalResidual = directRecomposedTotalResidual,
+            currentResidual = currentResidual,
+            for375CandidateTotalResidual = for375CandidateTotalResidual,
+            linearSrgbTotalResidual = linearSrgbTotalResidual,
+            sourceCoverageAlphaDeltaAbsTotal = sourceCoverageAlphaDeltaAbsTotal,
+            sourceCoverageAlphaDeltaAbsMax = sourceCoverageAlphaDeltaAbsMax,
+            paintSourceColorDeltaAbsMax = paintSourceColorDeltaAbsMax,
+        )
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-378",
+              "sceneId": "m60-f16-direct-source-color-evidence-for378",
+              "sourceSceneId": "m60-f16-linear-srgb-plausibility-audit-for377",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-preuve-couleur-source-transparente-apres-for-377",
+              "sourceFinding": "global/kanvas/findings/for-377-classe-la-piste-linear-s-rgb-m60-f16-comme-mixte-et-exige-une-preuve-couleur-directe",
+              "requiredFor377Decision": "M60_F16_LINEAR_SRGB_PLAUSIBILITY_AUDIT_RECORDED",
+              "requiredFor377Classification": "linear-srgb-mixed-needs-reference-color-evidence",
+              "decision": "M60_F16_DIRECT_SOURCE_COLOR_EVIDENCE_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "direct-source-color-confirms-linear-axis",
+                "direct-source-color-points-coverage-mismatch",
+                "direct-source-color-points-destination-artifact",
+                "direct-source-color-mixed-needs-next-axis",
+                "direct-source-color-blocked"
+              ],
+              "primaryEvidenceSource": "transparent-cpu-diagnostic-source-rgba",
+              "directSourceScene": "m60_bounded_stroke_cap_join_transparent_source_for378",
+              "directSourceSceneBackground": "transparent",
+              "directSourceSceneDrawsProductionScene": false,
+              "directSourceScenePathColorCapJoinStrokeWidthMatchesProduction": true,
+              "directSourceSceneIncludesProductionWhiteBackground": false,
+              "directSourceSceneIncludesProductionOutlineRects": false,
+              "directSourceReadSource": "CPU/reference diagnostic transparent source bitmap",
+              "directSourceReadFromRenderer": false,
+              "directSourceReadFromGpuImage": false,
+              "directSourceAppliedToRenderer": false,
+              "inverseDestinationEstimateUsedAsPrimaryEvidence": false,
+              "inverseDestinationEstimateAppliedAsCorrection": false,
+              "auditDoesNotProduceCorrection": true,
+              "auditDoesNotApplyRendererChange": true,
+              "currentResidual": $currentResidual,
+              "requiredCurrentResidual": $FOR373_CURRENT_RESIDUAL,
+              "requiredFor373CandidateTotalResidual": $FOR373_CANDIDATE_TOTAL_RESIDUAL,
+              "for373CandidateTotalResidual": $for373CandidateTotalResidual,
+              "requiredFor375EffectiveDestinationCandidateTotalResidual": $FOR375_EFFECTIVE_DESTINATION_CANDIDATE_TOTAL_RESIDUAL,
+              "for375EffectiveDestinationCandidateTotalResidual": $for375CandidateTotalResidual,
+              "requiredFor376BestVariantId": "linear_srgb_source_over_effective_destination_nearest_255",
+              "requiredFor376BestVariantTotalResidual": 607,
+              "linearSrgbTotalResidual": $linearSrgbTotalResidual,
+              "directRecomposedOnWhiteTotalResidual": $directRecomposedTotalResidual,
+              "directRecomposedOnWhiteTotalDeltaVsCurrent": ${directRecomposedTotalResidual - currentResidual},
+              "directRecomposedOnWhiteTotalDeltaVsFor373Candidate": ${directRecomposedTotalResidual - for373CandidateTotalResidual},
+              "directRecomposedOnWhiteTotalDeltaVsFor375Candidate": ${directRecomposedTotalResidual - for375CandidateTotalResidual},
+              "directRecomposedOnWhiteTotalDeltaVsFor377LinearSrgb": ${directRecomposedTotalResidual - linearSrgbTotalResidual},
+              "sourceCoverageAlphaDeltaAbsTotal": $sourceCoverageAlphaDeltaAbsTotal,
+              "sourceCoverageAlphaDeltaAbsMax": $sourceCoverageAlphaDeltaAbsMax,
+              "paintSourceUnpremultipliedRgbDeltaAbsMax": $paintSourceColorDeltaAbsMax,
+              "sampleCount": ${directSamples.size},
+              "directRecompositionImprovesCurrentSampleCount": ${directSamples.count { it.directRecomposedOnWhiteDeltaVsCurrent < 0 }},
+              "directRecompositionRegressesCurrentSampleCount": ${directSamples.count { it.directRecomposedOnWhiteDeltaVsCurrent > 0 }},
+              "directRecompositionImprovesFor375SampleCount": ${directSamples.count { it.directRecomposedOnWhiteDeltaVsFor375Candidate < 0 }},
+              "directRecompositionRegressesFor375SampleCount": ${directSamples.count { it.directRecomposedOnWhiteDeltaVsFor375Candidate > 0 }},
+              "classificationReason": ${directSourceColorClassificationReason(classification).jsonString()},
+              "samples": [
+            ${directSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "nonGoalsPreserved": {
+                "rendererBehaviorChanged": false,
+                "runtimeBehaviorChanged": false,
+                "gpuOrWgslChanged": false,
+                "geometryProductionChanged": false,
+                "coverageProductionChanged": false,
+                "fallbackChanged": false,
+                "kadreChanged": false,
+                "f16PremulBlendRuntimeChanged": false,
+                "skBitmapGetPixelChanged": false,
+                "scoreIncreased": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "directSourceAppliedToRenderer": false,
+                "directSourceReadFromRenderer": false,
+                "directSourceReadFromGpuImage": false,
+                "inverseDestinationEstimateUsedAsPrimaryEvidence": false,
+                "inverseDestinationEstimateAppliedAsCorrection": false,
                 "rendererSceneBranchAdded": false,
                 "rendererCoordinateBranchAdded": false,
                 "rendererSelectedCellBranchAdded": false,
@@ -1979,6 +2153,126 @@ class StrokeCapJoinSceneCaptureTest {
         }
     }
 
+    private fun directSourceColorEvidenceSample(
+        sample: LinearSrgbPlausibilityAuditSample,
+        transparentSource: SkBitmap,
+    ): DirectSourceColorEvidenceSample {
+        val candidate = sample.for376Sample.for375Sample.for374Sample.candidate
+        val directSourceRgba = rgbaArray(transparentSource.getPixel(candidate.x, candidate.y))
+        val directAlphaByte = directSourceRgba[3]
+        val directAlpha = directAlphaByte / 255.0
+        val directUnpremultipliedRgb = if (directAlphaByte == 0) {
+            null
+        } else {
+            directSourceRgba.copyOfRange(0, 3)
+        }
+        val paintSource = rgbaArray(candidate.paintSource)
+        val paintSourceUnpremultipliedDelta = if (directUnpremultipliedRgb == null) {
+            null
+        } else {
+            IntArray(3) { index -> directUnpremultipliedRgb[index] - paintSource[index] }
+        }
+        val directPremultipliedRgb = if (directUnpremultipliedRgb == null) {
+            intArrayOf(0, 0, 0)
+        } else {
+            IntArray(3) { index -> quantizeNearest255((directUnpremultipliedRgb[index] / 255.0) * directAlpha) }
+        }
+        val paintSourcePremultipliedExpected = IntArray(3) { index ->
+            quantizeNearest255((paintSource[index] / 255.0) * directAlpha)
+        }
+        val paintSourcePremultipliedDelta = IntArray(3) { index ->
+            directPremultipliedRgb[index] - paintSourcePremultipliedExpected[index]
+        }
+        val directRecomposedOnWhite = directUnpremultipliedSourceOverWhite(directSourceRgba)
+        val directResidual = sampleResidual(candidate.reference, rgbaToPixel(directRecomposedOnWhite))
+        return DirectSourceColorEvidenceSample(
+            for377Sample = sample,
+            directSourceRgba = directSourceRgba,
+            directSourceAlphaByte = directAlphaByte,
+            directSourceAlpha = directAlpha,
+            directPremultipliedRgb = directPremultipliedRgb,
+            directUnpremultipliedRgb = directUnpremultipliedRgb,
+            paintSourceUnpremultipliedRgbDelta = paintSourceUnpremultipliedDelta,
+            paintSourcePremultipliedRgbExpected = paintSourcePremultipliedExpected,
+            paintSourcePremultipliedRgbDelta = paintSourcePremultipliedDelta,
+            sourceCoverageAlphaDelta = directAlphaByte - candidate.sourceCoverageByte,
+            directRecomposedOnWhiteRgba = directRecomposedOnWhite,
+            directRecomposedOnWhiteResidual = directResidual,
+            directRecomposedOnWhiteDeltaVsCurrent = directResidual - sample.currentResidual,
+            directRecomposedOnWhiteDeltaVsFor373Candidate = directResidual - sample.for373CandidateResidual,
+            directRecomposedOnWhiteDeltaVsFor375Candidate = directResidual - sample.for375CandidateResidual,
+            directRecomposedOnWhiteDeltaVsFor377LinearSrgb = directResidual - sample.linearSrgbResidual,
+        )
+    }
+
+    private data class DirectSourceColorEvidenceSample(
+        val for377Sample: LinearSrgbPlausibilityAuditSample,
+        val directSourceRgba: IntArray,
+        val directSourceAlphaByte: Int,
+        val directSourceAlpha: Double,
+        val directPremultipliedRgb: IntArray,
+        val directUnpremultipliedRgb: IntArray?,
+        val paintSourceUnpremultipliedRgbDelta: IntArray?,
+        val paintSourcePremultipliedRgbExpected: IntArray,
+        val paintSourcePremultipliedRgbDelta: IntArray,
+        val sourceCoverageAlphaDelta: Int,
+        val directRecomposedOnWhiteRgba: IntArray,
+        val directRecomposedOnWhiteResidual: Int,
+        val directRecomposedOnWhiteDeltaVsCurrent: Int,
+        val directRecomposedOnWhiteDeltaVsFor373Candidate: Int,
+        val directRecomposedOnWhiteDeltaVsFor375Candidate: Int,
+        val directRecomposedOnWhiteDeltaVsFor377LinearSrgb: Int,
+    ) {
+        val currentResidual: Int = for377Sample.currentResidual
+        val for373CandidateResidual: Int = for377Sample.for373CandidateResidual
+        val for375CandidateResidual: Int = for377Sample.for375CandidateResidual
+        val linearSrgbResidual: Int = for377Sample.linearSrgbResidual
+        val sourceCoverageAlphaDeltaAbs: Int = kotlin.math.abs(sourceCoverageAlphaDelta)
+        val paintSourceUnpremultipliedRgbDeltaAbsMax: Int =
+            paintSourceUnpremultipliedRgbDelta?.maxOf { kotlin.math.abs(it) } ?: 255
+    }
+
+    private fun DirectSourceColorEvidenceSample.toJson(): String {
+        val base = for377Sample.toJson().trim()
+        val candidate = for377Sample.for376Sample.for375Sample.for374Sample.candidate
+        val suffix = """
+          "directSourceColorEvidence": {
+            "directSourceScene": "m60_bounded_stroke_cap_join_transparent_source_for378",
+            "directSourceReadSource": "CPU/reference diagnostic transparent source bitmap",
+            "directSourceReadFromRenderer": false,
+            "directSourceReadFromGpuImage": false,
+            "directSourceAppliedToRenderer": false,
+            "directSourceRgba": ${rgbaArrayJson(directSourceRgba)},
+            "directSourceReadbackRgbDomain": "SkBitmap.getPixel SkColor unpremultiplied 8-bit readback",
+            "directSourceAlphaByte": $directSourceAlphaByte,
+            "directSourceAlpha": ${String.format(Locale.US, "%.6f", directSourceAlpha)},
+            "directPremultipliedRgb": ${rgbArrayJson(directPremultipliedRgb)},
+            "directUnpremultipliedRgb": ${directUnpremultipliedRgb?.let { rgbArrayJson(it) } ?: "null"},
+            "directUnpremultipliedRgbPossible": ${directUnpremultipliedRgb != null},
+            "paintSourceRgba": ${rgbaJson(candidate.paintSource)},
+            "paintSourceUnpremultipliedRgbDelta": ${paintSourceUnpremultipliedRgbDelta?.let { channelRgbJson(it) } ?: "null"},
+            "paintSourceUnpremultipliedRgbDeltaAbsMax": $paintSourceUnpremultipliedRgbDeltaAbsMax,
+            "paintSourcePremultipliedRgbExpected": ${rgbArrayJson(paintSourcePremultipliedRgbExpected)},
+            "paintSourcePremultipliedRgbDelta": ${channelRgbJson(paintSourcePremultipliedRgbDelta)},
+            "sourceCoverageByte": ${candidate.sourceCoverageByte},
+            "sourceCoverageAlphaDelta": $sourceCoverageAlphaDelta,
+            "sourceCoverageAlphaDeltaAbs": $sourceCoverageAlphaDeltaAbs,
+            "directRecomposedOnWhiteRgba": ${rgbaArrayJson(directRecomposedOnWhiteRgba)},
+            "directRecompositionFormula": "rgb=round((directUnpremultipliedRgb/255.0)*directSourceAlpha + (1.0-directSourceAlpha))*255; a=255",
+            "directRecomposedOnWhiteResidual": $directRecomposedOnWhiteResidual,
+            "directRecomposedOnWhiteDeltaVsCurrent": $directRecomposedOnWhiteDeltaVsCurrent,
+            "directRecomposedOnWhiteDeltaVsFor373Candidate": $directRecomposedOnWhiteDeltaVsFor373Candidate,
+            "directRecomposedOnWhiteDeltaVsFor375Candidate": $directRecomposedOnWhiteDeltaVsFor375Candidate,
+            "directRecomposedOnWhiteDeltaVsFor377LinearSrgb": $directRecomposedOnWhiteDeltaVsFor377LinearSrgb,
+            "directRecompositionImprovesCurrent": ${directRecomposedOnWhiteDeltaVsCurrent < 0},
+            "directRecompositionImprovesFor375Candidate": ${directRecomposedOnWhiteDeltaVsFor375Candidate < 0},
+            "directRecompositionImprovesFor377LinearSrgb": ${directRecomposedOnWhiteDeltaVsFor377LinearSrgb < 0},
+            "inverseDestinationEstimateUsedAsPrimaryEvidence": false
+          }
+        """.trimIndent().prependIndent("  ")
+        return base.replace(Regex("\n\\s*}$"), ",\n$suffix\n}")
+    }
+
     private fun m60F16EffectiveCoverageExportJson(
         residualStats: StrokeResidualStats,
         adapter: String,
@@ -2442,6 +2736,53 @@ class StrokeCapJoinSceneCaptureTest {
                 "The FOR-376 invariant or recomputed linear-sRGB residual changed, so the plausibility audit cannot make a stable decision."
         }
 
+    private fun directSourceColorClassification(
+        sampleCount: Int,
+        directRecomposedTotalResidual: Int,
+        currentResidual: Int,
+        for375CandidateTotalResidual: Int,
+        linearSrgbTotalResidual: Int,
+        sourceCoverageAlphaDeltaAbsTotal: Int,
+        sourceCoverageAlphaDeltaAbsMax: Int,
+        paintSourceColorDeltaAbsMax: Int,
+    ): String {
+        if (sampleCount != FOR378_REQUIRED_SAMPLE_COUNT || linearSrgbTotalResidual != 607) {
+            return "direct-source-color-blocked"
+        }
+        if (sourceCoverageAlphaDeltaAbsMax > 1 || sourceCoverageAlphaDeltaAbsTotal > 4) {
+            return "direct-source-color-points-coverage-mismatch"
+        }
+        if (
+            directRecomposedTotalResidual <= linearSrgbTotalResidual &&
+            directRecomposedTotalResidual < currentResidual &&
+            directRecomposedTotalResidual < for375CandidateTotalResidual
+        ) {
+            return "direct-source-color-confirms-linear-axis"
+        }
+        if (
+            directRecomposedTotalResidual >= for375CandidateTotalResidual &&
+            directRecomposedTotalResidual >= linearSrgbTotalResidual &&
+            paintSourceColorDeltaAbsMax <= 4
+        ) {
+            return "direct-source-color-points-destination-artifact"
+        }
+        return "direct-source-color-mixed-needs-next-axis"
+    }
+
+    private fun directSourceColorClassificationReason(classification: String): String =
+        when (classification) {
+            "direct-source-color-confirms-linear-axis" ->
+                "The transparent-source recomposition improves current, FOR-375, and the FOR-377 linear-sRGB residual without using inverse-destination clamp channels as primary evidence."
+            "direct-source-color-points-coverage-mismatch" ->
+                "The transparent-source alpha no longer matches the FOR-372 source coverage bytes, so the next axis should isolate coverage before evaluating color-space policy."
+            "direct-source-color-points-destination-artifact" ->
+                "The direct source color and coverage agree with the preserved source facts, but recomposition on white does not reproduce the FOR-377 linear-sRGB gain, leaving the inverse-destination clamp path as a diagnostic artifact."
+            "direct-source-color-mixed-needs-next-axis" ->
+                "The transparent-source evidence does not cleanly confirm the linear-sRGB axis or isolate a pure coverage/destination cause; the next probe should separate effective source color from coverage."
+            else ->
+                "The FOR-377 invariant or transparent-source capture changed, so the direct source color audit cannot make a stable decision."
+        }
+
     private fun linearSrgbSampleCoherence(deltaVsCurrent: Int, deltaVsFor375Candidate: Int): String =
         when {
             deltaVsCurrent < 0 && deltaVsFor375Candidate < 0 -> "improves-current-and-for375"
@@ -2648,6 +2989,16 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun directUnpremultipliedSourceOverWhite(sourceRgba: IntArray): IntArray {
+        val alpha = sourceRgba[3] / 255.0
+        return intArrayOf(
+            quantizeNearest255((sourceRgba[0] / 255.0) * alpha + (1.0 - alpha)),
+            quantizeNearest255((sourceRgba[1] / 255.0) * alpha + (1.0 - alpha)),
+            quantizeNearest255((sourceRgba[2] / 255.0) * alpha + (1.0 - alpha)),
+            255,
+        )
+    }
+
     private fun linearFromSrgbByte(value: Int): Double {
         val srgb = value / 255.0
         return if (srgb <= 0.04045) {
@@ -2701,8 +3052,13 @@ class StrokeCapJoinSceneCaptureTest {
 
     private fun rgbaArrayJson(rgba: IntArray): String = """[${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${rgba[3]}]"""
 
+    private fun rgbArrayJson(rgb: IntArray): String = """[${rgb[0]}, ${rgb[1]}, ${rgb[2]}]"""
+
     private fun channelErrorJson(channels: IntArray): String =
         """{"r": ${channels[0]}, "g": ${channels[1]}, "b": ${channels[2]}, "a": ${channels[3]}}"""
+
+    private fun channelRgbJson(channels: IntArray): String =
+        """{"r": ${channels[0]}, "g": ${channels[1]}, "b": ${channels[2]}}"""
 
     private fun channelName(index: Int): String =
         when (index) {
@@ -2812,6 +3168,7 @@ class StrokeCapJoinSceneCaptureTest {
         private const val FOR375_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR376_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR377_REQUIRED_SAMPLE_COUNT = 10
+        private const val FOR378_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR373_CURRENT_RESIDUAL = 856
         private const val FOR373_CANDIDATE_TOTAL_RESIDUAL = 1033
         private const val FOR375_EFFECTIVE_DESTINATION_CANDIDATE_TOTAL_RESIDUAL = 794
