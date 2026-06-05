@@ -1,0 +1,369 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-424",
+          "sceneId": "m60-f16-aa-stencil-cover-partial-coverage-alpha-for424",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-424-m60-f16-diagnostiquer-divergence-alpha-coverage-aa-stencil-cover",
+          "sourceArtifacts": {
+            "for423": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-reference-source-coverage-for423/m60-f16-aa-stencil-cover-reference-source-coverage-for423.json",
+            "for422": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-source-comparison-for422/m60-f16-aa-stencil-cover-verified-source-comparison-for422.json",
+            "for372": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-effective-coverage-export-for372/m60-f16-effective-coverage-export-for372.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "classification": "partial-coverage-alpha-quantization-mismatch",
+          "globalClassification": "partial-coverage-alpha-quantization-mismatch",
+          "allowedClassifications": [
+            "partial-coverage-alpha-quantization-mismatch",
+            "partial-coverage-subdraw-or-band-mismatch",
+            "partial-coverage-stencil-sample-mismatch",
+            "partial-coverage-diagnostic-incomplete"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "comparisonPolicy": {
+            "scope": "Only the 6 FOR-423 partial pixels whose CPU coverage alpha is 160/255 and verified source alpha is about 96/255.",
+            "verifiedSourceMeaning": "sourceColorSentToBlend is the non-synthetic vec4f captured by the FOR-421 verified return-path instrumentation.",
+            "coverageReferenceMeaning": "coverageExpectedAlpha is read from BoundedStrokeCapJoinCoverageMaskGM alpha at the same selected pixel.",
+            "ratioMeaning": "observedToExpectedRatio = sourceAlpha / coverageExpectedAlpha; 96/160 = 0.6 is treated as an alpha quantization mismatch signature until a renderer-owned stencil/sample counter proves otherwise.",
+            "boundedRecordPolicy": "Six records plus a 3x3 CPU coverage neighborhood per record; no framebuffer dump, WGSL dump, or renderer behavior change is stored."
+          },
+          "structuralSummary": {
+            "diagnosticReturnPathVerified": true,
+            "partialPixelCount": 6,
+            "expectedPartialPixelCount": 6,
+            "sourceRecordCount": 6,
+            "insideSubdrawCount": 6,
+            "expectedCoverage160Count": 6,
+            "sourceAlpha96Count": 6,
+            "constantRatioCount": 6,
+            "coverageNeighborhoodRecordCount": 6,
+            "classificationCounts": {
+              "partial-coverage-alpha-quantization-mismatch": 6,
+              "partial-coverage-subdraw-or-band-mismatch": 0,
+              "partial-coverage-stencil-sample-mismatch": 0,
+              "partial-coverage-diagnostic-incomplete": 0
+            }
+          },
+          "partialPixels": [
+                  {
+        "x": 92,
+        "y": 75,
+        "drawIndex": 1,
+        "classification": "partial-coverage-alpha-quantization-mismatch",
+        "classificationReason": "The verified source alpha is 96/255 while the CPU coverage mask expects 160/255 at the same inside round-round subdraw pixel; the local ratio is the constant 96/160 signature.",
+        "source": {
+          "available": true,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "sourceAlpha": 0.376470625,
+          "sourceAlphaByte": 96
+        },
+        "referenceCoverage": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "coverageExpectedByte": 160,
+          "coverageExpectedAlpha": 0.627451003,
+          "coverageVsSourceAlphaDelta": 0.250980377,
+          "observedToExpectedRatio": 0.600000024,
+          "expectedObservedRatioSignature": "96/160"
+        },
+        "bandMetadata": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "strokeWidth": 10.0
+        },
+        "coverageNeighborhood3x3": {
+              "centerCoverageByte": 160,
+              "partialCount": 3,
+              "nonzeroCount": 6,
+              "samples": [
+                {"dx": -1, "dy": -1, "x": 91, "y": 74, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": -1, "x": 92, "y": 74, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 1, "dy": -1, "x": 93, "y": 74, "coverageByte": 96, "coverageAlpha": 0.376470596},
+{"dx": -1, "dy": 0, "x": 91, "y": 75, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": 0, "x": 92, "y": 75, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 1, "dy": 0, "x": 93, "y": 75, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": -1, "dy": 1, "x": 91, "y": 76, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 0, "dy": 1, "x": 92, "y": 76, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": 1, "dy": 1, "x": 93, "y": 76, "coverageByte": 0, "coverageAlpha": 0.000000000}
+              ]
+            }
+      },
+      {
+        "x": 91,
+        "y": 76,
+        "drawIndex": 1,
+        "classification": "partial-coverage-alpha-quantization-mismatch",
+        "classificationReason": "The verified source alpha is 96/255 while the CPU coverage mask expects 160/255 at the same inside round-round subdraw pixel; the local ratio is the constant 96/160 signature.",
+        "source": {
+          "available": true,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "sourceAlpha": 0.376470625,
+          "sourceAlphaByte": 96
+        },
+        "referenceCoverage": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "coverageExpectedByte": 160,
+          "coverageExpectedAlpha": 0.627451003,
+          "coverageVsSourceAlphaDelta": 0.250980377,
+          "observedToExpectedRatio": 0.600000024,
+          "expectedObservedRatioSignature": "96/160"
+        },
+        "bandMetadata": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "strokeWidth": 10.0
+        },
+        "coverageNeighborhood3x3": {
+              "centerCoverageByte": 160,
+              "partialCount": 3,
+              "nonzeroCount": 6,
+              "samples": [
+                {"dx": -1, "dy": -1, "x": 90, "y": 75, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": -1, "x": 91, "y": 75, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 1, "dy": -1, "x": 92, "y": 75, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": -1, "dy": 0, "x": 90, "y": 76, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": 0, "x": 91, "y": 76, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 1, "dy": 0, "x": 92, "y": 76, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": -1, "dy": 1, "x": 90, "y": 77, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 0, "dy": 1, "x": 91, "y": 77, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": 1, "dy": 1, "x": 92, "y": 77, "coverageByte": 0, "coverageAlpha": 0.000000000}
+              ]
+            }
+      },
+      {
+        "x": 90,
+        "y": 77,
+        "drawIndex": 1,
+        "classification": "partial-coverage-alpha-quantization-mismatch",
+        "classificationReason": "The verified source alpha is 96/255 while the CPU coverage mask expects 160/255 at the same inside round-round subdraw pixel; the local ratio is the constant 96/160 signature.",
+        "source": {
+          "available": true,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "sourceAlpha": 0.376470625,
+          "sourceAlphaByte": 96
+        },
+        "referenceCoverage": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "coverageExpectedByte": 160,
+          "coverageExpectedAlpha": 0.627451003,
+          "coverageVsSourceAlphaDelta": 0.250980377,
+          "observedToExpectedRatio": 0.600000024,
+          "expectedObservedRatioSignature": "96/160"
+        },
+        "bandMetadata": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "strokeWidth": 10.0
+        },
+        "coverageNeighborhood3x3": {
+              "centerCoverageByte": 160,
+              "partialCount": 3,
+              "nonzeroCount": 6,
+              "samples": [
+                {"dx": -1, "dy": -1, "x": 89, "y": 76, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": -1, "x": 90, "y": 76, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 1, "dy": -1, "x": 91, "y": 76, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": -1, "dy": 0, "x": 89, "y": 77, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": 0, "x": 90, "y": 77, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 1, "dy": 0, "x": 91, "y": 77, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": -1, "dy": 1, "x": 89, "y": 78, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 0, "dy": 1, "x": 90, "y": 78, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": 1, "dy": 1, "x": 91, "y": 78, "coverageByte": 0, "coverageAlpha": 0.000000000}
+              ]
+            }
+      },
+      {
+        "x": 89,
+        "y": 78,
+        "drawIndex": 1,
+        "classification": "partial-coverage-alpha-quantization-mismatch",
+        "classificationReason": "The verified source alpha is 96/255 while the CPU coverage mask expects 160/255 at the same inside round-round subdraw pixel; the local ratio is the constant 96/160 signature.",
+        "source": {
+          "available": true,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "sourceAlpha": 0.376470625,
+          "sourceAlphaByte": 96
+        },
+        "referenceCoverage": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "coverageExpectedByte": 160,
+          "coverageExpectedAlpha": 0.627451003,
+          "coverageVsSourceAlphaDelta": 0.250980377,
+          "observedToExpectedRatio": 0.600000024,
+          "expectedObservedRatioSignature": "96/160"
+        },
+        "bandMetadata": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "strokeWidth": 10.0
+        },
+        "coverageNeighborhood3x3": {
+              "centerCoverageByte": 160,
+              "partialCount": 3,
+              "nonzeroCount": 6,
+              "samples": [
+                {"dx": -1, "dy": -1, "x": 88, "y": 77, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": -1, "x": 89, "y": 77, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 1, "dy": -1, "x": 90, "y": 77, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": -1, "dy": 0, "x": 88, "y": 78, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": 0, "x": 89, "y": 78, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 1, "dy": 0, "x": 90, "y": 78, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": -1, "dy": 1, "x": 88, "y": 79, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 0, "dy": 1, "x": 89, "y": 79, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": 1, "dy": 1, "x": 90, "y": 79, "coverageByte": 0, "coverageAlpha": 0.000000000}
+              ]
+            }
+      },
+      {
+        "x": 88,
+        "y": 79,
+        "drawIndex": 1,
+        "classification": "partial-coverage-alpha-quantization-mismatch",
+        "classificationReason": "The verified source alpha is 96/255 while the CPU coverage mask expects 160/255 at the same inside round-round subdraw pixel; the local ratio is the constant 96/160 signature.",
+        "source": {
+          "available": true,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "sourceAlpha": 0.376470625,
+          "sourceAlphaByte": 96
+        },
+        "referenceCoverage": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "coverageExpectedByte": 160,
+          "coverageExpectedAlpha": 0.627451003,
+          "coverageVsSourceAlphaDelta": 0.250980377,
+          "observedToExpectedRatio": 0.600000024,
+          "expectedObservedRatioSignature": "96/160"
+        },
+        "bandMetadata": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "strokeWidth": 10.0
+        },
+        "coverageNeighborhood3x3": {
+              "centerCoverageByte": 160,
+              "partialCount": 3,
+              "nonzeroCount": 6,
+              "samples": [
+                {"dx": -1, "dy": -1, "x": 87, "y": 78, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": -1, "x": 88, "y": 78, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 1, "dy": -1, "x": 89, "y": 78, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": -1, "dy": 0, "x": 87, "y": 79, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": 0, "x": 88, "y": 79, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 1, "dy": 0, "x": 89, "y": 79, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": -1, "dy": 1, "x": 87, "y": 80, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 0, "dy": 1, "x": 88, "y": 80, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": 1, "dy": 1, "x": 89, "y": 80, "coverageByte": 0, "coverageAlpha": 0.000000000}
+              ]
+            }
+      },
+      {
+        "x": 87,
+        "y": 80,
+        "drawIndex": 1,
+        "classification": "partial-coverage-alpha-quantization-mismatch",
+        "classificationReason": "The verified source alpha is 96/255 while the CPU coverage mask expects 160/255 at the same inside round-round subdraw pixel; the local ratio is the constant 96/160 signature.",
+        "source": {
+          "available": true,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "sourceAlpha": 0.376470625,
+          "sourceAlphaByte": 96
+        },
+        "referenceCoverage": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "coverageExpectedByte": 160,
+          "coverageExpectedAlpha": 0.627451003,
+          "coverageVsSourceAlphaDelta": 0.250980377,
+          "observedToExpectedRatio": 0.600000024,
+          "expectedObservedRatioSignature": "96/160"
+        },
+        "bandMetadata": {
+          "strokeBand": "round-round",
+          "cap": "round",
+          "join": "round",
+          "strokeWidth": 10.0
+        },
+        "coverageNeighborhood3x3": {
+              "centerCoverageByte": 160,
+              "partialCount": 3,
+              "nonzeroCount": 6,
+              "samples": [
+                {"dx": -1, "dy": -1, "x": 86, "y": 79, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": -1, "x": 87, "y": 79, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 1, "dy": -1, "x": 88, "y": 79, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": -1, "dy": 0, "x": 86, "y": 80, "coverageByte": 255, "coverageAlpha": 1.000000000},
+{"dx": 0, "dy": 0, "x": 87, "y": 80, "coverageByte": 160, "coverageAlpha": 0.627451003},
+{"dx": 1, "dy": 0, "x": 88, "y": 80, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": -1, "dy": 1, "x": 86, "y": 81, "coverageByte": 64, "coverageAlpha": 0.250980407},
+{"dx": 0, "dy": 1, "x": 87, "y": 81, "coverageByte": 0, "coverageAlpha": 0.000000000},
+{"dx": 1, "dy": 1, "x": 88, "y": 81, "coverageByte": 0, "coverageAlpha": 0.000000000}
+              ]
+            }
+      }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "renderingFixApplied": false,
+            "wgsl4kModified": false,
+            "fullWgslDumpStored": false
+          },
+          "classificationReason": "All six FOR-423 partial pixels are inside round-round samples with CPU coverage 160/255 and verified source alpha 96/255, producing a stable 0.6 ratio.",
+          "nextStep": "Add a correction or finer renderer-side measurement for the AA stencil-cover alpha quantization path before changing support, thresholds, scoring, or promotion.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for424_m60_f16_aa_stencil_cover_partial_coverage_alpha.py",
+            "rtk python3 scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+            "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for424-pycache python3 -m py_compile scripts/validate_for424_m60_f16_aa_stencil_cover_partial_coverage_alpha.py",
+            "rtk git diff --check",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin"
+          ]
+        }

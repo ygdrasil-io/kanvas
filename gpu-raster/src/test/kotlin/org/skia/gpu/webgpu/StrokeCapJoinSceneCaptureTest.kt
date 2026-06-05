@@ -564,6 +564,11 @@ class StrokeCapJoinSceneCaptureTest {
                 postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
                 adapter = adapter,
             )
+            writeM60F16AaStencilCoverPartialCoverageAlpha(
+                finalWgslSnapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
+                storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                adapter = adapter,
+            )
         }
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
@@ -3232,6 +3237,276 @@ class StrokeCapJoinSceneCaptureTest {
             "Target the AA stencil-cover coverage/stencil side: the verified alpha sent to blend does not match the CPU coverage-mask reference."
         else ->
             "Add the missing bounded measurement before attempting a renderer correction."
+    }
+
+    private fun writeM60F16AaStencilCoverPartialCoverageAlpha(
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-aa-stencil-cover-partial-coverage-alpha-for424"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16AaStencilCoverPartialCoverageAlphaJson(
+                sceneId = sceneId,
+                finalWgslSnapshot = finalWgslSnapshot,
+                storageSnapshot = storageSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16AaStencilCoverPartialCoverageAlphaJson(
+        sceneId: String,
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val summaries = finalWgslSnapshot.variants.map { m60F16FinalWgslVariantSummary(it) }
+        val diagnosticReturnPathVerified = summaries
+            .filter { it.logicalName != "normal-bounded-runtime-correction" }
+            .all { summary ->
+                summary.functions["fs_inside"]?.returnsApplicationPointOutput == true &&
+                    summary.functions["fs_outside"]?.returnsApplicationPointOutput == true
+            }
+        val storageByKey = storageSnapshot.storageEvents
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val records = storageByKey.keys
+            .filter { it.drawIndex == 1 && partialPoints.contains(it.x to it.y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.drawIndex }.thenBy { it.y }.thenBy { it.x })
+            .map { key ->
+                val sourceRecords = storageByKey[key].orEmpty()
+                    .sortedWith(
+                        compareBy<Pair<
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                            >> { it.second.subdrawOrdinal }.thenBy { it.second.subdrawRole },
+                    )
+                val verifiedSources = sourceRecords.filter { (_, sample) ->
+                    sample.shaderObserved && !sample.captureSynthetic && sample.sourceColorSentToBlend != null
+                }
+                val bestSource = verifiedSources.maxByOrNull { (_, sample) -> sample.sourceColorSentToBlend?.getOrNull(3) ?: -1f }
+                val sourceAlpha = bestSource?.second?.sourceColorSentToBlend?.getOrNull(3)
+                val sourceAlphaByte = sourceAlpha?.let { kotlin.math.round(it * 255f).toInt().coerceIn(0, 255) }
+                val expectedCoverageByte = (coverageMask.getPixel(key.x, key.y) ushr 24) and 0xFF
+                val expectedCoverage = expectedCoverageByte / 255f
+                val observedToExpectedRatio = if (sourceAlpha != null && expectedCoverage > 0f) {
+                    sourceAlpha / expectedCoverage
+                } else {
+                    null
+                }
+                val band = strokePaintBands().firstOrNull { key.x in it.xStart until it.xEnd }
+                val neighborhood = m60F16CoverageNeighborhood3x3(coverageMask, key.x, key.y)
+                val centerMatchesCpuCoverage = sourceAlphaByte == expectedCoverageByte
+                val localClassification = when {
+                    !diagnosticReturnPathVerified || bestSource == null || band == null ->
+                        "partial-coverage-diagnostic-incomplete"
+                    bestSource.second.subdrawRole != "inside" || bestSource.second.subdrawOrdinal != 0 ->
+                        "partial-coverage-subdraw-or-band-mismatch"
+                    centerMatchesCpuCoverage ->
+                        "partial-coverage-diagnostic-incomplete"
+                    sourceAlphaByte == 96 && expectedCoverageByte == 160 && observedToExpectedRatio != null ->
+                        "partial-coverage-alpha-quantization-mismatch"
+                    neighborhood.samples.any { sample -> sample.coverageByte == sourceAlphaByte } ->
+                        "partial-coverage-stencil-sample-mismatch"
+                    else ->
+                        "partial-coverage-diagnostic-incomplete"
+                }
+                M60F16PartialCoverageAlphaRecord(
+                    key = key,
+                    band = band,
+                    source = bestSource,
+                    sourceAlphaByte = sourceAlphaByte,
+                    expectedCoverageByte = expectedCoverageByte,
+                    expectedCoverage = expectedCoverage,
+                    observedToExpectedRatio = observedToExpectedRatio,
+                    coverageDelta = sourceAlpha?.let { kotlin.math.abs(it - expectedCoverage) },
+                    neighborhood = neighborhood,
+                    classification = localClassification,
+                )
+            }
+        val classificationCounts = records.groupingBy { it.classification }.eachCount()
+        val globalClassification = when {
+            records.size != 6 || records.any { it.classification == "partial-coverage-diagnostic-incomplete" } ->
+                "partial-coverage-diagnostic-incomplete"
+            records.any { it.classification == "partial-coverage-subdraw-or-band-mismatch" } ->
+                "partial-coverage-subdraw-or-band-mismatch"
+            records.any { it.classification == "partial-coverage-stencil-sample-mismatch" } ->
+                "partial-coverage-stencil-sample-mismatch"
+            records.all { it.classification == "partial-coverage-alpha-quantization-mismatch" } ->
+                "partial-coverage-alpha-quantization-mismatch"
+            else ->
+                "partial-coverage-diagnostic-incomplete"
+        }
+        val recordsJson = records.joinToString(",\n") { record ->
+            m60F16PartialCoverageAlphaRecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-424",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-424-m60-f16-diagnostiquer-divergence-alpha-coverage-aa-stencil-cover",
+              "sourceArtifacts": {
+                "for423": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-reference-source-coverage-for423/m60-f16-aa-stencil-cover-reference-source-coverage-for423.json",
+                "for422": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-source-comparison-for422/m60-f16-aa-stencil-cover-verified-source-comparison-for422.json",
+                "for372": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-effective-coverage-export-for372/m60-f16-effective-coverage-export-for372.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${globalClassification.jsonString()},
+              "globalClassification": ${globalClassification.jsonString()},
+              "allowedClassifications": [
+                "partial-coverage-alpha-quantization-mismatch",
+                "partial-coverage-subdraw-or-band-mismatch",
+                "partial-coverage-stencil-sample-mismatch",
+                "partial-coverage-diagnostic-incomplete"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "comparisonPolicy": {
+                "scope": "Only the 6 FOR-423 partial pixels whose CPU coverage alpha is 160/255 and verified source alpha is about 96/255.",
+                "verifiedSourceMeaning": "sourceColorSentToBlend is the non-synthetic vec4f captured by the FOR-421 verified return-path instrumentation.",
+                "coverageReferenceMeaning": "coverageExpectedAlpha is read from BoundedStrokeCapJoinCoverageMaskGM alpha at the same selected pixel.",
+                "ratioMeaning": "observedToExpectedRatio = sourceAlpha / coverageExpectedAlpha; 96/160 = 0.6 is treated as an alpha quantization mismatch signature until a renderer-owned stencil/sample counter proves otherwise.",
+                "boundedRecordPolicy": "Six records plus a 3x3 CPU coverage neighborhood per record; no framebuffer dump, WGSL dump, or renderer behavior change is stored."
+              },
+              "structuralSummary": {
+                "diagnosticReturnPathVerified": $diagnosticReturnPathVerified,
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "sourceRecordCount": ${records.count { it.source != null }},
+                "insideSubdrawCount": ${records.count { it.source?.second?.subdrawRole == "inside" }},
+                "expectedCoverage160Count": ${records.count { it.expectedCoverageByte == 160 }},
+                "sourceAlpha96Count": ${records.count { it.sourceAlphaByte == 96 }},
+                "constantRatioCount": ${records.count { kotlin.math.abs((it.observedToExpectedRatio ?: -1f) - 0.6f) <= FOR423_REFERENCE_TOLERANCE }},
+                "coverageNeighborhoodRecordCount": ${records.count { it.neighborhood.samples.size == 9 }},
+                "classificationCounts": {
+                  "partial-coverage-alpha-quantization-mismatch": ${classificationCounts["partial-coverage-alpha-quantization-mismatch"] ?: 0},
+                  "partial-coverage-subdraw-or-band-mismatch": ${classificationCounts["partial-coverage-subdraw-or-band-mismatch"] ?: 0},
+                  "partial-coverage-stencil-sample-mismatch": ${classificationCounts["partial-coverage-stencil-sample-mismatch"] ?: 0},
+                  "partial-coverage-diagnostic-incomplete": ${classificationCounts["partial-coverage-diagnostic-incomplete"] ?: 0}
+                }
+              },
+              "partialPixels": [
+            $recordsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "renderingFixApplied": false,
+                "wgsl4kModified": false,
+                "fullWgslDumpStored": false
+              },
+              "classificationReason": ${m60F16PartialCoverageAlphaGlobalReason(globalClassification).jsonString()},
+              "nextStep": ${m60F16PartialCoverageAlphaNextStep(globalClassification).jsonString()},
+              "validationCommands": [
+                "rtk python3 scripts/validate_for424_m60_f16_aa_stencil_cover_partial_coverage_alpha.py",
+                "rtk python3 scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+                "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for424-pycache python3 -m py_compile scripts/validate_for424_m60_f16_aa_stencil_cover_partial_coverage_alpha.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16PartialCoverageAlphaRecordJson(record: M60F16PartialCoverageAlphaRecord): String {
+        val sourceSample = record.source?.second
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16PartialCoverageAlphaLocalReason(record).jsonString()},
+              "source": {
+                "available": ${sourceSample?.sourceColorSentToBlend != null},
+                "subdrawOrdinal": ${sourceSample?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${sourceSample?.subdrawRole?.jsonString() ?: "null"},
+                "shaderObserved": ${sourceSample?.shaderObserved ?: false},
+                "captureSynthetic": ${sourceSample?.captureSynthetic ?: false},
+                "sourceColorSentToBlend": ${sourceSample?.sourceColorSentToBlend.floatArrayOrNullJson()},
+                "sourceAlpha": ${sourceSample?.sourceColorSentToBlend?.getOrNull(3)?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "sourceAlphaByte": ${record.sourceAlphaByte ?: "null"}
+              },
+              "referenceCoverage": {
+                "strokeBand": ${record.band?.id?.jsonString() ?: "null"},
+                "cap": ${record.band?.cap?.jsonString() ?: "null"},
+                "join": ${record.band?.join?.jsonString() ?: "null"},
+                "coverageExpectedByte": ${record.expectedCoverageByte},
+                "coverageExpectedAlpha": ${String.format(Locale.US, "%.9f", record.expectedCoverage)},
+                "coverageVsSourceAlphaDelta": ${record.coverageDelta?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "observedToExpectedRatio": ${record.observedToExpectedRatio?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "expectedObservedRatioSignature": "96/160"
+              },
+              "bandMetadata": {
+                "strokeBand": ${record.band?.id?.jsonString() ?: "null"},
+                "cap": ${record.band?.cap?.jsonString() ?: "null"},
+                "join": ${record.band?.join?.jsonString() ?: "null"},
+                "strokeWidth": ${record.band?.strokeWidth?.let { String.format(Locale.US, "%.1f", it) } ?: "null"}
+              },
+              "coverageNeighborhood3x3": ${record.neighborhood.toJson().prependIndent("      ").trimStart()}
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16CoverageNeighborhood3x3(mask: SkBitmap, x: Int, y: Int): M60F16CoverageNeighborhood3x3 {
+        val samples = (-1..1).flatMap { dy ->
+            (-1..1).map { dx ->
+                val sampleX = x + dx
+                val sampleY = y + dy
+                val coverageByte = (mask.getPixel(sampleX, sampleY) ushr 24) and 0xFF
+                M60F16CoverageNeighborhoodSample(dx, dy, sampleX, sampleY, coverageByte)
+            }
+        }
+        return M60F16CoverageNeighborhood3x3(samples)
+    }
+
+    private fun m60F16PartialCoverageAlphaLocalReason(record: M60F16PartialCoverageAlphaRecord): String = when (record.classification) {
+        "partial-coverage-alpha-quantization-mismatch" ->
+            "The verified source alpha is 96/255 while the CPU coverage mask expects 160/255 at the same inside round-round subdraw pixel; the local ratio is the constant 96/160 signature."
+        "partial-coverage-subdraw-or-band-mismatch" ->
+            "The selected source does not belong to the expected inside subdraw/band metadata for the partial FOR-423 pixel."
+        "partial-coverage-stencil-sample-mismatch" ->
+            "A neighboring CPU coverage sample matches the observed source alpha, so the remaining suspect is a stencil/sample coordinate mismatch."
+        else ->
+            "The bounded diagnostic is incomplete because verified source, band metadata, or return-path proof is unavailable."
+    }
+
+    private fun m60F16PartialCoverageAlphaGlobalReason(classification: String): String = when (classification) {
+        "partial-coverage-alpha-quantization-mismatch" ->
+            "All six FOR-423 partial pixels are inside round-round samples with CPU coverage 160/255 and verified source alpha 96/255, producing a stable 0.6 ratio."
+        "partial-coverage-subdraw-or-band-mismatch" ->
+            "At least one partial pixel is explained by a source subdraw or band mismatch."
+        "partial-coverage-stencil-sample-mismatch" ->
+            "At least one partial pixel aligns with a neighboring coverage sample, pointing at stencil/sample coordinate selection."
+        else ->
+            "The available bounded data does not yet isolate the partial coverage alpha cause."
+    }
+
+    private fun m60F16PartialCoverageAlphaNextStep(classification: String): String = when (classification) {
+        "partial-coverage-alpha-quantization-mismatch" ->
+            "Add a correction or finer renderer-side measurement for the AA stencil-cover alpha quantization path before changing support, thresholds, scoring, or promotion."
+        "partial-coverage-subdraw-or-band-mismatch" ->
+            "Instrument subdraw/band selection before attempting a coverage math correction."
+        "partial-coverage-stencil-sample-mismatch" ->
+            "Instrument stencil/sample coordinates and coverage sample index selection before changing coverage math."
+        else ->
+            "Add the missing bounded renderer-owned measurement before attempting a renderer correction."
     }
 
     private data class M60F16FinalWgslFunctionSummary(
@@ -6267,6 +6542,56 @@ class StrokeCapJoinSceneCaptureTest {
         val decisive: Boolean,
         val classification: String,
     )
+
+    private data class M60F16PartialCoverageAlphaRecord(
+        val key: M60F16DrawPixelKey,
+        val band: StrokePaintBand?,
+        val source: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val sourceAlphaByte: Int?,
+        val expectedCoverageByte: Int,
+        val expectedCoverage: Float,
+        val observedToExpectedRatio: Float?,
+        val coverageDelta: Float?,
+        val neighborhood: M60F16CoverageNeighborhood3x3,
+        val classification: String,
+    )
+
+    private data class M60F16CoverageNeighborhood3x3(
+        val samples: List<M60F16CoverageNeighborhoodSample>,
+    ) {
+        fun toJson(): String {
+            val center = samples.firstOrNull { it.dx == 0 && it.dy == 0 }
+            val partialCount = samples.count { it.coverageByte in 1..254 }
+            val nonzeroCount = samples.count { it.coverageByte > 0 }
+            val samplesJson = samples.joinToString(",\n") { sample ->
+                sample.toJson().prependIndent("    ")
+            }
+            return """
+                {
+                  "centerCoverageByte": ${center?.coverageByte ?: "null"},
+                  "partialCount": $partialCount,
+                  "nonzeroCount": $nonzeroCount,
+                  "samples": [
+                $samplesJson
+                  ]
+                }
+            """.trimIndent()
+        }
+    }
+
+    private data class M60F16CoverageNeighborhoodSample(
+        val dx: Int,
+        val dy: Int,
+        val x: Int,
+        val y: Int,
+        val coverageByte: Int,
+    ) {
+        fun toJson(): String =
+            """{"dx": $dx, "dy": $dy, "x": $x, "y": $y, "coverageByte": $coverageByte, "coverageAlpha": ${String.format(Locale.US, "%.9f", coverageByte / 255f)}}"""
+    }
 
     private data class SourceOverReplayPixelModel(
         val x: Int,
