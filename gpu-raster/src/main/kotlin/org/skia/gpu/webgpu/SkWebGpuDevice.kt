@@ -190,6 +190,8 @@ private const val WEBGPU_M60_F16_SOURCE_COLOR_CORRECTION_PROBE_FLAG: String =
     "kanvas.webgpu.m60F16SourceColorCorrectionProbe.enabled"
 private const val WEBGPU_M60_F16_SOURCE_FACING_LANE_RUNTIME_CANDIDATE_FLAG: String =
     "kanvas.webgpu.m60F16SourceFacingLaneRuntimeCandidate.enabled"
+private const val WEBGPU_M60_F16_AA_STENCIL_COVER_BAND_METADATA_TRANSPORT_FLAG: String =
+    "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -449,6 +451,27 @@ public class SkWebGpuDevice(
         val cap: String,
         val join: String,
     )
+
+    private data class M60F16AaStencilCoverBandMetadata(
+        val bandXStart: Float,
+        val bandXEnd: Float,
+        val strokeBandId: Float,
+        val capId: Float,
+        val joinId: Float,
+        val sourceFacingLeftMaxLocalX: Float,
+        val sourceFacingRightMinLocalX: Float,
+    ) {
+        fun packInto(out: FloatArray, offset: Int) {
+            out[offset] = 1f
+            out[offset + 1] = bandXStart
+            out[offset + 2] = bandXEnd
+            out[offset + 3] = strokeBandId
+            out[offset + 4] = capId
+            out[offset + 5] = joinId
+            out[offset + 6] = sourceFacingLeftMaxLocalX
+            out[offset + 7] = sourceFacingRightMinLocalX
+        }
+    }
 
     private data class CacheCounters(
         var shaderModuleHits: Int = 0,
@@ -1071,6 +1094,13 @@ public class SkWebGpuDevice(
          * target-colour blend transform before coverage.
          */
         val m60F16SourceColorCorrectionProbe: Boolean = false,
+        /**
+         * FOR-394 diagnostic-only transport. When the explicit M60 F16 flag
+         * is enabled and the bounded stroke fixture is recognized, the cover
+         * pass uniform carries band bounds and cap/join ids so the shader can
+         * observe `bandLocalX`. The fragment output does not consume it.
+         */
+        val m60F16BandMetadata: M60F16AaStencilCoverBandMetadata? = null,
     ) : PendingDraw
 
     /**
@@ -8670,6 +8700,57 @@ public class SkWebGpuDevice(
     private fun m60F16SourceFacingLaneRuntimeCandidateRequested(): Boolean =
         System.getProperty(WEBGPU_M60_F16_SOURCE_FACING_LANE_RUNTIME_CANDIDATE_FLAG, "false").toBoolean()
 
+    private fun m60F16AaStencilCoverBandMetadataTransportEnabled(): Boolean =
+        System.getProperty(WEBGPU_M60_F16_AA_STENCIL_COVER_BAND_METADATA_TRANSPORT_FLAG, "false").toBoolean()
+
+    private fun m60F16AaStencilCoverBandMetadata(paint: SkPaint): M60F16AaStencilCoverBandMetadata? {
+        val style = activeStrokeStyleForPathAaDiagnostics ?: return null
+        if (!m60F16AaStencilCoverBandMetadataTransportEnabled()) return null
+        if (!targetColorSpaceBlend) return null
+        if (intermediateFormat != GPUTextureFormat.RGBA16Float) return null
+        if (width != 192 || height != 128) return null
+        if (!System.getProperty(WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG, "false").toBoolean()) return null
+        if (paint.blendMode != SkBlendMode.kSrcOver) return null
+        if (paint.shader != null || paint.colorFilter != null || paint.maskFilter != null || paint.pathEffect != null) {
+            return null
+        }
+        if (kotlin.math.abs(style.strokeWidth - 10f) > 0.001f) return null
+        val sourceColor = paint.color
+        return when {
+            style.cap == "butt" && style.join == "bevel" && sourceColor == 0xFF0066CC.toInt() ->
+                M60F16AaStencilCoverBandMetadata(
+                    bandXStart = 0f,
+                    bandXEnd = 48f,
+                    strokeBandId = 1f,
+                    capId = 1f,
+                    joinId = 1f,
+                    sourceFacingLeftMaxLocalX = 17f,
+                    sourceFacingRightMinLocalX = 39f,
+                )
+            style.cap == "round" && style.join == "round" && sourceColor == 0xFF008A4C.toInt() ->
+                M60F16AaStencilCoverBandMetadata(
+                    bandXStart = 48f,
+                    bandXEnd = 96f,
+                    strokeBandId = 2f,
+                    capId = 2f,
+                    joinId = 2f,
+                    sourceFacingLeftMaxLocalX = 17f,
+                    sourceFacingRightMinLocalX = 39f,
+                )
+            style.cap == "square" && style.join == "bevel" && sourceColor == 0xFFB33C00.toInt() ->
+                M60F16AaStencilCoverBandMetadata(
+                    bandXStart = 96f,
+                    bandXEnd = 192f,
+                    strokeBandId = 3f,
+                    capId = 3f,
+                    joinId = 1f,
+                    sourceFacingLeftMaxLocalX = 17f,
+                    sourceFacingRightMinLocalX = 39f,
+                )
+            else -> null
+        }
+    }
+
     private fun m60F16SourceColorCorrectionProbeEnabled(paint: SkPaint): Boolean {
         val style = activeStrokeStyleForPathAaDiagnostics ?: return false
         // FOR-392 recognizes the source-facing lane candidate guard but
@@ -11462,6 +11543,7 @@ public class SkWebGpuDevice(
                         clipShape = activeClipShape,
                         colorFilterPacked = polygonColorFilterPacked,
                         m60F16SourceColorCorrectionProbe = m60F16SourceColorCorrectionProbeEnabled(paint),
+                        m60F16BandMetadata = m60F16AaStencilCoverBandMetadata(paint),
                     ),
                 )
                 return
@@ -11701,6 +11783,7 @@ public class SkWebGpuDevice(
                             clipShape = activeClipShape,
                             colorFilterPacked = polygonColorFilterPacked,
                             m60F16SourceColorCorrectionProbe = m60F16SourceColorCorrectionProbeEnabled(paint),
+                            m60F16BandMetadata = m60F16AaStencilCoverBandMetadata(paint),
                         ),
                     )
                 }
@@ -15731,7 +15814,9 @@ public class SkWebGpuDevice(
                 label = "SkWebGpuDevice.stencilCoverAaDraw",
             ),
         )
-        // Layout shared with `aa_polygon.wgsl` / `aa_stencil_cover.wgsl` :
+        // Base layout shared with `aa_polygon.wgsl` / `aa_stencil_cover.wgsl` ;
+        // the final two FOR-394 diagnostic vec4 slots are consumed only by
+        // `aa_stencil_cover.wgsl` and remain zero outside the M60 F16 opt-in.
         //   offset    0 : color           (vec4)
         //   offset   16 : viewport        (vec4, only x/y used)
         //   offset   32 : edgeCount + fillType + pad (u32 reinterp)
@@ -15740,7 +15825,9 @@ public class SkWebGpuDevice(
         //   offset 4160 : clipShapeRadiiKind (vec4) ; G2.x (closing slice)
         //   offset 4176 : colorFilter* (6 * vec4 = 24 floats) ; Phase
         //                 G-direct-colorFilter (polygon closing slice)
-        val packed = FloatArray(12 + MAX_AA_EDGES * 4 + 8 + 24)
+        //   offset 4272 : m60F16BandMetadata0 (vec4) ; FOR-394 diagnostic
+        //   offset 4288 : m60F16BandMetadata1 (vec4) ; FOR-394 diagnostic
+        val packed = FloatArray(12 + MAX_AA_EDGES * 4 + 8 + 24 + 8)
         packed[0] = d.r; packed[1] = d.g; packed[2] = d.b; packed[3] = d.a
         packed[4] = width.toFloat(); packed[5] = height.toFloat()
         packed[6] = 0f; packed[7] = 0f
@@ -15754,6 +15841,7 @@ public class SkWebGpuDevice(
         val colorFilterBase = 12 + MAX_AA_EDGES * 4 + 8
         System.arraycopy(d.colorFilterPacked, 0, packed, colorFilterBase, 24)
         packed[colorFilterBase + 2] = if (d.m60F16SourceColorCorrectionProbe) 0f else targetColorSpaceBlendFlag()
+        d.m60F16BandMetadata?.packInto(packed, colorFilterBase + 24)
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
@@ -16536,19 +16624,22 @@ public class SkWebGpuDevice(
          * Size of the AA polygon per-draw uniform :
          *   color (16) + viewport (16) + edgeCount+pad (16) + edges (256*16) +
          *   clipShapeBounds (16) + clipShapeRadiiKind (16) +
-         *   colorFilter* (6 * 16 = 96) = 4272 bytes.
+         *   colorFilter* (6 * 16 = 96) + M60 F16 diagnostic band metadata
+         *   (2 * 16 = 32) = 4304 bytes.
          * G2.x (closing slice) bumped from 4144 to 4176 to carry the
          * optional analytical clip-shape consumed by `aa_polygon.wgsl` and
          * `aa_stencil_cover.wgsl`. Phase G-direct-colorFilter (polygon
          * closing slice) bumped from 4176 to 4272 to carry the 6-vec4f
          * colour-filter payload (kind, mode, 4 matrix rows, bias) consumed
          * by `aa_polygon.wgsl` / `aa_stencil_cover.wgsl`'s
-         * `apply_color_filter` helper. Both shaders share this layout via
-         * the `aaPolygonBindGroupLayout` ; the gradient stencil-cover
-         * shaders use a larger uniform (positions / colors slots before
-         * the clip payload), so this constant does not gate them.
+         * `apply_color_filter` helper. FOR-394 appends two inert diagnostic
+         * vec4 slots for `aa_stencil_cover.wgsl`; `aa_polygon.wgsl` ignores
+         * the trailing bytes. Both shaders share this bind group layout via
+         * `aaPolygonBindGroupLayout` ; the gradient stencil-cover shaders use
+         * a larger uniform (positions / colors slots before the clip payload),
+         * so this constant does not gate them.
          */
-        const val AA_POLYGON_UNIFORM_SIZE: ULong = 4272uL // 48 + 256 * 16 + 32 + 96
+        const val AA_POLYGON_UNIFORM_SIZE: ULong = 4304uL // 48 + 256 * 16 + 32 + 96 + 32
         /**
          * G4.1 — cap on `SkLinearGradient` stop count for the WGSL
          * uniform table. Skia's `MakeLinear` accepts arbitrary counts but

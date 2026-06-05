@@ -45,6 +45,13 @@
 //   colorFilterKindMode.x == 1 : SkColorFilters.Blend(colour, mode).
 //   colorFilterKindMode.x == 2 : SkColorFilters.Matrix(20 floats).
 //
+// FOR-394 diagnostic band metadata transport -- the final two vec4 slots are
+// disabled by default and never feed the fragment output. When the M60 F16
+// diagnostic flag is set, the host may populate:
+//
+//   m60F16BandMetadata0 = (enabled, xStart, xEnd, bandId)
+//   m60F16BandMetadata1 = (capId, joinId, leftMaxLocalX, rightMinLocalX)
+//
 // ASCII strict -- WGSL parser truncates on non-ASCII in wgpu4k 0.2.0.
 
 struct Uniforms {
@@ -63,6 +70,8 @@ struct Uniforms {
     colorFilterParam2:   vec4f,                       // offset 4224 : matrix row 2 (B coefs)
     colorFilterParam3:   vec4f,                       // offset 4240 : matrix row 3 (A coefs)
     colorFilterBias:     vec4f,                       // offset 4256 : per-row bias (R, G, B, A)
+    m60F16BandMetadata0: vec4f,                       // offset 4272 : (enabled, xStart, xEnd, bandId)
+    m60F16BandMetadata1: vec4f,                       // offset 4288 : (capId, joinId, leftMaxLocalX, rightMinLocalX)
 };
 
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
@@ -279,6 +288,27 @@ fn quantize_rgba8_if_target_blend(c: vec4f) -> vec4f {
         return floor(clamp(c, vec4f(0.0), vec4f(1.0)) * 255.0 + vec4f(0.5)) / 255.0;
     }
     return c;
+}
+
+fn m60_f16_band_metadata_enabled() -> bool {
+    return uniforms.m60F16BandMetadata0.x > 0.5;
+}
+
+fn m60_f16_local_x(pixel: vec2f) -> f32 {
+    return floor(pixel.x) - uniforms.m60F16BandMetadata0.y;
+}
+
+fn m60_f16_candidate_lane(pixel: vec2f) -> bool {
+    if (!m60_f16_band_metadata_enabled()) {
+        return false;
+    }
+    let band_id = u32(uniforms.m60F16BandMetadata0.w + 0.5);
+    let local_x = m60_f16_local_x(pixel);
+    let left_max = uniforms.m60F16BandMetadata1.z;
+    let right_min = uniforms.m60F16BandMetadata1.w;
+    let butt_bevel_left_lane = band_id == 1u && local_x <= left_max;
+    let round_round_right_lane = band_id == 2u && local_x >= right_min;
+    return butt_bevel_left_lane || round_round_right_lane;
 }
 
 @fragment
