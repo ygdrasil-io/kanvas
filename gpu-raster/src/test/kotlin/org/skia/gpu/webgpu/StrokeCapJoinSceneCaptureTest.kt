@@ -534,6 +534,15 @@ class StrokeCapJoinSceneCaptureTest {
                 adapter = adapter,
             )
         }
+        if (aaStencilCoverFinalWgslDiagnosticSnapshot.enabled &&
+            aaStencilCoverShaderReturnStorageZeroCauseSnapshot.enabled
+        ) {
+            writeM60F16AaStencilCoverVerifiedReturnPathDiagnostic(
+                finalWgslSnapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
+                storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                adapter = adapter,
+            )
+        }
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -2433,6 +2442,123 @@ class StrokeCapJoinSceneCaptureTest {
         """.trimIndent() + "\n"
     }
 
+    private fun writeM60F16AaStencilCoverVerifiedReturnPathDiagnostic(
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-aa-stencil-cover-verified-return-path-diagnostic-for421"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16AaStencilCoverVerifiedReturnPathDiagnosticJson(
+                sceneId = sceneId,
+                finalWgslSnapshot = finalWgslSnapshot,
+                storageSnapshot = storageSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16AaStencilCoverVerifiedReturnPathDiagnosticJson(
+        sceneId: String,
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ): String {
+        val summaries = finalWgslSnapshot.variants.map { m60F16FinalWgslVariantSummary(it) }
+        val diagnosticSummaries = summaries.filter { it.logicalName != "normal-bounded-runtime-correction" }
+        val diagnosticReturnPathVerified = diagnosticSummaries.all { summary ->
+            summary.functions["fs_inside"]?.returnsApplicationPointOutput == true &&
+                summary.functions["fs_outside"]?.returnsApplicationPointOutput == true
+        }
+        val for419Summary = summaries.firstOrNull { it.logicalName == "for419-storage-zero-cause" }
+        val for419EntryStorageDisabled =
+            for419Summary?.functions?.values?.none { it.callsRecordFragmentLane } == true
+        val storageSamples = storageSnapshot.storageEvents.flatMap { it.samples }
+        val colorTargetSamples = storageSnapshot.colorTargetEvents.flatMap { it.samples }
+        val storageObservedCount = storageSamples.count { it.shaderObserved }
+        val storageNonzeroCount = storageSamples.count { it.sourceColorSentToBlend.isNonzeroFloatArray() }
+        val colorTargetNonzeroCount = colorTargetSamples.count { it.scratchOutputRgbaFloat.isNonzeroFloatArray() }
+        val classification = when {
+            !diagnosticReturnPathVerified -> "diagnostic-return-path-instrumentation-unavailable"
+            storageObservedCount > 0 && storageNonzeroCount > 0 && colorTargetNonzeroCount > 0 ->
+                "verified-return-path-storage-nonzero"
+            colorTargetNonzeroCount > 0 -> "verified-return-path-storage-still-zero"
+            else -> "verified-return-path-color-target-unavailable"
+        }
+        val variantsJson = summaries.joinToString(",\n") { summary ->
+            """
+            {
+              "logicalName": ${summary.logicalName.jsonString()},
+              "sourceHashSha256": ${summary.sourceHash.jsonString()},
+              "divergenceFromNormal": ${summary.divergenceFromNormal.jsonString()},
+              "fsInsideReturnsApplicationPointOutput": ${summary.functions["fs_inside"]?.returnsApplicationPointOutput == true},
+              "fsOutsideReturnsApplicationPointOutput": ${summary.functions["fs_outside"]?.returnsApplicationPointOutput == true},
+              "fsInsideCallsEntryStorage": ${summary.functions["fs_inside"]?.callsRecordFragmentLane == true},
+              "fsOutsideCallsEntryStorage": ${summary.functions["fs_outside"]?.callsRecordFragmentLane == true},
+              "containsOutputNonzeroGate": ${summary.containsOutputNonzeroGate}
+            }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-421",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-421-m60-f16-corriger-instrumentation-diagnostique-vrai-retour-wgsl",
+              "sourceFinding": "global/kanvas/findings/for-420-export-wgsl-final-confirme-hooks-diagnostiques-hors-chemin-rendered-return",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "verified-return-path-storage-nonzero",
+                "verified-return-path-storage-still-zero",
+                "verified-return-path-color-target-unavailable",
+                "diagnostic-return-path-instrumentation-unavailable"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "guards": {
+                "finalWgslDiagnostic": {"guardId": ${finalWgslSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${finalWgslSnapshot.enabled}, "enabledByDefault": false},
+                "shaderReturnStorageZeroCause": {"guardId": ${storageSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${storageSnapshot.enabled}, "enabledByDefault": false}
+              },
+              "structuralSummary": {
+                "diagnosticReturnPathVerified": $diagnosticReturnPathVerified,
+                "for419EntryStorageDisabled": $for419EntryStorageDisabled,
+                "storageSampleCount": ${storageSamples.size},
+                "storageObservedCount": $storageObservedCount,
+                "storageNonzeroSourceCount": $storageNonzeroCount,
+                "colorTargetSampleCount": ${colorTargetSamples.size},
+                "colorTargetNonzeroCount": $colorTargetNonzeroCount
+              },
+              "variants": [
+            $variantsJson
+              ],
+              "classificationReason": ${
+            when (classification) {
+                "verified-return-path-storage-nonzero" ->
+                    "FOR-421 verified that fs_inside/fs_outside return the instrumented application-point helper in the final WGSL and the FOR-419 storage side-channel now observes nonzero source values on the true rendered return path."
+                "verified-return-path-storage-still-zero" ->
+                    "FOR-421 verified the rendered return path instrumentation, but storage still did not observe nonzero source values while the color target stayed nonzero."
+                "verified-return-path-color-target-unavailable" ->
+                    "FOR-421 verified the rendered return path instrumentation, but the scratch color target evidence was unavailable or zero."
+                else ->
+                    "FOR-421 could not verify that both diagnostic entry points return the application-point helper in the final WGSL."
+            }.jsonString()
+        },
+              "nextStep": "Use the verified storage source values to compare against the scratch color target and isolate the remaining M60 F16 rendered-color mismatch without changing default rendering.",
+              "validationCommands": [
+                "rtk python3 scripts/validate_for421_m60_f16_aa_stencil_cover_verified_return_path_diagnostic.py",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverShaderReturnDiagnostic.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
     private data class M60F16FinalWgslFunctionSummary(
         val name: String,
         val present: Boolean,
@@ -2621,6 +2747,9 @@ class StrokeCapJoinSceneCaptureTest {
         MessageDigest.getInstance("SHA-256")
             .digest(value.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
+
+    private fun FloatArray?.isNonzeroFloatArray(): Boolean =
+        this != null && any { kotlin.math.abs(it) > 1.0e-9f }
 
     private fun m60F16FragmentLaneRuntimeSnapshotExportJson(
         snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,

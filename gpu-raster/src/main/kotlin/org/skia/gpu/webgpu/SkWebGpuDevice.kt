@@ -4747,24 +4747,56 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                 )
         }
         if (applicationPointDiagnostic || coverageStencilContributionMapDiagnostic || contributionIsolationDiagnostic) {
-            val boundedReturnBlock = """
-    let c = m60_f16_bounded_runtime_corrected_color(frag.xy);
-    let alpha = c.a * coverage;
-    return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));
-""".trimIndent()
-            wgsl = wgsl.replaceFirst(
-                boundedReturnBlock,
-                "    return m60_f16_application_point_output(frag.xy, 1u, coverage);",
-            )
-            wgsl = wgsl.replaceFirst(
-                boundedReturnBlock,
-                "    return m60_f16_application_point_output(frag.xy, 2u, coverage);",
-            )
+            wgsl = instrumentM60F16AaStencilCoverApplicationPointReturnPath(wgsl, cacheKey)
         }
         recordM60F16AaStencilCoverFinalWgslSource(cacheKey, wgsl)
         return context.device.createShaderModule(ShaderModuleDescriptor(code = wgsl)).also {
             shaderModuleCache[cacheKey] = it
         }
+    }
+
+    private fun instrumentM60F16AaStencilCoverApplicationPointReturnPath(
+        wgsl: String,
+        cacheKey: String,
+    ): String {
+        val boundedReturnBlock =
+            "    let c = m60_f16_bounded_runtime_corrected_color(frag.xy);\n" +
+                "    let alpha = c.a * coverage;\n" +
+                "    return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, " +
+                "vec4f(c.rgb * alpha, alpha));\n"
+        val occurrences = countM60F16AaStencilCoverOccurrences(wgsl, boundedReturnBlock)
+        check(occurrences == 2) {
+            "M60 F16 AA stencil-cover diagnostic return-path instrumentation expected 2 " +
+                "bounded return blocks for $cacheKey but found $occurrences"
+        }
+        var instrumented = wgsl.replaceFirst(
+            boundedReturnBlock,
+            "    return m60_f16_application_point_output(frag.xy, 1u, coverage);\n",
+        )
+        instrumented = instrumented.replaceFirst(
+            boundedReturnBlock,
+            "    return m60_f16_application_point_output(frag.xy, 2u, coverage);\n",
+        )
+        val instrumentedReturns = countM60F16AaStencilCoverOccurrences(
+            instrumented,
+            "return m60_f16_application_point_output(",
+        )
+        check(instrumentedReturns == 2) {
+            "M60 F16 AA stencil-cover diagnostic return-path instrumentation expected 2 " +
+                "instrumented returns for $cacheKey but found $instrumentedReturns"
+        }
+        return instrumented
+    }
+
+    private fun countM60F16AaStencilCoverOccurrences(haystack: String, needle: String): Int {
+        if (needle.isEmpty()) return 0
+        var count = 0
+        var index = haystack.indexOf(needle)
+        while (index >= 0) {
+            count += 1
+            index = haystack.indexOf(needle, startIndex = index + needle.length)
+        }
+        return count
     }
 
     private fun recordM60F16AaStencilCoverFinalWgslSource(cacheKey: String, wgsl: String) {
