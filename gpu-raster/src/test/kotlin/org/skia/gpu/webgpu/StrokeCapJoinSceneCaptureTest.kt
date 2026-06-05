@@ -449,6 +449,13 @@ class StrokeCapJoinSceneCaptureTest {
                 adapter = adapter,
             )
         }
+        if (System.getProperty(FOR409_SOURCE_OVER_REPLAY_PROPERTY, "false").toBoolean()) {
+            writeM60F16AaStencilCoverSourceOverReplay(
+                snapshot = aaStencilCoverContributionIsolationSnapshot,
+                postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
+                adapter = adapter,
+            )
+        }
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -1739,6 +1746,24 @@ class StrokeCapJoinSceneCaptureTest {
                 postPassSnapshot = postPassSnapshot,
                 boundedRuntimeCorrectionProbeEnabledForEvidenceRun =
                     boundedRuntimeCorrectionProbeEnabledForEvidenceRun,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun writeM60F16AaStencilCoverSourceOverReplay(
+        snapshot: SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/" +
+                "m60-f16-aa-stencil-cover-source-over-replay-for409",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-aa-stencil-cover-source-over-replay-for409.json").writeText(
+            m60F16AaStencilCoverSourceOverReplayJson(
+                snapshot = snapshot,
+                postPassSnapshot = postPassSnapshot,
                 adapter = adapter,
             ),
         )
@@ -3662,6 +3687,248 @@ class StrokeCapJoinSceneCaptureTest {
             }
         """.trimIndent()
     }
+
+    private fun m60F16AaStencilCoverSourceOverReplayJson(
+        snapshot: SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ): String {
+        val selected = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS
+        val samples = snapshot.events.flatMap { event -> event.samples.map { sample -> event to sample } }
+        val postPassByPixel = postPassSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to sample } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, values) -> values.lastOrNull { it.readbackAvailable } }
+        val pixelModels = selected.map { (x, y) ->
+            val pixelSamples = samples
+                .filter { (_, sample) -> sample.x == x && sample.y == y }
+                .sortedWith(
+                    compareBy<Pair<
+                        SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationEvent,
+                        SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSample,
+                        >> { it.first.drawIndex }.thenBy { it.second.subdrawOrdinal },
+                )
+            val observed = pixelSamples.filter { (_, sample) ->
+                sample.shaderObserved &&
+                    sample.sourceColorPremulRgbaFloat != null &&
+                    sample.coverageOrAaAlpha != null &&
+                    sample.blendMode == "kSrcOver"
+            }
+            SourceOverReplayPixelModel(
+                x = x,
+                y = y,
+                postPass = postPassByPixel[x to y],
+                subdraws = pixelSamples,
+                observedReplayInputCount = observed.size,
+                classification = when {
+                    observed.isEmpty() -> "source-over-replay-no-observed-subdraw"
+                    else -> "source-over-replay-insufficient-inputs"
+                },
+            )
+        }
+        val globalClassification = when {
+            pixelModels.any { it.classification == "source-over-replay-insufficient-inputs" } ->
+                "source-over-replay-insufficient-inputs"
+            pixelModels.all { it.classification == "source-over-replay-no-observed-subdraw" } ->
+                "source-over-replay-no-observed-subdraw"
+            else -> "source-over-replay-insufficient-inputs"
+        }
+        val selectedJson = pixelModels.joinToString(",\n") { model ->
+            sourceOverReplayPixelJson(model).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-409",
+              "sceneId": "m60-f16-aa-stencil-cover-source-over-replay-for409",
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-409-m60-f16-replay-diagnostique-source-over-hors-fixed-function-blend",
+              "sourceFinding": "global/kanvas/findings/for-408-ajoute-le-hook-per-subdraw-aa-stencil-cover-mais-confirme-le-blocage-framebuffer-m60-f16",
+              "sourceArtifacts": {
+                "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+                "for405": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-pass-readback-for405/m60-f16-aa-stencil-cover-post-pass-readback-for405.json",
+                "for406": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-post-pass-reference-comparison-for406/m60-f16-post-pass-reference-comparison-for406.json",
+                "for408": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-per-subdraw-hook-for408/m60-f16-aa-stencil-cover-per-subdraw-hook-for408.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "decision": "M60_F16_AA_STENCIL_COVER_SOURCE_OVER_REPLAY_RECORDED",
+              "classification": ${globalClassification.jsonString()},
+              "globalClassification": ${globalClassification.jsonString()},
+              "allowedClassifications": [
+                "source-over-replay-matches-post-pass",
+                "source-over-replay-differs-post-pass",
+                "source-over-replay-insufficient-inputs",
+                "source-over-replay-no-observed-subdraw"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "correctionAppliedByDefault": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "guards": {
+                "experimentalStrokeRenderer": {"guardId": "$EXPERIMENTAL_RENDER_PROPERTY", "enabledForEvidenceRun": true, "enabledByDefault": false},
+                "sourceOverReplay": {"guardId": "$FOR409_SOURCE_OVER_REPLAY_PROPERTY", "enabledForEvidenceRun": ${System.getProperty(FOR409_SOURCE_OVER_REPLAY_PROPERTY, "false").toBoolean()}, "enabledByDefault": false},
+                "contributionIsolation": {"guardId": "$FOR408_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_PROPERTY", "enabledForEvidenceRun": ${snapshot.enabled}, "enabledByDefault": false},
+                "postPassReadback": {"guardId": "$FOR404_AA_STENCIL_COVER_RUNTIME_HOOK_PROPERTY", "enabledForEvidenceRun": ${postPassSnapshot.enabled}, "enabledByDefault": false}
+              },
+              "scope": {
+                "scene": "M60 F16 bounded stroke cap/join target-colorspace blend",
+                "pixelSet": "FOR-401 selected residual coordinates",
+                "selectedPixelCount": ${selected.size},
+                "pipelineFamily": "StencilCoverAaPolygonDraw",
+                "blendMode": "kSrcOver",
+                "generalizedOutsideM60F16": false
+              },
+              "replayPolicy": {
+                "math": "premultiplied float SrcOver: out = src + dst * (1 - src.a)",
+                "subdrawOrder": "drawIndex ascending, then subdrawOrdinal ascending",
+                "initialStateRequirement": "exact destination premultiplied RGBA float before the first observed replay subdraw",
+                "initialStateAvailable": false,
+                "insufficientInputClassification": "source-over-replay-insufficient-inputs",
+                "noSyntheticInitialState": true
+              },
+              "sourceContext": {
+                "for408Classification": "per-subdraw-framebuffer-state-unavailable",
+                "for408RuntimeApi": "SkWebGpuDevice.m60F16AaStencilCoverContributionIsolationSnapshot()",
+                "for408ObservedSubdrawCount": ${pixelModels.sumOf { it.observedReplayInputCount }},
+                "for405RuntimeApi": "SkWebGpuDevice.m60F16AaStencilCoverPostPassReadbackSnapshot()",
+                "for405PostPassObservedPixelCount": ${pixelModels.count { it.postPass != null }},
+                "for400EvidencePolicy": "context-only-not-direct-write-proof",
+                "for400UsedAsDirectProof": false
+              },
+              "replaySummary": {
+                "selectedPixelCount": ${pixelModels.size},
+                "sourceOverReplayMatchesPostPassCount": ${pixelModels.count { it.classification == "source-over-replay-matches-post-pass" }},
+                "sourceOverReplayDiffersPostPassCount": ${pixelModels.count { it.classification == "source-over-replay-differs-post-pass" }},
+                "sourceOverReplayInsufficientInputsCount": ${pixelModels.count { it.classification == "source-over-replay-insufficient-inputs" }},
+                "sourceOverReplayNoObservedSubdrawCount": ${pixelModels.count { it.classification == "source-over-replay-no-observed-subdraw" }},
+                "observedReplayInputSubdrawCount": ${pixelModels.sumOf { it.observedReplayInputCount }},
+                "usedSubdrawCount": 0,
+                "excludedSubdrawCount": ${pixelModels.sumOf { it.subdraws.size }},
+                "postPassObservedPixelCount": ${pixelModels.count { it.postPass != null }},
+                "initialStateMissingPixelCount": ${pixelModels.count { it.observedReplayInputCount > 0 }}
+              },
+              "selectedPixels": [
+            $selectedJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "correctionApplied": false,
+                "for400UsedAsDirectProof": false,
+                "generalizedOutsideM60F16": false
+              },
+              "classificationReason": "FOR-409 can order FOR-408 observed source/coverage subdraw inputs and compare against FOR-405 post-pass colors, but the exact destination premultiplied RGBA float before the first observed subdraw is still unavailable. The diagnostic therefore refuses to synthesize an initial state and classifies the replay as insufficient inputs.",
+              "validationCommands": [
+                "rtk python3 scripts/validate_for409_m60_f16_aa_stencil_cover_source_over_replay.py",
+                "rtk python3 scripts/validate_for408_m60_f16_aa_stencil_cover_per_subdraw_hook.py",
+                "rtk python3 scripts/validate_for407_m60_f16_aa_stencil_cover_contribution_isolation.py",
+                "rtk python3 scripts/validate_for406_m60_f16_post_pass_reference_comparison.py",
+                "rtk python3 scripts/validate_for405_m60_f16_aa_stencil_cover_post_pass_readback.py",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverSourceOverReplay.enabled=true -Dkanvas.webgpu.m60F16DirectPassWriteHook.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverContributionIsolation.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun sourceOverReplayPixelJson(model: SourceOverReplayPixelModel): String {
+        val usedJson = model.subdraws.filter { (_, sample) ->
+            model.classification in setOf(
+                "source-over-replay-matches-post-pass",
+                "source-over-replay-differs-post-pass",
+            ) && sample.shaderObserved
+        }.joinToString(",\n") { (event, sample) ->
+            sourceOverReplaySubdrawJson(event, sample, used = true, reason = null).prependIndent("        ")
+        }
+        val excludedJson = model.subdraws.joinToString(",\n") { (event, sample) ->
+            val reason = when {
+                !sample.shaderObserved -> "subdraw-not-observed-by-for408-hook"
+                sample.sourceColorPremulRgbaFloat == null -> "source-color-premul-missing"
+                sample.coverageOrAaAlpha == null -> "coverage-or-aa-alpha-missing"
+                sample.blendMode != "kSrcOver" -> "non-source-over-blend-mode"
+                else -> "initial-state-before-first-observed-subdraw-unavailable"
+            }
+            sourceOverReplaySubdrawJson(event, sample, used = false, reason = reason).prependIndent("        ")
+        }
+        val initialMissingReason = if (model.observedReplayInputCount > 0) {
+            "source-over-replay-initial-state-unavailable"
+        } else {
+            "source-over-replay-no-observed-subdraw"
+        }
+        return """
+            {
+              "x": ${model.x},
+              "y": ${model.y},
+              "classification": ${model.classification.jsonString()},
+              "initialState": {
+                "available": false,
+                "rgbaFloat": null,
+                "source": null,
+                "missingReason": ${initialMissingReason.jsonString()},
+                "verification": "FOR-408 does not expose dstBeforeRgbaFloat for the first observed subdraw; FOR-405 only exposes post-pass destination after the AA stencil-cover pass."
+              },
+              "observedSubdrawCount": ${model.observedReplayInputCount},
+              "usedSubdrawCount": 0,
+              "excludedSubdrawCount": ${model.subdraws.size},
+              "replayOrder": "drawIndex-then-subdrawOrdinal",
+              "replayInputsSufficient": false,
+              "replayedRgbaFloat": null,
+              "postPassObservedRgbaFloat": ${model.postPass?.observedRgbaFloat.floatArrayOrNullJson()},
+              "postPassObservedRgba8": ${model.postPass?.observedRgba8.intArrayOrNullJson()},
+              "replayVsPostPassDelta": null,
+              "subdrawsUsed": [
+            $usedJson
+              ],
+              "subdrawsExcluded": [
+            $excludedJson
+              ],
+              "classificationReason": "FOR-408 provides observed source color and coverage for this pixel, but FOR-409 has no explicit initial destination state before the first observed subdraw."
+            }
+        """.trimIndent()
+    }
+
+    private fun sourceOverReplaySubdrawJson(
+        event: SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationEvent,
+        sample: SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSample,
+        used: Boolean,
+        reason: String?,
+    ): String = """
+        {
+          "drawIndex": ${event.drawIndex},
+          "subdrawOrdinal": ${sample.subdrawOrdinal},
+          "subdrawRole": ${sample.subdrawRole.jsonString()},
+          "pipelineFamily": ${event.pipelineFamily.jsonString()},
+          "blendMode": ${sample.blendMode.jsonString()},
+          "shaderObserved": ${sample.shaderObserved},
+          "sourceColorPremulRgbaFloat": ${sample.sourceColorPremulRgbaFloat.floatArrayOrNullJson()},
+          "coverageOrAaAlpha": ${sample.coverageOrAaAlpha?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+          "usedForReplay": $used,
+          "excludedReason": ${reason?.jsonString() ?: "null"}
+        }
+    """.trimIndent()
+
+    private data class SourceOverReplayPixelModel(
+        val x: Int,
+        val y: Int,
+        val postPass: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSample?,
+        val subdraws: List<
+            Pair<
+                SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationEvent,
+                SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSample,
+                >,
+            >,
+        val observedReplayInputCount: Int,
+        val classification: String,
+    )
 
     private fun FloatArray?.floatArrayOrNullJson(): String =
         this?.floatJson() ?: "null"
@@ -10501,6 +10768,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16DirectPassWriteHook.enabled"
         private const val FOR408_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverContributionIsolation.enabled"
+        private const val FOR409_SOURCE_OVER_REPLAY_PROPERTY =
+            "kanvas.webgpu.m60F16AaStencilCoverSourceOverReplay.enabled"
         private const val FOR401_FINAL_RESIDUAL_ORIGIN_MAP_SAMPLE_LIMIT = 16
         private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
