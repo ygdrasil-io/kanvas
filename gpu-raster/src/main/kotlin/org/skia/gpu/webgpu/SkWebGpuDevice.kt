@@ -186,6 +186,8 @@ private const val WEBGPU_COVERAGE_SELECTOR_FLAG: String = "kanvas.webgpu.coverag
 private const val WEBGPU_COVERAGE_SELECTOR_DISABLED_REASON: String = "coverage.webgpu-selector-disabled"
 private const val WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG: String =
     "kanvas.webgpu.strokeCapJoin.experimentalRender"
+private const val WEBGPU_M60_F16_SOURCE_COLOR_CORRECTION_PROBE_FLAG: String =
+    "kanvas.webgpu.m60F16SourceColorCorrectionProbe.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -1060,6 +1062,13 @@ public class SkWebGpuDevice(
          * are masked off, so the slot is inert during stencil-write.
          */
         val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
+        /**
+         * FOR-380 diagnostic correction. The bounded M60 F16 stroke
+         * cap/join probe keeps this source colour in the direct
+         * source/recompose-on-white domain instead of applying the
+         * target-colour blend transform before coverage.
+         */
+        val m60F16SourceColorCorrectionProbe: Boolean = false,
     ) : PendingDraw
 
     /**
@@ -8656,6 +8665,25 @@ public class SkWebGpuDevice(
     private var activeDashIntervalCountForPathAaDiagnostics: Int? = null
     private var activeStrokeStyleForPathAaDiagnostics: StrokeStyleDiagnostics? = null
 
+    private fun m60F16SourceColorCorrectionProbeEnabled(paint: SkPaint): Boolean {
+        val style = activeStrokeStyleForPathAaDiagnostics ?: return false
+        if (!targetColorSpaceBlend) return false
+        if (intermediateFormat != GPUTextureFormat.RGBA16Float) return false
+        if (!System.getProperty(WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG, "false").toBoolean()) return false
+        if (!System.getProperty(WEBGPU_M60_F16_SOURCE_COLOR_CORRECTION_PROBE_FLAG, "false").toBoolean()) return false
+        if (paint.blendMode != SkBlendMode.kSrcOver) return false
+        if (paint.shader != null || paint.colorFilter != null || paint.maskFilter != null || paint.pathEffect != null) {
+            return false
+        }
+        if (kotlin.math.abs(style.strokeWidth - 10f) > 0.001f) return false
+        return when (style.cap to style.join) {
+            "butt" to "bevel",
+            "round" to "round",
+            "square" to "bevel" -> true
+            else -> false
+        }
+    }
+
     override fun setActiveClipShape(shape: SkClipShape?) {
         activeClipShape = shape
     }
@@ -11425,6 +11453,7 @@ public class SkWebGpuDevice(
                         mode = paint.blendMode,
                         clipShape = activeClipShape,
                         colorFilterPacked = polygonColorFilterPacked,
+                        m60F16SourceColorCorrectionProbe = m60F16SourceColorCorrectionProbeEnabled(paint),
                     ),
                 )
                 return
@@ -11663,6 +11692,7 @@ public class SkWebGpuDevice(
                             mode = paint.blendMode,
                             clipShape = activeClipShape,
                             colorFilterPacked = polygonColorFilterPacked,
+                            m60F16SourceColorCorrectionProbe = m60F16SourceColorCorrectionProbeEnabled(paint),
                         ),
                     )
                 }
@@ -15715,7 +15745,7 @@ public class SkWebGpuDevice(
         // 4176 (= float index 12 + MAX_AA_EDGES * 4 + 8).
         val colorFilterBase = 12 + MAX_AA_EDGES * 4 + 8
         System.arraycopy(d.colorFilterPacked, 0, packed, colorFilterBase, 24)
-        packed[colorFilterBase + 2] = targetColorSpaceBlendFlag()
+        packed[colorFilterBase + 2] = if (d.m60F16SourceColorCorrectionProbe) 0f else targetColorSpaceBlendFlag()
         context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
         val bindGroup = context.device.createBindGroup(
             BindGroupDescriptor(
