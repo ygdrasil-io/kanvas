@@ -216,6 +216,8 @@ private const val WEBGPU_M60_F16_AA_STENCIL_COVER_STORAGE_COLOR_TARGET_COMPARISO
     "kanvas.webgpu.m60F16AaStencilCoverStorageColorTargetComparison.enabled"
 private const val WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_STORAGE_ZERO_CAUSE_FLAG: String =
     "kanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled"
+private const val WEBGPU_M60_F16_AA_STENCIL_COVER_FINAL_WGSL_DIAGNOSTIC_FLAG: String =
+    "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -648,6 +650,24 @@ public class SkWebGpuDevice(
         val colorTargetEvents: List<M60F16AaStencilCoverIsolatedColorTargetEvent>,
     )
 
+    public data class M60F16AaStencilCoverFinalWgslDiagnosticSnapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val requestedBoundary: String,
+        val observedBoundary: String,
+        val sourceOwner: String,
+        val variants: List<M60F16AaStencilCoverFinalWgslVariant>,
+    )
+
+    public data class M60F16AaStencilCoverFinalWgslVariant(
+        val logicalName: String,
+        val cacheKey: String,
+        val shaderLabel: String,
+        val source: String,
+        val sourceSharedWith: String?,
+        val intendedUse: String,
+    )
+
     public data class M60F16AaStencilCoverContributionIsolationSnapshot(
         val propertyName: String,
         val enabled: Boolean,
@@ -882,6 +902,11 @@ public class SkWebGpuDevice(
             WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_STORAGE_ZERO_CAUSE_FLAG,
             "false",
         ).toBoolean()
+    private val m60F16AaStencilCoverFinalWgslDiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_AA_STENCIL_COVER_FINAL_WGSL_DIAGNOSTIC_FLAG,
+            "false",
+        ).toBoolean()
     private val rawRectUniformColorWrites: MutableList<RawRectUniformColorWrite> = mutableListOf()
     private val rawRgba8TextureUploads: MutableList<RawRgba8TextureUpload> = mutableListOf()
     private val outputReadbackBoundarySamples: MutableList<OutputReadbackSample> = mutableListOf()
@@ -920,6 +945,7 @@ public class SkWebGpuDevice(
         MutableList<M60F16AaStencilCoverShaderReturnDiagnosticEvent> = mutableListOf()
     private val m60F16AaStencilCoverShaderReturnStorageZeroCauseColorEvents:
         MutableList<M60F16AaStencilCoverIsolatedColorTargetEvent> = mutableListOf()
+    private val m60F16AaStencilCoverFinalWgslSources: MutableMap<String, String> = linkedMapOf()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
         PipelineKeyedCache("generated shader modules")
@@ -1132,6 +1158,66 @@ public class SkWebGpuDevice(
             storageEvents = m60F16AaStencilCoverShaderReturnStorageZeroCauseStorageEvents.toList(),
             colorTargetEvents = m60F16AaStencilCoverShaderReturnStorageZeroCauseColorEvents.toList(),
         )
+
+    public fun m60F16AaStencilCoverFinalWgslDiagnosticSnapshot():
+        M60F16AaStencilCoverFinalWgslDiagnosticSnapshot {
+        ensureM60F16AaStencilCoverFinalWgslDiagnosticSources()
+        val sources = m60F16AaStencilCoverFinalWgslSources
+        fun variant(
+            logicalName: String,
+            cacheKey: String,
+            shaderLabel: String,
+            sourceSharedWith: String?,
+            intendedUse: String,
+        ): M60F16AaStencilCoverFinalWgslVariant =
+            M60F16AaStencilCoverFinalWgslVariant(
+                logicalName = logicalName,
+                cacheKey = cacheKey,
+                shaderLabel = shaderLabel,
+                source = sources[cacheKey].orEmpty(),
+                sourceSharedWith = sourceSharedWith,
+                intendedUse = intendedUse,
+            )
+        return M60F16AaStencilCoverFinalWgslDiagnosticSnapshot(
+            propertyName = WEBGPU_M60_F16_AA_STENCIL_COVER_FINAL_WGSL_DIAGNOSTIC_FLAG,
+            enabled = m60F16AaStencilCoverFinalWgslDiagnosticsEnabled,
+            requestedBoundary = "final WGSL source immediately before createShaderModule",
+            observedBoundary =
+                "SkWebGpuDevice.loadM60F16AaStencilCoverProbeShader records final in-memory WGSL before module creation",
+            sourceOwner = "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+            variants = listOf(
+                variant(
+                    logicalName = "normal-bounded-runtime-correction",
+                    cacheKey = "experimental://m60-f16-aa-stencil-cover-bounded-runtime-correction",
+                    shaderLabel = "normal M60 F16 bounded runtime correction AA stencil-cover",
+                    sourceSharedWith = null,
+                    intendedUse = "default bounded correction render shader when the opt-in correction probe is enabled",
+                ),
+                variant(
+                    logicalName = "for412-shader-return-storage",
+                    cacheKey = "diagnostic://m60-f16-aa-stencil-cover-shader-return-for412",
+                    shaderLabel = M60_F16_AA_STENCIL_COVER_SHADER_RETURN_DIAGNOSTIC_SHADER,
+                    sourceSharedWith = null,
+                    intendedUse = "FOR-412 shader-return storage diagnostic",
+                ),
+                variant(
+                    logicalName = "for418-storage-vs-color-target",
+                    cacheKey = "diagnostic://m60-f16-aa-stencil-cover-shader-return-for412",
+                    shaderLabel = M60_F16_AA_STENCIL_COVER_SHADER_RETURN_DIAGNOSTIC_SHADER,
+                    sourceSharedWith = "for412-shader-return-storage",
+                    intendedUse =
+                        "FOR-418 uses the FOR-412 final shader module in a no-blend scratch color-target comparison pass",
+                ),
+                variant(
+                    logicalName = "for419-storage-zero-cause",
+                    cacheKey = "diagnostic://m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419",
+                    shaderLabel = M60_F16_AA_STENCIL_COVER_SHADER_RETURN_STORAGE_ZERO_CAUSE_SHADER,
+                    sourceSharedWith = null,
+                    intendedUse = "FOR-419 nonzero-preserving shader-return storage zero-cause diagnostic",
+                ),
+            ),
+        )
+    }
 
     public fun buildPipelineKeyIdentityForDiagnostics(axes: Map<String, String>): PipelineKey =
         pipelineKeyIdentity(
@@ -4675,9 +4761,23 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                 "    return m60_f16_application_point_output(frag.xy, 2u, coverage);",
             )
         }
+        recordM60F16AaStencilCoverFinalWgslSource(cacheKey, wgsl)
         return context.device.createShaderModule(ShaderModuleDescriptor(code = wgsl)).also {
             shaderModuleCache[cacheKey] = it
         }
+    }
+
+    private fun recordM60F16AaStencilCoverFinalWgslSource(cacheKey: String, wgsl: String) {
+        if (m60F16AaStencilCoverFinalWgslDiagnosticsEnabled) {
+            m60F16AaStencilCoverFinalWgslSources[cacheKey] = wgsl
+        }
+    }
+
+    private fun ensureM60F16AaStencilCoverFinalWgslDiagnosticSources() {
+        if (!m60F16AaStencilCoverFinalWgslDiagnosticsEnabled) return
+        m60F16BoundedRuntimeCorrectionShader
+        m60F16AaStencilCoverShaderReturnDiagnosticShader
+        m60F16AaStencilCoverShaderReturnStorageZeroCauseShader
     }
 
     private fun loadM60F16FragmentLaneDiagnosticShader(): GPUShaderModule =

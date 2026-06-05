@@ -1,6 +1,7 @@
 package org.skia.gpu.webgpu
 
 import java.io.File
+import java.security.MessageDigest
 import java.util.Locale
 import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SK_ColorBLUE
@@ -225,6 +226,8 @@ class StrokeCapJoinSceneCaptureTest {
                         contributionIsolationResult.aaStencilCoverStorageColorTargetComparisonSnapshot,
                     aaStencilCoverShaderReturnStorageZeroCauseSnapshot =
                         contributionIsolationResult.aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                    aaStencilCoverFinalWgslDiagnosticSnapshot =
+                        contributionIsolationResult.aaStencilCoverFinalWgslDiagnosticSnapshot,
                     aaStencilCoverContributionIsolationPostPassSnapshot =
                         contributionIsolationResult.aaStencilCoverPostPassReadbackSnapshot,
                     aaStencilCoverContributionIsolationBoundedRuntimeCorrectionProbe = true,
@@ -285,6 +288,8 @@ class StrokeCapJoinSceneCaptureTest {
             SkWebGpuDevice.M60F16AaStencilCoverStorageColorTargetComparisonSnapshot,
         aaStencilCoverShaderReturnStorageZeroCauseSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        aaStencilCoverFinalWgslDiagnosticSnapshot:
+            SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
         aaStencilCoverContributionIsolationPostPassSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
         aaStencilCoverContributionIsolationBoundedRuntimeCorrectionProbe: Boolean,
@@ -520,6 +525,12 @@ class StrokeCapJoinSceneCaptureTest {
         if (aaStencilCoverShaderReturnStorageZeroCauseSnapshot.enabled) {
             writeM60F16AaStencilCoverShaderReturnStorageZeroCause(
                 snapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                adapter = adapter,
+            )
+        }
+        if (aaStencilCoverFinalWgslDiagnosticSnapshot.enabled) {
+            writeM60F16AaStencilCoverFinalWgslDiagnostic(
+                snapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
                 adapter = adapter,
             )
         }
@@ -2268,6 +2279,348 @@ class StrokeCapJoinSceneCaptureTest {
         }
         """.trimIndent()
     }
+
+    private fun writeM60F16AaStencilCoverFinalWgslDiagnostic(
+        snapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/" +
+                "m60-f16-aa-stencil-cover-final-wgsl-diagnostic-for420",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-aa-stencil-cover-final-wgsl-diagnostic-for420.json").writeText(
+            m60F16AaStencilCoverFinalWgslDiagnosticJson(snapshot, adapter),
+        )
+    }
+
+    private fun m60F16AaStencilCoverFinalWgslDiagnosticJson(
+        snapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        adapter: String,
+    ): String {
+        val summaries = snapshot.variants.map { m60F16FinalWgslVariantSummary(it) }
+        val normal = summaries.firstOrNull { it.logicalName == "normal-bounded-runtime-correction" }
+        val diagnosticVariants = summaries.filter { it.logicalName != "normal-bounded-runtime-correction" }
+        val missingSourceCount = summaries.count { it.sourceHash.isEmpty() }
+        val fsEntryPointsPresent = summaries.all { it.functions["fs_inside"]?.present == true } &&
+            summaries.all { it.functions["fs_outside"]?.present == true }
+        val shaderReturnSharedByFor418 = summaries
+            .firstOrNull { it.logicalName == "for418-storage-vs-color-target" }
+            ?.sourceSharedWith == "for412-shader-return-storage"
+        val applicationPointReturnedByDiagnostics = diagnosticVariants.all { summary ->
+            val inside = summary.functions["fs_inside"]
+            val outside = summary.functions["fs_outside"]
+            inside?.returnsApplicationPointOutput == true && outside?.returnsApplicationPointOutput == true
+        }
+        val classification = when {
+            missingSourceCount > 0 -> "wgsl-final-source-export-unavailable"
+            !fsEntryPointsPresent -> "wgsl-final-source-entrypoint-missing"
+            normal == null -> "wgsl-final-source-export-unavailable"
+            applicationPointReturnedByDiagnostics && shaderReturnSharedByFor418 ->
+                "diagnostic-final-wgsl-hooks-replace-render-return-path"
+            else -> "diagnostic-final-wgsl-hooks-not-on-rendered-return-path"
+        }
+        val variantsJson = summaries.joinToString(",\n") { summary ->
+            m60F16FinalWgslVariantSummaryJson(summary).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-420",
+              "sceneId": "m60-f16-aa-stencil-cover-final-wgsl-diagnostic-for420",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-420-m60-f16-exporter-wgsl-final-diagnostique-et-comparer-fs-inside-outside",
+              "sourceFinding": "global/kanvas/findings/for-419-diagnostique-le-hook-storage-shader-return-hors-chemin-return-reel",
+              "sourceArtifacts": {
+                "for412": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412.json",
+                "for418": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-storage-vs-color-target-for418/m60-f16-aa-stencil-cover-storage-vs-color-target-for418.json",
+                "for419": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419/m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": ${snapshot.sourceOwner.jsonString()},
+              "decision": "M60_F16_AA_STENCIL_COVER_FINAL_WGSL_DIAGNOSTIC_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "diagnostic-final-wgsl-hooks-replace-render-return-path",
+                "diagnostic-final-wgsl-hooks-not-on-rendered-return-path",
+                "wgsl-final-source-entrypoint-missing",
+                "wgsl-final-source-export-unavailable"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "correctionAppliedByDefault": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "guards": {
+                "finalWgslDiagnostic": {"guardId": ${snapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${snapshot.enabled}, "enabledByDefault": false},
+                "shaderReturnDiagnostic": {"guardId": "$FOR412_SHADER_RETURN_DIAGNOSTIC_PROPERTY", "enabledByDefault": false},
+                "storageColorTargetComparison": {"guardId": "$FOR418_STORAGE_COLOR_TARGET_COMPARISON_PROPERTY", "enabledByDefault": false},
+                "shaderReturnStorageZeroCause": {"guardId": "$FOR419_SHADER_RETURN_STORAGE_ZERO_CAUSE_PROPERTY", "enabledByDefault": false}
+              },
+              "runtimeSnapshot": {
+                "api": "SkWebGpuDevice.m60F16AaStencilCoverFinalWgslDiagnosticSnapshot()",
+                "propertyName": ${snapshot.propertyName.jsonString()},
+                "enabled": ${snapshot.enabled},
+                "requestedBoundary": ${snapshot.requestedBoundary.jsonString()},
+                "observedBoundary": ${snapshot.observedBoundary.jsonString()},
+                "variantCount": ${summaries.size},
+                "missingSourceCount": $missingSourceCount
+              },
+              "comparisonPolicy": {
+                "hashAlgorithm": "SHA-256 over exact final WGSL String passed to ShaderModuleDescriptor(code = ...)",
+                "sourceDumpPolicy": "No full WGSL dump is stored; each function summary is capped to bounded normalized lines.",
+                "entryPointsCompared": ["fs_inside", "fs_outside"],
+                "hooksCompared": [
+                  "m60_f16_record_fragment_lane",
+                  "m60_f16_record_application_point",
+                  "m60_f16_application_point_output",
+                  "return @location(0)"
+                ]
+              },
+              "structuralSummary": {
+                "for418UsesFor412ShaderSource": $shaderReturnSharedByFor418,
+                "allVariantsHaveFsInsideAndFsOutside": $fsEntryPointsPresent,
+                "diagnosticVariantsReturnApplicationPointOutput": $applicationPointReturnedByDiagnostics,
+                "for419HasEntryStorageWrite": ${
+            summaries.firstOrNull { it.logicalName == "for419-storage-zero-cause" }
+                ?.functions
+                ?.values
+                ?.any { it.callsRecordFragmentLane } ?: false
+        }
+              },
+              "variants": [
+            $variantsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "renderingFixApplied": false,
+                "wgsl4kModified": false,
+                "fullWgslDumpStored": false
+              },
+              "classificationReason": ${
+            when (classification) {
+                "diagnostic-final-wgsl-hooks-replace-render-return-path" ->
+                    "The final WGSL given to createShaderModule shows FOR-412/FOR-418/FOR-419 fs_inside and fs_outside returning m60_f16_application_point_output; FOR-418 shares the FOR-412 shader source, and FOR-419 removes the entry storage hook while keeping the application-point return substitution."
+                "diagnostic-final-wgsl-hooks-not-on-rendered-return-path" ->
+                    "The final WGSL was exported, and the diagnostic helper functions exist, but fs_inside/fs_outside still return the normal bounded-runtime expression instead of m60_f16_application_point_output; the application-point storage hook is therefore not on the rendered @location(0) path."
+                "wgsl-final-source-entrypoint-missing" ->
+                    "At least one exported final WGSL source lacks fs_inside or fs_outside."
+                else ->
+                    "At least one expected final WGSL source was not available in the opt-in export snapshot."
+            }.jsonString()
+        },
+              "nextStep": "Use the final-source proof to focus the next ticket on why the application-point storage side-channel still does not observe records at runtime, without changing M60 F16 rendering.",
+              "validationCommands": [
+                "rtk python3 scripts/validate_for420_m60_f16_aa_stencil_cover_final_wgsl_diagnostic.py",
+                "rtk python3 scripts/validate_for419_m60_f16_aa_stencil_cover_shader_return_storage_zero_cause.py",
+                "rtk python3 scripts/validate_for418_m60_f16_aa_stencil_cover_storage_vs_color_target.py",
+                "rtk python3 scripts/validate_for417_m60_f16_aa_stencil_cover_isolated_color_target_runtime.py",
+                "rtk python3 scripts/validate_for416_m60_f16_aa_stencil_cover_isolated_color_target.py",
+                "rtk python3 scripts/validate_for415_m60_f16_aa_stencil_cover_blend_render_pass_state.py",
+                "rtk python3 scripts/validate_for414_m60_f16_aa_stencil_cover_post_draw_readback.py",
+                "rtk python3 scripts/validate_for413_m60_f16_aa_stencil_cover_draw_transition_correlation.py",
+                "rtk python3 scripts/validate_for412_m60_f16_aa_stencil_cover_shader_return_diagnostic.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for420-pycache python3 -m py_compile scripts/validate_for420_m60_f16_aa_stencil_cover_final_wgsl_diagnostic.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private data class M60F16FinalWgslFunctionSummary(
+        val name: String,
+        val present: Boolean,
+        val signatureHasLocationReturn: Boolean,
+        val callsRecordFragmentLane: Boolean,
+        val callsRecordApplicationPoint: Boolean,
+        val callsApplicationPointOutput: Boolean,
+        val returnsApplicationPointOutput: Boolean,
+        val returnStatementCount: Int,
+        val orderedMarkers: List<String>,
+        val boundedLines: List<String>,
+    )
+
+    private data class M60F16FinalWgslVariantSummary(
+        val logicalName: String,
+        val cacheKey: String,
+        val shaderLabel: String,
+        val sourceHash: String,
+        val sourceLength: Int,
+        val sourceSharedWith: String?,
+        val intendedUse: String,
+        val functions: Map<String, M60F16FinalWgslFunctionSummary>,
+        val applicationPointOutput: M60F16FinalWgslFunctionSummary,
+        val containsRecordApplicationPointFunction: Boolean,
+        val containsRecordFragmentLaneFunction: Boolean,
+        val containsOutputNonzeroGate: Boolean,
+        val divergenceFromNormal: String,
+    )
+
+    private fun m60F16FinalWgslVariantSummary(
+        variant: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslVariant,
+    ): M60F16FinalWgslVariantSummary {
+        val source = variant.source
+        val fsInside = m60F16FinalWgslFunctionSummary(source, "fs_inside")
+        val fsOutside = m60F16FinalWgslFunctionSummary(source, "fs_outside")
+        val applicationPointOutput = m60F16FinalWgslFunctionSummary(source, "m60_f16_application_point_output")
+        val containsRecordApplicationPointFunction = source.contains("fn m60_f16_record_application_point(")
+        val containsRecordFragmentLaneFunction = source.contains("fn m60_f16_record_fragment_lane(")
+        val containsOutputNonzeroGate = source.contains("let output_nonzero")
+        val divergence = when {
+            variant.source.isEmpty() -> "source-unavailable"
+            variant.logicalName == "normal-bounded-runtime-correction" -> "baseline-normal-bounded-runtime-correction"
+            variant.sourceSharedWith == "for412-shader-return-storage" ->
+                "shares-for412-shader-return-source; pipeline target differs in FOR-418"
+            containsOutputNonzeroGate && fsInside.returnsApplicationPointOutput && fsOutside.returnsApplicationPointOutput ->
+                "removes-entry-storage-hook-and-keeps-application-point-return-substitution"
+            fsInside.returnsApplicationPointOutput && fsOutside.returnsApplicationPointOutput ->
+                "replaces-normal-return-with-application-point-storage-hook"
+            else -> "diagnostic-return-path-not-replaced"
+        }
+        return M60F16FinalWgslVariantSummary(
+            logicalName = variant.logicalName,
+            cacheKey = variant.cacheKey,
+            shaderLabel = variant.shaderLabel,
+            sourceHash = if (source.isEmpty()) "" else sha256Hex(source),
+            sourceLength = source.length,
+            sourceSharedWith = variant.sourceSharedWith,
+            intendedUse = variant.intendedUse,
+            functions = linkedMapOf(
+                "fs_inside" to fsInside,
+                "fs_outside" to fsOutside,
+            ),
+            applicationPointOutput = applicationPointOutput,
+            containsRecordApplicationPointFunction = containsRecordApplicationPointFunction,
+            containsRecordFragmentLaneFunction = containsRecordFragmentLaneFunction,
+            containsOutputNonzeroGate = containsOutputNonzeroGate,
+            divergenceFromNormal = divergence,
+        )
+    }
+
+    private fun m60F16FinalWgslFunctionSummary(
+        source: String,
+        functionName: String,
+    ): M60F16FinalWgslFunctionSummary {
+        val function = extractWgslFunction(source, functionName)
+        val text = function?.body.orEmpty()
+        val signature = function?.signature.orEmpty()
+        val markers = listOf(
+            "m60_f16_record_fragment_lane" to text.indexOf("m60_f16_record_fragment_lane"),
+            "m60_f16_bounded_runtime_corrected_color" to text.indexOf("m60_f16_bounded_runtime_corrected_color"),
+            "m60_f16_quantize_after_bounded_runtime_correction" to
+                text.indexOf("m60_f16_quantize_after_bounded_runtime_correction"),
+            "m60_f16_application_point_output" to text.indexOf("m60_f16_application_point_output"),
+            "m60_f16_record_application_point" to text.indexOf("m60_f16_record_application_point"),
+            "return" to text.indexOf("return"),
+        ).filter { it.second >= 0 }
+            .sortedBy { it.second }
+            .map { it.first }
+        val boundedLines = text
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .take(18)
+            .toList()
+        return M60F16FinalWgslFunctionSummary(
+            name = functionName,
+            present = function != null,
+            signatureHasLocationReturn = signature.contains("-> @location(0) vec4f"),
+            callsRecordFragmentLane = text.contains("m60_f16_record_fragment_lane("),
+            callsRecordApplicationPoint = text.contains("m60_f16_record_application_point("),
+            callsApplicationPointOutput = text.contains("m60_f16_application_point_output("),
+            returnsApplicationPointOutput = text.contains("return m60_f16_application_point_output("),
+            returnStatementCount = Regex("\\breturn\\b").findAll(text).count(),
+            orderedMarkers = markers,
+            boundedLines = boundedLines,
+        )
+    }
+
+    private data class WgslFunctionSlice(
+        val signature: String,
+        val body: String,
+    )
+
+    private fun extractWgslFunction(source: String, functionName: String): WgslFunctionSlice? {
+        val marker = "fn $functionName"
+        val start = source.indexOf(marker)
+        if (start < 0) return null
+        val braceStart = source.indexOf('{', start)
+        if (braceStart < 0) return null
+        var depth = 0
+        var end = braceStart
+        while (end < source.length) {
+            when (source[end]) {
+                '{' -> depth += 1
+                '}' -> {
+                    depth -= 1
+                    if (depth == 0) {
+                        val signature = source.substring(start, braceStart).trim()
+                        val body = source.substring(braceStart + 1, end)
+                        return WgslFunctionSlice(signature, body)
+                    }
+                }
+            }
+            end += 1
+        }
+        return null
+    }
+
+    private fun m60F16FinalWgslVariantSummaryJson(summary: M60F16FinalWgslVariantSummary): String {
+        val functionsJson = summary.functions.values.joinToString(",\n") { function ->
+            m60F16FinalWgslFunctionSummaryJson(function).prependIndent("      ")
+        }
+        return """
+            {
+              "logicalName": ${summary.logicalName.jsonString()},
+              "cacheKey": ${summary.cacheKey.jsonString()},
+              "shaderLabel": ${summary.shaderLabel.jsonString()},
+              "sourceHashSha256": ${summary.sourceHash.jsonString()},
+              "sourceLengthBytes": ${summary.sourceLength},
+              "sourceSharedWith": ${summary.sourceSharedWith?.jsonString() ?: "null"},
+              "intendedUse": ${summary.intendedUse.jsonString()},
+              "containsRecordApplicationPointFunction": ${summary.containsRecordApplicationPointFunction},
+              "containsRecordFragmentLaneFunction": ${summary.containsRecordFragmentLaneFunction},
+              "containsOutputNonzeroGate": ${summary.containsOutputNonzeroGate},
+              "divergenceFromNormal": ${summary.divergenceFromNormal.jsonString()},
+              "functions": [
+            $functionsJson
+              ],
+              "applicationPointOutput": ${m60F16FinalWgslFunctionSummaryJson(summary.applicationPointOutput)}
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16FinalWgslFunctionSummaryJson(summary: M60F16FinalWgslFunctionSummary): String {
+        val markersJson = summary.orderedMarkers.joinToString(", ") { it.jsonString() }
+        val linesJson = summary.boundedLines.joinToString(",\n") { it.jsonString().prependIndent("        ") }
+        return """
+            {
+              "name": ${summary.name.jsonString()},
+              "present": ${summary.present},
+              "signatureHasLocationReturn": ${summary.signatureHasLocationReturn},
+              "callsRecordFragmentLane": ${summary.callsRecordFragmentLane},
+              "callsRecordApplicationPoint": ${summary.callsRecordApplicationPoint},
+              "callsApplicationPointOutput": ${summary.callsApplicationPointOutput},
+              "returnsApplicationPointOutput": ${summary.returnsApplicationPointOutput},
+              "returnStatementCount": ${summary.returnStatementCount},
+              "orderedMarkers": [$markersJson],
+              "boundedNormalizedLines": [
+            $linesJson
+              ]
+            }
+        """.trimIndent()
+    }
+
+    private fun sha256Hex(value: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
 
     private fun m60F16FragmentLaneRuntimeSnapshotExportJson(
         snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
@@ -11921,6 +12274,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16AaStencilCoverStorageColorTargetComparison.enabled"
         private const val FOR419_SHADER_RETURN_STORAGE_ZERO_CAUSE_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled"
+        private const val FOR420_FINAL_WGSL_DIAGNOSTIC_PROPERTY =
+            "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled"
         private const val FOR412_MATCH_TOLERANCE = 0.000001f
         private const val FOR401_FINAL_RESIDUAL_ORIGIN_MAP_SAMPLE_LIMIT = 16
         private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =

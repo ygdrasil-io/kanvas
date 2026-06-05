@@ -1,0 +1,399 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-420",
+          "sceneId": "m60-f16-aa-stencil-cover-final-wgsl-diagnostic-for420",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-420-m60-f16-exporter-wgsl-final-diagnostique-et-comparer-fs-inside-outside",
+          "sourceFinding": "global/kanvas/findings/for-419-diagnostique-le-hook-storage-shader-return-hors-chemin-return-reel",
+          "sourceArtifacts": {
+            "for412": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412.json",
+            "for418": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-storage-vs-color-target-for418/m60-f16-aa-stencil-cover-storage-vs-color-target-for418.json",
+            "for419": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419/m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "decision": "M60_F16_AA_STENCIL_COVER_FINAL_WGSL_DIAGNOSTIC_RECORDED",
+          "classification": "diagnostic-final-wgsl-hooks-not-on-rendered-return-path",
+          "allowedClassifications": [
+            "diagnostic-final-wgsl-hooks-replace-render-return-path",
+            "diagnostic-final-wgsl-hooks-not-on-rendered-return-path",
+            "wgsl-final-source-entrypoint-missing",
+            "wgsl-final-source-export-unavailable"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "correctionAppliedByDefault": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "guards": {
+            "finalWgslDiagnostic": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false},
+            "shaderReturnDiagnostic": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverShaderReturnDiagnostic.enabled", "enabledByDefault": false},
+            "storageColorTargetComparison": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverStorageColorTargetComparison.enabled", "enabledByDefault": false},
+            "shaderReturnStorageZeroCause": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled", "enabledByDefault": false}
+          },
+          "runtimeSnapshot": {
+            "api": "SkWebGpuDevice.m60F16AaStencilCoverFinalWgslDiagnosticSnapshot()",
+            "propertyName": "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled",
+            "enabled": true,
+            "requestedBoundary": "final WGSL source immediately before createShaderModule",
+            "observedBoundary": "SkWebGpuDevice.loadM60F16AaStencilCoverProbeShader records final in-memory WGSL before module creation",
+            "variantCount": 4,
+            "missingSourceCount": 0
+          },
+          "comparisonPolicy": {
+            "hashAlgorithm": "SHA-256 over exact final WGSL String passed to ShaderModuleDescriptor(code = ...)",
+            "sourceDumpPolicy": "No full WGSL dump is stored; each function summary is capped to bounded normalized lines.",
+            "entryPointsCompared": ["fs_inside", "fs_outside"],
+            "hooksCompared": [
+              "m60_f16_record_fragment_lane",
+              "m60_f16_record_application_point",
+              "m60_f16_application_point_output",
+              "return @location(0)"
+            ]
+          },
+          "structuralSummary": {
+            "for418UsesFor412ShaderSource": true,
+            "allVariantsHaveFsInsideAndFsOutside": true,
+            "diagnosticVariantsReturnApplicationPointOutput": false,
+            "for419HasEntryStorageWrite": false
+          },
+          "variants": [
+                        {
+              "logicalName": "normal-bounded-runtime-correction",
+              "cacheKey": "experimental://m60-f16-aa-stencil-cover-bounded-runtime-correction",
+              "shaderLabel": "normal M60 F16 bounded runtime correction AA stencil-cover",
+              "sourceHashSha256": "530395caccdddb4b836de4be11e46d71986b2ca46667c9bba71528059af8417a",
+              "sourceLengthBytes": 13949,
+              "sourceSharedWith": null,
+              "intendedUse": "default bounded correction render shader when the opt-in correction probe is enabled",
+              "containsRecordApplicationPointFunction": false,
+              "containsRecordFragmentLaneFunction": false,
+              "containsOutputNonzeroGate": false,
+              "divergenceFromNormal": "baseline-normal-bounded-runtime-correction",
+              "functions": [
+                      {
+            "name": "fs_inside",
+            "present": true,
+            "signatureHasLocationReturn": true,
+            "callsRecordFragmentLane": false,
+            "callsRecordApplicationPoint": false,
+            "callsApplicationPointOutput": false,
+            "returnsApplicationPointOutput": false,
+            "returnStatementCount": 1,
+            "orderedMarkers": ["m60_f16_bounded_runtime_corrected_color", "return", "m60_f16_quantize_after_bounded_runtime_correction"],
+            "boundedNormalizedLines": [
+                  "var coverage = select(supersampled_path_cov(frag.xy), 1.0, uniforms.edgeCount == 0u);",
+      "coverage = coverage * clip_cov(frag.xy);",
+      "let c = m60_f16_bounded_runtime_corrected_color(frag.xy);",
+      "let alpha = c.a * coverage;",
+      "return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));"
+            ]
+          },
+          {
+            "name": "fs_outside",
+            "present": true,
+            "signatureHasLocationReturn": true,
+            "callsRecordFragmentLane": false,
+            "callsRecordApplicationPoint": false,
+            "callsApplicationPointOutput": false,
+            "returnsApplicationPointOutput": false,
+            "returnStatementCount": 1,
+            "orderedMarkers": ["m60_f16_bounded_runtime_corrected_color", "return", "m60_f16_quantize_after_bounded_runtime_correction"],
+            "boundedNormalizedLines": [
+                  "var coverage = select(supersampled_path_cov(frag.xy), 0.0, uniforms.edgeCount == 0u);",
+      "coverage = coverage * clip_cov(frag.xy);",
+      "let c = m60_f16_bounded_runtime_corrected_color(frag.xy);",
+      "let alpha = c.a * coverage;",
+      "return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));"
+            ]
+          }
+              ],
+              "applicationPointOutput": {
+  "name": "m60_f16_application_point_output",
+  "present": false,
+  "signatureHasLocationReturn": false,
+  "callsRecordFragmentLane": false,
+  "callsRecordApplicationPoint": false,
+  "callsApplicationPointOutput": false,
+  "returnsApplicationPointOutput": false,
+  "returnStatementCount": 0,
+  "orderedMarkers": [],
+  "boundedNormalizedLines": [
+
+  ]
+}
+            },
+            {
+              "logicalName": "for412-shader-return-storage",
+              "cacheKey": "diagnostic://m60-f16-aa-stencil-cover-shader-return-for412",
+              "shaderLabel": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+              "sourceHashSha256": "78b5bf8d9a8db9e6606c0db414d7ba2ec7b9118c4ffdee060d64a36e0ec9470d",
+              "sourceLengthBytes": 17197,
+              "sourceSharedWith": null,
+              "intendedUse": "FOR-412 shader-return storage diagnostic",
+              "containsRecordApplicationPointFunction": true,
+              "containsRecordFragmentLaneFunction": true,
+              "containsOutputNonzeroGate": false,
+              "divergenceFromNormal": "diagnostic-return-path-not-replaced",
+              "functions": [
+                      {
+            "name": "fs_inside",
+            "present": true,
+            "signatureHasLocationReturn": true,
+            "callsRecordFragmentLane": true,
+            "callsRecordApplicationPoint": false,
+            "callsApplicationPointOutput": false,
+            "returnsApplicationPointOutput": false,
+            "returnStatementCount": 1,
+            "orderedMarkers": ["m60_f16_record_fragment_lane", "m60_f16_bounded_runtime_corrected_color", "return", "m60_f16_quantize_after_bounded_runtime_correction"],
+            "boundedNormalizedLines": [
+                  "m60_f16_record_fragment_lane(frag.xy, 1u);",
+      "var coverage = select(supersampled_path_cov(frag.xy), 1.0, uniforms.edgeCount == 0u);",
+      "coverage = coverage * clip_cov(frag.xy);",
+      "let c = m60_f16_bounded_runtime_corrected_color(frag.xy);",
+      "let alpha = c.a * coverage;",
+      "return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));"
+            ]
+          },
+          {
+            "name": "fs_outside",
+            "present": true,
+            "signatureHasLocationReturn": true,
+            "callsRecordFragmentLane": true,
+            "callsRecordApplicationPoint": false,
+            "callsApplicationPointOutput": false,
+            "returnsApplicationPointOutput": false,
+            "returnStatementCount": 1,
+            "orderedMarkers": ["m60_f16_record_fragment_lane", "m60_f16_bounded_runtime_corrected_color", "return", "m60_f16_quantize_after_bounded_runtime_correction"],
+            "boundedNormalizedLines": [
+                  "m60_f16_record_fragment_lane(frag.xy, 2u);",
+      "var coverage = select(supersampled_path_cov(frag.xy), 0.0, uniforms.edgeCount == 0u);",
+      "coverage = coverage * clip_cov(frag.xy);",
+      "let c = m60_f16_bounded_runtime_corrected_color(frag.xy);",
+      "let alpha = c.a * coverage;",
+      "return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));"
+            ]
+          }
+              ],
+              "applicationPointOutput":     {
+      "name": "m60_f16_application_point_output",
+      "present": true,
+      "signatureHasLocationReturn": false,
+      "callsRecordFragmentLane": false,
+      "callsRecordApplicationPoint": true,
+      "callsApplicationPointOutput": false,
+      "returnsApplicationPointOutput": false,
+      "returnStatementCount": 1,
+      "orderedMarkers": ["m60_f16_bounded_runtime_corrected_color", "m60_f16_quantize_after_bounded_runtime_correction", "m60_f16_record_application_point", "return"],
+      "boundedNormalizedLines": [
+            "let filtered = apply_color_filter(uniforms.color);",
+"let target_colorspace = apply_target_colorspace_if_needed(filtered);",
+"let corrected = m60_f16_bounded_runtime_corrected_color(pixel);",
+"let alpha = corrected.a * coverage;",
+"let before_quantization = vec4f(corrected.rgb * alpha, alpha);",
+"let quantized = m60_f16_quantize_after_bounded_runtime_correction(pixel, before_quantization);",
+"m60_f16_record_application_point(",
+"pixel,",
+"side,",
+"coverage,",
+"filtered,",
+"target_colorspace,",
+"before_quantization,",
+"quantized",
+");",
+"return quantized;"
+      ]
+    }
+            },
+            {
+              "logicalName": "for418-storage-vs-color-target",
+              "cacheKey": "diagnostic://m60-f16-aa-stencil-cover-shader-return-for412",
+              "shaderLabel": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+              "sourceHashSha256": "78b5bf8d9a8db9e6606c0db414d7ba2ec7b9118c4ffdee060d64a36e0ec9470d",
+              "sourceLengthBytes": 17197,
+              "sourceSharedWith": "for412-shader-return-storage",
+              "intendedUse": "FOR-418 uses the FOR-412 final shader module in a no-blend scratch color-target comparison pass",
+              "containsRecordApplicationPointFunction": true,
+              "containsRecordFragmentLaneFunction": true,
+              "containsOutputNonzeroGate": false,
+              "divergenceFromNormal": "shares-for412-shader-return-source; pipeline target differs in FOR-418",
+              "functions": [
+                      {
+            "name": "fs_inside",
+            "present": true,
+            "signatureHasLocationReturn": true,
+            "callsRecordFragmentLane": true,
+            "callsRecordApplicationPoint": false,
+            "callsApplicationPointOutput": false,
+            "returnsApplicationPointOutput": false,
+            "returnStatementCount": 1,
+            "orderedMarkers": ["m60_f16_record_fragment_lane", "m60_f16_bounded_runtime_corrected_color", "return", "m60_f16_quantize_after_bounded_runtime_correction"],
+            "boundedNormalizedLines": [
+                  "m60_f16_record_fragment_lane(frag.xy, 1u);",
+      "var coverage = select(supersampled_path_cov(frag.xy), 1.0, uniforms.edgeCount == 0u);",
+      "coverage = coverage * clip_cov(frag.xy);",
+      "let c = m60_f16_bounded_runtime_corrected_color(frag.xy);",
+      "let alpha = c.a * coverage;",
+      "return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));"
+            ]
+          },
+          {
+            "name": "fs_outside",
+            "present": true,
+            "signatureHasLocationReturn": true,
+            "callsRecordFragmentLane": true,
+            "callsRecordApplicationPoint": false,
+            "callsApplicationPointOutput": false,
+            "returnsApplicationPointOutput": false,
+            "returnStatementCount": 1,
+            "orderedMarkers": ["m60_f16_record_fragment_lane", "m60_f16_bounded_runtime_corrected_color", "return", "m60_f16_quantize_after_bounded_runtime_correction"],
+            "boundedNormalizedLines": [
+                  "m60_f16_record_fragment_lane(frag.xy, 2u);",
+      "var coverage = select(supersampled_path_cov(frag.xy), 0.0, uniforms.edgeCount == 0u);",
+      "coverage = coverage * clip_cov(frag.xy);",
+      "let c = m60_f16_bounded_runtime_corrected_color(frag.xy);",
+      "let alpha = c.a * coverage;",
+      "return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));"
+            ]
+          }
+              ],
+              "applicationPointOutput":     {
+      "name": "m60_f16_application_point_output",
+      "present": true,
+      "signatureHasLocationReturn": false,
+      "callsRecordFragmentLane": false,
+      "callsRecordApplicationPoint": true,
+      "callsApplicationPointOutput": false,
+      "returnsApplicationPointOutput": false,
+      "returnStatementCount": 1,
+      "orderedMarkers": ["m60_f16_bounded_runtime_corrected_color", "m60_f16_quantize_after_bounded_runtime_correction", "m60_f16_record_application_point", "return"],
+      "boundedNormalizedLines": [
+            "let filtered = apply_color_filter(uniforms.color);",
+"let target_colorspace = apply_target_colorspace_if_needed(filtered);",
+"let corrected = m60_f16_bounded_runtime_corrected_color(pixel);",
+"let alpha = corrected.a * coverage;",
+"let before_quantization = vec4f(corrected.rgb * alpha, alpha);",
+"let quantized = m60_f16_quantize_after_bounded_runtime_correction(pixel, before_quantization);",
+"m60_f16_record_application_point(",
+"pixel,",
+"side,",
+"coverage,",
+"filtered,",
+"target_colorspace,",
+"before_quantization,",
+"quantized",
+");",
+"return quantized;"
+      ]
+    }
+            },
+            {
+              "logicalName": "for419-storage-zero-cause",
+              "cacheKey": "diagnostic://m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419",
+              "shaderLabel": "diagnostic in-memory FOR-419 nonzero-preserving shader-return storage variant of shaders/aa_stencil_cover.wgsl",
+              "sourceHashSha256": "214dbad12b015c1987caa3629a5f5580e9db8016f4bb40e15d48a0d9b5c7a92a",
+              "sourceLengthBytes": 17271,
+              "sourceSharedWith": null,
+              "intendedUse": "FOR-419 nonzero-preserving shader-return storage zero-cause diagnostic",
+              "containsRecordApplicationPointFunction": true,
+              "containsRecordFragmentLaneFunction": true,
+              "containsOutputNonzeroGate": true,
+              "divergenceFromNormal": "diagnostic-return-path-not-replaced",
+              "functions": [
+                      {
+            "name": "fs_inside",
+            "present": true,
+            "signatureHasLocationReturn": true,
+            "callsRecordFragmentLane": false,
+            "callsRecordApplicationPoint": false,
+            "callsApplicationPointOutput": false,
+            "returnsApplicationPointOutput": false,
+            "returnStatementCount": 1,
+            "orderedMarkers": ["m60_f16_bounded_runtime_corrected_color", "return", "m60_f16_quantize_after_bounded_runtime_correction"],
+            "boundedNormalizedLines": [
+                  "var coverage = select(supersampled_path_cov(frag.xy), 1.0, uniforms.edgeCount == 0u);",
+      "coverage = coverage * clip_cov(frag.xy);",
+      "let c = m60_f16_bounded_runtime_corrected_color(frag.xy);",
+      "let alpha = c.a * coverage;",
+      "return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));"
+            ]
+          },
+          {
+            "name": "fs_outside",
+            "present": true,
+            "signatureHasLocationReturn": true,
+            "callsRecordFragmentLane": false,
+            "callsRecordApplicationPoint": false,
+            "callsApplicationPointOutput": false,
+            "returnsApplicationPointOutput": false,
+            "returnStatementCount": 1,
+            "orderedMarkers": ["m60_f16_bounded_runtime_corrected_color", "return", "m60_f16_quantize_after_bounded_runtime_correction"],
+            "boundedNormalizedLines": [
+                  "var coverage = select(supersampled_path_cov(frag.xy), 0.0, uniforms.edgeCount == 0u);",
+      "coverage = coverage * clip_cov(frag.xy);",
+      "let c = m60_f16_bounded_runtime_corrected_color(frag.xy);",
+      "let alpha = c.a * coverage;",
+      "return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));"
+            ]
+          }
+              ],
+              "applicationPointOutput":     {
+      "name": "m60_f16_application_point_output",
+      "present": true,
+      "signatureHasLocationReturn": false,
+      "callsRecordFragmentLane": false,
+      "callsRecordApplicationPoint": true,
+      "callsApplicationPointOutput": false,
+      "returnsApplicationPointOutput": false,
+      "returnStatementCount": 1,
+      "orderedMarkers": ["m60_f16_bounded_runtime_corrected_color", "m60_f16_quantize_after_bounded_runtime_correction", "m60_f16_record_application_point", "return"],
+      "boundedNormalizedLines": [
+            "let filtered = apply_color_filter(uniforms.color);",
+"let target_colorspace = apply_target_colorspace_if_needed(filtered);",
+"let corrected = m60_f16_bounded_runtime_corrected_color(pixel);",
+"let alpha = corrected.a * coverage;",
+"let before_quantization = vec4f(corrected.rgb * alpha, alpha);",
+"let quantized = m60_f16_quantize_after_bounded_runtime_correction(pixel, before_quantization);",
+"m60_f16_record_application_point(",
+"pixel,",
+"side,",
+"coverage,",
+"filtered,",
+"target_colorspace,",
+"before_quantization,",
+"quantized",
+");",
+"return quantized;"
+      ]
+    }
+            }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "renderingFixApplied": false,
+            "wgsl4kModified": false,
+            "fullWgslDumpStored": false
+          },
+          "classificationReason": "The final WGSL was exported, and the diagnostic helper functions exist, but fs_inside/fs_outside still return the normal bounded-runtime expression instead of m60_f16_application_point_output; the application-point storage hook is therefore not on the rendered @location(0) path.",
+          "nextStep": "Use the final-source proof to focus the next ticket on why the application-point storage side-channel still does not observe records at runtime, without changing M60 F16 rendering.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for420_m60_f16_aa_stencil_cover_final_wgsl_diagnostic.py",
+            "rtk python3 scripts/validate_for419_m60_f16_aa_stencil_cover_shader_return_storage_zero_cause.py",
+            "rtk python3 scripts/validate_for418_m60_f16_aa_stencil_cover_storage_vs_color_target.py",
+            "rtk python3 scripts/validate_for417_m60_f16_aa_stencil_cover_isolated_color_target_runtime.py",
+            "rtk python3 scripts/validate_for416_m60_f16_aa_stencil_cover_isolated_color_target.py",
+            "rtk python3 scripts/validate_for415_m60_f16_aa_stencil_cover_blend_render_pass_state.py",
+            "rtk python3 scripts/validate_for414_m60_f16_aa_stencil_cover_post_draw_readback.py",
+            "rtk python3 scripts/validate_for413_m60_f16_aa_stencil_cover_draw_transition_correlation.py",
+            "rtk python3 scripts/validate_for412_m60_f16_aa_stencil_cover_shader_return_diagnostic.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for420-pycache python3 -m py_compile scripts/validate_for420_m60_f16_aa_stencil_cover_final_wgsl_diagnostic.py",
+            "rtk git diff --check",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+          ]
+        }
