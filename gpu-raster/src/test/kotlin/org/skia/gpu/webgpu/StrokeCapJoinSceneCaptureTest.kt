@@ -120,6 +120,13 @@ class StrokeCapJoinSceneCaptureTest {
             )
 
             if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
+                val fragmentLaneRuntimeSnapshot = withExperimentalStrokeCapJoinRender {
+                    WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                        ctx,
+                        gm,
+                        targetColorSpaceBlend = true,
+                    ).snapshot
+                }
                 writeEvidence(
                     cpuBitmap = cpuBitmap,
                     reference = reference,
@@ -132,6 +139,7 @@ class StrokeCapJoinSceneCaptureTest {
                     regionStats = regionStats,
                     residualStats = residualStats,
                     correctedResidualStats = correctedResidualStats,
+                    fragmentLaneRuntimeSnapshot = fragmentLaneRuntimeSnapshot,
                     adapter = adapter,
                 )
             }
@@ -162,6 +170,7 @@ class StrokeCapJoinSceneCaptureTest {
         regionStats: List<StrokeRegionStats>,
         residualStats: StrokeResidualStats,
         correctedResidualStats: StrokeResidualStats,
+        fragmentLaneRuntimeSnapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join").apply { mkdirs() }
@@ -272,6 +281,7 @@ class StrokeCapJoinSceneCaptureTest {
             correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
             adapter = adapter,
         )
+        writeM60F16FragmentLaneRuntimeSnapshotExport(fragmentLaneRuntimeSnapshot, adapter)
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -639,6 +649,8 @@ class StrokeCapJoinSceneCaptureTest {
         }
         append('"')
     }
+
+    private fun Pair<Int, Int>.pixelJson(): String = """{"x": $first, "y": $second}"""
 
     private class BoundedStrokeCapJoinGM : GM() {
         override fun getName(): String = "m60_bounded_stroke_cap_join"
@@ -1266,6 +1278,173 @@ class StrokeCapJoinSceneCaptureTest {
                 adapter = adapter,
             ),
         )
+    }
+
+    private fun writeM60F16FragmentLaneRuntimeSnapshotExport(
+        snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/" +
+                "m60-f16-fragment-lane-runtime-snapshot-export-for397",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-fragment-lane-runtime-snapshot-export-for397.json").writeText(
+            m60F16FragmentLaneRuntimeSnapshotExportJson(snapshot, adapter),
+        )
+    }
+
+    private fun m60F16FragmentLaneRuntimeSnapshotExportJson(
+        snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
+        adapter: String,
+    ): String {
+        val expected = M60_F16_FRAGMENT_LANE_EXPECTED_PIXELS
+        val expectedSet = expected.toSet()
+        val observedPixels = snapshot.samples
+            .filter { it.observedCandidateLane }
+            .map { it.x to it.y }
+            .distinct()
+            .sortedWith(compareBy<Pair<Int, Int>> { it.second }.thenBy { it.first })
+        val observedSet = observedPixels.toSet()
+        val falsePositives = observedPixels.filter { it !in expectedSet }
+        val falseNegatives = expected.filter { it !in observedSet }
+        val exactMatch = snapshot.enabled &&
+            snapshot.samples.isNotEmpty() &&
+            snapshot.samples.size == expected.size &&
+            falsePositives.isEmpty() &&
+            falseNegatives.isEmpty() &&
+            snapshot.samples.all { it.valid && it.observedCandidateLane }
+        val classification = when {
+            !snapshot.enabled || snapshot.samples.isEmpty() -> "fragment-lane-runtime-snapshot-empty"
+            exactMatch -> "fragment-lane-runtime-snapshot-exported"
+            else -> "fragment-lane-runtime-snapshot-mismatch"
+        }
+        val reason = when (classification) {
+            "fragment-lane-runtime-snapshot-exported" ->
+                "The opt-in fragment diagnostic snapshot exported the 8 FOR-391 expected lane pixels."
+            "fragment-lane-runtime-snapshot-empty" ->
+                if (snapshot.enabled) {
+                    "The diagnostic guard was enabled, but m60F16FragmentLaneDiagnosticSnapshot() exported zero samples."
+                } else {
+                    "The diagnostic guard was disabled for this scene evidence run, so no runtime samples were exported."
+                }
+            else ->
+                "The runtime snapshot did not match the 8 FOR-391 expected lane pixels exactly."
+        }
+        val nextStep = when (classification) {
+            "fragment-lane-runtime-snapshot-exported" ->
+                "Use the exported predicate evidence only as diagnostic input; FOR-397 does not enable correction or promotion."
+            "fragment-lane-runtime-snapshot-empty" ->
+                "Rerun the scene with both FOR-394 and FOR-396 opt-in guards, then inspect the AA stencil-cover diagnostic binding path if samples remain empty."
+            else ->
+                "Inspect the reported false positives and false negatives before considering any predicate activation."
+        }
+        val samplesJson = snapshot.samples.joinToString(",\n") { sample ->
+            """
+            {
+              "x": ${sample.x},
+              "y": ${sample.y},
+              "observedCandidateLane": ${sample.observedCandidateLane},
+              "coverageSide": ${sample.coverageSide.jsonString()},
+              "validExpectedSlot": ${sample.valid}
+            }
+            """.trimIndent().prependIndent("    ")
+        }
+        val expectedJson = expected.joinToString(",\n") { it.pixelJson().prependIndent("    ") }
+        val observedJson = observedPixels.joinToString(",\n") { it.pixelJson().prependIndent("    ") }
+        val falsePositiveJson = falsePositives.joinToString(",\n") { it.pixelJson().prependIndent("    ") }
+        val falseNegativeJson = falseNegatives.joinToString(",\n") { it.pixelJson().prependIndent("    ") }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-397",
+              "sceneId": "m60-f16-fragment-lane-runtime-snapshot-export-for397",
+              "sourceSceneId": "m60-bounded-stroke-cap-join",
+              "decision": "M60_F16_FRAGMENT_LANE_RUNTIME_SNAPSHOT_EXPORTED",
+              "classification": "$classification",
+              "allowedClassifications": [
+                "fragment-lane-runtime-snapshot-exported",
+                "fragment-lane-runtime-snapshot-mismatch",
+                "fragment-lane-runtime-snapshot-empty"
+              ],
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMethod": "writeM60F16FragmentLaneRuntimeSnapshotExport",
+              "sourceFinding": "global/kanvas/findings/for-396-installe-un-canal-diagnostique-fragment-aa-stencil-cover-m60-f16-sans-preuve-exact-match-runtime-exportee",
+              "requiredFor396Decision": "M60_F16_AA_STENCIL_COVER_FRAGMENT_LANE_DIAGNOSTIC_CHANNEL_INSTALLED",
+              "requiredFor394Decision": "M60_F16_AA_STENCIL_COVER_BAND_METADATA_TRANSPORT_RECORDED",
+              "requiredFor391Decision": "M60_F16_SOURCE_FACING_LOCAL_BAND_LANE_METADATA_RECORDED",
+              "supportClaim": false,
+              "promoted": false,
+              "runtimeSnapshot": {
+                "api": "SkWebGpuDevice.m60F16FragmentLaneDiagnosticSnapshot()",
+                "propertyName": ${snapshot.propertyName.jsonString()},
+                "enabled": ${snapshot.enabled},
+                "diagnosticShader": ${snapshot.diagnosticShader.jsonString()},
+                "pipelineLayout": ${snapshot.pipelineLayout.jsonString()},
+                "sampleCount": ${snapshot.samples.size},
+                "samples": [
+            $samplesJson
+                ]
+              },
+              "guards": {
+                "bandMetadataTransport": {
+                  "guardId": "$M60_F16_BAND_METADATA_TRANSPORT_PROPERTY",
+                  "enabledForEvidenceRun": ${System.getProperty(M60_F16_BAND_METADATA_TRANSPORT_PROPERTY, "false").toBoolean()},
+                  "enabledByDefault": false
+                },
+                "fragmentLaneDiagnostic": {
+                  "guardId": "$M60_F16_FRAGMENT_LANE_DIAGNOSTIC_PROPERTY",
+                  "enabledForEvidenceRun": ${snapshot.enabled},
+                  "enabledByDefault": false
+                }
+              },
+              "pixelComparison": {
+                "comparisonStatus": "$classification",
+                "measurementScope": "FOR-396 diagnostic slots exported by m60F16FragmentLaneDiagnosticSnapshot()",
+                "expectedUsefulPixels": [
+            $expectedJson
+                ],
+                "expectedUsefulPixelCount": ${expected.size},
+                "shaderObservedPixels": [
+            $observedJson
+                ],
+                "shaderObservedPixelCount": ${observedPixels.size},
+                "falsePositives": [
+            $falsePositiveJson
+                ],
+                "falsePositiveCount": ${falsePositives.size},
+                "falseNegatives": [
+            $falseNegativeJson
+                ],
+                "falseNegativeCount": ${falseNegatives.size},
+                "falsePositiveFalseNegativeMeasured": ${snapshot.enabled && snapshot.samples.isNotEmpty()},
+                "runtimeReadbackArtifactCaptured": ${snapshot.enabled && snapshot.samples.isNotEmpty()},
+                "exactMatchProvenByRuntimeReadback": $exactMatch
+              },
+              "nonGoalsPreserved": {
+                "m60F16CorrectionEnabled": false,
+                "runtimePredicateActivated": false,
+                "finalColorChanged": false,
+                "coverageChanged": false,
+                "fallbackChanged": false,
+                "scoringChanged": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "for380ProbeRouteUsed": false,
+                "generalizedOutsideM60F16": false
+              },
+              "classificationReason": ${reason.jsonString()},
+              "nextStep": ${nextStep.jsonString()},
+              "validationCommands": [
+                "rtk python3 scripts/validate_for397_m60_f16_fragment_lane_runtime_snapshot_export.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for397-pycache-parent python3 -m py_compile scripts/validate_for397_m60_f16_fragment_lane_runtime_snapshot_export.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+              ]
+            }
+        """.trimIndent() + "\n"
     }
 
     private fun m60F16SourceColorCorrectionProbeJson(
@@ -7878,9 +8057,23 @@ class StrokeCapJoinSceneCaptureTest {
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
         private const val EXPERIMENTAL_RENDER_PROPERTY = "kanvas.webgpu.strokeCapJoin.experimentalRender"
         private const val FOR380_CORRECTION_PROPERTY = "kanvas.webgpu.m60F16SourceColorCorrectionProbe.enabled"
+        private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =
+            "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
+        private const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_PROPERTY =
+            "kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled"
         private const val FOR389_CANDIDATE_GUARD_PROPERTY =
             "kanvas.webgpu.m60F16SourceCoverageFullSceneCandidate.enabled"
         private const val FOR389_SELECTED_SAMPLE_LIMIT = 64
+        private val M60_F16_FRAGMENT_LANE_EXPECTED_PIXELS = listOf(
+            93 to 74,
+            92 to 75,
+            91 to 76,
+            17 to 77,
+            90 to 77,
+            89 to 78,
+            88 to 79,
+            87 to 80,
+        )
 
         private fun jsonString(value: String): String = buildString {
             append('"')

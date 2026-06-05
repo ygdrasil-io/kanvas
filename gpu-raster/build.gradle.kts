@@ -175,6 +175,12 @@ tasks.withType<Test> {
     System.getProperty("kanvas.for339.runtimeTrace.write")?.let {
         systemProperty("kanvas.for339.runtimeTrace.write", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled", it)
+    }
+    System.getProperty("kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
