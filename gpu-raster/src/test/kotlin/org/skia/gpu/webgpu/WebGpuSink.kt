@@ -34,6 +34,8 @@ public object WebGpuSink {
         val applicationPointSnapshot: SkWebGpuDevice.M60F16BoundedCorrectionApplicationPointSnapshot,
         val coverageStencilContributionMapSnapshot:
             SkWebGpuDevice.M60F16CoverageStencilContributionMapSnapshot,
+        val aaStencilCoverPostPassRuntimeHookSnapshot:
+            SkWebGpuDevice.M60F16AaStencilCoverPostPassRuntimeHookSnapshot,
     )
 
     /**
@@ -91,6 +93,8 @@ public object WebGpuSink {
                 applicationPointSnapshot = device.m60F16BoundedCorrectionApplicationPointSnapshot(),
                 coverageStencilContributionMapSnapshot =
                     device.m60F16CoverageStencilContributionMapSnapshot(),
+                aaStencilCoverPostPassRuntimeHookSnapshot =
+                    device.m60F16AaStencilCoverPostPassRuntimeHookSnapshot(),
             )
         }
     }
