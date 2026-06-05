@@ -165,6 +165,7 @@ class StrokeCapJoinSceneCaptureTest {
         writeM60F16CandidateRegressionAudit(residualStats, adapter)
         writeM60F16EffectiveDestinationCandidate(residualStats, adapter)
         writeM60F16CompositionQuantizationCandidate(residualStats, adapter)
+        writeM60F16LinearSrgbPlausibilityAudit(residualStats, adapter)
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -833,6 +834,18 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun writeM60F16LinearSrgbPlausibilityAudit(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-linear-srgb-plausibility-audit-for377",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-linear-srgb-plausibility-audit-for377.json").writeText(
+            m60F16LinearSrgbPlausibilityAuditJson(residualStats, adapter),
+        )
+    }
+
     private fun m60F16CandidatePolicyRgbaProbeJson(
         residualStats: StrokeResidualStats,
         adapter: String,
@@ -1214,6 +1227,139 @@ class StrokeCapJoinSceneCaptureTest {
               "sampleCount": ${candidateSamples.size},
               "samples": [
             ${candidateSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "nonGoalsPreserved": {
+                "rendererBehaviorChanged": false,
+                "runtimeBehaviorChanged": false,
+                "gpuOrWgslChanged": false,
+                "geometryProductionChanged": false,
+                "coverageProductionChanged": false,
+                "fallbackChanged": false,
+                "kadreChanged": false,
+                "f16PremulBlendRuntimeChanged": false,
+                "skBitmapGetPixelChanged": false,
+                "scoreIncreased": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "variantAppliedToRenderer": false,
+                "variantReadFromRenderer": false,
+                "variantReadFromGpuImage": false,
+                "destinationAppliedToRenderer": false,
+                "destinationReadFromRenderer": false,
+                "destinationReadFromGpuImage": false,
+                "rendererSceneBranchAdded": false,
+                "rendererCoordinateBranchAdded": false,
+                "rendererSelectedCellBranchAdded": false,
+                "fullGmCropPathAdded": false
+              },
+              "command": "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16LinearSrgbPlausibilityAuditJson(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val samples = residualStats.highDeltaSamples.take(FOR377_REQUIRED_SAMPLE_COUNT)
+        val for374Samples = samples.mapIndexed { index, sample ->
+            candidateRegressionSample(candidatePolicySample(index + 1, sample, coverageMask))
+        }
+        val for375Samples = for374Samples.map { effectiveDestinationCandidateSample(it) }
+        val for376Samples = for375Samples.map { compositionQuantizationCandidateSample(it) }
+        val auditSamples = for376Samples.map { linearSrgbPlausibilityAuditSample(it) }
+        val currentResidual = auditSamples.sumOf { it.currentResidual }
+        val for373CandidateTotalResidual = auditSamples.sumOf { it.for373CandidateResidual }
+        val for375CandidateTotalResidual = auditSamples.sumOf { it.for375CandidateResidual }
+        val linearSrgbTotalResidual = auditSamples.sumOf { it.linearSrgbResidual }
+        val totalImprovementVsCurrent = currentResidual - linearSrgbTotalResidual
+        val clampPositiveImprovement = auditSamples.sumOf { it.destinationClampPositiveImprovement }
+        val clampImprovementShare = if (totalImprovementVsCurrent > 0) {
+            clampPositiveImprovement.toDouble() / totalImprovementVsCurrent.toDouble()
+        } else {
+            0.0
+        }
+        val bandCoherence = auditSamples.groupBy { it.strokeBand }.toSortedMap().map { (strokeBand, bandSamples) ->
+            LinearSrgbBandCoherence(
+                strokeBand = strokeBand,
+                sampleCount = bandSamples.size,
+                currentResidual = bandSamples.sumOf { it.currentResidual },
+                linearSrgbResidual = bandSamples.sumOf { it.linearSrgbResidual },
+                for375Residual = bandSamples.sumOf { it.for375CandidateResidual },
+                improvedVsCurrentSamples = bandSamples.count { it.linearSrgbDeltaVsCurrent < 0 },
+                regressedVsCurrentSamples = bandSamples.count { it.linearSrgbDeltaVsCurrent > 0 },
+                improvedVsFor375Samples = bandSamples.count { it.linearSrgbDeltaVsFor375Candidate < 0 },
+                regressedVsFor375Samples = bandSamples.count { it.linearSrgbDeltaVsFor375Candidate > 0 },
+            )
+        }
+        val classification = linearSrgbPlausibilityClassification(
+            sampleCount = auditSamples.size,
+            linearSrgbTotalResidual = linearSrgbTotalResidual,
+            currentResidual = currentResidual,
+            clampImprovementShare = clampImprovementShare,
+            bandCoherence = bandCoherence,
+        )
+        val classificationReason = linearSrgbPlausibilityClassificationReason(classification)
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-377",
+              "sceneId": "m60-f16-linear-srgb-plausibility-audit-for377",
+              "sourceSceneId": "m60-f16-composition-quantization-candidate-for376",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-audit-realite-linear-s-rgb-apres-for-376",
+              "sourceFinding": "global/kanvas/findings/for-376-isole-la-variante-linear-s-rgb-comme-meilleure-piste-m60-f16-apres-destination-effective",
+              "requiredFor376Decision": "M60_F16_COMPOSITION_QUANTIZATION_CANDIDATE_RECORDED",
+              "requiredFor376Classification": "composition-quantization-candidate-reduces-residual",
+              "decision": "M60_F16_LINEAR_SRGB_PLAUSIBILITY_AUDIT_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "linear-srgb-plausible-next-axis",
+                "linear-srgb-likely-diagnostic-artifact",
+                "linear-srgb-mixed-needs-reference-color-evidence",
+                "linear-srgb-blocked"
+              ],
+              "auditedVariantId": "linear_srgb_source_over_effective_destination_nearest_255",
+              "auditInputSource": "FOR-376 preserved samples plus recalculated linear-sRGB residual and clamp/tint diagnostics",
+              "auditDoesNotProduceCorrection": true,
+              "auditDoesNotApplyRendererChange": true,
+              "destinationSource": "inverseDestinationEstimate.rgbClampedToSrgb",
+              "destinationReadFromRenderer": false,
+              "destinationReadFromGpuImage": false,
+              "destinationAppliedToRenderer": false,
+              "variantReadFromRenderer": false,
+              "variantReadFromGpuImage": false,
+              "variantAppliedToRenderer": false,
+              "currentResidual": $currentResidual,
+              "requiredCurrentResidual": $FOR373_CURRENT_RESIDUAL,
+              "requiredFor373CandidateTotalResidual": $FOR373_CANDIDATE_TOTAL_RESIDUAL,
+              "for373CandidateTotalResidual": $for373CandidateTotalResidual,
+              "requiredFor375EffectiveDestinationCandidateTotalResidual": $FOR375_EFFECTIVE_DESTINATION_CANDIDATE_TOTAL_RESIDUAL,
+              "for375EffectiveDestinationCandidateTotalResidual": $for375CandidateTotalResidual,
+              "requiredFor376BestVariantId": "linear_srgb_source_over_effective_destination_nearest_255",
+              "requiredFor376BestVariantTotalResidual": 607,
+              "linearSrgbTotalResidual": $linearSrgbTotalResidual,
+              "linearSrgbTotalDeltaVsCurrent": ${linearSrgbTotalResidual - currentResidual},
+              "linearSrgbTotalDeltaVsFor375Candidate": ${linearSrgbTotalResidual - for375CandidateTotalResidual},
+              "linearSrgbTotalDeltaVsFor373Candidate": ${linearSrgbTotalResidual - for373CandidateTotalResidual},
+              "sampleCount": ${auditSamples.size},
+              "improvedVsCurrentSampleCount": ${auditSamples.count { it.linearSrgbDeltaVsCurrent < 0 }},
+              "regressedVsCurrentSampleCount": ${auditSamples.count { it.linearSrgbDeltaVsCurrent > 0 }},
+              "improvedVsFor375SampleCount": ${auditSamples.count { it.linearSrgbDeltaVsFor375Candidate < 0 }},
+              "regressedVsFor375SampleCount": ${auditSamples.count { it.linearSrgbDeltaVsFor375Candidate > 0 }},
+              "destinationClampChannelCount": ${auditSamples.sumOf { it.destinationClampChannelCount }},
+              "destinationClampPositiveImprovement": $clampPositiveImprovement,
+              "linearSrgbPositiveImprovement": $totalImprovementVsCurrent,
+              "destinationClampPositiveImprovementShare": ${String.format(Locale.US, "%.6f", clampImprovementShare)},
+              "classificationReason": ${classificationReason.jsonString()},
+              "bandCoherence": [
+            ${bandCoherence.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "samples": [
+            ${auditSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
               ],
               "nonGoalsPreserved": {
                 "rendererBehaviorChanged": false,
@@ -1633,6 +1779,166 @@ class StrokeCapJoinSceneCaptureTest {
           "improvesCurrent": ${totalDeltaVsCurrent < 0},
           "improvesFor375Candidate": ${totalDeltaVsFor375Candidate < 0},
           "improvesFor373Candidate": ${totalDeltaVsFor373Candidate < 0}
+        }
+    """.trimIndent()
+
+    private fun linearSrgbPlausibilityAuditSample(
+        sample: CompositionQuantizationCandidateSample,
+    ): LinearSrgbPlausibilityAuditSample {
+        val variant = sample.variants.first { it.variantId == LINEAR_SRGB_EFFECTIVE_DESTINATION_VARIANT_ID }
+        val candidateRgba = variant.candidateRgba ?: intArrayOf(0, 0, 0, 0)
+        val reference = rgbaArray(sample.for375Sample.for374Sample.candidate.reference)
+        val current = rgbaArray(sample.for375Sample.for374Sample.candidate.current)
+        val source = rgbaArray(sample.for375Sample.for374Sample.candidate.paintSource)
+        val currentError = channelAbsError(reference, current)
+        val linearError = channelAbsError(reference, candidateRgba)
+        val improvement = IntArray(4) { currentError[it] - linearError[it] }
+        val inverse = sample.for375Sample.for374Sample.inverseDestinationEstimate
+        val rounded = inverse.rgbRounded ?: intArrayOf(0, 0, 0)
+        val clamped = inverse.rgbClamped ?: intArrayOf(0, 0, 0)
+        val channelAudits = (0..3).map { index ->
+            LinearSrgbChannelAudit(
+                channel = channelKey(index),
+                currentError = currentError[index],
+                linearSrgbError = linearError[index],
+                improvement = improvement[index],
+                linearSrgbMinusCurrentError = linearError[index] - currentError[index],
+                sourceMinusReference = source[index] - reference[index],
+                currentMinusReference = current[index] - reference[index],
+                linearSrgbMinusReference = candidateRgba[index] - reference[index],
+                sourceTintDirection = sourceTintDirection(reference, current, source, index),
+                destinationRounded = if (index < 3) rounded[index] else null,
+                destinationClampedToSrgb = if (index < 3) clamped[index] else null,
+                destinationClampToLimit = index < 3 && rounded[index] != clamped[index],
+                destinationClampLimit = if (index < 3 && rounded[index] != clamped[index]) clamped[index] else null,
+            )
+        }
+        return LinearSrgbPlausibilityAuditSample(
+            for376Sample = sample,
+            linearSrgbVariant = variant,
+            currentErrorByChannel = currentError,
+            linearSrgbErrorByChannel = linearError,
+            linearSrgbImprovementByChannel = improvement,
+            channelAudits = channelAudits,
+        )
+    }
+
+    private data class LinearSrgbPlausibilityAuditSample(
+        val for376Sample: CompositionQuantizationCandidateSample,
+        val linearSrgbVariant: CompositionQuantizationCandidateVariant,
+        val currentErrorByChannel: IntArray,
+        val linearSrgbErrorByChannel: IntArray,
+        val linearSrgbImprovementByChannel: IntArray,
+        val channelAudits: List<LinearSrgbChannelAudit>,
+    ) {
+        val strokeBand: String = for376Sample.for375Sample.for374Sample.candidate.strokeBand
+        val currentResidual: Int = for376Sample.currentResidual
+        val for373CandidateResidual: Int = for376Sample.for373CandidateResidual
+        val for375CandidateResidual: Int = for376Sample.for375CandidateResidual
+        val linearSrgbResidual: Int = linearSrgbVariant.residual
+        val linearSrgbDeltaVsCurrent: Int = linearSrgbVariant.deltaVsCurrent
+        val linearSrgbDeltaVsFor375Candidate: Int = linearSrgbVariant.deltaVsFor375Candidate
+        val linearSrgbDeltaVsFor373Candidate: Int = linearSrgbVariant.deltaVsFor373Candidate
+        val destinationClampChannelCount: Int = channelAudits.count { it.destinationClampToLimit }
+        val destinationClampPositiveImprovement: Int =
+            channelAudits.filter { it.destinationClampToLimit && it.improvement > 0 }.sumOf { it.improvement }
+    }
+
+    private fun LinearSrgbPlausibilityAuditSample.toJson(): String {
+        val base = for376Sample.toJson().trim()
+        val suffix = """
+          "linearSrgbPlausibilityAudit": {
+            "variantId": ${LINEAR_SRGB_EFFECTIVE_DESTINATION_VARIANT_ID.jsonString()},
+            "currentResidual": $currentResidual,
+            "linearSrgbResidual": $linearSrgbResidual,
+            "for375Residual": $for375CandidateResidual,
+            "for373Residual": $for373CandidateResidual,
+            "linearSrgbDeltaVsCurrent": $linearSrgbDeltaVsCurrent,
+            "linearSrgbDeltaVsFor375Candidate": $linearSrgbDeltaVsFor375Candidate,
+            "linearSrgbDeltaVsFor373Candidate": $linearSrgbDeltaVsFor373Candidate,
+            "currentErrorByChannel": ${channelErrorJson(currentErrorByChannel)},
+            "linearSrgbErrorByChannel": ${channelErrorJson(linearSrgbErrorByChannel)},
+            "linearSrgbImprovementByChannel": ${channelErrorJson(linearSrgbImprovementByChannel)},
+            "destinationClampChannelCount": $destinationClampChannelCount,
+            "destinationClampPositiveImprovement": $destinationClampPositiveImprovement,
+            "sampleCoherence": ${linearSrgbSampleCoherence(linearSrgbDeltaVsCurrent, linearSrgbDeltaVsFor375Candidate).jsonString()},
+            "channelAudit": {
+        ${channelAudits.joinToString(",\n") { it.toJson().prependIndent("      ") }}
+            }
+          }
+        """.trimIndent().prependIndent("  ")
+        return base.replace(Regex("\n\\s*}$"), ",\n$suffix\n}")
+    }
+
+    private data class LinearSrgbChannelAudit(
+        val channel: String,
+        val currentError: Int,
+        val linearSrgbError: Int,
+        val improvement: Int,
+        val linearSrgbMinusCurrentError: Int,
+        val sourceMinusReference: Int,
+        val currentMinusReference: Int,
+        val linearSrgbMinusReference: Int,
+        val sourceTintDirection: String,
+        val destinationRounded: Int?,
+        val destinationClampedToSrgb: Int?,
+        val destinationClampToLimit: Boolean,
+        val destinationClampLimit: Int?,
+    )
+
+    private fun LinearSrgbChannelAudit.toJson(): String = """
+        ${channel.jsonString()}: {
+          "currentError": $currentError,
+          "linearSrgbError": $linearSrgbError,
+          "improvement": $improvement,
+          "linearSrgbMinusCurrentError": $linearSrgbMinusCurrentError,
+          "sourceMinusReference": $sourceMinusReference,
+          "currentMinusReference": $currentMinusReference,
+          "linearSrgbMinusReference": $linearSrgbMinusReference,
+          "sourceTintDirection": ${sourceTintDirection.jsonString()},
+          "destinationRounded": ${destinationRounded?.toString() ?: "null"},
+          "destinationClampedToSrgb": ${destinationClampedToSrgb?.toString() ?: "null"},
+          "destinationClampToLimit": $destinationClampToLimit,
+          "destinationClampLimit": ${destinationClampLimit?.toString() ?: "null"}
+        }
+    """.trimIndent()
+
+    private data class LinearSrgbBandCoherence(
+        val strokeBand: String,
+        val sampleCount: Int,
+        val currentResidual: Int,
+        val linearSrgbResidual: Int,
+        val for375Residual: Int,
+        val improvedVsCurrentSamples: Int,
+        val regressedVsCurrentSamples: Int,
+        val improvedVsFor375Samples: Int,
+        val regressedVsFor375Samples: Int,
+    ) {
+        val deltaVsCurrent: Int = linearSrgbResidual - currentResidual
+        val deltaVsFor375Candidate: Int = linearSrgbResidual - for375Residual
+        val coherence: String = when {
+            deltaVsCurrent < 0 && deltaVsFor375Candidate < 0 -> "improves-current-and-for375"
+            deltaVsCurrent < 0 && deltaVsFor375Candidate > 0 -> "improves-current-but-regresses-for375"
+            deltaVsCurrent < 0 -> "improves-current-only"
+            deltaVsCurrent == 0 -> "neutral-vs-current"
+            else -> "regresses-vs-current"
+        }
+    }
+
+    private fun LinearSrgbBandCoherence.toJson(): String = """
+        {
+          "strokeBand": ${strokeBand.jsonString()},
+          "sampleCount": $sampleCount,
+          "currentResidual": $currentResidual,
+          "linearSrgbResidual": $linearSrgbResidual,
+          "for375Residual": $for375Residual,
+          "deltaVsCurrent": $deltaVsCurrent,
+          "deltaVsFor375Candidate": $deltaVsFor375Candidate,
+          "improvedVsCurrentSamples": $improvedVsCurrentSamples,
+          "regressedVsCurrentSamples": $regressedVsCurrentSamples,
+          "improvedVsFor375Samples": $improvedVsFor375Samples,
+          "regressedVsFor375Samples": $regressedVsFor375Samples,
+          "coherence": ${coherence.jsonString()}
         }
     """.trimIndent()
 
@@ -2102,6 +2408,70 @@ class StrokeCapJoinSceneCaptureTest {
         return "composition-quantization-candidate-regresses"
     }
 
+    private fun linearSrgbPlausibilityClassification(
+        sampleCount: Int,
+        linearSrgbTotalResidual: Int,
+        currentResidual: Int,
+        clampImprovementShare: Double,
+        bandCoherence: List<LinearSrgbBandCoherence>,
+    ): String {
+        if (sampleCount != FOR377_REQUIRED_SAMPLE_COUNT || linearSrgbTotalResidual != 607) {
+            return "linear-srgb-blocked"
+        }
+        if (linearSrgbTotalResidual >= currentResidual) {
+            return "linear-srgb-blocked"
+        }
+        if (clampImprovementShare >= 0.60) {
+            return "linear-srgb-likely-diagnostic-artifact"
+        }
+        if (bandCoherence.all { it.deltaVsCurrent < 0 && it.deltaVsFor375Candidate < 0 } && clampImprovementShare < 0.50) {
+            return "linear-srgb-plausible-next-axis"
+        }
+        return "linear-srgb-mixed-needs-reference-color-evidence"
+    }
+
+    private fun linearSrgbPlausibilityClassificationReason(classification: String): String =
+        when (classification) {
+            "linear-srgb-plausible-next-axis" ->
+                "The linear-sRGB variant improves both stroke bands against current and FOR-375, and the gain is not dominated by destination clamp channels."
+            "linear-srgb-likely-diagnostic-artifact" ->
+                "Most positive improvement comes from inverse-destination channels clamped to the sRGB limits, so the gain is likely dominated by the diagnostic destination estimate."
+            "linear-srgb-mixed-needs-reference-color-evidence" ->
+                "The variant improves every sample against current and strongly improves round-round, but butt-bevel regresses against FOR-375 and nearly half of the positive gain comes from clamped inverse-destination channels."
+            else ->
+                "The FOR-376 invariant or recomputed linear-sRGB residual changed, so the plausibility audit cannot make a stable decision."
+        }
+
+    private fun linearSrgbSampleCoherence(deltaVsCurrent: Int, deltaVsFor375Candidate: Int): String =
+        when {
+            deltaVsCurrent < 0 && deltaVsFor375Candidate < 0 -> "improves-current-and-for375"
+            deltaVsCurrent < 0 && deltaVsFor375Candidate > 0 -> "improves-current-but-regresses-for375"
+            deltaVsCurrent < 0 -> "improves-current-only"
+            deltaVsCurrent == 0 -> "neutral-vs-current"
+            else -> "regresses-vs-current"
+        }
+
+    private fun sourceTintDirection(
+        reference: IntArray,
+        current: IntArray,
+        source: IntArray,
+        channelIndex: Int,
+    ): String {
+        val sourceDelta = source[channelIndex] - reference[channelIndex]
+        val currentDelta = current[channelIndex] - reference[channelIndex]
+        if (currentDelta == 0) {
+            return "current-matches-reference"
+        }
+        if (sourceDelta == 0) {
+            return "source-matches-reference"
+        }
+        return if (sourceDelta.sign() == currentDelta.sign()) {
+            "current-error-with-source-tint"
+        } else {
+            "current-error-opposes-source-tint"
+        }
+    }
+
     private fun candidateRegressionReason(classification: String): String =
         when (classification) {
             "candidate-regression-likely-destination-model" ->
@@ -2342,6 +2712,14 @@ class StrokeCapJoinSceneCaptureTest {
             else -> "alpha"
         }
 
+    private fun channelKey(index: Int): String =
+        when (index) {
+            0 -> "r"
+            1 -> "g"
+            2 -> "b"
+            else -> "a"
+        }
+
     private fun f16CandidatePolicyId(): String =
         listOf("straight", "srgb", "quantized", "alpha", "src", "over", "white").joinToString("_")
 
@@ -2433,9 +2811,12 @@ class StrokeCapJoinSceneCaptureTest {
         private const val FOR374_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR375_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR376_REQUIRED_SAMPLE_COUNT = 10
+        private const val FOR377_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR373_CURRENT_RESIDUAL = 856
         private const val FOR373_CANDIDATE_TOTAL_RESIDUAL = 1033
         private const val FOR375_EFFECTIVE_DESTINATION_CANDIDATE_TOTAL_RESIDUAL = 794
+        private const val LINEAR_SRGB_EFFECTIVE_DESTINATION_VARIANT_ID =
+            "linear_srgb_source_over_effective_destination_nearest_255"
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
         private const val EXPERIMENTAL_RENDER_PROPERTY = "kanvas.webgpu.strokeCapJoin.experimentalRender"
 
