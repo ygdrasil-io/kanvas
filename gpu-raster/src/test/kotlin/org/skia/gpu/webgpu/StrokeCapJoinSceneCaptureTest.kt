@@ -170,11 +170,13 @@ class StrokeCapJoinSceneCaptureTest {
                                 withM60F16PredrawDstReadback(true) {
                                     withM60F16ShaderReturnDiagnostic(true) {
                                         withM60F16AaStencilCoverContributionIsolationDiagnostic(true) {
-                                            WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
-                                                ctx,
-                                                gm,
-                                                targetColorSpaceBlend = true,
-                                            )
+                                            withM60F16IsolatedColorTargetRuntime(true) {
+                                                WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                                                    ctx,
+                                                    gm,
+                                                    targetColorSpaceBlend = true,
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -215,6 +217,8 @@ class StrokeCapJoinSceneCaptureTest {
                         contributionIsolationResult.aaStencilCoverContributionIsolationSnapshot,
                     aaStencilCoverShaderReturnDiagnosticSnapshot =
                         contributionIsolationResult.aaStencilCoverShaderReturnDiagnosticSnapshot,
+                    aaStencilCoverIsolatedColorTargetSnapshot =
+                        contributionIsolationResult.aaStencilCoverIsolatedColorTargetSnapshot,
                     aaStencilCoverContributionIsolationPostPassSnapshot =
                         contributionIsolationResult.aaStencilCoverPostPassReadbackSnapshot,
                     aaStencilCoverContributionIsolationBoundedRuntimeCorrectionProbe = true,
@@ -269,6 +273,8 @@ class StrokeCapJoinSceneCaptureTest {
             SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
         aaStencilCoverShaderReturnDiagnosticSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        aaStencilCoverIsolatedColorTargetSnapshot:
+            SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetSnapshot,
         aaStencilCoverContributionIsolationPostPassSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
         aaStencilCoverContributionIsolationBoundedRuntimeCorrectionProbe: Boolean,
@@ -484,6 +490,12 @@ class StrokeCapJoinSceneCaptureTest {
                 contributionSnapshot = aaStencilCoverContributionIsolationSnapshot,
                 predrawSnapshot = aaStencilCoverPredrawDstReadbackSnapshot,
                 postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
+                adapter = adapter,
+            )
+        }
+        if (aaStencilCoverIsolatedColorTargetSnapshot.enabled) {
+            writeM60F16AaStencilCoverIsolatedColorTargetRuntime(
+                snapshot = aaStencilCoverIsolatedColorTargetSnapshot,
                 adapter = adapter,
             )
         }
@@ -957,6 +969,20 @@ class StrokeCapJoinSceneCaptureTest {
                 System.clearProperty(FOR412_SHADER_RETURN_DIAGNOSTIC_PROPERTY)
             } else {
                 System.setProperty(FOR412_SHADER_RETURN_DIAGNOSTIC_PROPERTY, previous)
+            }
+        }
+    }
+
+    private fun <T> withM60F16IsolatedColorTargetRuntime(enabled: Boolean, block: () -> T): T {
+        val previous = System.getProperty(FOR417_ISOLATED_COLOR_TARGET_PROPERTY)
+        System.setProperty(FOR417_ISOLATED_COLOR_TARGET_PROPERTY, enabled.toString())
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FOR417_ISOLATED_COLOR_TARGET_PROPERTY)
+            } else {
+                System.setProperty(FOR417_ISOLATED_COLOR_TARGET_PROPERTY, previous)
             }
         }
     }
@@ -1882,6 +1908,81 @@ class StrokeCapJoinSceneCaptureTest {
                 adapter = adapter,
             ),
         )
+    }
+
+    private fun writeM60F16AaStencilCoverIsolatedColorTargetRuntime(
+        snapshot: SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetSnapshot,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/" +
+                "m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417",
+        ).apply { mkdirs() }
+        File(dir, "raw-runtime-snapshot-for417.json").writeText(
+            m60F16AaStencilCoverIsolatedColorTargetRuntimeRawJson(snapshot, adapter),
+        )
+    }
+
+    private fun m60F16AaStencilCoverIsolatedColorTargetRuntimeRawJson(
+        snapshot: SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetSnapshot,
+        adapter: String,
+    ): String {
+        val events = snapshot.events.joinToString(",\n") { event ->
+            val samples = event.samples.joinToString(",\n") { sample ->
+                """
+                {
+                  "x": ${sample.x},
+                  "y": ${sample.y},
+                  "targetWithinScissor": ${sample.targetWithinScissor},
+                  "readbackAttempted": ${sample.readbackAttempted},
+                  "readbackAvailable": ${sample.readbackAvailable},
+                  "scratchOutputRgbaFloat": ${sample.scratchOutputRgbaFloat.floatArrayOrNullJson()},
+                  "scratchOutputRgba8": ${sample.scratchOutputRgba8.intArrayOrNullJson()},
+                  "classification": ${sample.classification.jsonString()},
+                  "reason": ${sample.reason.jsonString()}
+                }
+                """.trimIndent()
+            }
+            """
+            {
+              "drawIndex": ${event.drawIndex},
+              "pipelineFamily": ${event.pipelineFamily.jsonString()},
+              "fillType": ${event.fillType.jsonString()},
+              "blendMode": ${event.blendMode.jsonString()},
+              "scissor": ${intArrayJson(event.scissor)},
+              "edgeCount": ${event.edgeCount},
+              "coverVertexCount": ${event.coverVertexCount},
+              "scratchTargetEncoded": ${event.scratchTargetEncoded},
+              "copyAttempted": ${event.copyAttempted},
+              "copySucceeded": ${event.copySucceeded},
+              "copyFailureReason": ${event.copyFailureReason?.jsonString() ?: "null"},
+              "samples": [
+                $samples
+              ]
+            }
+            """.trimIndent()
+        }
+        return """
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-417",
+          "sceneId": "m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417",
+          "adapter": ${adapter.jsonString()},
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "propertyName": ${snapshot.propertyName.jsonString()},
+          "enabled": ${snapshot.enabled},
+          "requestedBoundary": ${snapshot.requestedBoundary.jsonString()},
+          "observedBoundary": ${snapshot.observedBoundary.jsonString()},
+          "diagnosticShader": ${snapshot.diagnosticShader.jsonString()},
+          "pipelineLayout": ${snapshot.pipelineLayout.jsonString()},
+          "scratchFormat": ${snapshot.scratchFormat.jsonString()},
+          "sampleLimit": ${snapshot.sampleLimit},
+          "events": [
+            $events
+          ]
+        }
+        """.trimIndent()
     }
 
     private fun m60F16FragmentLaneRuntimeSnapshotExportJson(
@@ -11530,6 +11631,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16AaStencilCoverPredrawDstReadback.enabled"
         private const val FOR412_SHADER_RETURN_DIAGNOSTIC_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverShaderReturnDiagnostic.enabled"
+        private const val FOR417_ISOLATED_COLOR_TARGET_PROPERTY =
+            "kanvas.webgpu.m60F16AaStencilCoverIsolatedColorTarget.enabled"
         private const val FOR412_MATCH_TOLERANCE = 0.000001f
         private const val FOR401_FINAL_RESIDUAL_ORIGIN_MAP_SAMPLE_LIMIT = 16
         private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =
