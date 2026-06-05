@@ -161,6 +161,7 @@ class StrokeCapJoinSceneCaptureTest {
         File(dir, "aa-residual-diagnostic.json").writeText(residualStats.toJson(adapter))
         writeM60F16SourcePaintCaptureExtension(residualStats, adapter)
         writeM60F16EffectiveCoverageExport(residualStats, adapter)
+        writeM60F16CandidatePolicyRgbaProbe(residualStats, adapter)
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -781,6 +782,194 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun writeM60F16CandidatePolicyRgbaProbe(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-candidate-policy-rgba-probe-for373",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-candidate-policy-rgba-probe-for373.json").writeText(
+            m60F16CandidatePolicyRgbaProbeJson(residualStats, adapter),
+        )
+    }
+
+    private fun m60F16CandidatePolicyRgbaProbeJson(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val samples = residualStats.highDeltaSamples.take(FOR373_REQUIRED_SAMPLE_COUNT)
+        val currentResidual = samples.sumOf { sampleResidual(it.reference, it.gpu) }
+        val candidateSamples = samples.mapIndexed { index, sample ->
+            candidatePolicySample(index + 1, sample, coverageMask)
+        }
+        val candidateTotalResidual = candidateSamples.sumOf { it.candidateResidual }
+        val classification = when {
+            samples.size != FOR373_REQUIRED_SAMPLE_COUNT -> "candidate-policy-blocked"
+            candidateTotalResidual < FOR373_CURRENT_RESIDUAL -> "candidate-policy-reduces-residual"
+            candidateTotalResidual == FOR373_CURRENT_RESIDUAL -> "candidate-policy-neutral"
+            else -> "candidate-policy-regresses"
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-373",
+              "sceneId": "m60-f16-candidate-policy-rgba-probe-for373",
+              "sourceSceneId": "m60-f16-effective-coverage-export-for372",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-candidate-policy-rgba-comparable-apres-for-372",
+              "sourceFinding": "global/kanvas/findings/for-372-exporte-la-couverture-aa-effective-m60-f16-depuis-un-masque-cpu-diagnostique",
+              "requiredFor372Decision": "M60_F16_EFFECTIVE_COVERAGE_EXPORT_READY_FOR_CANDIDATE_PROBE",
+              "requiredFor372Classification": "coverage-export-ready-for-candidate-probe",
+              "decision": "M60_F16_CANDIDATE_POLICY_RGBA_PROBE_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "candidate-policy-reduces-residual",
+                "candidate-policy-neutral",
+                "candidate-policy-regresses",
+                "candidate-policy-blocked"
+              ],
+              "candidatePolicyId": ${f16CandidatePolicyId().jsonString()},
+              "candidatePolicyFormula": "alphaByte=round((paintAlpha/255.0)*(sourceCoverageByte/255.0)*255); alpha=alphaByte/255.0; rgb=floor(((sourceRgb/255.0)*alpha + (1.0-alpha))*256.0) clamped to [0,255]; a=255",
+              "candidatePolicyInputSource": "FOR-372 diagnostic coverage export fields plus BoundedStrokeCapJoinGM paint metadata",
+              "candidatePolicyRgbaSource": "calculated-by-diagnostic-policy",
+              "candidatePolicyRgbaReadFromRenderer": false,
+              "candidatePolicyRgbaReadFromGpuImage": false,
+              "candidatePolicyRgbaAppliedToRenderer": false,
+              "rendererAppliedCandidate": false,
+              "currentResidual": $currentResidual,
+              "requiredCurrentResidual": $FOR373_CURRENT_RESIDUAL,
+              "candidateTotalResidual": $candidateTotalResidual,
+              "candidateTotalResidualDeltaVsCurrent": ${candidateTotalResidual - FOR373_CURRENT_RESIDUAL},
+              "sampleCount": ${samples.size},
+              "samples": [
+            ${candidateSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "nonGoalsPreserved": {
+                "rendererBehaviorChanged": false,
+                "candidateImplementationAuthorized": false,
+                "candidatePolicyRgbaAppliedToRenderer": false,
+                "candidatePolicyRgbaReadFromRenderer": false,
+                "candidatePolicyRgbaReadFromGpuImage": false,
+                "scoreIncreased": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "gpuOrWgslChanged": false,
+                "geometryProductionChanged": false,
+                "coverageProductionChanged": false,
+                "fallbackChanged": false,
+                "kadreChanged": false,
+                "f16PremulBlendRuntimeChanged": false,
+                "skBitmapGetPixelChanged": false,
+                "rendererSceneBranchAdded": false,
+                "rendererCoordinateBranchAdded": false,
+                "rendererSelectedCellBranchAdded": false,
+                "fullGmCropPathAdded": false
+              },
+              "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun candidatePolicySample(index: Int, sample: ResidualSample, coverageMask: SkBitmap): CandidatePolicySample {
+        val band = strokePaintBands().first { sample.x in it.xStart until it.xEnd }
+        val currentResidual = sampleResidual(sample.reference, sample.gpu)
+        val sourceCoverageByte = (coverageMask.getPixel(sample.x, sample.y) ushr 24) and 0xFF
+        val candidateRgba = candidatePolicyRgba(band.sourceColor, sourceCoverageByte)
+        val candidateResidual = sampleResidual(sample.reference, rgbaToPixel(candidateRgba))
+        return CandidatePolicySample(
+            index = index,
+            x = sample.x,
+            y = sample.y,
+            strokeBand = band.id,
+            reference = sample.reference,
+            current = sample.gpu,
+            currentResidual = currentResidual,
+            maxChannelDelta = sample.maxChannelDelta,
+            paintSource = band.sourceColor,
+            paintSourceAlpha = (band.sourceColor ushr 24) and 0xFF,
+            cap = band.cap,
+            join = band.join,
+            strokeWidth = band.strokeWidth,
+            sourceCoverageByte = sourceCoverageByte,
+            sourceCoverage = sourceCoverageByte / 255.0,
+            effectiveSourceAlphaByte = sourceCoverageByte,
+            effectiveSourceAlpha = sourceCoverageByte / 255.0,
+            candidatePolicyRgba = candidateRgba,
+            candidateResidual = candidateResidual,
+            candidateResidualDeltaVsCurrent = candidateResidual - currentResidual,
+            candidateImprovesSample = candidateResidual < currentResidual,
+        )
+    }
+
+    private data class CandidatePolicySample(
+        val index: Int,
+        val x: Int,
+        val y: Int,
+        val strokeBand: String,
+        val reference: Int,
+        val current: Int,
+        val currentResidual: Int,
+        val maxChannelDelta: Int,
+        val paintSource: Int,
+        val paintSourceAlpha: Int,
+        val cap: String,
+        val join: String,
+        val strokeWidth: Float,
+        val sourceCoverageByte: Int,
+        val sourceCoverage: Double,
+        val effectiveSourceAlphaByte: Int,
+        val effectiveSourceAlpha: Double,
+        val candidatePolicyRgba: IntArray,
+        val candidateResidual: Int,
+        val candidateResidualDeltaVsCurrent: Int,
+        val candidateImprovesSample: Boolean,
+    )
+
+    private fun CandidatePolicySample.toJson(): String = """
+        {
+          "index": $index,
+          "x": $x,
+          "y": $y,
+          "strokeBand": ${strokeBand.jsonString()},
+          "referenceRgba": ${rgbaJson(reference)},
+          "currentRgba": ${rgbaJson(current)},
+          "gpuRgba": ${rgbaJson(current)},
+          "sampleResidual": $currentResidual,
+          "maxChannelDelta": $maxChannelDelta,
+          "paintSourceRgba": ${rgbaJson(paintSource)},
+          "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+          "paintSourceAlpha": $paintSourceAlpha,
+          "cap": ${cap.jsonString()},
+          "join": ${join.jsonString()},
+          "strokeWidth": ${String.format(Locale.US, "%.1f", strokeWidth)},
+          "sourceCoverageByte": $sourceCoverageByte,
+          "sourceCoverage": ${String.format(Locale.US, "%.6f", sourceCoverage)},
+          "sourceCoverageStatus": "preserved-from-FOR-372-diagnostic-mask-alpha",
+          "effectiveSourceAlphaByte": $effectiveSourceAlphaByte,
+          "effectiveSourceAlpha": ${String.format(Locale.US, "%.6f", effectiveSourceAlpha)},
+          "effectiveSourceAlphaStatus": "opaque-source-paint-alpha-multiplied-by-exported-coverage",
+          "coverageProvenance": "cpu.coverage.stroke-cap-join-oracle / PathStrokeCoverage / diagnostic transparent GM alpha mask",
+          "coverageReadSource": "alpha-channel-from-transparent-cpu-diagnostic-mask",
+          "coverageReconstructedFromRgbaDeltas": false,
+          "referenceCurrentRgbaUsedForCoverage": false,
+          "sampleDeltaRgbaUsedForCoverage": false,
+          "candidatePolicyId": ${f16CandidatePolicyId().jsonString()},
+          "candidatePolicyRgba": ${rgbaArrayJson(candidatePolicyRgba)},
+          "candidatePolicyRgbaStatus": "calculated-by-straight-srgb-quantized-alpha-src-over-white",
+          "candidatePolicyRgbaSource": "calculated-by-diagnostic-policy",
+          "candidatePolicyRgbaReadFromRenderer": false,
+          "candidatePolicyRgbaReadFromGpuImage": false,
+          "candidateResidual": $candidateResidual,
+          "candidateResidualDeltaVsCurrent": $candidateResidualDeltaVsCurrent,
+          "candidateImprovesSample": $candidateImprovesSample,
+          "rendererAppliedCandidate": false
+        }
+    """.trimIndent()
+
     private fun m60F16EffectiveCoverageExportJson(
         residualStats: StrokeResidualStats,
         adapter: String,
@@ -1059,6 +1248,38 @@ class StrokeCapJoinSceneCaptureTest {
             kotlin.math.abs(((reference ushr shift) and 0xFF) - ((current ushr shift) and 0xFF))
         }
 
+    private fun candidatePolicyRgba(sourceColor: Int, sourceCoverageByte: Int): IntArray {
+        val sourceAlphaByte = (sourceColor ushr 24) and 0xFF
+        val effectiveAlphaByte = quantizeAlphaRound((sourceAlphaByte / 255.0) * (sourceCoverageByte / 255.0))
+        val alpha = effectiveAlphaByte / 255.0
+        return intArrayOf(
+            quantize256((((sourceColor ushr 16) and 0xFF) / 255.0) * alpha + (1.0 - alpha)),
+            quantize256((((sourceColor ushr 8) and 0xFF) / 255.0) * alpha + (1.0 - alpha)),
+            quantize256(((sourceColor and 0xFF) / 255.0) * alpha + (1.0 - alpha)),
+            255,
+        )
+    }
+
+    private fun quantizeAlphaRound(value: Double): Int =
+        if (value.isNaN()) {
+            0
+        } else {
+            ((value * 255.0) + 0.5).toInt().coerceIn(0, 255)
+        }
+
+    private fun quantize256(value: Double): Int =
+        if (value.isNaN()) {
+            0
+        } else {
+            (value * 256.0).toInt().coerceIn(0, 255)
+        }
+
+    private fun rgbaToPixel(rgba: IntArray): Int =
+        ((rgba[3] and 0xFF) shl 24) or
+            ((rgba[0] and 0xFF) shl 16) or
+            ((rgba[1] and 0xFF) shl 8) or
+            (rgba[2] and 0xFF)
+
     private fun rgbaJson(pixel: Int): String {
         val r = (pixel ushr 16) and 0xFF
         val g = (pixel ushr 8) and 0xFF
@@ -1066,6 +1287,8 @@ class StrokeCapJoinSceneCaptureTest {
         val a = (pixel ushr 24) and 0xFF
         return """[$r, $g, $b, $a]"""
     }
+
+    private fun rgbaArrayJson(rgba: IntArray): String = """[${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${rgba[3]}]"""
 
     private fun f16CandidatePolicyId(): String =
         listOf("straight", "srgb", "quantized", "alpha", "src", "over", "white").joinToString("_")
@@ -1154,6 +1377,8 @@ class StrokeCapJoinSceneCaptureTest {
         private const val GPU_SUPPORT_THRESHOLD = 99.95
         private const val FOR370_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR372_REQUIRED_SAMPLE_COUNT = 10
+        private const val FOR373_REQUIRED_SAMPLE_COUNT = 10
+        private const val FOR373_CURRENT_RESIDUAL = 856
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
         private const val EXPERIMENTAL_RENDER_PROPERTY = "kanvas.webgpu.strokeCapJoin.experimentalRender"
 
