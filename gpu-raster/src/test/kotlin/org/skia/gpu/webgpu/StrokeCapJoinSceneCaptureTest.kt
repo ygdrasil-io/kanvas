@@ -223,6 +223,8 @@ class StrokeCapJoinSceneCaptureTest {
                         contributionIsolationResult.aaStencilCoverIsolatedColorTargetSnapshot,
                     aaStencilCoverStorageColorTargetComparisonSnapshot =
                         contributionIsolationResult.aaStencilCoverStorageColorTargetComparisonSnapshot,
+                    aaStencilCoverShaderReturnStorageZeroCauseSnapshot =
+                        contributionIsolationResult.aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
                     aaStencilCoverContributionIsolationPostPassSnapshot =
                         contributionIsolationResult.aaStencilCoverPostPassReadbackSnapshot,
                     aaStencilCoverContributionIsolationBoundedRuntimeCorrectionProbe = true,
@@ -281,6 +283,8 @@ class StrokeCapJoinSceneCaptureTest {
             SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetSnapshot,
         aaStencilCoverStorageColorTargetComparisonSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverStorageColorTargetComparisonSnapshot,
+        aaStencilCoverShaderReturnStorageZeroCauseSnapshot:
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
         aaStencilCoverContributionIsolationPostPassSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
         aaStencilCoverContributionIsolationBoundedRuntimeCorrectionProbe: Boolean,
@@ -505,9 +509,17 @@ class StrokeCapJoinSceneCaptureTest {
                 adapter = adapter,
             )
         }
-        if (aaStencilCoverStorageColorTargetComparisonSnapshot.enabled) {
+        if (aaStencilCoverStorageColorTargetComparisonSnapshot.enabled &&
+            !aaStencilCoverShaderReturnStorageZeroCauseSnapshot.enabled
+        ) {
             writeM60F16AaStencilCoverStorageColorTargetComparison(
                 snapshot = aaStencilCoverStorageColorTargetComparisonSnapshot,
+                adapter = adapter,
+            )
+        }
+        if (aaStencilCoverShaderReturnStorageZeroCauseSnapshot.enabled) {
+            writeM60F16AaStencilCoverShaderReturnStorageZeroCause(
+                snapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
                 adapter = adapter,
             )
         }
@@ -2113,6 +2125,129 @@ class StrokeCapJoinSceneCaptureTest {
           "schemaVersion": 1,
           "linear": "FOR-418",
           "sceneId": "m60-f16-aa-stencil-cover-storage-vs-color-target-for418",
+          "adapter": ${adapter.jsonString()},
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "propertyName": ${snapshot.propertyName.jsonString()},
+          "enabled": ${snapshot.enabled},
+          "requestedBoundary": ${snapshot.requestedBoundary.jsonString()},
+          "observedBoundary": ${snapshot.observedBoundary.jsonString()},
+          "diagnosticShader": ${snapshot.diagnosticShader.jsonString()},
+          "pipelineLayout": ${snapshot.pipelineLayout.jsonString()},
+          "scratchFormat": ${snapshot.scratchFormat.jsonString()},
+          "sampleLimit": ${snapshot.sampleLimit},
+          "storageEvents": [
+            $storageEvents
+          ],
+          "colorTargetEvents": [
+            $colorTargetEvents
+          ]
+        }
+        """.trimIndent()
+    }
+
+    private fun writeM60F16AaStencilCoverShaderReturnStorageZeroCause(
+        snapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/" +
+                "m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419",
+        ).apply { mkdirs() }
+        File(dir, "raw-runtime-snapshot-for419.json").writeText(
+            m60F16AaStencilCoverShaderReturnStorageZeroCauseRawJson(snapshot, adapter),
+        )
+    }
+
+    private fun m60F16AaStencilCoverShaderReturnStorageZeroCauseRawJson(
+        snapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ): String {
+        fun storageEventJson(event: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent): String {
+            val samples = event.samples.joinToString(",\n") { sample ->
+                """
+                {
+                  "x": ${sample.x},
+                  "y": ${sample.y},
+                  "subdrawOrdinal": ${sample.subdrawOrdinal},
+                  "subdrawRole": ${sample.subdrawRole.jsonString()},
+                  "targetWithinScissor": ${sample.targetWithinScissor},
+                  "shaderObserved": ${sample.shaderObserved},
+                  "candidateBranchReached": ${sample.candidateBranchReached},
+                  "colorAfterColorFilter": ${sample.colorAfterColorFilter.floatArrayOrNullJson()},
+                  "colorAfterTargetColorspaceIfNeeded": ${sample.colorAfterTargetColorspaceIfNeeded.floatArrayOrNullJson()},
+                  "correctedColorBeforeCoverage": ${sample.correctedColorBeforeCoverage.floatArrayOrNullJson()},
+                  "coverageOrAaAlpha": ${sample.coverageOrAaAlpha?.toString() ?: "null"},
+                  "sourceAlphaAfterCoverage": ${sample.sourceAlphaAfterCoverage?.toString() ?: "null"},
+                  "sourceColorBeforeQuantization": ${sample.sourceColorBeforeQuantization.floatArrayOrNullJson()},
+                  "sourceColorSentToBlend": ${sample.sourceColorSentToBlend.floatArrayOrNullJson()},
+                  "sourceFieldUsedByFOR408Replay": ${sample.sourceFieldUsedByFOR408Replay.floatArrayOrNullJson()},
+                  "quantizedAlphaSentToBlend": ${sample.quantizedAlphaSentToBlend?.toString() ?: "null"},
+                  "captureSynthetic": ${sample.captureSynthetic},
+                  "classification": ${sample.classification.jsonString()},
+                  "reason": ${sample.reason.jsonString()}
+                }
+                """.trimIndent()
+            }
+            return """
+            {
+              "drawIndex": ${event.drawIndex},
+              "pipelineFamily": ${event.pipelineFamily.jsonString()},
+              "fillType": ${event.fillType.jsonString()},
+              "blendMode": ${event.blendMode.jsonString()},
+              "scissor": ${intArrayJson(event.scissor)},
+              "edgeCount": ${event.edgeCount},
+              "coverVertexCount": ${event.coverVertexCount},
+              "samples": [
+                $samples
+              ]
+            }
+            """.trimIndent()
+        }
+
+        fun colorEventJson(event: SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetEvent): String {
+            val samples = event.samples.joinToString(",\n") { sample ->
+                """
+                {
+                  "x": ${sample.x},
+                  "y": ${sample.y},
+                  "targetWithinScissor": ${sample.targetWithinScissor},
+                  "readbackAttempted": ${sample.readbackAttempted},
+                  "readbackAvailable": ${sample.readbackAvailable},
+                  "scratchOutputRgbaFloat": ${sample.scratchOutputRgbaFloat.floatArrayOrNullJson()},
+                  "scratchOutputRgba8": ${sample.scratchOutputRgba8.intArrayOrNullJson()},
+                  "classification": ${sample.classification.jsonString()},
+                  "reason": ${sample.reason.jsonString()}
+                }
+                """.trimIndent()
+            }
+            return """
+            {
+              "drawIndex": ${event.drawIndex},
+              "pipelineFamily": ${event.pipelineFamily.jsonString()},
+              "fillType": ${event.fillType.jsonString()},
+              "blendMode": ${event.blendMode.jsonString()},
+              "scissor": ${intArrayJson(event.scissor)},
+              "edgeCount": ${event.edgeCount},
+              "coverVertexCount": ${event.coverVertexCount},
+              "scratchTargetEncoded": ${event.scratchTargetEncoded},
+              "copyAttempted": ${event.copyAttempted},
+              "copySucceeded": ${event.copySucceeded},
+              "copyFailureReason": ${event.copyFailureReason?.jsonString() ?: "null"},
+              "samples": [
+                $samples
+              ]
+            }
+            """.trimIndent()
+        }
+
+        val storageEvents = snapshot.storageEvents.joinToString(",\n") { storageEventJson(it) }
+        val colorTargetEvents = snapshot.colorTargetEvents.joinToString(",\n") { colorEventJson(it) }
+        return """
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-419",
+          "sceneId": "m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419",
           "adapter": ${adapter.jsonString()},
           "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
           "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
@@ -11784,6 +11919,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16AaStencilCoverIsolatedColorTarget.enabled"
         private const val FOR418_STORAGE_COLOR_TARGET_COMPARISON_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverStorageColorTargetComparison.enabled"
+        private const val FOR419_SHADER_RETURN_STORAGE_ZERO_CAUSE_PROPERTY =
+            "kanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled"
         private const val FOR412_MATCH_TOLERANCE = 0.000001f
         private const val FOR401_FINAL_RESIDUAL_ORIGIN_MAP_SAMPLE_LIMIT = 16
         private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =

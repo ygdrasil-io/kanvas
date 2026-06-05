@@ -214,6 +214,8 @@ private const val WEBGPU_M60_F16_AA_STENCIL_COVER_ISOLATED_COLOR_TARGET_FLAG: St
     "kanvas.webgpu.m60F16AaStencilCoverIsolatedColorTarget.enabled"
 private const val WEBGPU_M60_F16_AA_STENCIL_COVER_STORAGE_COLOR_TARGET_COMPARISON_FLAG: String =
     "kanvas.webgpu.m60F16AaStencilCoverStorageColorTargetComparison.enabled"
+private const val WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_STORAGE_ZERO_CAUSE_FLAG: String =
+    "kanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -633,6 +635,19 @@ public class SkWebGpuDevice(
         val colorTargetEvents: List<M60F16AaStencilCoverIsolatedColorTargetEvent>,
     )
 
+    public data class M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val requestedBoundary: String,
+        val observedBoundary: String,
+        val diagnosticShader: String,
+        val pipelineLayout: String,
+        val scratchFormat: String,
+        val sampleLimit: Int,
+        val storageEvents: List<M60F16AaStencilCoverShaderReturnDiagnosticEvent>,
+        val colorTargetEvents: List<M60F16AaStencilCoverIsolatedColorTargetEvent>,
+    )
+
     public data class M60F16AaStencilCoverContributionIsolationSnapshot(
         val propertyName: String,
         val enabled: Boolean,
@@ -862,6 +877,11 @@ public class SkWebGpuDevice(
             WEBGPU_M60_F16_AA_STENCIL_COVER_STORAGE_COLOR_TARGET_COMPARISON_FLAG,
             "false",
         ).toBoolean()
+    private val m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_STORAGE_ZERO_CAUSE_FLAG,
+            "false",
+        ).toBoolean()
     private val rawRectUniformColorWrites: MutableList<RawRectUniformColorWrite> = mutableListOf()
     private val rawRgba8TextureUploads: MutableList<RawRgba8TextureUpload> = mutableListOf()
     private val outputReadbackBoundarySamples: MutableList<OutputReadbackSample> = mutableListOf()
@@ -896,6 +916,10 @@ public class SkWebGpuDevice(
         MutableList<M60F16AaStencilCoverIsolatedColorTargetEvent> = mutableListOf()
     private val m60F16AaStencilCoverStorageColorTargetComparisonPendingReadbacks:
         MutableList<M60F16AaStencilCoverStorageColorTargetComparisonReadback> = mutableListOf()
+    private val m60F16AaStencilCoverShaderReturnStorageZeroCauseStorageEvents:
+        MutableList<M60F16AaStencilCoverShaderReturnDiagnosticEvent> = mutableListOf()
+    private val m60F16AaStencilCoverShaderReturnStorageZeroCauseColorEvents:
+        MutableList<M60F16AaStencilCoverIsolatedColorTargetEvent> = mutableListOf()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
         PipelineKeyedCache("generated shader modules")
@@ -1090,6 +1114,23 @@ public class SkWebGpuDevice(
             sampleLimit = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.size,
             storageEvents = m60F16AaStencilCoverStorageColorTargetComparisonStorageEvents.toList(),
             colorTargetEvents = m60F16AaStencilCoverStorageColorTargetComparisonColorEvents.toList(),
+        )
+
+    public fun m60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot():
+        M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot =
+        M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot(
+            propertyName = WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_STORAGE_ZERO_CAUSE_FLAG,
+            enabled = m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled,
+            requestedBoundary =
+                "per mutating M60 F16 StencilCoverAaPolygonDraw shader-return storage zero-cause probe",
+            observedBoundary =
+                "one no-blend scratch pass writes shader-return storage fields only after nonzero @location(0) computation",
+            diagnosticShader = M60_F16_AA_STENCIL_COVER_SHADER_RETURN_STORAGE_ZERO_CAUSE_SHADER,
+            pipelineLayout = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_LAYOUT,
+            scratchFormat = GPUTextureFormat.RGBA16Float.name,
+            sampleLimit = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.size,
+            storageEvents = m60F16AaStencilCoverShaderReturnStorageZeroCauseStorageEvents.toList(),
+            colorTargetEvents = m60F16AaStencilCoverShaderReturnStorageZeroCauseColorEvents.toList(),
         )
 
     public fun buildPipelineKeyIdentityForDiagnostics(axes: Map<String, String>): PipelineKey =
@@ -2085,7 +2126,11 @@ public class SkWebGpuDevice(
     }
 
     private suspend fun recordM60F16AaStencilCoverStorageColorTargetComparisonReadbacks() {
-        if (!m60F16AaStencilCoverStorageColorTargetComparisonDiagnosticsEnabled) return
+        if (!m60F16AaStencilCoverStorageColorTargetComparisonDiagnosticsEnabled &&
+            !m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled
+        ) {
+            return
+        }
         val readbacks = m60F16AaStencilCoverStorageColorTargetComparisonPendingReadbacks.toList()
         m60F16AaStencilCoverStorageColorTargetComparisonPendingReadbacks.clear()
         readbacks.forEach { readback ->
@@ -2228,26 +2273,31 @@ public class SkWebGpuDevice(
                         },
                     )
                 }
-                m60F16AaStencilCoverStorageColorTargetComparisonStorageEvents +=
-                    M60F16AaStencilCoverShaderReturnDiagnosticEvent(
-                        drawIndex = metadata.drawIndex,
-                        pipelineFamily = "StencilCoverAaPolygonDraw",
-                        fillType = metadata.fillType,
-                        blendMode = metadata.blendMode,
-                        scissor = metadata.scissor.copyOf(),
-                        edgeCount = metadata.edgeCount,
-                        coverVertexCount = metadata.coverVertexCount,
-                        samples = storageSamples,
-                    )
-                m60F16AaStencilCoverStorageColorTargetComparisonColorEvents +=
-                    m60F16IsolatedColorTargetEvent(
-                        metadata = metadata,
-                        scratchTargetEncoded = true,
-                        copyAttempted = true,
-                        copySucceeded = true,
-                        copyFailureReason = null,
-                        samples = colorSamples,
-                    )
+                val storageEvent = M60F16AaStencilCoverShaderReturnDiagnosticEvent(
+                    drawIndex = metadata.drawIndex,
+                    pipelineFamily = "StencilCoverAaPolygonDraw",
+                    fillType = metadata.fillType,
+                    blendMode = metadata.blendMode,
+                    scissor = metadata.scissor.copyOf(),
+                    edgeCount = metadata.edgeCount,
+                    coverVertexCount = metadata.coverVertexCount,
+                    samples = storageSamples,
+                )
+                val colorEvent = m60F16IsolatedColorTargetEvent(
+                    metadata = metadata,
+                    scratchTargetEncoded = true,
+                    copyAttempted = true,
+                    copySucceeded = true,
+                    copyFailureReason = null,
+                    samples = colorSamples,
+                )
+                if (m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled) {
+                    m60F16AaStencilCoverShaderReturnStorageZeroCauseStorageEvents += storageEvent
+                    m60F16AaStencilCoverShaderReturnStorageZeroCauseColorEvents += colorEvent
+                } else {
+                    m60F16AaStencilCoverStorageColorTargetComparisonStorageEvents += storageEvent
+                    m60F16AaStencilCoverStorageColorTargetComparisonColorEvents += colorEvent
+                }
             } catch (t: Throwable) {
                 val storageSamples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.flatMap { (x, y) ->
                     listOf("inside", "outside").mapIndexed { index, role ->
@@ -2287,26 +2337,31 @@ public class SkWebGpuDevice(
                         reason = "FOR-418 color-target readback failed: ${t::class.simpleName}: ${t.message}",
                     )
                 }
-                m60F16AaStencilCoverStorageColorTargetComparisonStorageEvents +=
-                    M60F16AaStencilCoverShaderReturnDiagnosticEvent(
-                        drawIndex = metadata.drawIndex,
-                        pipelineFamily = "StencilCoverAaPolygonDraw",
-                        fillType = metadata.fillType,
-                        blendMode = metadata.blendMode,
-                        scissor = metadata.scissor.copyOf(),
-                        edgeCount = metadata.edgeCount,
-                        coverVertexCount = metadata.coverVertexCount,
-                        samples = storageSamples,
-                    )
-                m60F16AaStencilCoverStorageColorTargetComparisonColorEvents +=
-                    m60F16IsolatedColorTargetEvent(
-                        metadata = metadata,
-                        scratchTargetEncoded = true,
-                        copyAttempted = true,
-                        copySucceeded = false,
-                        copyFailureReason = "${t::class.simpleName}: ${t.message}",
-                        samples = colorSamples,
-                    )
+                val storageEvent = M60F16AaStencilCoverShaderReturnDiagnosticEvent(
+                    drawIndex = metadata.drawIndex,
+                    pipelineFamily = "StencilCoverAaPolygonDraw",
+                    fillType = metadata.fillType,
+                    blendMode = metadata.blendMode,
+                    scissor = metadata.scissor.copyOf(),
+                    edgeCount = metadata.edgeCount,
+                    coverVertexCount = metadata.coverVertexCount,
+                    samples = storageSamples,
+                )
+                val colorEvent = m60F16IsolatedColorTargetEvent(
+                    metadata = metadata,
+                    scratchTargetEncoded = true,
+                    copyAttempted = true,
+                    copySucceeded = false,
+                    copyFailureReason = "${t::class.simpleName}: ${t.message}",
+                    samples = colorSamples,
+                )
+                if (m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled) {
+                    m60F16AaStencilCoverShaderReturnStorageZeroCauseStorageEvents += storageEvent
+                    m60F16AaStencilCoverShaderReturnStorageZeroCauseColorEvents += colorEvent
+                } else {
+                    m60F16AaStencilCoverStorageColorTargetComparisonStorageEvents += storageEvent
+                    m60F16AaStencilCoverStorageColorTargetComparisonColorEvents += colorEvent
+                }
             }
         }
     }
@@ -4198,6 +4253,7 @@ public class SkWebGpuDevice(
         applicationPointDiagnostic: Boolean = false,
         coverageStencilContributionMapDiagnostic: Boolean = false,
         contributionIsolationDiagnostic: Boolean = false,
+        storageZeroCauseDiagnostic: Boolean = false,
     ): GPUShaderModule {
         val cached = shaderModuleCache[cacheKey]
         if (cached != null) {
@@ -4328,6 +4384,17 @@ fn m60_f16_record_application_point(
     let py = floor(pixel.y);
     let side_offset = select(0u, 1u, side == 2u);
     let base = (u32(slot) * 2u + side_offset) * 6u;
+${if (storageZeroCauseDiagnostic) {
+                            """
+    let output_nonzero =
+        quantized.r != 0.0 || quantized.g != 0.0 || quantized.b != 0.0 || quantized.a != 0.0;
+    if (!output_nonzero) {
+        return;
+    }
+""".trimEnd()
+                        } else {
+                            ""
+                        }}
     m60F16FragmentLaneDiagnostic[base] = vec4f(
         px,
         py,
@@ -4337,7 +4404,12 @@ fn m60_f16_record_application_point(
     m60F16FragmentLaneDiagnostic[base + 1u] = filtered;
     m60F16FragmentLaneDiagnostic[base + 2u] = target_colorspace;
     m60F16FragmentLaneDiagnostic[base + 3u] = before_quantization;
-    m60F16FragmentLaneDiagnostic[base + 4u] = vec4f(coverage, before_quantization.a, quantized.a, 0.0);
+    m60F16FragmentLaneDiagnostic[base + 4u] = vec4f(
+        coverage,
+        before_quantization.a,
+        quantized.a,
+        ${if (storageZeroCauseDiagnostic) "1.0" else "0.0"}
+    );
     m60F16FragmentLaneDiagnostic[base + 5u] = quantized;
 }
 
@@ -4575,7 +4647,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         if (insertedHelpers.isNotEmpty()) {
             wgsl = wgsl.replace("@fragment\nfn fs_inside", "$insertedHelpers\n\n@fragment\nfn fs_inside")
         }
-        if (diagnostic) {
+        if (diagnostic && !storageZeroCauseDiagnostic) {
             wgsl = wgsl
                 .replace(
                     "@fragment\nfn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n",
@@ -4659,6 +4731,15 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             diagnostic = true,
             boundedRuntimeCorrection = true,
             contributionIsolationDiagnostic = true,
+        )
+
+    private fun loadM60F16AaStencilCoverShaderReturnStorageZeroCauseShader(): GPUShaderModule =
+        loadM60F16AaStencilCoverProbeShader(
+            cacheKey = "diagnostic://m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419",
+            diagnostic = true,
+            boundedRuntimeCorrection = true,
+            contributionIsolationDiagnostic = true,
+            storageZeroCauseDiagnostic = true,
         )
 
     // ─── Rect pipeline (G1.2 / G2.3a) — full-screen tri + scissor + coverage ───
@@ -5085,6 +5166,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     private val m60F16AaStencilCoverShaderReturnDiagnosticShaderLazy: Lazy<GPUShaderModule> = lazy {
         loadM60F16AaStencilCoverShaderReturnDiagnosticShader()
     }
+    private val m60F16AaStencilCoverShaderReturnStorageZeroCauseShaderLazy: Lazy<GPUShaderModule> = lazy {
+        loadM60F16AaStencilCoverShaderReturnStorageZeroCauseShader()
+    }
 
     private val m60F16FragmentLaneDiagnosticShader: GPUShaderModule
         get() = m60F16FragmentLaneDiagnosticShaderLazy.value
@@ -5106,6 +5190,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     private val m60F16AaStencilCoverShaderReturnDiagnosticShader: GPUShaderModule
         get() = m60F16AaStencilCoverShaderReturnDiagnosticShaderLazy.value
+
+    private val m60F16AaStencilCoverShaderReturnStorageZeroCauseShader: GPUShaderModule
+        get() = m60F16AaStencilCoverShaderReturnStorageZeroCauseShaderLazy.value
 
     /**
      * G3.3b.3d — which half of the AA falloff a cover sub-draw paints.
@@ -5157,6 +5244,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     private val m60F16AaStencilCoverIsolatedColorTargetPipelineCache:
         MutableMap<Triple<SkPathFillType, CoverageSide, Boolean>, GPURenderPipeline> = mutableMapOf()
     private val m60F16AaStencilCoverStorageColorTargetComparisonPipelineCache:
+        MutableMap<Pair<SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
+    private val m60F16AaStencilCoverShaderReturnStorageZeroCausePipelineCache:
         MutableMap<Pair<SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
 
     /**
@@ -5462,6 +5551,65 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                     ),
                     fragment = FragmentState(
                         module = m60F16AaStencilCoverShaderReturnDiagnosticShader,
+                        entryPoint = entryPoint,
+                        targets = listOf(
+                            ColorTargetState(
+                                format = GPUTextureFormat.RGBA16Float,
+                                blend = null,
+                            ),
+                        ),
+                    ),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = readMask,
+                        stencilWriteMask = 0xFFu,
+                    ),
+                ),
+            )
+        }
+
+    private fun m60F16AaStencilCoverShaderReturnStorageZeroCausePipelineFor(
+        fillType: SkPathFillType,
+        side: CoverageSide,
+    ): GPURenderPipeline =
+        m60F16AaStencilCoverShaderReturnStorageZeroCausePipelineCache.getOrPut(fillType to side) {
+            val readMask: UInt = if (fillType.isEvenOdd()) 0x01u else 0xFFu
+            val insideCompare =
+                if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
+            val compare = when (side) {
+                CoverageSide.Inside -> insideCompare
+                CoverageSide.Outside ->
+                    if (insideCompare == GPUCompareFunction.Equal) GPUCompareFunction.NotEqual
+                    else GPUCompareFunction.Equal
+            }
+            val entryPoint = when (side) {
+                CoverageSide.Inside -> "fs_inside"
+                CoverageSide.Outside -> "fs_outside"
+            }
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = m60F16FragmentLaneDiagnosticPipelineLayout,
+                    vertex = VertexState(
+                        module = m60F16AaStencilCoverShaderReturnStorageZeroCauseShader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                    ),
+                    fragment = FragmentState(
+                        module = m60F16AaStencilCoverShaderReturnStorageZeroCauseShader,
                         entryPoint = entryPoint,
                         targets = listOf(
                             ColorTargetState(
@@ -15006,6 +15154,11 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             m60F16AaStencilCoverStorageColorTargetComparisonColorEvents.clear()
             m60F16AaStencilCoverStorageColorTargetComparisonPendingReadbacks.clear()
         }
+        if (m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled) {
+            m60F16AaStencilCoverShaderReturnStorageZeroCauseStorageEvents.clear()
+            m60F16AaStencilCoverShaderReturnStorageZeroCauseColorEvents.clear()
+            m60F16AaStencilCoverStorageColorTargetComparisonPendingReadbacks.clear()
+        }
 
         // G-suivi (round 17 follow-up) -- drop pending draws whose vertex
         // arrays would produce a zero-size GPU buffer. WebGPU panics in
@@ -15430,9 +15583,11 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                             )
                     }
                 }
-                if (m60F16AaStencilCoverStorageColorTargetComparisonDiagnosticsEnabled &&
-                    d.m60F16BandMetadata != null
-                ) {
+                val shaderReturnStorageScratchDiagnosticsEnabled =
+                    (m60F16AaStencilCoverStorageColorTargetComparisonDiagnosticsEnabled ||
+                        m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled) &&
+                        d.m60F16BandMetadata != null
+                if (shaderReturnStorageScratchDiagnosticsEnabled) {
                     val scratchView = res.m60F16AaStencilCoverStorageColorTargetComparisonScratchView
                     val scratchDepthStencilView =
                         res.m60F16AaStencilCoverStorageColorTargetComparisonDepthStencilView
@@ -15484,17 +15639,31 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                             setBindGroup(0u, shaderBindGroup)
                             setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
                             setPipeline(
-                                m60F16AaStencilCoverStorageColorTargetComparisonPipelineFor(
-                                    d.fillType,
-                                    CoverageSide.Inside,
-                                ),
+                                if (m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled) {
+                                    m60F16AaStencilCoverShaderReturnStorageZeroCausePipelineFor(
+                                        d.fillType,
+                                        CoverageSide.Inside,
+                                    )
+                                } else {
+                                    m60F16AaStencilCoverStorageColorTargetComparisonPipelineFor(
+                                        d.fillType,
+                                        CoverageSide.Inside,
+                                    )
+                                },
                             )
                             draw((d.coverVerts.size / 2).toUInt())
                             setPipeline(
-                                m60F16AaStencilCoverStorageColorTargetComparisonPipelineFor(
-                                    d.fillType,
-                                    CoverageSide.Outside,
-                                ),
+                                if (m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled) {
+                                    m60F16AaStencilCoverShaderReturnStorageZeroCausePipelineFor(
+                                        d.fillType,
+                                        CoverageSide.Outside,
+                                    )
+                                } else {
+                                    m60F16AaStencilCoverStorageColorTargetComparisonPipelineFor(
+                                        d.fillType,
+                                        CoverageSide.Outside,
+                                    )
+                                },
                             )
                             draw((d.coverVerts.size / 2).toUInt())
                             end()
@@ -19021,7 +19190,10 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             null
         }
         val storageColorTargetComparisonEnabled =
-            m60F16AaStencilCoverStorageColorTargetComparisonDiagnosticsEnabled &&
+            (
+                m60F16AaStencilCoverStorageColorTargetComparisonDiagnosticsEnabled ||
+                    m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled
+                ) &&
                 d.m60F16BandMetadata != null &&
                 d.m60F16BoundedRuntimeCorrectionProbe &&
                 d.mode == SkBlendMode.kSrcOver &&
@@ -19745,6 +19917,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         m60F16AaStencilCoverIsolatedColorTargetPipelineCache.clear()
         m60F16AaStencilCoverStorageColorTargetComparisonPipelineCache.values.forEach { it.close() }
         m60F16AaStencilCoverStorageColorTargetComparisonPipelineCache.clear()
+        m60F16AaStencilCoverShaderReturnStorageZeroCausePipelineCache.values.forEach { it.close() }
+        m60F16AaStencilCoverShaderReturnStorageZeroCausePipelineCache.clear()
         aaStencilCoverGradientPipelineCache.values.forEach { it.close() }
         aaStencilCoverGradientPipelineCache.clear()
         aaStencilCoverRadialGradientPipelineCache.values.forEach { it.close() }
@@ -19832,6 +20006,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         if (m60F16AaStencilCoverShaderReturnDiagnosticShaderLazy.isInitialized()) {
             m60F16AaStencilCoverShaderReturnDiagnosticShader.close()
         }
+        if (m60F16AaStencilCoverShaderReturnStorageZeroCauseShaderLazy.isInitialized()) {
+            m60F16AaStencilCoverShaderReturnStorageZeroCauseShader.close()
+        }
         intermediateView.close()
         intermediateTexture.close()
         depthStencilView.close()
@@ -19863,6 +20040,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             "diagnostic in-memory FOR-408 per-subdraw contribution-isolation variant of shaders/aa_stencil_cover.wgsl"
         const val M60_F16_AA_STENCIL_COVER_SHADER_RETURN_DIAGNOSTIC_SHADER: String =
             "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl"
+        const val M60_F16_AA_STENCIL_COVER_SHADER_RETURN_STORAGE_ZERO_CAUSE_SHADER: String =
+            "diagnostic in-memory FOR-419 nonzero-preserving shader-return storage variant of shaders/aa_stencil_cover.wgsl"
         const val RAW_COLOR_SENTINEL_TEXEL_SAMPLE_LIMIT: Int = 16
         const val FOR258_SHADER_SIDE_PROBE_SAMPLE_STRIDE_BYTES: Int = 16
         const val FOR258_SHADER_SIDE_PROBE_SAMPLE_COUNT: UInt = 2u
