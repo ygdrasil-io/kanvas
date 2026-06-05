@@ -1,0 +1,4120 @@
+{
+  "adapter": "Apple M2 Max",
+  "allowedClassifications": [
+    "blend-state-suspect-for-zero-source-mutation",
+    "fixed-function-blend-state-captured-no-mismatch",
+    "render-pass-attachment-state-suspect",
+    "state-capture-insufficient"
+  ],
+  "blendRenderPassSummary": {
+    "byClassification": {
+      "fixed-function-blend-state-captured-no-mismatch": 16
+    },
+    "drawMetadata": {
+      "1": {
+        "coverVertexCount": 6,
+        "edgeCount": 8,
+        "fillType": "kWinding",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "3": {
+        "coverVertexCount": 6,
+        "edgeCount": 39,
+        "fillType": "kWinding",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "5": {
+        "coverVertexCount": 6,
+        "edgeCount": 12,
+        "fillType": "kWinding",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      }
+    },
+    "fixedFunctionBlendState": {
+      "blendMode": "kSrcOver",
+      "blendPlan": {
+        "evidenceKind": "code-derived",
+        "kind": "FixedFunction",
+        "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+        "source": "selectWebGpuBlendPlan + blendStateFor"
+      },
+      "webGpuBlendState": {
+        "alpha": {
+          "dstFactor": "OneMinusSrcAlpha",
+          "operation": "Add",
+          "srcFactor": "One"
+        },
+        "color": {
+          "dstFactor": "OneMinusSrcAlpha",
+          "operation": "Add",
+          "srcFactor": "One"
+        },
+        "evidenceKind": "code-derived"
+      },
+      "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+    },
+    "mutatingDrawCounts": {
+      "1": 6,
+      "3": 10
+    },
+    "renderPassCommonState": {
+      "colorAttachmentClearValue": "background",
+      "colorAttachmentLoadOp": "Load",
+      "colorAttachmentStoreOp": "Store",
+      "intermediateFormat": "RGBA16Float",
+      "stencilLoadOp": "Clear",
+      "stencilReference": 0,
+      "stencilStoreOp": "Discard"
+    }
+  },
+  "classification": "fixed-function-blend-state-captured-no-mismatch",
+  "classificationReason": "The captured state exposes no BlendPlan, WebGPU factor/op, attachment format, load/store, scissor, geometry-count, stencil-ref, or inside/outside pipeline mismatch. The mutation remains real and immediate, but FOR-415 does not find a descriptor-level blend/render-pass configuration error.",
+  "comparisonPolicy": {
+    "for400UsedAsDirectProof": false,
+    "missingShaderReturnTreatedAsZero": false,
+    "noSyntheticShaderReturn": true,
+    "stateEvidenceKinds": [
+      "runtime-metadata",
+      "code-derived",
+      "runtime-metadata-plus-code-derived-state"
+    ],
+    "tolerance": 1e-06
+  },
+  "correctionAppliedByDefault": false,
+  "decision": "FOR-415 captures the fixed WebGPU state around the 16 FOR-413 zero-return mutating transitions. The mutating draws use kSrcOver FixedFunction BlendPlan, the expected WebGPU factors are One/OneMinusSrcAlpha for color and alpha, the attachment is RGBA16Float Load/Store, and stencil is cleared/discarded per draw with ref 0.",
+  "defaultRenderingChanged": false,
+  "globalClassification": "fixed-function-blend-state-captured-no-mismatch",
+  "guards": {
+    "derivedOnly": {
+      "defaultRenderingChanged": false,
+      "enabledByDefault": false,
+      "notes": "FOR-415 adds no runtime guard and changes no rendering path."
+    },
+    "sourceRuntimeInputs": {
+      "enabledByDefault": false,
+      "for405PostDrawReadback": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled",
+      "for412ShaderReturnDiagnostic": "kanvas.webgpu.m60F16AaStencilCoverShaderReturnDiagnostic.enabled"
+    }
+  },
+  "linear": "FOR-415",
+  "mutationRecords": [
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 8,
+        "eventDrawIndex": 1,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 92,
+      "y": 75
+    },
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 8,
+        "eventDrawIndex": 1,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 91,
+      "y": 76
+    },
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 8,
+        "eventDrawIndex": 1,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 90,
+      "y": 77
+    },
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 8,
+        "eventDrawIndex": 1,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 89,
+      "y": 78
+    },
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 8,
+        "eventDrawIndex": 1,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 88,
+      "y": 79
+    },
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 8,
+        "eventDrawIndex": 1,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 1,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 87,
+      "y": 80
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 39,
+        "eventDrawIndex": 3,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 101,
+      "y": 37
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 39,
+        "eventDrawIndex": 3,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 102,
+      "y": 37
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 39,
+        "eventDrawIndex": 3,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 99,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 39,
+        "eventDrawIndex": 3,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 100,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 39,
+        "eventDrawIndex": 3,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 101,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 39,
+        "eventDrawIndex": 3,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 102,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 39,
+        "eventDrawIndex": 3,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 103,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 39,
+        "eventDrawIndex": 3,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 104,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        0.5,
+        0.5,
+        0.5,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 39,
+        "eventDrawIndex": 3,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          0.5,
+          0.041015625,
+          0.202148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.743164062,
+        "maxChannelFloat": 0.5,
+        "signedRgbaFloat": [
+          -0.5,
+          0.041015625,
+          -0.202148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 98,
+      "y": 39
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendState": {
+        "blendMode": "kSrcOver",
+        "blendPlan": {
+          "evidenceKind": "code-derived",
+          "kind": "FixedFunction",
+          "reason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+          "source": "selectWebGpuBlendPlan + blendStateFor"
+        },
+        "webGpuBlendState": {
+          "alpha": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "color": {
+            "dstFactor": "OneMinusSrcAlpha",
+            "operation": "Add",
+            "srcFactor": "One"
+          },
+          "evidenceKind": "code-derived"
+        },
+        "zeroSourceExpectation": "With premultiplied source [0, 0, 0, 0], kSrcOver fixed-function blend computes src + dst * (1 - src.a), so the color attachment should remain equal to dst."
+      },
+      "classification": "fixed-function-blend-state-captured-no-mismatch",
+      "classificationReason": "FOR-412 observes non-synthetic zero fragment returns for the inside/outside subdraws, FOR-414 shows the mutation immediately after this draw, and the code-audited WebGPU state is standard kSrcOver fixed-function blend over RGBA16Float with Load/Store and per-pass stencil clear/discard. No blend or attachment descriptor mismatch is exposed.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "postDrawMatchesAfterBoundary": true,
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "renderPassState": {
+        "colorAttachment": {
+          "clearValue": "background",
+          "clearValueNotAppliedForSelectedMutatingDraws": true,
+          "loadOp": "Load",
+          "loadOpEvidenceKind": "code-derived",
+          "loadOpReason": "The selected draw is reached after an initialized intermediate boundary in the FOR-410/FOR-405 evidence run; SkWebGpuDevice computes loadOp from `colorViewWritten`, and records these predraw/post-draw samples without materializing a duplicate render pass.",
+          "storeOp": "Store",
+          "view": "intermediateView"
+        },
+        "coverVertexCount": 6,
+        "depthStencilAttachment": {
+          "depthReadOnly": true,
+          "stencilClearValue": 0,
+          "stencilLoadOp": "Clear",
+          "stencilReadOnly": false,
+          "stencilStoreOp": "Discard",
+          "view": "depthStencilView"
+        },
+        "edgeCount": 39,
+        "eventDrawIndex": 3,
+        "evidenceKind": "runtime-metadata-plus-code-derived-state",
+        "intermediateFormat": "RGBA16Float",
+        "scissor": [
+          0,
+          0,
+          192,
+          128
+        ]
+      },
+      "shaderReturnState": {
+        "allAvailableNonSynthetic": true,
+        "allObservedSourcesZero": true,
+        "realObservedCount": 2,
+        "subdrawCount": 2,
+        "syntheticCount": 0,
+        "unavailableCount": 0,
+        "unavailableTreatedAsSyntheticZero": false
+      },
+      "shaderReturnSubdraws": [
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_inside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Inside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_inside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "NotEqual",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 0,
+            "subdrawRole": "inside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "targetWithinScissor": null
+        },
+        {
+          "blendMode": "kSrcOver",
+          "captureSynthetic": false,
+          "classification": "shader-return-captured",
+          "coverageOrAaAlpha": null,
+          "drawIndex": 3,
+          "fillType": null,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "state": {
+            "boundedRuntimeCorrectionProbeActiveForEvidence": true,
+            "colorTarget": {
+              "blend": {
+                "alpha": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "color": {
+                  "dstFactor": "OneMinusSrcAlpha",
+                  "operation": "Add",
+                  "srcFactor": "One"
+                },
+                "evidenceKind": "code-derived"
+              },
+              "format": "RGBA16Float"
+            },
+            "diagnosticPipelineFunction": "m60F16FragmentLaneDiagnosticPipelineFor",
+            "diagnosticShaderActiveForShaderReturnEvidence": true,
+            "evidenceRunPipelineFunction": "m60F16BoundedRuntimeCorrectionPipelineFor",
+            "fragmentEntryPoint": "fs_outside",
+            "nominalPipelineFunction": "aaStencilCoverPipelineFor",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "shaderModule": "diagnostic in-memory FOR-412 shader-return variant of shaders/aa_stencil_cover.wgsl",
+            "stencil": {
+              "coverageSide": "Outside",
+              "depthCompare": "Always",
+              "depthWriteEnabled": false,
+              "entryPoint": "fs_outside",
+              "evidenceKind": "code-derived",
+              "fillType": "kWinding",
+              "stencilCompare": "Equal",
+              "stencilDepthFailOp": "Keep",
+              "stencilFailOp": "Keep",
+              "stencilPassOp": "Keep",
+              "stencilReadMask": "0xFF",
+              "stencilReference": 0,
+              "stencilWriteMask": "0xFF"
+            },
+            "subdrawOrdinal": 1,
+            "subdrawRole": "outside",
+            "vertexEntryPoint": "vs_main"
+          },
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "targetWithinScissor": null
+        }
+      ],
+      "stateInterpretation": {
+        "fixedFunctionBlendMatchesExpectedSrcOver": true,
+        "observedMutationContradictsZeroSourceExpectation": true,
+        "renderPassAttachmentMismatchObserved": false,
+        "unobservableWithoutChangingRendering": [],
+        "zeroShaderReturnShouldNotMutateDestination": true
+      },
+      "transitionDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 99,
+      "y": 39
+    }
+  ],
+  "nextStep": "Inspect whether the diagnostic shader-return side channel and the actual color target write can diverge inside the same fragment path, or whether a lower WebGPU/wgpu fixed-function behavior needs a minimized reproduction. The descriptor state itself is not the next suspect.",
+  "nonGoalsPreserved": [
+    "No rendering correction is applied.",
+    "No default rendering behavior changes.",
+    "No support or promotion claim is made for M60 F16.",
+    "No score, threshold, route, fallback, or scene promotion policy changes.",
+    "Unavailable FOR-412 shader returns are not converted into synthetic zero sources.",
+    "No Ganesh, Graphite, or SkSL compiler work is introduced."
+  ],
+  "producer": "scripts/validate_for415_m60_f16_aa_stencil_cover_blend_render_pass_state.py",
+  "producerMethod": "derived correlation over FOR-412/FOR-413/FOR-414 artifacts plus bounded SkWebGpuDevice.kt source audit for blend/render-pass descriptors",
+  "promoted": false,
+  "runtimeOwner": "existing opt-in FOR-405/FOR-412 runtime diagnostics; no new runtime hook",
+  "sceneId": "m60-f16-aa-stencil-cover-blend-render-pass-state-for415",
+  "schemaVersion": 1,
+  "scope": {
+    "blendMode": "kSrcOver",
+    "drawsContext": [
+      1,
+      3,
+      5
+    ],
+    "drawsInspected": [
+      1,
+      3
+    ],
+    "generalizedOutsideM60F16": false,
+    "mutationRecordCount": 16,
+    "pipelineFamily": "StencilCoverAaPolygonDraw",
+    "selectedPixelCount": 16
+  },
+  "scoringChanged": false,
+  "sourceArtifacts": {
+    "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+    "for405": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-pass-readback-for405/m60-f16-aa-stencil-cover-post-pass-readback-for405.json",
+    "for410": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-predraw-dst-readback-for410/m60-f16-aa-stencil-cover-predraw-dst-readback-for410.json",
+    "for412": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412.json",
+    "for413": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-draw-transition-correlation-for413/m60-f16-aa-stencil-cover-draw-transition-correlation-for413.json",
+    "for414": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-draw-readback-for414/m60-f16-aa-stencil-cover-post-draw-readback-for414.json"
+  },
+  "sourceCodeAudit": {
+    "checks": {
+      "aaStencilCoverColorTargetUsesIntermediateAndBlendState": true,
+      "aaStencilCoverDiagnosticPipelineSelection": true,
+      "aaStencilCoverInsideOutsidePipelines": true,
+      "aaStencilCoverRenderPassLoadStore": true,
+      "aaStencilCoverStencilClearDiscard": true,
+      "aaStencilCoverStencilReferenceZero": true,
+      "blendPlanSrcOverFixedFunction": true
+    },
+    "method": "bounded source-code audit of StencilCoverAaPolygonDraw blend/render-pass state",
+    "source": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
+  },
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-415-m60-f16-capturer-etat-blend-render-pass-aa-stencil-cover",
+  "sourceFinding": "global/kanvas/findings/for-414-confirme-que-les-mutations-zero-return-sont-visibles-immediatement-apres-le-draw",
+  "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+  "supportClaim": false,
+  "thresholdChanged": false,
+  "validationCommands": [
+    "rtk python3 scripts/validate_for415_m60_f16_aa_stencil_cover_blend_render_pass_state.py",
+    "rtk python3 scripts/validate_for414_m60_f16_aa_stencil_cover_post_draw_readback.py",
+    "rtk python3 scripts/validate_for413_m60_f16_aa_stencil_cover_draw_transition_correlation.py",
+    "rtk python3 scripts/validate_for412_m60_f16_aa_stencil_cover_shader_return_diagnostic.py",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk git diff --check",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for415-pycache python3 -m py_compile scripts/validate_for415_m60_f16_aa_stencil_cover_blend_render_pass_state.py"
+  ]
+}
