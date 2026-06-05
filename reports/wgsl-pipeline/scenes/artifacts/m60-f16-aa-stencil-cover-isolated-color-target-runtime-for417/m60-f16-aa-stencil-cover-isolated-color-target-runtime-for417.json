@@ -1,0 +1,2583 @@
+{
+  "adapter": "Apple M2 Max",
+  "allowedClassifications": [
+    "isolated-color-target-output-diverges-from-shader-return",
+    "isolated-color-target-output-nonzero-matches-mutation",
+    "isolated-color-target-output-zero-fixed-function-suspect",
+    "isolated-color-target-runtime-hook-unavailable"
+  ],
+  "classification": "isolated-color-target-output-nonzero-matches-mutation",
+  "classificationReason": "The no-blend scratch target produces non-zero color-target outputs for all 16 zero-return mutating transitions. Those values diverge from the FOR-412 storage side-channel zeros, and SrcOver(scratch, dstBefore) matches the immediate FOR-414 post-draw mutations.",
+  "comparisonPolicy": {
+    "f16ReconstructionTolerance": 0.0006,
+    "for400UsedAsDirectProof": false,
+    "isolatedTargetField": "FOR-417 isolatedColorTarget.combinedOutputRgbaFloat",
+    "missingIsolatedTargetTreatedAsZero": false,
+    "missingShaderReturnTreatedAsZero": false,
+    "mutationCheck": "SrcOver(scratchOutput, beforeRgbaFloat) equals afterRgbaFloat within tolerance",
+    "noSyntheticShaderReturn": true,
+    "sourceField": "FOR-412 sourceColorSentToBlend",
+    "tolerance": 1e-06
+  },
+  "correctionAppliedByDefault": false,
+  "decision": "FOR-417 adds an opt-in RGBA16Float scratch render pass with color-target blend disabled. It observes the selected M60 F16 AA stencil-cover output directly and correlates it with FOR-412, FOR-414, and FOR-416.",
+  "defaultRenderingChanged": false,
+  "globalClassification": "isolated-color-target-output-nonzero-matches-mutation",
+  "guards": {
+    "isolatedColorTargetRuntime": {
+      "defaultRenderingChanged": false,
+      "enabledByDefault": false,
+      "enabledForEvidenceRun": true,
+      "guardId": "kanvas.webgpu.m60F16AaStencilCoverIsolatedColorTarget.enabled"
+    },
+    "sourceRuntimeInputs": {
+      "for412ShaderReturnDiagnostic": "kanvas.webgpu.m60F16AaStencilCoverShaderReturnDiagnostic.enabled",
+      "for414PostDrawReadback": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled",
+      "for416DerivedAbsence": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-isolated-color-target-for416/m60-f16-aa-stencil-cover-isolated-color-target-for416.json"
+    }
+  },
+  "linear": "FOR-417",
+  "mutationRecords": [
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          22,
+          32,
+          71,
+          96
+        ],
+        "combinedOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.709777832,
+        0.749023437,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.000305176,
+          0.000488281,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.000793457,
+        "maxChannelFloat": 0.000488281,
+        "signedRgbaFloat": [
+          -0.000305176,
+          -0.000488281,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "absoluteTotalFloat": 2.493347167,
+        "maxChannelFloat": 0.623535156,
+        "signedRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "absoluteTotalFloat": 0.866516114,
+        "maxChannelFloat": 0.376464844,
+        "signedRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 92,
+      "y": 75
+    },
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          22,
+          32,
+          71,
+          96
+        ],
+        "combinedOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.709777832,
+        0.749023437,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.000305176,
+          0.000488281,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.000793457,
+        "maxChannelFloat": 0.000488281,
+        "signedRgbaFloat": [
+          -0.000305176,
+          -0.000488281,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "absoluteTotalFloat": 2.493347167,
+        "maxChannelFloat": 0.623535156,
+        "signedRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "absoluteTotalFloat": 0.866516114,
+        "maxChannelFloat": 0.376464844,
+        "signedRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 91,
+      "y": 76
+    },
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          22,
+          32,
+          71,
+          96
+        ],
+        "combinedOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.709777832,
+        0.749023437,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.000305176,
+          0.000488281,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.000793457,
+        "maxChannelFloat": 0.000488281,
+        "signedRgbaFloat": [
+          -0.000305176,
+          -0.000488281,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "absoluteTotalFloat": 2.493347167,
+        "maxChannelFloat": 0.623535156,
+        "signedRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "absoluteTotalFloat": 0.866516114,
+        "maxChannelFloat": 0.376464844,
+        "signedRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 90,
+      "y": 77
+    },
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          22,
+          32,
+          71,
+          96
+        ],
+        "combinedOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.709777832,
+        0.749023437,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.000305176,
+          0.000488281,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.000793457,
+        "maxChannelFloat": 0.000488281,
+        "signedRgbaFloat": [
+          -0.000305176,
+          -0.000488281,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "absoluteTotalFloat": 2.493347167,
+        "maxChannelFloat": 0.623535156,
+        "signedRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "absoluteTotalFloat": 0.866516114,
+        "maxChannelFloat": 0.376464844,
+        "signedRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 89,
+      "y": 78
+    },
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          22,
+          32,
+          71,
+          96
+        ],
+        "combinedOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.709777832,
+        0.749023437,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.000305176,
+          0.000488281,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.000793457,
+        "maxChannelFloat": 0.000488281,
+        "signedRgbaFloat": [
+          -0.000305176,
+          -0.000488281,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "absoluteTotalFloat": 2.493347167,
+        "maxChannelFloat": 0.623535156,
+        "signedRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "absoluteTotalFloat": 0.866516114,
+        "maxChannelFloat": 0.376464844,
+        "signedRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 88,
+      "y": 79
+    },
+    {
+      "afterRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 1,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          22,
+          32,
+          71,
+          96
+        ],
+        "combinedOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          0.290527344,
+          0.251464844,
+          0.098144531,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.640136719,
+        "maxChannelFloat": 0.290527344,
+        "signedRgbaFloat": [
+          -0.290527344,
+          -0.251464844,
+          -0.098144531,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.709777832,
+        0.749023437,
+        0.901855469,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.000305176,
+          0.000488281,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.000793457,
+        "maxChannelFloat": 0.000488281,
+        "signedRgbaFloat": [
+          -0.000305176,
+          -0.000488281,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "absoluteTotalFloat": 2.493347167,
+        "maxChannelFloat": 0.623535156,
+        "signedRgbaFloat": [
+          0.62322998,
+          0.623046875,
+          0.623535156,
+          0.623535156
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "absoluteTotalFloat": 0.866516114,
+        "maxChannelFloat": 0.376464844,
+        "signedRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "1->3",
+      "x": 87,
+      "y": 80
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "combinedOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": true
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "absoluteTotalFloat": 1.838867188,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 101,
+      "y": 37
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "combinedOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": true
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "absoluteTotalFloat": 1.838867188,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 102,
+      "y": 37
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "combinedOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": true
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "absoluteTotalFloat": 1.838867188,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 99,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "combinedOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": true
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "absoluteTotalFloat": 1.838867188,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 100,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "combinedOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": true
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "absoluteTotalFloat": 1.838867188,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 101,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "combinedOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": true
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "absoluteTotalFloat": 1.838867188,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 102,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "combinedOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": true
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "absoluteTotalFloat": 1.838867188,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 103,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "combinedOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": true
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "absoluteTotalFloat": 1.838867188,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 104,
+      "y": 38
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        0.5,
+        0.5,
+        0.5,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "combinedOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          0.5,
+          0.041015625,
+          0.202148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.743164062,
+        "maxChannelFloat": 0.5,
+        "signedRgbaFloat": [
+          -0.5,
+          0.041015625,
+          -0.202148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": true
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "absoluteTotalFloat": 1.838867188,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 98,
+      "y": 39
+    },
+    {
+      "afterRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "beforeRgbaFloat": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "blendMode": "kSrcOver",
+      "classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "classificationReason": "FOR-417 observes a real non-zero no-blend scratch color-target output. The observed scratch output diverges from the zero FOR-412 storage side-channel, and SrcOver(scratch, dstBefore) reconstructs the FOR-414 immediate mutation.",
+      "drawIndex": 3,
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for416Classification": "isolated-color-target-diagnostic-unavailable",
+      "isolatedColorTarget": {
+        "available": true,
+        "classification": "isolated-color-target-output-observed",
+        "colorTargetBlend": null,
+        "combinedOutputRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "combinedOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "sampleSource": "FOR-417 no-blend scratch runtime readback",
+        "scratchFormat": "RGBA16Float",
+        "scratchTargetEncoded": true
+      },
+      "mutationDelta": {
+        "absoluteRgbaFloat": [
+          1.0,
+          0.458984375,
+          0.702148437,
+          0.0
+        ],
+        "absoluteTotalFloat": 2.161132812,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          -1.0,
+          -0.458984375,
+          -0.702148437,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "postDrawRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "scratchSourceOverBeforeVsMutationDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 0.0006,
+        "withinTolerance": true
+      },
+      "scratchVsPostDrawDirectDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "absoluteTotalFloat": 0.0,
+        "maxChannelFloat": 0.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": true
+      },
+      "sourceColorSentToBlendSubdraws": [
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "inside"
+        },
+        {
+          "captureSynthetic": false,
+          "for412Classification": "shader-return-captured",
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "subdrawRole": "outside"
+        }
+      ],
+      "sourceVsScratchDelta": {
+        "absoluteRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "absoluteTotalFloat": 1.838867188,
+        "maxChannelFloat": 1.0,
+        "signedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "tolerance": 1e-06,
+        "withinTolerance": false
+      },
+      "transitionId": "3->5",
+      "x": 99,
+      "y": 39
+    }
+  ],
+  "nextStep": "Investigate why the FOR-412 storage side-channel reports zero while the actual color-target output from the same bounded cover draw is non-zero: the suspect moves inside the diagnostic shader-return capture path, not fixed-function blend/load/store.",
+  "nonGoalsPreserved": [
+    "No rendering correction is applied.",
+    "The diagnostic guard is disabled by default.",
+    "No default rendering behavior changes.",
+    "No support or promotion claim is made for M60 F16.",
+    "No score, threshold, route, fallback, or scene promotion policy changes.",
+    "No extension outside M60 F16 / StencilCoverAaPolygonDraw / kSrcOver.",
+    "No synthetic zero source is introduced.",
+    "No Ganesh, Graphite, or SkSL compiler work is introduced."
+  ],
+  "producer": "scripts/validate_for417_m60_f16_aa_stencil_cover_isolated_color_target_runtime.py",
+  "promoted": false,
+  "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+  "runtimeSummary": {
+    "byClassification": {
+      "isolated-color-target-output-nonzero-matches-mutation": 16
+    },
+    "eventsObserved": 3,
+    "mutatingDrawCounts": {
+      "1": 6,
+      "3": 10
+    },
+    "nonZeroScratchOutputCount": 16,
+    "rawRuntimeArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417/raw-runtime-snapshot-for417.json",
+    "scratchSamplesAvailableForMutationRecords": 16,
+    "scratchSourceOverMatchesMutationCount": 16,
+    "sourceVsScratchDivergenceCount": 16
+  },
+  "sceneId": "m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417",
+  "schemaVersion": 1,
+  "scope": {
+    "blendMode": "kSrcOver",
+    "drawsContext": [
+      1,
+      3,
+      5
+    ],
+    "drawsInspected": [
+      1,
+      3
+    ],
+    "generalizedOutsideM60F16": false,
+    "mutationRecordCount": 16,
+    "pipelineFamily": "StencilCoverAaPolygonDraw",
+    "scratchFormat": "RGBA16Float",
+    "selectedPixelCount": 16
+  },
+  "scoringChanged": false,
+  "sourceArtifacts": {
+    "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+    "for412": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412.json",
+    "for413": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-draw-transition-correlation-for413/m60-f16-aa-stencil-cover-draw-transition-correlation-for413.json",
+    "for414": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-draw-readback-for414/m60-f16-aa-stencil-cover-post-draw-readback-for414.json",
+    "for416": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-isolated-color-target-for416/m60-f16-aa-stencil-cover-isolated-color-target-for416.json",
+    "rawRuntime": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417/raw-runtime-snapshot-for417.json"
+  },
+  "sourceCodeAudit": {
+    "captureTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+    "checks": {
+      "captureWritesRawSnapshot": true,
+      "diagnosticPipelineCacheClosed": true,
+      "noBlendColorTarget": true,
+      "runtimeGuardDisabledByDefault": true,
+      "runtimeGuardPresent": true,
+      "scratchDepthStencilSeparate": true,
+      "scratchFormatRgba16Float": true,
+      "scratchPassDoesNotTargetIntermediate": true,
+      "scratchResourcesClosed": true,
+      "scratchTargetSeparateFromIntermediateView": true,
+      "snapshotExported": true
+    },
+    "method": "bounded source audit for FOR-417 runtime guard, scratch pass, no-blend pipeline, readback, and resource cleanup",
+    "source": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+    "testSink": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt"
+  },
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-417-m60-f16-ajouter-scratch-no-blend-pour-sortie-color-target-aa-stencil-cover",
+  "sourceFinding": "global/kanvas/findings/for-416-refuse-de-synthetiser-la-sortie-color-target-isolee-et-confirme-le-besoin-dun-scratch-no-blend",
+  "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+  "supportClaim": false,
+  "thresholdChanged": false,
+  "validationCommands": [
+    "rtk python3 scripts/validate_for417_m60_f16_aa_stencil_cover_isolated_color_target_runtime.py",
+    "rtk python3 scripts/validate_for416_m60_f16_aa_stencil_cover_isolated_color_target.py",
+    "rtk python3 scripts/validate_for415_m60_f16_aa_stencil_cover_blend_render_pass_state.py",
+    "rtk python3 scripts/validate_for414_m60_f16_aa_stencil_cover_post_draw_readback.py",
+    "rtk python3 scripts/validate_for413_m60_f16_aa_stencil_cover_draw_transition_correlation.py",
+    "rtk python3 scripts/validate_for412_m60_f16_aa_stencil_cover_shader_return_diagnostic.py",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk git diff --check",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for417-pycache python3 -m py_compile scripts/validate_for417_m60_f16_aa_stencil_cover_isolated_color_target_runtime.py",
+    "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+  ]
+}

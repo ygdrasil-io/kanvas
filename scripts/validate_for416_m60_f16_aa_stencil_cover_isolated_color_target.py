@@ -184,9 +184,19 @@ def source_audit() -> dict[str, Any]:
         "if (d is StencilCoverAaPolygonDraw) {",
         "if (d is StencilCoverAaGradientDraw) {",
     )
+    superseded_by_for417 = (
+        FOR416_GUARD in source
+        and "m60F16AaStencilCoverIsolatedColorTargetPipelineFor" in source
+        and "raw-runtime-snapshot-for417.json" in (
+            PROJECT_ROOT
+            / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt"
+        ).read_text(encoding="utf-8")
+    )
     checks = {
         "aaStencilCoverPassTargetsMainColorView": "view = colorView" in aa_branch,
-        "aaStencilCoverBranchDoesNotAllocateScratchTarget": "scratch" not in aa_branch.lower(),
+        "aaStencilCoverBranchDidNotAllocateScratchTargetBeforeFOR417": (
+            "scratch" not in aa_branch.lower() or superseded_by_for417
+        ),
         "aaStencilCoverPostDrawReadbackSamplesIntermediateView": (
             "BindGroupEntry(binding = 0u, resource = intermediateView)" in source
             and "m60F16AaStencilCoverPostPassReadbackBindGroup" in source
@@ -210,8 +220,10 @@ def source_audit() -> dict[str, Any]:
             "val sourceColorSentToBlend: FloatArray?" in source
             and "M60F16AaStencilCoverShaderReturnDiagnosticSample" in source
         ),
-        "for416RuntimeGuardAbsent": FOR416_GUARD not in source,
-        "for416ScratchReadbackAbsent": "IsolatedColorTarget" not in source,
+        "for416RuntimeGuardAbsentOrSupersededByFOR417": FOR416_GUARD not in source or superseded_by_for417,
+        "for416ScratchReadbackAbsentOrSupersededByFOR417": (
+            "IsolatedColorTarget" not in source or superseded_by_for417
+        ),
     }
     missing = [name for name, present in checks.items() if not present]
     require(not missing, f"SkWebGpuDevice.kt source audit missing checks: {missing}")
@@ -223,6 +235,10 @@ def source_audit() -> dict[str, Any]:
         ),
         "checks": checks,
         "conclusion": (
+            "FOR-416 established that no no-blend scratch color target existed in that slice. "
+            "The current source may contain the later FOR-417 guarded runtime hook; FOR-416 still "
+            "keeps its derived-only evidence and never synthesizes a missing isolated value."
+            if superseded_by_for417 else
             "The current runtime has no opt-in render pass that redirects the mutating "
             "cover subdraws to a separate no-blend color target. Existing FOR-412 data "
             "is a storage-buffer side channel, and existing FOR-405/FOR-414 data samples "
@@ -550,7 +566,7 @@ def validate_artifact(data: dict[str, Any]) -> str:
     require(isinstance(guards, dict), "guards missing")
     require(guards["derivedOnly"]["enabledByDefault"] is False, "derived guard must be off by default")
     require(guards["wouldBeRuntimeGuard"]["guardId"] == FOR416_GUARD, "FOR-416 guard changed")
-    require(guards["wouldBeRuntimeGuard"]["presentInRuntime"] is False, "FOR-416 runtime must remain absent")
+    require(guards["wouldBeRuntimeGuard"]["presentInRuntime"] is False, "FOR-416 artifact must remain derived-only")
 
     scope = data.get("scope")
     require(scope.get("selectedPixelCount") == 16, "selected pixel count changed")
@@ -569,7 +585,11 @@ def validate_artifact(data: dict[str, Any]) -> str:
     require(isinstance(audit, dict), "sourceCodeAudit missing")
     checks = audit.get("checks")
     require(isinstance(checks, dict) and all(checks.values()), "sourceCodeAudit checks failed")
-    require("no opt-in render pass" in audit.get("conclusion", ""), "audit conclusion too weak")
+    require(
+        "no opt-in render pass" in audit.get("conclusion", "")
+        or "FOR-417 guarded runtime hook" in audit.get("conclusion", ""),
+        "audit conclusion too weak",
+    )
 
     summary = data.get("isolatedTargetSummary")
     require(summary["mutatingDrawCounts"] == {"1": 6, "3": 10}, "draw split changed")

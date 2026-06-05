@@ -2527,16 +2527,16 @@
   },
   "sourceCodeAudit": {
     "checks": {
-      "aaStencilCoverBranchDoesNotAllocateScratchTarget": true,
+      "aaStencilCoverBranchDidNotAllocateScratchTargetBeforeFOR417": true,
       "aaStencilCoverPassTargetsMainColorView": true,
       "aaStencilCoverPipelineUsesBlendStateForMode": true,
       "aaStencilCoverPostDrawReadbackSamplesIntermediateView": true,
-      "for416RuntimeGuardAbsent": true,
-      "for416ScratchReadbackAbsent": true,
+      "for416RuntimeGuardAbsentOrSupersededByFOR417": true,
+      "for416ScratchReadbackAbsentOrSupersededByFOR417": true,
       "shaderReturnDiagnosticIsStorageSideChannel": true,
       "shaderReturnDiagnosticPipelineUsesBlendStateForMode": true
     },
-    "conclusion": "The current runtime has no opt-in render pass that redirects the mutating cover subdraws to a separate no-blend color target. Existing FOR-412 data is a storage-buffer side channel, and existing FOR-405/FOR-414 data samples the already blended intermediate texture.",
+    "conclusion": "FOR-416 established that no no-blend scratch color target existed in that slice. The current source may contain the later FOR-417 guarded runtime hook; FOR-416 still keeps its derived-only evidence and never synthesizes a missing isolated value.",
     "method": "bounded source audit of StencilCoverAaPolygonDraw render-pass, pipeline, post-draw readback, and FOR-412 shader-return side channel",
     "source": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
   },
