@@ -555,6 +555,15 @@ class StrokeCapJoinSceneCaptureTest {
                 postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
                 adapter = adapter,
             )
+            writeM60F16AaStencilCoverReferenceSourceCoverage(
+                reference = reference,
+                currentGpu = experimentalGpu,
+                finalWgslSnapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
+                storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                predrawSnapshot = aaStencilCoverPredrawDstReadbackSnapshot,
+                postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
+                adapter = adapter,
+            )
         }
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
@@ -2914,6 +2923,315 @@ class StrokeCapJoinSceneCaptureTest {
             "Inspect the diagnostic pass difference between return-path storage and no-blend color-target writes before changing rendering behavior."
         else ->
             "Rerun the bounded diagnostics with FOR-421, scratch color target, predraw, and post-draw readbacks enabled."
+    }
+
+    private fun writeM60F16AaStencilCoverReferenceSourceCoverage(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-aa-stencil-cover-reference-source-coverage-for423"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16AaStencilCoverReferenceSourceCoverageJson(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                finalWgslSnapshot = finalWgslSnapshot,
+                storageSnapshot = storageSnapshot,
+                predrawSnapshot = predrawSnapshot,
+                postPassSnapshot = postPassSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16AaStencilCoverReferenceSourceCoverageJson(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val summaries = finalWgslSnapshot.variants.map { m60F16FinalWgslVariantSummary(it) }
+        val diagnosticReturnPathVerified = summaries
+            .filter { it.logicalName != "normal-bounded-runtime-correction" }
+            .all { summary ->
+                summary.functions["fs_inside"]?.returnsApplicationPointOutput == true &&
+                    summary.functions["fs_outside"]?.returnsApplicationPointOutput == true
+            }
+        val storageByKey = storageSnapshot.storageEvents
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val colorByKey = storageSnapshot.colorTargetEvents
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, values) -> values.firstOrNull { it.second.readbackAvailable } ?: values.first() }
+        val predrawByKey = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, values) -> values.firstOrNull { it.second.readbackAvailable } ?: values.first() }
+        val postPassByKey = postPassSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, values) -> values.firstOrNull { it.second.readbackAvailable } ?: values.first() }
+        val selectedPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.toSet()
+        val records = colorByKey.keys
+            .filter { selectedPoints.contains(it.x to it.y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.drawIndex }.thenBy { it.y }.thenBy { it.x })
+            .map { key ->
+                val sourceRecords = storageByKey[key].orEmpty()
+                    .sortedWith(
+                        compareBy<Pair<
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                            >> { it.second.subdrawOrdinal }.thenBy { it.second.subdrawRole },
+                    )
+                val verifiedSources = sourceRecords.filter { (_, sample) ->
+                    sample.shaderObserved && !sample.captureSynthetic && sample.sourceColorSentToBlend != null
+                }
+                val bestSource = verifiedSources.maxByOrNull { (_, sample) -> sample.sourceColorSentToBlend?.getOrNull(3) ?: -1f }
+                val band = strokePaintBands().firstOrNull { key.x in it.xStart until it.xEnd }
+                val coverageByte = (coverageMask.getPixel(key.x, key.y) ushr 24) and 0xFF
+                val expectedCoverage = coverageByte / 255f
+                val expectedSource = band?.let { premulPaintSourceFloat(it.sourceColor, expectedCoverage) }
+                val source = bestSource?.second?.sourceColorSentToBlend
+                val sourceDelta = if (source != null && expectedSource != null) {
+                    rgbaDelta(source, expectedSource, FOR423_REFERENCE_TOLERANCE)
+                } else {
+                    null
+                }
+                val coverageDelta = source?.let { kotlin.math.abs(it[3] - expectedCoverage) }
+                val coverageMatches = coverageDelta != null && coverageDelta <= FOR423_REFERENCE_TOLERANCE
+                val referenceRgba = rgbaArray(reference.getPixel(key.x, key.y))
+                val currentRgba = rgbaArray(currentGpu.getPixel(key.x, key.y))
+                val finalObserved = postPassByKey[key]?.second?.observedRgbaFloat
+                val referenceDelta = finalObserved?.let {
+                    rgbaDelta(it, rgbaByteArrayToFloat(referenceRgba), FOR423_REFERENCE_TOLERANCE)
+                }
+                val decisive = source != null && band != null && finalObserved != null
+                val classification = when {
+                    !diagnosticReturnPathVerified || source == null || band == null || finalObserved == null ->
+                        "reference-comparison-incomplete"
+                    !coverageMatches ->
+                        "verified-coverage-diverges-from-reference"
+                    sourceDelta?.withinTolerance == false ->
+                        "verified-source-diverges-from-reference"
+                    else ->
+                        "verified-source-and-coverage-match-reference"
+                }
+                M60F16ReferenceSourceCoverageRecord(
+                    key = key,
+                    band = band,
+                    coverageByte = coverageByte,
+                    expectedCoverage = expectedCoverage,
+                    bestSource = bestSource,
+                    expectedSource = expectedSource,
+                    sourceVsReferenceDelta = sourceDelta,
+                    coverageDelta = coverageDelta,
+                    referenceRgba = referenceRgba,
+                    currentGpuRgba = currentRgba,
+                    postPass = postPassByKey[key],
+                    predraw = predrawByKey[key],
+                    colorTarget = colorByKey[key],
+                    finalVsReferenceDelta = referenceDelta,
+                    decisive = decisive,
+                    classification = classification,
+                )
+            }
+        val decisiveRecords = records.filter { it.decisive }
+        val globalClassification = when {
+            decisiveRecords.isEmpty() || decisiveRecords.any { it.classification == "reference-comparison-incomplete" } ->
+                "reference-comparison-incomplete"
+            decisiveRecords.any { it.classification == "verified-coverage-diverges-from-reference" } ->
+                "verified-coverage-diverges-from-reference"
+            decisiveRecords.any { it.classification == "verified-source-diverges-from-reference" } ->
+                "verified-source-diverges-from-reference"
+            else -> "verified-source-and-coverage-match-reference"
+        }
+        val classificationCounts = records.groupingBy { it.classification }.eachCount()
+        val recordsJson = records.joinToString(",\n") { record ->
+            m60F16ReferenceSourceCoverageRecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-423",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-423-m60-f16-comparer-source-coverage-verifiees-reference-scene",
+              "sourceFinding": "global/kanvas/findings/for-422-source-verifiee-correspond-scratch-et-mutation-finale",
+              "sourceArtifacts": {
+                "for422": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-source-comparison-for422/m60-f16-aa-stencil-cover-verified-source-comparison-for422.json",
+                "for421": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-return-path-diagnostic-for421/m60-f16-aa-stencil-cover-verified-return-path-diagnostic-for421.json",
+                "for372": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-effective-coverage-export-for372/m60-f16-effective-coverage-export-for372.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${globalClassification.jsonString()},
+              "globalClassification": ${globalClassification.jsonString()},
+              "allowedClassifications": [
+                "verified-source-and-coverage-match-reference",
+                "verified-source-diverges-from-reference",
+                "verified-coverage-diverges-from-reference",
+                "reference-comparison-incomplete"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "comparisonPolicy": {
+                "verifiedSourceMeaning": "sourceColorSentToBlend is the non-synthetic vec4f captured by the FOR-421 verified return-path instrumentation.",
+                "coverageReferenceMeaning": "coverageExpectedAlpha is read from BoundedStrokeCapJoinCoverageMaskGM alpha at the same selected pixel.",
+                "sourceReferenceMeaning": "expectedSourcePremulRgbaFloat is paintSourceRgba premultiplied by coverageExpectedAlpha.",
+                "finalReferenceMeaning": "referenceRgba is the Skia/reference bitmap pixel for the selected scene coordinate.",
+                "tolerance": $FOR423_REFERENCE_TOLERANCE,
+                "boundedRecordPolicy": "One record per selected pixel and sampled draw; no framebuffer dump or WGSL source dump is stored."
+              },
+              "structuralSummary": {
+                "diagnosticReturnPathVerified": $diagnosticReturnPathVerified,
+                "selectedPixelCount": ${selectedPoints.size},
+                "localComparisonCount": ${records.size},
+                "decisiveComparisonCount": ${decisiveRecords.size},
+                "verifiedSourceRecordCount": ${records.count { it.bestSource != null }},
+                "coverageReferenceCount": ${records.count { it.band != null }},
+                "coverageDivergenceCount": ${records.count { it.classification == "verified-coverage-diverges-from-reference" }},
+                "sourceDivergenceCount": ${records.count { it.classification == "verified-source-diverges-from-reference" }},
+                "sourceCoverageMatchCount": ${records.count { it.classification == "verified-source-and-coverage-match-reference" }},
+                "incompleteCount": ${records.count { it.classification == "reference-comparison-incomplete" }},
+                "classificationCounts": {
+                  "verified-source-and-coverage-match-reference": ${classificationCounts["verified-source-and-coverage-match-reference"] ?: 0},
+                  "verified-source-diverges-from-reference": ${classificationCounts["verified-source-diverges-from-reference"] ?: 0},
+                  "verified-coverage-diverges-from-reference": ${classificationCounts["verified-coverage-diverges-from-reference"] ?: 0},
+                  "reference-comparison-incomplete": ${classificationCounts["reference-comparison-incomplete"] ?: 0}
+                }
+              },
+              "localComparisons": [
+            $recordsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "renderingFixApplied": false,
+                "wgsl4kModified": false,
+                "fullWgslDumpStored": false
+              },
+              "classificationReason": ${m60F16ReferenceSourceCoverageGlobalReason(globalClassification).jsonString()},
+              "nextStep": ${m60F16ReferenceSourceCoverageNextStep(globalClassification).jsonString()},
+              "validationCommands": [
+                "rtk python3 scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+                "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+                "rtk python3 scripts/validate_for421_m60_f16_aa_stencil_cover_verified_return_path_diagnostic.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for423-pycache python3 -m py_compile scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16ReferenceSourceCoverageRecordJson(record: M60F16ReferenceSourceCoverageRecord): String {
+        val sourceSample = record.bestSource?.second
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "pipelineFamily": ${record.colorTarget?.first?.pipelineFamily?.jsonString() ?: "null"},
+              "blendMode": ${record.colorTarget?.first?.blendMode?.jsonString() ?: "null"},
+              "decisiveForGlobalClassification": ${record.decisive},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16ReferenceSourceCoverageLocalReason(record).jsonString()},
+              "reference": {
+                "strokeBand": ${record.band?.id?.jsonString() ?: "null"},
+                "cap": ${record.band?.cap?.jsonString() ?: "null"},
+                "join": ${record.band?.join?.jsonString() ?: "null"},
+                "paintSourceRgba": ${record.band?.sourceColor?.let { rgbaJson(it) } ?: "null"},
+                "coverageExpectedByte": ${record.coverageByte},
+                "coverageExpectedAlpha": ${String.format(Locale.US, "%.9f", record.expectedCoverage)},
+                "expectedSourcePremulRgbaFloat": ${record.expectedSource.floatArrayOrNullJson()},
+                "referenceRgba": ${rgbaArrayJson(record.referenceRgba)},
+                "currentGpuRgba": ${rgbaArrayJson(record.currentGpuRgba)}
+              },
+              "verifiedSource": {
+                "available": ${sourceSample?.sourceColorSentToBlend != null},
+                "subdrawOrdinal": ${sourceSample?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${sourceSample?.subdrawRole?.jsonString() ?: "null"},
+                "sourceColorSentToBlend": ${sourceSample?.sourceColorSentToBlend.floatArrayOrNullJson()},
+                "coverageObservedAlpha": ${sourceSample?.sourceColorSentToBlend?.getOrNull(3)?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "coverageVsReferenceDelta": ${record.coverageDelta?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "sourceVsReferenceDelta": ${record.sourceVsReferenceDelta?.let { rgbaDeltaJson(it) } ?: "null"}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": ${record.predraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                "dstAfterRgbaFloat": ${record.postPass?.second?.observedRgbaFloat.floatArrayOrNullJson()},
+                "dstAfterRgba8": ${record.postPass?.second?.observedRgba8.intArrayOrNullJson()},
+                "dstAfterVsReferenceDelta": ${record.finalVsReferenceDelta?.let { rgbaDeltaJson(it) } ?: "null"}
+              }
+            }
+        """.trimIndent()
+    }
+
+    private fun premulPaintSourceFloat(pixel: Int, coverage: Float): FloatArray {
+        val rgba = rgbaArray(pixel)
+        val alpha = (rgba[3] / 255f) * coverage
+        return floatArrayOf(
+            (rgba[0] / 255f) * alpha,
+            (rgba[1] / 255f) * alpha,
+            (rgba[2] / 255f) * alpha,
+            alpha,
+        )
+    }
+
+    private fun rgbaByteArrayToFloat(rgba: IntArray): FloatArray =
+        FloatArray(4) { index -> rgba[index] / 255f }
+
+    private fun m60F16ReferenceSourceCoverageLocalReason(record: M60F16ReferenceSourceCoverageRecord): String = when (record.classification) {
+        "verified-source-and-coverage-match-reference" ->
+            "The verified source and observed alpha match the CPU coverage-mask reference for this selected pixel."
+        "verified-source-diverges-from-reference" ->
+            "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha."
+        "verified-coverage-diverges-from-reference" ->
+            "The verified source alpha differs from the CPU coverage-mask alpha for this selected pixel."
+        else ->
+            "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable."
+    }
+
+    private fun m60F16ReferenceSourceCoverageGlobalReason(classification: String): String = when (classification) {
+        "verified-source-and-coverage-match-reference" ->
+            "For the decisive M60 F16 samples, verified source color and coverage match the CPU reference inputs; the residual must be explained outside this source/coverage pair."
+        "verified-source-diverges-from-reference" ->
+            "At least one decisive sample has verified source color that diverges from the source expected from the scene reference and CPU coverage mask."
+        "verified-coverage-diverges-from-reference" ->
+            "At least one decisive sample has verified source alpha/coverage that diverges from the CPU coverage-mask reference."
+        else ->
+            "The run does not contain enough verified source, coverage reference, and final output data to compare against the scene reference."
+    }
+
+    private fun m60F16ReferenceSourceCoverageNextStep(classification: String): String = when (classification) {
+        "verified-source-and-coverage-match-reference" ->
+            "Inspect scene assembly, reference/oracle mapping, or later composition because verified source and coverage no longer explain the residual."
+        "verified-source-diverges-from-reference" ->
+            "Target the shader source-color calculation for the selected M60 F16 AA stencil-cover subdraws."
+        "verified-coverage-diverges-from-reference" ->
+            "Target the AA stencil-cover coverage/stencil side: the verified alpha sent to blend does not match the CPU coverage-mask reference."
+        else ->
+            "Add the missing bounded measurement before attempting a renderer correction."
     }
 
     private data class M60F16FinalWgslFunctionSummary(
@@ -5915,6 +6233,37 @@ class StrokeCapJoinSceneCaptureTest {
         val bestSourceDelta: M60F16VerifiedSourceDelta?,
         val scratchSourceOverVsFinalDelta: RgbaFloatDelta?,
         val dstMutationDelta: RgbaFloatDelta?,
+        val decisive: Boolean,
+        val classification: String,
+    )
+
+    private data class M60F16ReferenceSourceCoverageRecord(
+        val key: M60F16DrawPixelKey,
+        val band: StrokePaintBand?,
+        val coverageByte: Int,
+        val expectedCoverage: Float,
+        val bestSource: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val expectedSource: FloatArray?,
+        val sourceVsReferenceDelta: RgbaFloatDelta?,
+        val coverageDelta: Float?,
+        val referenceRgba: IntArray,
+        val currentGpuRgba: IntArray,
+        val postPass: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSample,
+            >?,
+        val predraw: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSample,
+            >?,
+        val colorTarget: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetSample,
+            >?,
+        val finalVsReferenceDelta: RgbaFloatDelta?,
         val decisive: Boolean,
         val classification: String,
     )
@@ -12811,6 +13160,7 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled"
         private const val FOR412_MATCH_TOLERANCE = 0.000001f
         private const val FOR417_RECONSTRUCTION_TOLERANCE = 0.0006f
+        private const val FOR423_REFERENCE_TOLERANCE = 2f / 255f
         private const val FOR401_FINAL_RESIDUAL_ORIGIN_MAP_SAMPLE_LIMIT = 16
         private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
