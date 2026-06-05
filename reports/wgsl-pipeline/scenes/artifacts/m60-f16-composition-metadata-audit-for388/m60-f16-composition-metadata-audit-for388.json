@@ -1,0 +1,1741 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-388",
+  "sceneId": "m60-f16-composition-metadata-audit-for388",
+  "sourceSceneId": "m60-f16-residual-fringe-discriminator-audit-for387",
+  "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-residual-fringe-discriminator-audit-for387/m60-f16-residual-fringe-discriminator-audit-for387.json",
+  "adapter": "Apple M2 Max",
+  "producer": "scripts/validate_for388_m60_f16_composition_metadata_audit.py",
+  "producerInput": "FOR-387 exported diagnostic metadata; no renderer export extension was required",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-metadata-composition-source-couverture-apres-for-387",
+  "sourceFinding": "global/kanvas/findings/for-387-montre-que-la-metadata-de-frange-m60-f16-actuelle-garde-encore-25-regressions-1",
+  "requiredFor387Decision": "M60_F16_RESIDUAL_FRINGE_DISCRIMINATOR_AUDIT_RECORDED",
+  "requiredFor387Classification": "fringe-discriminator-too-broad",
+  "decision": "M60_F16_COMPOSITION_METADATA_AUDIT_RECORDED",
+  "classification": "usable-correction-candidate",
+  "allowedClassifications": [
+    "usable-correction-candidate",
+    "still-too-broad",
+    "insufficient-metadata"
+  ],
+  "auditDoesNotProduceCorrection": true,
+  "auditDoesNotApplyRendererChange": true,
+  "correctionAppliedByDefault": false,
+  "correctionPredicateEnabled": false,
+  "rendererExportExtended": false,
+  "sourceScope": {
+    "sourceCandidateId": "local-window-edge-distance-le-17",
+    "scopeDescription": "The 33 pixels selected by FOR-387 local-window-edge-distance-le-17.",
+    "inspectedPixels": 33,
+    "sourceLocalTruthPixels": 8,
+    "regressedTruthPixels": 25,
+    "sourceCandidateSelectedBeforeResidual": 768,
+    "sourceCandidateSelectedAfterResidual": 2044,
+    "usesFor387SelectionAsAuditInput": true,
+    "usesSkiaReferenceForScope": false,
+    "usesProbeOutcomeForScope": false,
+    "usesProbeResidualForScope": false,
+    "usesDeltaVsCurrentForScope": false,
+    "probeOutcomeUsedOnlyAsEvaluationTruth": true
+  },
+  "auditedSignals": {
+    "sourceAlphaVsEffectiveCoverageAlpha": true,
+    "orientedFringeNeighborhood": true,
+    "insideOutsideSideApproximation": true,
+    "sourceContributionIndependentOfTransparentCoverage": true,
+    "transparentSourceRgbaAvailable": true,
+    "coverageOrthogonalNeighborhoodAvailable": true,
+    "rendererRuntimePredicateReady": false
+  },
+  "inspectedPixels": [
+    {
+      "x": 93,
+      "y": 43,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 45,
+      "bandEdgeDistance": 2,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-east-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 92,
+      "y": 44,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 44,
+      "bandEdgeDistance": 3,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-east-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 91,
+      "y": 45,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 43,
+      "bandEdgeDistance": 4,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-east-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 90,
+      "y": 46,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 42,
+      "bandEdgeDistance": 5,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-east-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 89,
+      "y": 47,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 41,
+      "bandEdgeDistance": 6,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-east-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 88,
+      "y": 48,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 40,
+      "bandEdgeDistance": 7,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-east-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 87,
+      "y": 49,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 39,
+      "bandEdgeDistance": 8,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-east-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 93,
+      "y": 57,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 45,
+      "bandEdgeDistance": 2,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 92,
+      "y": 58,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 44,
+      "bandEdgeDistance": 3,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 91,
+      "y": 59,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 43,
+      "bandEdgeDistance": 4,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 90,
+      "y": 60,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 42,
+      "bandEdgeDistance": 5,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 89,
+      "y": 61,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 41,
+      "bandEdgeDistance": 6,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 88,
+      "y": 62,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 40,
+      "bandEdgeDistance": 7,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 87,
+      "y": 63,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 39,
+      "bandEdgeDistance": 8,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        68,
+        121,
+        68,
+        160
+      ],
+      "transparentSourceColorFamily": "green-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "green-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 2,
+      "probeResidual": 58,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 87,
+      "y": 68,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 39,
+      "bandEdgeDistance": 8,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 0,
+      "probeResidual": 55,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 88,
+      "y": 69,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 40,
+      "bandEdgeDistance": 7,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 0,
+      "probeResidual": 55,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 89,
+      "y": 70,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 41,
+      "bandEdgeDistance": 6,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 0,
+      "probeResidual": 55,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 17,
+      "y": 71,
+      "strokeBand": "butt-bevel",
+      "cap": "butt",
+      "join": "bevel",
+      "bandLocalX": 17,
+      "bandEdgeDistance": 17,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-east-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 0,
+      "probeResidual": 55,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 90,
+      "y": 71,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 42,
+      "bandEdgeDistance": 5,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 0,
+      "probeResidual": 55,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 16,
+      "y": 72,
+      "strokeBand": "butt-bevel",
+      "cap": "butt",
+      "join": "bevel",
+      "bandLocalX": 16,
+      "bandEdgeDistance": 16,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-east-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 0,
+      "probeResidual": 55,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 91,
+      "y": 72,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 43,
+      "bandEdgeDistance": 4,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 0,
+      "probeResidual": 55,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 15,
+      "y": 73,
+      "strokeBand": "butt-bevel",
+      "cap": "butt",
+      "join": "bevel",
+      "bandLocalX": 15,
+      "bandEdgeDistance": 15,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-east-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 0,
+      "probeResidual": 55,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 92,
+      "y": 73,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 44,
+      "bandEdgeDistance": 3,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "south-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 0,
+      "probeResidual": 55,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 93,
+      "y": 74,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 45,
+      "bandEdgeDistance": 2,
+      "coverageAlphaByte": 96,
+      "transparentSourceAlphaByte": 96,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "west-terminal",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        96
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "isolated-or-terminal",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 52,
+      "probeResidual": 45,
+      "for387EvaluationResult": "source-local-useful"
+    },
+    {
+      "x": 15,
+      "y": 75,
+      "strokeBand": "butt-bevel",
+      "cap": "butt",
+      "join": "bevel",
+      "bandLocalX": 15,
+      "bandEdgeDistance": 15,
+      "coverageAlphaByte": 96,
+      "transparentSourceAlphaByte": 96,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-east-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        96
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 3,
+      "probeResidual": 34,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 92,
+      "y": 75,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 44,
+      "bandEdgeDistance": 3,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 105,
+      "probeResidual": 96,
+      "for387EvaluationResult": "source-local-useful"
+    },
+    {
+      "x": 16,
+      "y": 76,
+      "strokeBand": "butt-bevel",
+      "cap": "butt",
+      "join": "bevel",
+      "bandLocalX": 16,
+      "bandEdgeDistance": 16,
+      "coverageAlphaByte": 96,
+      "transparentSourceAlphaByte": 96,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-east-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        96
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 3,
+      "probeResidual": 34,
+      "for387EvaluationResult": "regressed-if-corrected"
+    },
+    {
+      "x": 91,
+      "y": 76,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 43,
+      "bandEdgeDistance": 4,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 105,
+      "probeResidual": 96,
+      "for387EvaluationResult": "source-local-useful"
+    },
+    {
+      "x": 17,
+      "y": 77,
+      "strokeBand": "butt-bevel",
+      "cap": "butt",
+      "join": "bevel",
+      "bandLocalX": 17,
+      "bandEdgeDistance": 17,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-east-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 52,
+      "probeResidual": 48,
+      "for387EvaluationResult": "source-local-useful"
+    },
+    {
+      "x": 90,
+      "y": 77,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 42,
+      "bandEdgeDistance": 5,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 105,
+      "probeResidual": 96,
+      "for387EvaluationResult": "source-local-useful"
+    },
+    {
+      "x": 89,
+      "y": 78,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 41,
+      "bandEdgeDistance": 6,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 105,
+      "probeResidual": 96,
+      "for387EvaluationResult": "source-local-useful"
+    },
+    {
+      "x": 88,
+      "y": 79,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 40,
+      "bandEdgeDistance": 7,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 105,
+      "probeResidual": 96,
+      "for387EvaluationResult": "source-local-useful"
+    },
+    {
+      "x": 87,
+      "y": 80,
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "bandLocalX": 39,
+      "bandEdgeDistance": 8,
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "coverageSourceAlphaRelation": "source-alpha-equals-effective-coverage",
+      "orientedCoverageSide": "north-west-solid",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "sourceContributionIndependentOfTransparentCoverage": "blue-dominant-source",
+      "fringeTopology": "two-sided-solid-fringe",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "currentResidual": 105,
+      "probeResidual": 96,
+      "for387EvaluationResult": "source-local-useful"
+    }
+  ],
+  "compositionMetadataCandidates": [
+    {
+      "id": "alpha-relation-equals-effective-coverage",
+      "description": "Tests whether source alpha already differs from the effective coverage alpha.",
+      "signalFamily": "source-alpha-vs-effective-coverage-alpha",
+      "selectionMethod": "coverageAlphaByte == transparentSourceAlphaByte",
+      "scope": "for387-local-window-edge-distance-le-17-selected-pixels",
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor379MembershipAsPrimary": false,
+      "usesFor382CategoryForSelection": false,
+      "usesFor383PredicateAsPrimary": false,
+      "usesFor384PredicateAsPrimary": false,
+      "usesFor385PredicateAsPrimary": false,
+      "usesFor386PredicateAsPrimary": false,
+      "usesFor387TruthAsSelection": false,
+      "selectedPixels": 33,
+      "sourceLocalRecovered": 8,
+      "sourceLocalTruth": 8,
+      "regressedPixelsIncluded": 25,
+      "precision": 0.2424,
+      "recall": 1.0,
+      "candidateClass": "still-too-broad",
+      "estimatedResidualIfApplied": {
+        "count": 33,
+        "beforeResidual": 768,
+        "afterResidual": 2044,
+        "deltaVsCurrent": 1276,
+        "gainVsCurrent": -1276
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 93,
+          "y": 43,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 44,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 45,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 90,
+          "y": 46,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 89,
+          "y": 47,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 88,
+          "y": 48,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 87,
+          "y": 49,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 93,
+          "y": 57,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 58,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 59,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 90,
+          "y": 60,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 89,
+          "y": 61,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 88,
+          "y": 62,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 87,
+          "y": 63,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 87,
+          "y": 68,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 88,
+          "y": 69,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 89,
+          "y": 70,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 17,
+          "y": 71,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 90,
+          "y": 71,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 16,
+          "y": 72,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 72,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 15,
+          "y": 73,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 73,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 93,
+          "y": 74,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 15,
+          "y": 75,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 75,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 16,
+          "y": 76,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 76,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 17,
+          "y": 77,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 90,
+          "y": 77,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 89,
+          "y": 78,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 88,
+          "y": 79,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 87,
+          "y": 80,
+          "result": "source-local-useful"
+        }
+      ]
+    },
+    {
+      "id": "high-alpha-source-coverage-relation",
+      "description": "Keeps only the high alpha lane while preserving equal source/coverage alpha.",
+      "signalFamily": "source-alpha-vs-effective-coverage-alpha",
+      "selectionMethod": "coverageAlphaByte == transparentSourceAlphaByte && coverageAlphaByte >= 160",
+      "scope": "for387-local-window-edge-distance-le-17-selected-pixels",
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor379MembershipAsPrimary": false,
+      "usesFor382CategoryForSelection": false,
+      "usesFor383PredicateAsPrimary": false,
+      "usesFor384PredicateAsPrimary": false,
+      "usesFor385PredicateAsPrimary": false,
+      "usesFor386PredicateAsPrimary": false,
+      "usesFor387TruthAsSelection": false,
+      "selectedPixels": 30,
+      "sourceLocalRecovered": 7,
+      "sourceLocalTruth": 8,
+      "regressedPixelsIncluded": 23,
+      "precision": 0.2333,
+      "recall": 0.875,
+      "candidateClass": "insufficient-metadata",
+      "estimatedResidualIfApplied": {
+        "count": 30,
+        "beforeResidual": 710,
+        "afterResidual": 1931,
+        "deltaVsCurrent": 1221,
+        "gainVsCurrent": -1221
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 93,
+          "y": 43,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 44,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 45,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 90,
+          "y": 46,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 89,
+          "y": 47,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 88,
+          "y": 48,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 87,
+          "y": 49,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 93,
+          "y": 57,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 58,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 59,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 90,
+          "y": 60,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 89,
+          "y": 61,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 88,
+          "y": 62,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 87,
+          "y": 63,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 87,
+          "y": 68,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 88,
+          "y": 69,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 89,
+          "y": 70,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 17,
+          "y": 71,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 90,
+          "y": 71,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 16,
+          "y": 72,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 72,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 15,
+          "y": 73,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 73,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 75,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 91,
+          "y": 76,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 17,
+          "y": 77,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 90,
+          "y": 77,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 89,
+          "y": 78,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 88,
+          "y": 79,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 87,
+          "y": 80,
+          "result": "source-local-useful"
+        }
+      ]
+    },
+    {
+      "id": "oriented-coverage-source-side",
+      "description": "Keeps the oriented coverage sides matching the source-local lane direction.",
+      "signalFamily": "oriented-fringe-side",
+      "selectionMethod": "orientedCoverageSide in {west-terminal,north-west-solid,north-east-solid}",
+      "scope": "for387-local-window-edge-distance-le-17-selected-pixels",
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor379MembershipAsPrimary": false,
+      "usesFor382CategoryForSelection": false,
+      "usesFor383PredicateAsPrimary": false,
+      "usesFor384PredicateAsPrimary": false,
+      "usesFor385PredicateAsPrimary": false,
+      "usesFor386PredicateAsPrimary": false,
+      "usesFor387TruthAsSelection": false,
+      "selectedPixels": 17,
+      "sourceLocalRecovered": 8,
+      "sourceLocalTruth": 8,
+      "regressedPixelsIncluded": 9,
+      "precision": 0.4706,
+      "recall": 1.0,
+      "candidateClass": "still-too-broad",
+      "estimatedResidualIfApplied": {
+        "count": 17,
+        "beforeResidual": 754,
+        "afterResidual": 1143,
+        "deltaVsCurrent": 389,
+        "gainVsCurrent": -389
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 93,
+          "y": 57,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 58,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 59,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 90,
+          "y": 60,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 89,
+          "y": 61,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 88,
+          "y": 62,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 87,
+          "y": 63,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 93,
+          "y": 74,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 15,
+          "y": 75,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 75,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 16,
+          "y": 76,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 76,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 17,
+          "y": 77,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 90,
+          "y": 77,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 89,
+          "y": 78,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 88,
+          "y": 79,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 87,
+          "y": 80,
+          "result": "source-local-useful"
+        }
+      ]
+    },
+    {
+      "id": "blue-source-contribution",
+      "description": "Keeps pixels whose transparent-source diagnostic carries the blue local source.",
+      "signalFamily": "source-local-contribution-independent-of-transparent-coverage",
+      "selectionMethod": "transparentSourceColorFamily == blue-dominant-source",
+      "scope": "for387-local-window-edge-distance-le-17-selected-pixels",
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor379MembershipAsPrimary": false,
+      "usesFor382CategoryForSelection": false,
+      "usesFor383PredicateAsPrimary": false,
+      "usesFor384PredicateAsPrimary": false,
+      "usesFor385PredicateAsPrimary": false,
+      "usesFor386PredicateAsPrimary": false,
+      "usesFor387TruthAsSelection": false,
+      "selectedPixels": 19,
+      "sourceLocalRecovered": 8,
+      "sourceLocalTruth": 8,
+      "regressedPixelsIncluded": 11,
+      "precision": 0.4211,
+      "recall": 1.0,
+      "candidateClass": "still-too-broad",
+      "estimatedResidualIfApplied": {
+        "count": 19,
+        "beforeResidual": 740,
+        "afterResidual": 1232,
+        "deltaVsCurrent": 492,
+        "gainVsCurrent": -492
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 87,
+          "y": 68,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 88,
+          "y": 69,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 89,
+          "y": 70,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 17,
+          "y": 71,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 90,
+          "y": 71,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 16,
+          "y": 72,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 72,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 15,
+          "y": 73,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 73,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 93,
+          "y": 74,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 15,
+          "y": 75,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 92,
+          "y": 75,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 16,
+          "y": 76,
+          "result": "regressed-if-corrected"
+        },
+        {
+          "x": 91,
+          "y": 76,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 17,
+          "y": 77,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 90,
+          "y": 77,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 89,
+          "y": 78,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 88,
+          "y": 79,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 87,
+          "y": 80,
+          "result": "source-local-useful"
+        }
+      ]
+    },
+    {
+      "id": "source-color-and-oriented-coverage-lane",
+      "description": "Combines source-local blue contribution with the matching oriented coverage side.",
+      "signalFamily": "source-color-plus-oriented-fringe-side",
+      "selectionMethod": "(round-round && blue source && oriented side in {west-terminal,north-west-solid}) || (butt-bevel && blue source && oriented side == north-east-solid && coverageAlphaByte >= 160)",
+      "scope": "for387-local-window-edge-distance-le-17-selected-pixels",
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor379MembershipAsPrimary": false,
+      "usesFor382CategoryForSelection": false,
+      "usesFor383PredicateAsPrimary": false,
+      "usesFor384PredicateAsPrimary": false,
+      "usesFor385PredicateAsPrimary": false,
+      "usesFor386PredicateAsPrimary": false,
+      "usesFor387TruthAsSelection": false,
+      "selectedPixels": 8,
+      "sourceLocalRecovered": 8,
+      "sourceLocalTruth": 8,
+      "regressedPixelsIncluded": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "candidateClass": "usable-correction-candidate",
+      "estimatedResidualIfApplied": {
+        "count": 8,
+        "beforeResidual": 734,
+        "afterResidual": 669,
+        "deltaVsCurrent": -65,
+        "gainVsCurrent": 65
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 93,
+          "y": 74,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 92,
+          "y": 75,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 91,
+          "y": 76,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 17,
+          "y": 77,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 90,
+          "y": 77,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 89,
+          "y": 78,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 88,
+          "y": 79,
+          "result": "source-local-useful"
+        },
+        {
+          "x": 87,
+          "y": 80,
+          "result": "source-local-useful"
+        }
+      ]
+    }
+  ],
+  "bestCompositionMetadataCandidate": {
+    "id": "source-color-and-oriented-coverage-lane",
+    "description": "Combines source-local blue contribution with the matching oriented coverage side.",
+    "signalFamily": "source-color-plus-oriented-fringe-side",
+    "selectionMethod": "(round-round && blue source && oriented side in {west-terminal,north-west-solid}) || (butt-bevel && blue source && oriented side == north-east-solid && coverageAlphaByte >= 160)",
+    "scope": "for387-local-window-edge-distance-le-17-selected-pixels",
+    "usesSkiaReferenceForSelection": false,
+    "usesProbeOutcomeForSelection": false,
+    "usesProbeResidualForSelection": false,
+    "usesDeltaVsCurrentForSelection": false,
+    "usesCurrentResidualForSelection": false,
+    "usesFor379MembershipAsPrimary": false,
+    "usesFor382CategoryForSelection": false,
+    "usesFor383PredicateAsPrimary": false,
+    "usesFor384PredicateAsPrimary": false,
+    "usesFor385PredicateAsPrimary": false,
+    "usesFor386PredicateAsPrimary": false,
+    "usesFor387TruthAsSelection": false,
+    "selectedPixels": 8,
+    "sourceLocalRecovered": 8,
+    "sourceLocalTruth": 8,
+    "regressedPixelsIncluded": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "candidateClass": "usable-correction-candidate",
+    "estimatedResidualIfApplied": {
+      "count": 8,
+      "beforeResidual": 734,
+      "afterResidual": 669,
+      "deltaVsCurrent": -65,
+      "gainVsCurrent": 65
+    },
+    "selectedPixelCoordinates": [
+      {
+        "x": 93,
+        "y": 74,
+        "result": "source-local-useful"
+      },
+      {
+        "x": 92,
+        "y": 75,
+        "result": "source-local-useful"
+      },
+      {
+        "x": 91,
+        "y": 76,
+        "result": "source-local-useful"
+      },
+      {
+        "x": 17,
+        "y": 77,
+        "result": "source-local-useful"
+      },
+      {
+        "x": 90,
+        "y": 77,
+        "result": "source-local-useful"
+      },
+      {
+        "x": 89,
+        "y": 78,
+        "result": "source-local-useful"
+      },
+      {
+        "x": 88,
+        "y": 79,
+        "result": "source-local-useful"
+      },
+      {
+        "x": 87,
+        "y": 80,
+        "result": "source-local-useful"
+      }
+    ]
+  },
+  "classificationReason": "A source/coverage composition metadata candidate recovers all 8 useful pixels inside the FOR-387 scope with 0 included regressions. It is only recorded as a candidate; no correction is enabled.",
+  "nextMove": "Do not enable the correction in FOR-388. A later ticket may evaluate `source-color-and-oriented-coverage-lane` behind an explicit opt-in guard with full-scene evidence.",
+  "nonGoalsPreserved": {
+    "rendererBehaviorChanged": false,
+    "runtimeBehaviorChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryProductionChanged": false,
+    "coverageProductionChanged": false,
+    "fallbackChanged": false,
+    "scoreChanged": false,
+    "thresholdChanged": false,
+    "promotionChanged": false,
+    "correctionEnabled": false
+  },
+  "validationCommands": [
+    "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+    "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+    "rtk python3 scripts/validate_for388_m60_f16_composition_metadata_audit.py",
+    "rtk python3 scripts/validate_for387_m60_f16_residual_fringe_discriminator_audit.py",
+    "rtk python3 scripts/validate_for386_m60_f16_coverage_regression_discriminator_audit.py",
+    "rtk python3 scripts/validate_for385_m60_f16_generalized_coverage_metadata_predicate_audit.py",
+    "rtk python3 scripts/validate_for384_m60_f16_pre_correction_geometry_coverage_metadata_audit.py",
+    "rtk python3 scripts/validate_for383_m60_f16_pre_probe_predicate_audit.py",
+    "rtk python3 scripts/validate_for382_m60_f16_coverage_composition_membership_audit.py",
+    "rtk python3 scripts/validate_for381_m60_f16_source_color_subzone_audit.py",
+    "rtk python3 scripts/validate_for380_m60_f16_source_color_correction_probe.py",
+    "rtk python3 scripts/validate_for379_m60_f16_effective_source_color_path.py",
+    "rtk python3 scripts/validate_for378_m60_f16_direct_source_color_evidence.py",
+    "rtk python3 scripts/validate_for377_m60_f16_linear_srgb_plausibility_audit.py",
+    "rtk python3 scripts/validate_for376_m60_f16_composition_quantization_candidate.py",
+    "rtk python3 scripts/validate_for375_m60_f16_effective_destination_candidate.py",
+    "rtk python3 scripts/validate_for374_m60_f16_candidate_regression_audit.py",
+    "rtk python3 scripts/validate_for373_m60_f16_candidate_policy_rgba_probe.py",
+    "rtk python3 scripts/validate_for372_m60_f16_effective_coverage_export.py",
+    "rtk python3 scripts/validate_for371_m60_f16_effective_coverage_access_audit.py",
+    "rtk python3 scripts/validate_for370_m60_f16_source_paint_capture_extension.py",
+    "rtk python3 scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+    "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+    "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+    "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+    "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk git diff --check"
+  ]
+}
