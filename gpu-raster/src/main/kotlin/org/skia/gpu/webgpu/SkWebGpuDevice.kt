@@ -194,6 +194,8 @@ private const val WEBGPU_M60_F16_AA_STENCIL_COVER_BAND_METADATA_TRANSPORT_FLAG: 
     "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
 private const val WEBGPU_M60_F16_SOURCE_FACING_LANE_SHADER_READBACK_FLAG: String =
     "kanvas.webgpu.m60F16SourceFacingLaneShaderReadback.enabled"
+private const val WEBGPU_M60_F16_AA_STENCIL_COVER_FRAGMENT_LANE_DIAGNOSTIC_FLAG: String =
+    "kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -392,6 +394,22 @@ public class SkWebGpuDevice(
         val valid: Boolean,
     )
 
+    public data class M60F16FragmentLaneDiagnosticSnapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val diagnosticShader: String,
+        val pipelineLayout: String,
+        val samples: List<M60F16FragmentLaneDiagnosticSample>,
+    )
+
+    public data class M60F16FragmentLaneDiagnosticSample(
+        val x: Int,
+        val y: Int,
+        val observedCandidateLane: Boolean,
+        val coverageSide: String,
+        val valid: Boolean,
+    )
+
     public data class RawRectUniformColorWrite(
         val route: String,
         val drawIndex: Int,
@@ -494,10 +512,17 @@ public class SkWebGpuDevice(
         System.getProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY, "false").toBoolean()
     private val m60F16SourceFacingLaneShaderReadbackDiagnosticsEnabled: Boolean =
         System.getProperty(WEBGPU_M60_F16_SOURCE_FACING_LANE_SHADER_READBACK_FLAG, "false").toBoolean()
+    private val m60F16AaStencilCoverFragmentLaneDiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_AA_STENCIL_COVER_FRAGMENT_LANE_DIAGNOSTIC_FLAG,
+            "false",
+        ).toBoolean()
     private val rawRectUniformColorWrites: MutableList<RawRectUniformColorWrite> = mutableListOf()
     private val rawRgba8TextureUploads: MutableList<RawRgba8TextureUpload> = mutableListOf()
     private val outputReadbackBoundarySamples: MutableList<OutputReadbackSample> = mutableListOf()
     private val for258ShaderSideProbeSamples: MutableList<For258ShaderSideProbeSample> = mutableListOf()
+    private val m60F16FragmentLaneDiagnosticSamples:
+        MutableList<M60F16FragmentLaneDiagnosticSample> = mutableListOf()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
         PipelineKeyedCache("generated shader modules")
@@ -561,6 +586,15 @@ public class SkWebGpuDevice(
             diagnosticShader = FOR258_SHADER_SIDE_PROBE_SHADER,
             pipelineLayout = FOR258_SHADER_SIDE_PROBE_LAYOUT,
             samples = for258ShaderSideProbeSamples.toList(),
+        )
+
+    public fun m60F16FragmentLaneDiagnosticSnapshot(): M60F16FragmentLaneDiagnosticSnapshot =
+        M60F16FragmentLaneDiagnosticSnapshot(
+            propertyName = WEBGPU_M60_F16_AA_STENCIL_COVER_FRAGMENT_LANE_DIAGNOSTIC_FLAG,
+            enabled = m60F16AaStencilCoverFragmentLaneDiagnosticsEnabled,
+            diagnosticShader = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SHADER,
+            pipelineLayout = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_LAYOUT,
+            samples = m60F16FragmentLaneDiagnosticSamples.toList(),
         )
 
     public fun buildPipelineKeyIdentityForDiagnostics(axes: Map<String, String>): PipelineKey =
@@ -856,6 +890,46 @@ public class SkWebGpuDevice(
         } finally {
             readback.staging.close()
             readback.storage.close()
+        }
+    }
+
+    private suspend fun recordM60F16FragmentLaneDiagnostics(perDrawResources: List<DrawResources>) {
+        if (!m60F16AaStencilCoverFragmentLaneDiagnosticsEnabled) return
+        m60F16FragmentLaneDiagnosticSamples.clear()
+        val readbacks = perDrawResources.mapNotNull { res ->
+            res.m60F16FragmentLaneDiagnosticStaging?.let(::M60F16FragmentLaneDiagnosticReadback)
+        }
+        readbacks.forEach { readback ->
+            readback.staging.mapAsync(
+                GPUMapMode.Read,
+                0uL,
+                M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
+            ).getOrThrow()
+            val bytes = readback.staging
+                .getMappedRange(0uL, M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE)
+                .toByteArray()
+            readback.staging.unmap()
+            val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+            M60_F16_FRAGMENT_LANE_DIAGNOSTIC_POINTS.forEachIndexed { index, point ->
+                val base = index * M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_STRIDE_BYTES
+                val x = buffer.getInt(base)
+                val y = buffer.getInt(base + 4)
+                val lane = buffer.getInt(base + 8)
+                val side = buffer.getInt(base + 12)
+                if (lane != 0 || x != 0 || y != 0 || side != 0) {
+                    m60F16FragmentLaneDiagnosticSamples += M60F16FragmentLaneDiagnosticSample(
+                        x = x,
+                        y = y,
+                        observedCandidateLane = lane != 0,
+                        coverageSide = when (side) {
+                            1 -> "inside"
+                            2 -> "outside"
+                            else -> "unknown"
+                        },
+                        valid = x == point.first && y == point.second && lane == 1,
+                    )
+                }
+            }
         }
     }
 
@@ -2575,6 +2649,63 @@ public class SkWebGpuDevice(
         }
     }
 
+    private fun loadM60F16FragmentLaneDiagnosticShader(): GPUShaderModule {
+        val cacheKey = "diagnostic://m60-f16-aa-stencil-cover-fragment-lane"
+        val cached = shaderModuleCache[cacheKey]
+        if (cached != null) {
+            cacheCounters.shaderModuleHits += 1
+            return cached
+        }
+        cacheCounters.shaderModuleMisses += 1
+        val base = SkWebGpuDevice::class.java.classLoader
+            .getResource("shaders/aa_stencil_cover.wgsl")?.readText()
+            ?: error("shaders/aa_stencil_cover.wgsl missing from classpath")
+        val wgsl = base
+            .replace(
+                "@binding(0) @group(0) var<uniform> uniforms: Uniforms;\n",
+                """
+@binding(0) @group(0) var<uniform> uniforms: Uniforms;
+@binding(1) @group(0) var<storage, read_write> m60F16FragmentLaneDiagnostic: array<vec4u, 8>;
+""".trimIndent() + "\n",
+            )
+            .replace(
+                "@fragment\nfn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n",
+                "@fragment\nfn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n" +
+                    "    m60_f16_record_fragment_lane(frag.xy, 1u);\n",
+            )
+            .replace(
+                "@fragment\nfn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n",
+                "@fragment\nfn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n" +
+                    "    m60_f16_record_fragment_lane(frag.xy, 2u);\n",
+            )
+            .replace(
+                "@fragment\nfn fs_inside",
+                """
+fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
+    if (!m60_f16_candidate_lane(pixel)) {
+        return;
+    }
+    let px = u32(floor(pixel.x));
+    let py = u32(floor(pixel.y));
+    if (px == 93u && py == 74u) { m60F16FragmentLaneDiagnostic[0] = vec4u(px, py, 1u, side); }
+    if (px == 92u && py == 75u) { m60F16FragmentLaneDiagnostic[1] = vec4u(px, py, 1u, side); }
+    if (px == 91u && py == 76u) { m60F16FragmentLaneDiagnostic[2] = vec4u(px, py, 1u, side); }
+    if (px == 17u && py == 77u) { m60F16FragmentLaneDiagnostic[3] = vec4u(px, py, 1u, side); }
+    if (px == 90u && py == 77u) { m60F16FragmentLaneDiagnostic[4] = vec4u(px, py, 1u, side); }
+    if (px == 89u && py == 78u) { m60F16FragmentLaneDiagnostic[5] = vec4u(px, py, 1u, side); }
+    if (px == 88u && py == 79u) { m60F16FragmentLaneDiagnostic[6] = vec4u(px, py, 1u, side); }
+    if (px == 87u && py == 80u) { m60F16FragmentLaneDiagnostic[7] = vec4u(px, py, 1u, side); }
+}
+
+@fragment
+fn fs_inside
+""".trimIndent(),
+            )
+        return context.device.createShaderModule(ShaderModuleDescriptor(code = wgsl)).also {
+            shaderModuleCache[cacheKey] = it
+        }
+    }
+
     // ─── Rect pipeline (G1.2 / G2.3a) — full-screen tri + scissor + coverage ───
 
     private val handwrittenRectShader: GPUShaderModule = loadShader("shaders/solid_color.wgsl")
@@ -2978,6 +3109,12 @@ public class SkWebGpuDevice(
     // ─── AA stencil-cover (G3.3b.3a / G3.3b.3d) — AA cover for multi-contour ──
 
     private val aaStencilCoverShader: GPUShaderModule = loadShader("shaders/aa_stencil_cover.wgsl")
+    private val m60F16FragmentLaneDiagnosticShaderLazy: Lazy<GPUShaderModule> = lazy {
+        loadM60F16FragmentLaneDiagnosticShader()
+    }
+
+    private val m60F16FragmentLaneDiagnosticShader: GPUShaderModule
+        get() = m60F16FragmentLaneDiagnosticShaderLazy.value
 
     /**
      * G3.3b.3d — which half of the AA falloff a cover sub-draw paints.
@@ -2990,6 +3127,39 @@ public class SkWebGpuDevice(
     private enum class CoverageSide { Inside, Outside }
 
     private val aaStencilCoverPipelineCache: MutableMap<Triple<SkBlendMode, SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
+    private val m60F16FragmentLaneDiagnosticBindGroupLayoutLazy: Lazy<GPUBindGroupLayout> = lazy {
+        context.device.createBindGroupLayout(
+            BindGroupLayoutDescriptor(
+                entries = listOf(
+                    BindGroupLayoutEntry(
+                        binding = 0u,
+                        visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                    ),
+                    BindGroupLayoutEntry(
+                        binding = 1u,
+                        visibility = GPUShaderStage.Fragment,
+                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Storage),
+                    ),
+                ),
+            ),
+        )
+    }
+
+    private val m60F16FragmentLaneDiagnosticBindGroupLayout: GPUBindGroupLayout
+        get() = m60F16FragmentLaneDiagnosticBindGroupLayoutLazy.value
+
+    private val m60F16FragmentLaneDiagnosticPipelineLayoutLazy = lazy {
+        context.device.createPipelineLayout(
+            PipelineLayoutDescriptor(bindGroupLayouts = listOf(m60F16FragmentLaneDiagnosticBindGroupLayout)),
+        )
+    }
+
+    private val m60F16FragmentLaneDiagnosticPipelineLayout
+        get() = m60F16FragmentLaneDiagnosticPipelineLayoutLazy.value
+
+    private val m60F16FragmentLaneDiagnosticPipelineCache:
+        MutableMap<Triple<SkBlendMode, SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
 
     /**
      * AA-cover pipeline. Same fill-type encoding as [coverPipelineFor]
@@ -3031,6 +3201,66 @@ public class SkWebGpuDevice(
                     ),
                     fragment = FragmentState(
                         module = aaStencilCoverShader,
+                        entryPoint = entryPoint,
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = readMask,
+                        stencilWriteMask = 0xFFu,
+                    ),
+                ),
+            )
+        }
+
+    private fun m60F16FragmentLaneDiagnosticPipelineFor(
+        mode: SkBlendMode,
+        fillType: SkPathFillType,
+        side: CoverageSide,
+    ): GPURenderPipeline =
+        m60F16FragmentLaneDiagnosticPipelineCache.getOrPut(Triple(mode, fillType, side)) {
+            val readMask: UInt = if (fillType.isEvenOdd()) 0x01u else 0xFFu
+            val insideCompare =
+                if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
+            val compare = when (side) {
+                CoverageSide.Inside -> insideCompare
+                CoverageSide.Outside ->
+                    if (insideCompare == GPUCompareFunction.Equal) GPUCompareFunction.NotEqual
+                    else GPUCompareFunction.Equal
+            }
+            val entryPoint = when (side) {
+                CoverageSide.Inside -> "fs_inside"
+                CoverageSide.Outside -> "fs_outside"
+            }
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = m60F16FragmentLaneDiagnosticPipelineLayout,
+                    vertex = VertexState(
+                        module = m60F16FragmentLaneDiagnosticShader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                    ),
+                    fragment = FragmentState(
+                        module = m60F16FragmentLaneDiagnosticShader,
                         entryPoint = entryPoint,
                         targets = listOf(
                             ColorTargetState(
@@ -12704,6 +12934,9 @@ public class SkWebGpuDevice(
                 // across the half-pixel boundary band. Closes the
                 // outside-half AA loss inherent to the G3.3b.3a single
                 // cover sub-draw.
+                res.m60F16FragmentLaneDiagnosticStorage?.let { storage ->
+                    encoder.clearBuffer(storage, 0uL, M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE)
+                }
                 encoder.beginRenderPass(
                     RenderPassDescriptor(
                         colorAttachments = listOf(
@@ -12736,11 +12969,38 @@ public class SkWebGpuDevice(
                     draw((d.stencilVerts.size / 2).toUInt())
                     setStencilReference(0u)
                     setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
-                    setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Inside))
+                    val diagnosticBindGroup = res.m60F16FragmentLaneDiagnosticBindGroup
+                    if (diagnosticBindGroup != null) {
+                        setBindGroup(0u, diagnosticBindGroup)
+                    }
+                    setPipeline(
+                        if (diagnosticBindGroup != null) {
+                            m60F16FragmentLaneDiagnosticPipelineFor(d.mode, d.fillType, CoverageSide.Inside)
+                        } else {
+                            aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Inside)
+                        },
+                    )
                     draw((d.coverVerts.size / 2).toUInt())
-                    setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Outside))
+                    setPipeline(
+                        if (diagnosticBindGroup != null) {
+                            m60F16FragmentLaneDiagnosticPipelineFor(d.mode, d.fillType, CoverageSide.Outside)
+                        } else {
+                            aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Outside)
+                        },
+                    )
                     draw((d.coverVerts.size / 2).toUInt())
                     end()
+                }
+                if (res.m60F16FragmentLaneDiagnosticStorage != null &&
+                    res.m60F16FragmentLaneDiagnosticStaging != null
+                ) {
+                    encoder.copyBufferToBuffer(
+                        source = res.m60F16FragmentLaneDiagnosticStorage,
+                        sourceOffset = 0uL,
+                        destination = res.m60F16FragmentLaneDiagnosticStaging,
+                        destinationOffset = 0uL,
+                        size = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
+                    )
                 }
                 return@forEachIndexed
             }
@@ -14012,6 +14272,8 @@ public class SkWebGpuDevice(
             // The view goes before the texture, mirroring scratchH/V cleanup.
             it.materializeTargetView?.close()
             it.materializeTargetTexture?.close()
+            it.m60F16FragmentLaneDiagnosticStaging?.close()
+            it.m60F16FragmentLaneDiagnosticStorage?.close()
         }
     }
 
@@ -14057,6 +14319,7 @@ public class SkWebGpuDevice(
         context.queue.submit(listOf(encoder.finish()))
 
         recordFor258ShaderSideProbe(for258ShaderSideProbeReadback)
+        recordM60F16FragmentLaneDiagnostics(perDrawResources)
         val pixels = target.readPixels()
         recordOutputReadbackBoundary(pixels)
 
@@ -14184,6 +14447,13 @@ public class SkWebGpuDevice(
         // Owned cascade textures + views to close after submit.
         val cascadeTextures: List<GPUTexture> = emptyList(),
         val cascadeViews: List<GPUTextureView> = emptyList(),
+        // FOR-396 diagnostic-only fragment side-channel for the bounded
+        // M60 F16 AA stencil-cover lane predicate. These buffers are
+        // allocated only when the explicit opt-in guard is active and the
+        // FOR-394 metadata transport recognized the draw.
+        val m60F16FragmentLaneDiagnosticStorage: GPUBuffer? = null,
+        val m60F16FragmentLaneDiagnosticStaging: GPUBuffer? = null,
+        val m60F16FragmentLaneDiagnosticBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
         // L1a -- DropShadow-inside-Compose materialise target texture +
         // view. Allocated by [enqueueMaterializeDropShadowToScratch] and
         // owned by this DrawResources ; closed in [closeDrawResources]
@@ -14203,6 +14473,10 @@ public class SkWebGpuDevice(
 
     private data class For258ShaderSideProbeReadback(
         val storage: GPUBuffer,
+        val staging: GPUBuffer,
+    )
+
+    private data class M60F16FragmentLaneDiagnosticReadback(
         val staging: GPUBuffer,
     )
 
@@ -15855,6 +16129,43 @@ public class SkWebGpuDevice(
                 ),
             ),
         )
+        val diagnosticEnabled =
+            m60F16AaStencilCoverFragmentLaneDiagnosticsEnabled && d.m60F16BandMetadata != null
+        val diagnosticStorage = if (diagnosticEnabled) {
+            context.device.createBuffer(
+                BufferDescriptor(
+                    size = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
+                    usage = GPUBufferUsage.Storage or GPUBufferUsage.CopySrc or GPUBufferUsage.CopyDst,
+                    label = "SkWebGpuDevice.m60F16FragmentLaneDiagnostic.storage.diagnosticOnly",
+                ),
+            )
+        } else {
+            null
+        }
+        val diagnosticStaging = if (diagnosticEnabled) {
+            context.device.createBuffer(
+                BufferDescriptor(
+                    size = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
+                    usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                    label = "SkWebGpuDevice.m60F16FragmentLaneDiagnostic.staging.diagnosticOnly",
+                ),
+            )
+        } else {
+            null
+        }
+        val diagnosticBindGroup = if (diagnosticEnabled) {
+            context.device.createBindGroup(
+                BindGroupDescriptor(
+                    layout = m60F16FragmentLaneDiagnosticBindGroupLayout,
+                    entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                        BindGroupEntry(binding = 1u, resource = BufferBinding(buffer = diagnosticStorage!!)),
+                    ),
+                ),
+            )
+        } else {
+            null
+        }
         val stencilVB = context.device.createBuffer(
             BufferDescriptor(
                 size = (d.stencilVerts.size * Float.SIZE_BYTES).toULong(),
@@ -15876,6 +16187,9 @@ public class SkWebGpuDevice(
             bindGroup = bindGroup,
             vertexBuffer = stencilVB,
             coverVertexBuffer = coverVB,
+            m60F16FragmentLaneDiagnosticStorage = diagnosticStorage,
+            m60F16FragmentLaneDiagnosticStaging = diagnosticStaging,
+            m60F16FragmentLaneDiagnosticBindGroup = diagnosticBindGroup,
         )
     }
 
@@ -16412,6 +16726,8 @@ public class SkWebGpuDevice(
         coverPipelineCache.clear()
         aaStencilCoverPipelineCache.values.forEach { it.close() }
         aaStencilCoverPipelineCache.clear()
+        m60F16FragmentLaneDiagnosticPipelineCache.values.forEach { it.close() }
+        m60F16FragmentLaneDiagnosticPipelineCache.clear()
         aaStencilCoverGradientPipelineCache.values.forEach { it.close() }
         aaStencilCoverGradientPipelineCache.clear()
         aaStencilCoverRadialGradientPipelineCache.values.forEach { it.close() }
@@ -16475,6 +16791,9 @@ public class SkWebGpuDevice(
         if (for258ShaderSideProbeShaderLazy.isInitialized()) {
             for258ShaderSideProbeShader.close()
         }
+        if (m60F16FragmentLaneDiagnosticShaderLazy.isInitialized()) {
+            m60F16FragmentLaneDiagnosticShader.close()
+        }
         intermediateView.close()
         intermediateTexture.close()
         depthStencilView.close()
@@ -16490,16 +16809,35 @@ public class SkWebGpuDevice(
             "shaders/shader_side_probe_for258_diagnostic_only.wgsl"
         const val FOR258_SHADER_SIDE_PROBE_LAYOUT: String =
             "diagnostic-only compute layout: binding0 intermediate texture, binding1 storage buffer"
+        const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SHADER: String =
+            "diagnostic in-memory variant of shaders/aa_stencil_cover.wgsl"
+        const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_LAYOUT: String =
+            "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer"
         const val RAW_COLOR_SENTINEL_TEXEL_SAMPLE_LIMIT: Int = 16
         const val FOR258_SHADER_SIDE_PROBE_SAMPLE_STRIDE_BYTES: Int = 16
         const val FOR258_SHADER_SIDE_PROBE_SAMPLE_COUNT: UInt = 2u
         val FOR258_SHADER_SIDE_PROBE_BUFFER_SIZE: ULong =
             (FOR258_SHADER_SIDE_PROBE_SAMPLE_STRIDE_BYTES * FOR258_SHADER_SIDE_PROBE_SAMPLE_COUNT.toInt())
                 .toULong()
+        const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_STRIDE_BYTES: Int = 16
+        const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_COUNT: Int = 8
+        val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE: ULong =
+            (M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_STRIDE_BYTES *
+                M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_COUNT).toULong()
         val OUTPUT_READBACK_SENTINEL_POINTS: List<Pair<Int, Int>> = listOf(
             0 to 0,
             8 to 24,
             40 to 40,
+        )
+        val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_POINTS: List<Pair<Int, Int>> = listOf(
+            93 to 74,
+            92 to 75,
+            91 to 76,
+            17 to 77,
+            90 to 77,
+            89 to 78,
+            88 to 79,
+            87 to 80,
         )
         val FOR258_SHADER_SIDE_PROBE_POINTS: List<For258ShaderSideProbePoint> = listOf(
             For258ShaderSideProbePoint("legacy-source-color-uniform.simple-offset-row1-col0", 40, 40),
