@@ -152,6 +152,17 @@ class StrokeCapJoinSceneCaptureTest {
                         }
                     }
                 }
+                val coverageStencilContributionMapResult = withExperimentalStrokeCapJoinRender {
+                    withM60F16BoundedRuntimeCorrectionProbe(true) {
+                        withM60F16CoverageStencilContributionMapDiagnostic(true) {
+                            WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                                ctx,
+                                gm,
+                                targetColorSpaceBlend = true,
+                            )
+                        }
+                    }
+                }
                 writeEvidence(
                     cpuBitmap = cpuBitmap,
                     reference = reference,
@@ -159,6 +170,7 @@ class StrokeCapJoinSceneCaptureTest {
                     correctedExperimentalGpu = correctedExperimentalGpu,
                     boundedRuntimeCorrectionGpu = boundedRuntimeCorrectionGpu,
                     boundedCorrectionApplicationPointGpu = boundedCorrectionApplicationPointResult.bitmap,
+                    coverageStencilContributionMapGpu = coverageStencilContributionMapResult.bitmap,
                     cpuCmp = cpuCmp,
                     experimentalGpuCmp = experimentalGpuCmp,
                     correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
@@ -172,6 +184,8 @@ class StrokeCapJoinSceneCaptureTest {
                     boundedRuntimeCorrectionSnapshot = boundedRuntimeCorrectionResult.snapshot,
                     boundedCorrectionApplicationPointSnapshot =
                         boundedCorrectionApplicationPointResult.applicationPointSnapshot,
+                    coverageStencilContributionMapSnapshot =
+                        coverageStencilContributionMapResult.coverageStencilContributionMapSnapshot,
                     adapter = adapter,
                 )
             }
@@ -197,6 +211,7 @@ class StrokeCapJoinSceneCaptureTest {
         correctedExperimentalGpu: SkBitmap,
         boundedRuntimeCorrectionGpu: SkBitmap,
         boundedCorrectionApplicationPointGpu: SkBitmap,
+        coverageStencilContributionMapGpu: SkBitmap,
         cpuCmp: BitmapComparison,
         experimentalGpuCmp: BitmapComparison,
         correctedExperimentalGpuCmp: BitmapComparison,
@@ -210,6 +225,8 @@ class StrokeCapJoinSceneCaptureTest {
         boundedRuntimeCorrectionSnapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         boundedCorrectionApplicationPointSnapshot:
             SkWebGpuDevice.M60F16BoundedCorrectionApplicationPointSnapshot,
+        coverageStencilContributionMapSnapshot:
+            SkWebGpuDevice.M60F16CoverageStencilContributionMapSnapshot,
         adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join").apply { mkdirs() }
@@ -345,6 +362,16 @@ class StrokeCapJoinSceneCaptureTest {
             currentResidualStats = residualStats,
             correctedResidualStats = boundedRuntimeCorrectionResidualStats,
             snapshot = boundedCorrectionApplicationPointSnapshot,
+            adapter = adapter,
+        )
+        writeM60F16CoverageStencilContributionMap(
+            reference = reference,
+            currentGpu = experimentalGpu,
+            correctedGpu = boundedRuntimeCorrectionGpu,
+            coverageStencilContributionMapGpu = coverageStencilContributionMapGpu,
+            currentResidualStats = residualStats,
+            correctedResidualStats = boundedRuntimeCorrectionResidualStats,
+            snapshot = coverageStencilContributionMapSnapshot,
             adapter = adapter,
         )
         File(dir, "experimental-gpu-diagnostic.json").writeText(
@@ -727,6 +754,23 @@ class StrokeCapJoinSceneCaptureTest {
                 System.clearProperty(FOR399_APPLICATION_POINT_DIAGNOSTIC_PROPERTY)
             } else {
                 System.setProperty(FOR399_APPLICATION_POINT_DIAGNOSTIC_PROPERTY, previous)
+            }
+        }
+    }
+
+    private fun <T> withM60F16CoverageStencilContributionMapDiagnostic(
+        enabled: Boolean,
+        block: () -> T,
+    ): T {
+        val previous = System.getProperty(FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY)
+        System.setProperty(FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY, enabled.toString())
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY)
+            } else {
+                System.setProperty(FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY, previous)
             }
         }
     }
@@ -1455,6 +1499,34 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun writeM60F16CoverageStencilContributionMap(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        correctedGpu: SkBitmap,
+        coverageStencilContributionMapGpu: SkBitmap,
+        currentResidualStats: StrokeResidualStats,
+        correctedResidualStats: StrokeResidualStats,
+        snapshot: SkWebGpuDevice.M60F16CoverageStencilContributionMapSnapshot,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/" +
+                "m60-f16-coverage-stencil-contribution-map-for400",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-coverage-stencil-contribution-map-for400.json").writeText(
+            m60F16CoverageStencilContributionMapJson(
+                reference = reference,
+                currentGpu = currentGpu,
+                correctedGpu = correctedGpu,
+                coverageStencilContributionMapGpu = coverageStencilContributionMapGpu,
+                currentResidualStats = currentResidualStats,
+                correctedResidualStats = correctedResidualStats,
+                snapshot = snapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
     private fun m60F16FragmentLaneRuntimeSnapshotExportJson(
         snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         adapter: String,
@@ -2037,6 +2109,230 @@ class StrokeCapJoinSceneCaptureTest {
             }
         """.trimIndent() + "\n"
     }
+
+    private fun m60F16CoverageStencilContributionMapJson(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        correctedGpu: SkBitmap,
+        coverageStencilContributionMapGpu: SkBitmap,
+        currentResidualStats: StrokeResidualStats,
+        correctedResidualStats: StrokeResidualStats,
+        snapshot: SkWebGpuDevice.M60F16CoverageStencilContributionMapSnapshot,
+        adapter: String,
+    ): String {
+        val expected = M60_F16_FRAGMENT_LANE_EXPECTED_PIXELS
+        val expectedSet = expected.toSet()
+        val rawSamples = snapshot.samples
+        val samples = collapseM60F16CoverageStencilContributionMapSamples(rawSamples)
+        val observedSamples = samples.filter { it.observedByShader }
+        val effectiveSamples = samples.filter { it.hasEffectiveContribution() }
+        val predicateEffectiveSamples = effectiveSamples.filter { it.belongsToFor397Predicate }
+        val neighborEffectiveSamples = effectiveSamples.filterNot { it.belongsToFor397Predicate }
+        val insideEffectiveCount = effectiveSamples.count { it.coverageSide == "inside" }
+        val outsideEffectiveCount = effectiveSamples.count { it.coverageSide == "outside" }
+        val dominantUsefulSide = when {
+            insideEffectiveCount > outsideEffectiveCount -> "inside"
+            outsideEffectiveCount > insideEffectiveCount -> "outside"
+            insideEffectiveCount == 0 && outsideEffectiveCount == 0 -> "none"
+            else -> "mixed"
+        }
+        val classification = when {
+            neighborEffectiveSamples.isNotEmpty() -> "neighbor-contribution-candidates-found"
+            predicateEffectiveSamples.isEmpty() && effectiveSamples.isNotEmpty() ->
+                "inside-outside-side-mismatch-suspected"
+            effectiveSamples.isEmpty() -> "predicate-window-zero-contribution"
+            else -> "coverage-stencil-map-inconclusive"
+        }
+        val classificationReason = when (classification) {
+            "neighbor-contribution-candidates-found" ->
+                "The bounded radius-1 window contains non-FOR-397 samples with non-zero coverage, source alpha, and blend input."
+            "inside-outside-side-mismatch-suspected" ->
+                "Useful contribution exists in the window but not on the FOR-397 predicate samples, so the side or stencil predicate should be audited before any correction."
+            "predicate-window-zero-contribution" ->
+                "No observed sample in the bounded radius-1 FOR-397 window has non-zero coverage, source alpha, and blend input."
+            else ->
+                "The bounded window was captured, but the contribution and side signals do not identify a stable next correction predicate."
+        }
+        val nextStep = when (classification) {
+            "neighbor-contribution-candidates-found" ->
+                "Keep M60 F16 unpromoted; use the neighbor rows as diagnostic-only candidates in a separate bounded predicate ticket before any correction is applied."
+            "predicate-window-zero-contribution" ->
+                "Refuse this local FOR-397 window for correction and move the next probe to the stencil/cover pass that actually contributes source colour."
+            "inside-outside-side-mismatch-suspected" ->
+                "Open a minimal side-mismatch audit that compares the contributing side against the FOR-397 outside-side branch before testing another correction."
+            else ->
+                "Do not correct; add a narrower instrumentation point only if it can expose the contributing cover pass without changing default rendering."
+        }
+        val correctedChangedPixels = changedPixels(currentGpu, correctedGpu)
+        val mapChangedPixels = changedPixels(correctedGpu, coverageStencilContributionMapGpu)
+        val samplesJson = samples.joinToString(",\n") { sample ->
+            val referencePixel = reference.getPixel(sample.x, sample.y)
+            val currentPixel = currentGpu.getPixel(sample.x, sample.y)
+            val correctedPixel = correctedGpu.getPixel(sample.x, sample.y)
+            val mapPixel = coverageStencilContributionMapGpu.getPixel(sample.x, sample.y)
+            """
+                {
+                  "x": ${sample.x},
+                  "y": ${sample.y},
+                  "belongsToFor397Predicate": ${sample.belongsToFor397Predicate},
+                  "side": ${sample.coverageSide.jsonString()},
+                  "observedByShader": ${sample.observedByShader},
+                  "candidateBranchReached": ${sample.candidateBranchReached},
+                  "valid": ${sample.valid},
+                  "coverageAlpha": ${String.format(Locale.US, "%.9f", sample.coverageAlpha)},
+                  "sourceAlphaAfterCoverage": ${String.format(Locale.US, "%.9f", sample.sourceAlphaAfterCoverage)},
+                  "colorSentToBlend": ${sample.colorSentToBlendBeforeQuantization.floatJson()},
+                  "quantizedColorSentToBlend": ${sample.quantizedColorSentToBlend.floatJson()},
+                  "colorAfterApplyColorFilter": ${sample.colorAfterColorFilter.floatJson()},
+                  "colorAfterApplyTargetColorspaceIfNeeded": ${sample.colorAfterTargetColorspaceIfNeeded.floatJson()},
+                  "effectiveContribution": ${sample.hasEffectiveContribution()},
+                  "referenceRgba": ${rgbaJson(referencePixel)},
+                  "currentRgba": ${rgbaJson(currentPixel)},
+                  "correctedRgba": ${rgbaJson(correctedPixel)},
+                  "coverageStencilContributionMapRgba": ${rgbaJson(mapPixel)},
+                  "currentResidualVsReference": ${sampleResidual(referencePixel, currentPixel)},
+                  "correctedResidualVsReference": ${sampleResidual(referencePixel, correctedPixel)},
+                  "coverageStencilContributionMapResidualVsReference": ${sampleResidual(referencePixel, mapPixel)},
+                  "deltaResidualCurrentVsReference": ${sampleResidual(referencePixel, currentPixel)},
+                  "finalPixelChangedByFor398Correction": ${currentPixel != correctedPixel},
+                  "finalPixelChangedByFor400Diagnostic": ${correctedPixel != mapPixel}
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-400",
+              "sceneId": "m60-f16-coverage-stencil-contribution-map-for400",
+              "sourceSceneId": "m60-f16-bounded-correction-shader-application-point-for399",
+              "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-bounded-correction-shader-application-point-for399/m60-f16-bounded-correction-shader-application-point-for399.json",
+              "sourceFinding": "global/kanvas/findings/for-399-prouve-que-la-correction-m60-f16-bornee-atteint-le-shader-mais-ne-contribue-pas-aux-pixels-finaux",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "decision": "M60_F16_COVERAGE_STENCIL_CONTRIBUTION_MAP_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "neighbor-contribution-candidates-found",
+                "predicate-window-zero-contribution",
+                "inside-outside-side-mismatch-suspected",
+                "coverage-stencil-map-inconclusive"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "correctionAppliedByDefault": false,
+              "guards": {
+                "experimentalStrokeRenderer": {
+                  "guardId": "$EXPERIMENTAL_RENDER_PROPERTY",
+                  "enabledForEvidenceRun": true,
+                  "enabledByDefault": false
+                },
+                "bandMetadataTransport": {
+                  "guardId": "$M60_F16_BAND_METADATA_TRANSPORT_PROPERTY",
+                  "enabledForEvidenceRun": ${System.getProperty(M60_F16_BAND_METADATA_TRANSPORT_PROPERTY, "false").toBoolean()},
+                  "enabledByDefault": false
+                },
+                "fragmentLaneDiagnostic": {
+                  "guardId": "$M60_F16_FRAGMENT_LANE_DIAGNOSTIC_PROPERTY",
+                  "enabledForEvidenceRun": ${System.getProperty(M60_F16_FRAGMENT_LANE_DIAGNOSTIC_PROPERTY, "false").toBoolean()},
+                  "enabledByDefault": false
+                },
+                "boundedRuntimeCorrection": {
+                  "guardId": "$FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY",
+                  "enabledForEvidenceRun": true,
+                  "enabledByDefault": false
+                },
+                "coverageStencilContributionMap": {
+                  "guardId": "$FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY",
+                  "enabledForEvidenceRun": ${snapshot.enabled},
+                  "enabledByDefault": false
+                }
+              },
+              "runtimeSnapshot": {
+                "api": "SkWebGpuDevice.m60F16CoverageStencilContributionMapSnapshot()",
+                "propertyName": ${snapshot.propertyName.jsonString()},
+                "enabled": ${snapshot.enabled},
+                "diagnosticShader": ${snapshot.diagnosticShader.jsonString()},
+                "pipelineLayout": ${snapshot.pipelineLayout.jsonString()},
+                "windowRadius": ${snapshot.windowRadius},
+                "sampleLimit": ${snapshot.sampleLimit},
+                "sampleCount": ${samples.size},
+                "rawReadbackSampleCount": ${rawSamples.size},
+                "observedSampleCount": ${observedSamples.size}
+              },
+              "predicateWindow": {
+                "radius": ${snapshot.windowRadius},
+                "strictSampleLimit": ${snapshot.sampleLimit},
+                "for397PixelCount": ${expected.size},
+                "for397Pixels": [
+            ${expected.joinToString(",\n") { it.pixelJson().prependIndent("    ") }}
+                ],
+                "sampleCount": ${samples.size},
+                "predicateSampleCount": ${samples.count { it.belongsToFor397Predicate }},
+                "neighborSampleCount": ${samples.count { !it.belongsToFor397Predicate }}
+              },
+              "contributionSummary": {
+                "effectiveContributionCount": ${effectiveSamples.size},
+                "predicateEffectiveContributionCount": ${predicateEffectiveSamples.size},
+                "neighborEffectiveContributionCount": ${neighborEffectiveSamples.size},
+                "insideEffectiveContributionCount": $insideEffectiveCount,
+                "outsideEffectiveContributionCount": $outsideEffectiveCount,
+                "dominantUsefulSide": ${dominantUsefulSide.jsonString()},
+                "for397ObservedCount": ${samples.count { it.belongsToFor397Predicate && it.observedByShader }},
+                "for397CandidateBranchReachedCount": ${samples.count { it.belongsToFor397Predicate && it.candidateBranchReached }},
+                "expectedFor397PixelsPreserved": ${samples.filter { it.belongsToFor397Predicate }.map { it.x to it.y }.toSet() == expectedSet}
+              },
+              "samples": [
+            $samplesJson
+              ],
+              "renderComparison": {
+                "currentTotalResidual": ${imageResidual(currentGpu, reference)},
+                "correctedTotalResidual": ${imageResidual(correctedGpu, reference)},
+                "currentMismatchPixels": ${currentResidualStats.mismatchPixels},
+                "correctedMismatchPixels": ${correctedResidualStats.mismatchPixels},
+                "for398ChangedPixelCount": ${correctedChangedPixels.size},
+                "for400DiagnosticChangedPixelCount": ${mapChangedPixels.size},
+                "for400DiagnosticMatchesFor398Correction": ${mapChangedPixels.isEmpty()}
+              },
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "for380BroadCorrectionReintroduced": false,
+                "generalizedOutsideM60F16": false
+              },
+              "classificationReason": ${classificationReason.jsonString()},
+              "nextStep": ${nextStep.jsonString()},
+              "validationCommands": [
+                "rtk python3 scripts/validate_for400_m60_f16_coverage_stencil_contribution_map.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for400-pycache-parent python3 -m py_compile scripts/validate_for400_m60_f16_coverage_stencil_contribution_map.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true -Dkanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled=true -Dkanvas.webgpu.m60F16CoverageStencilContributionMap.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun SkWebGpuDevice.M60F16CoverageStencilContributionMapSample.hasEffectiveContribution(): Boolean =
+        coverageAlpha > 0.0f &&
+            sourceAlphaAfterCoverage > 0.0f &&
+            colorSentToBlendBeforeQuantization.any { kotlin.math.abs(it) > 0.000001f }
+
+    private fun collapseM60F16CoverageStencilContributionMapSamples(
+        samples: List<SkWebGpuDevice.M60F16CoverageStencilContributionMapSample>,
+    ): List<SkWebGpuDevice.M60F16CoverageStencilContributionMapSample> =
+        samples
+            .groupBy { it.x to it.y }
+            .map { (_, coordinateSamples) ->
+                coordinateSamples.firstOrNull { it.hasEffectiveContribution() }
+                    ?: coordinateSamples.firstOrNull { it.candidateBranchReached }
+                    ?: coordinateSamples.firstOrNull { it.observedByShader }
+                    ?: coordinateSamples.first()
+            }
+            .sortedWith(compareBy<SkWebGpuDevice.M60F16CoverageStencilContributionMapSample> { it.y }.thenBy { it.x })
 
     private fun m60F16SourceColorCorrectionProbeJson(
         uncorrectedResidualStats: StrokeResidualStats,
@@ -8735,6 +9031,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled"
         private const val FOR399_APPLICATION_POINT_DIAGNOSTIC_PROPERTY =
             "kanvas.webgpu.m60F16BoundedCorrectionApplicationPointDiagnostic.enabled"
+        private const val FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY =
+            "kanvas.webgpu.m60F16CoverageStencilContributionMap.enabled"
         private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
         private const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_PROPERTY =
