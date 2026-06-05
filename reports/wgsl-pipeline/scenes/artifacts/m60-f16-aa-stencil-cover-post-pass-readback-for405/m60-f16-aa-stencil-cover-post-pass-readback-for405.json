@@ -1,0 +1,1450 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-405",
+          "sceneId": "m60-f16-aa-stencil-cover-post-pass-readback-for405",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-runtime-hook-for404/m60-f16-aa-stencil-cover-runtime-hook-for404.json",
+          "sourceArtifacts": {
+            "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+            "for404": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-runtime-hook-for404/m60-f16-aa-stencil-cover-runtime-hook-for404.json"
+          },
+          "sourceMemory": "global/kanvas/findings/for-404-ajoute-un-hook-runtime-borne-aa-stencil-cover-mais-bloque-sur-le-readback-post-pass",
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "producerMethod": "writeM60F16AaStencilCoverPostPassReadback",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "decision": "M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_RECORDED",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "allowedClassifications": [
+            "aa-stencil-cover-post-pass-color-observed",
+            "aa-stencil-cover-post-pass-format-unsupported",
+            "aa-stencil-cover-post-pass-copy-blocked",
+            "aa-stencil-cover-post-pass-readback-inconclusive"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "correctionAppliedByDefault": false,
+          "defaultRenderingChanged": false,
+          "guards": {
+            "experimentalStrokeRenderer": {
+              "guardId": "kanvas.webgpu.strokeCapJoin.experimentalRender",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "aaStencilCoverPostPassRuntimeHook": {
+              "guardId": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "aaStencilCoverPostPassReadback": {
+              "guardId": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "coverageStencilContributionMap": {
+              "guardId": "kanvas.webgpu.m60F16CoverageStencilContributionMap.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false,
+              "evidencePolicy": "context-only-not-direct-write-proof"
+            }
+          },
+          "sourceContext": {
+            "for404Classification": "aa-stencil-cover-post-pass-readback-blocked",
+            "for404RuntimeApi": "SkWebGpuDevice.m60F16AaStencilCoverPostPassRuntimeHookSnapshot()",
+            "for404RuntimeEventCount": 3,
+            "for400EvidencePolicy": "context-only-not-direct-write-proof",
+            "for400UsedAsDirectProof": false,
+            "for401Classification": "residual-visible-only-at-final-readback",
+            "for401CurrentTotalResidual": 62748,
+            "for401CurrentMismatchPixels": 1615,
+            "for401SelectedResidualTotal": 1560,
+            "for401SelectedPixelCount": 16
+          },
+          "runtimeReadback": {
+            "api": "SkWebGpuDevice.m60F16AaStencilCoverPostPassReadbackSnapshot()",
+            "propertyName": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled",
+            "enabled": true,
+            "requestedBoundary": "after StencilCoverAaPolygonDraw cover sub-draws before final present/readback",
+            "observedBoundary": "compute textureLoad from intermediate RGBA16Float after StencilCoverAaPolygonDraw render pass",
+            "diagnosticShader": "shaders/m60_f16_aa_stencil_cover_post_pass_readback_for405_diagnostic_only.wgsl",
+            "pipelineLayout": "diagnostic-only compute layout: binding0 intermediate RGBA16Float texture, binding1 16-sample storage buffer",
+            "intermediateFormat": "RGBA16Float",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "sampleLimit": 16,
+            "eventCount": 3,
+            "postPassReadbackAvailable": true,
+            "events": [
+                    {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "fillType": "kWinding",
+          "blendMode": "kSrcOver",
+          "scissor": [0, 0, 192, 128],
+          "edgeCount": 8,
+          "coverVertexCount": 6,
+          "copyAttempted": true,
+          "copySucceeded": true,
+          "copyFailureReason": null,
+          "samples": [
+            {
+  "x": 92,
+  "y": 75,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 91,
+  "y": 76,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 90,
+  "y": 77,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 89,
+  "y": 78,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 88,
+  "y": 79,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 87,
+  "y": 80,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 101,
+  "y": 37,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "observedRgba8": [255, 255, 255, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 102,
+  "y": 37,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "observedRgba8": [255, 255, 255, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 99,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "observedRgba8": [255, 255, 255, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 100,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "observedRgba8": [255, 255, 255, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 101,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "observedRgba8": [255, 255, 255, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 102,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "observedRgba8": [255, 255, 255, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 103,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "observedRgba8": [255, 255, 255, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 104,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "observedRgba8": [255, 255, 255, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 98,
+  "y": 39,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "observedRgba8": [255, 255, 255, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 99,
+  "y": 39,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "observedRgba8": [255, 255, 255, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+}
+          ]
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "fillType": "kWinding",
+          "blendMode": "kSrcOver",
+          "scissor": [0, 0, 192, 128],
+          "edgeCount": 39,
+          "coverVertexCount": 6,
+          "copyAttempted": true,
+          "copySucceeded": true,
+          "copyFailureReason": null,
+          "samples": [
+            {
+  "x": 92,
+  "y": 75,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 91,
+  "y": 76,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 90,
+  "y": 77,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 89,
+  "y": 78,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 88,
+  "y": 79,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 87,
+  "y": 80,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 101,
+  "y": 37,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 102,
+  "y": 37,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 99,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 100,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 101,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 102,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 103,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 104,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 98,
+  "y": 39,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 99,
+  "y": 39,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+}
+          ]
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "fillType": "kWinding",
+          "blendMode": "kSrcOver",
+          "scissor": [0, 0, 192, 128],
+          "edgeCount": 12,
+          "coverVertexCount": 6,
+          "copyAttempted": true,
+          "copySucceeded": true,
+          "copyFailureReason": null,
+          "samples": [
+            {
+  "x": 92,
+  "y": 75,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 91,
+  "y": 76,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 90,
+  "y": 77,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 89,
+  "y": 78,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 88,
+  "y": 79,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 87,
+  "y": 80,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "observedRgba8": [181, 191, 230, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 101,
+  "y": 37,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 102,
+  "y": 37,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 99,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 100,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 101,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 102,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 103,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 104,
+  "y": 38,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 98,
+  "y": 39,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+},
+{
+  "x": 99,
+  "y": 39,
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "observedRgba8": [0, 138, 76, 255],
+  "classification": "aa-stencil-cover-post-pass-color-observed",
+  "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+}
+          ]
+        }
+            ]
+          },
+          "postPassSummary": {
+            "currentTotalResidual": 62748,
+            "currentMismatchPixels": 1615,
+            "selectedPixelCount": 16,
+            "selectedResidualTotal": 1560,
+            "postPassObservedCount": 16,
+            "postPassFormatUnsupportedCount": 0,
+            "postPassCopyBlockedCount": 0,
+            "postPassReadbackInconclusiveCount": 0
+          },
+          "selectedPixels": [
+                    {
+          "x": 92,
+          "y": 75,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "observedRgba8": [181, 191, 230, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 91,
+          "y": 76,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "observedRgba8": [181, 191, 230, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 90,
+          "y": 77,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "observedRgba8": [181, 191, 230, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 89,
+          "y": 78,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "observedRgba8": [181, 191, 230, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 88,
+          "y": 79,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "observedRgba8": [181, 191, 230, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 87,
+          "y": 80,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "observedRgba8": [181, 191, 230, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 101,
+          "y": 37,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+            "observedRgba8": [0, 138, 76, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 102,
+          "y": 37,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+            "observedRgba8": [0, 138, 76, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 99,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+            "observedRgba8": [0, 138, 76, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 100,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+            "observedRgba8": [0, 138, 76, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 101,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+            "observedRgba8": [0, 138, 76, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 102,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+            "observedRgba8": [0, 138, 76, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 103,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+            "observedRgba8": [0, 138, 76, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 104,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+            "observedRgba8": [0, 138, 76, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 98,
+          "y": 39,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+            "observedRgba8": [0, 138, 76, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        },
+        {
+          "x": 99,
+          "y": 39,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-color-observed",
+          "postPass": {
+            "observed": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+            "observedRgba8": [0, 138, 76, 255],
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "classification": "aa-stencil-cover-post-pass-color-observed"
+}
+            ]
+          }
+        }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "correctionApplied": false,
+            "for380BroadCorrectionReintroduced": false,
+            "for400UsedAsDirectProof": false,
+            "generalizedOutsideM60F16": false
+          },
+          "classificationReason": "FOR-405 observed deterministic post-pass colors by sampling the intermediate RGBA16Float texture after StencilCoverAaPolygonDraw and before final present/readback.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for405_m60_f16_aa_stencil_cover_post_pass_readback.py",
+            "rtk python3 scripts/validate_for404_m60_f16_aa_stencil_cover_runtime_hook.py",
+            "rtk python3 scripts/validate_for403_m60_f16_direct_pass_write_hook.py",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16DirectPassWriteHook.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true -Dkanvas.webgpu.m60F16CoverageStencilContributionMap.enabled=true -Dkanvas.webgpu.m60F16FinalResidualOriginMap.enabled=true -Dkanvas.webgpu.m60F16PassWriteProbe.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+            "rtk git diff --check"
+          ]
+        }
