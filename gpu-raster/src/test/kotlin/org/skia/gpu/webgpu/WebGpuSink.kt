@@ -48,6 +48,8 @@ public object WebGpuSink {
             SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetSnapshot,
         val aaStencilCoverStorageColorTargetComparisonSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverStorageColorTargetComparisonSnapshot,
+        val aaStencilCoverShaderReturnStorageZeroCauseSnapshot:
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
     )
 
     /**
@@ -119,6 +121,8 @@ public object WebGpuSink {
                     device.m60F16AaStencilCoverIsolatedColorTargetSnapshot(),
                 aaStencilCoverStorageColorTargetComparisonSnapshot =
                     device.m60F16AaStencilCoverStorageColorTargetComparisonSnapshot(),
+                aaStencilCoverShaderReturnStorageZeroCauseSnapshot =
+                    device.m60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot(),
             )
         }
     }
