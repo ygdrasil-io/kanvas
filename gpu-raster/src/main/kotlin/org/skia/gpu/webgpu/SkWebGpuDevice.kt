@@ -196,6 +196,8 @@ private const val WEBGPU_M60_F16_SOURCE_FACING_LANE_SHADER_READBACK_FLAG: String
     "kanvas.webgpu.m60F16SourceFacingLaneShaderReadback.enabled"
 private const val WEBGPU_M60_F16_AA_STENCIL_COVER_FRAGMENT_LANE_DIAGNOSTIC_FLAG: String =
     "kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled"
+private const val WEBGPU_M60_F16_BOUNDED_RUNTIME_CORRECTION_PROBE_FLAG: String =
+    "kanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -1172,6 +1174,13 @@ public class SkWebGpuDevice(
          * target-colour blend transform before coverage.
          */
         val m60F16SourceColorCorrectionProbe: Boolean = false,
+        /**
+         * FOR-398 opt-in correction probe. Unlike the older FOR-380
+         * draw-wide probe, this uses the runtime M60 F16 lane predicate
+         * inside `aa_stencil_cover.wgsl` and leaves all other fragments on
+         * the current target-colour blend path.
+         */
+        val m60F16BoundedRuntimeCorrectionProbe: Boolean = false,
         /**
          * FOR-394 diagnostic-only transport. When the explicit M60 F16 flag
          * is enabled and the bounded stroke fixture is recognized, the cover
@@ -2649,8 +2658,11 @@ public class SkWebGpuDevice(
         }
     }
 
-    private fun loadM60F16FragmentLaneDiagnosticShader(): GPUShaderModule {
-        val cacheKey = "diagnostic://m60-f16-aa-stencil-cover-fragment-lane"
+    private fun loadM60F16AaStencilCoverProbeShader(
+        cacheKey: String,
+        diagnostic: Boolean,
+        boundedRuntimeCorrection: Boolean,
+    ): GPUShaderModule {
         val cached = shaderModuleCache[cacheKey]
         if (cached != null) {
             cacheCounters.shaderModuleHits += 1
@@ -2660,27 +2672,52 @@ public class SkWebGpuDevice(
         val base = SkWebGpuDevice::class.java.classLoader
             .getResource("shaders/aa_stencil_cover.wgsl")?.readText()
             ?: error("shaders/aa_stencil_cover.wgsl missing from classpath")
-        val wgsl = base
-            .replace(
+        var wgsl = base
+        if (diagnostic) {
+            wgsl = wgsl.replace(
                 "@binding(0) @group(0) var<uniform> uniforms: Uniforms;\n",
                 """
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 @binding(1) @group(0) var<storage, read_write> m60F16FragmentLaneDiagnostic: array<vec4u, 8>;
 """.trimIndent() + "\n",
             )
-            .replace(
-                "@fragment\nfn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n",
-                "@fragment\nfn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n" +
-                    "    m60_f16_record_fragment_lane(frag.xy, 1u);\n",
-            )
-            .replace(
-                "@fragment\nfn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n",
-                "@fragment\nfn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n" +
-                    "    m60_f16_record_fragment_lane(frag.xy, 2u);\n",
-            )
-            .replace(
-                "@fragment\nfn fs_inside",
-                """
+        }
+        if (boundedRuntimeCorrection) {
+            wgsl = wgsl
+                .replace(
+                    "    let c = apply_target_colorspace_if_needed(apply_color_filter(uniforms.color));\n",
+                    "    let c = m60_f16_bounded_runtime_corrected_color(frag.xy);\n",
+                )
+                .replace(
+                    "    return quantize_rgba8_if_target_blend(vec4f(c.rgb * alpha, alpha));\n",
+                    "    return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));\n",
+                )
+        }
+        val insertedHelpers = buildString {
+            if (boundedRuntimeCorrection) {
+                append(
+                    """
+fn m60_f16_bounded_runtime_corrected_color(pixel: vec2f) -> vec4f {
+    let filtered = apply_color_filter(uniforms.color);
+    if (m60_f16_candidate_lane(pixel)) {
+        return filtered;
+    }
+    return apply_target_colorspace_if_needed(filtered);
+}
+
+fn m60_f16_quantize_after_bounded_runtime_correction(pixel: vec2f, c: vec4f) -> vec4f {
+    if (m60_f16_candidate_lane(pixel)) {
+        return c;
+    }
+    return quantize_rgba8_if_target_blend(c);
+}
+""".trimIndent(),
+                )
+                append("\n\n")
+            }
+            if (diagnostic) {
+                append(
+                    """
 fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     if (!m60_f16_candidate_lane(pixel)) {
         return;
@@ -2696,15 +2733,51 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     if (px == 88u && py == 79u) { m60F16FragmentLaneDiagnostic[6] = vec4u(px, py, 1u, side); }
     if (px == 87u && py == 80u) { m60F16FragmentLaneDiagnostic[7] = vec4u(px, py, 1u, side); }
 }
-
-@fragment
-fn fs_inside
 """.trimIndent(),
-            )
+                )
+            }
+        }
+        if (insertedHelpers.isNotEmpty()) {
+            wgsl = wgsl.replace("@fragment\nfn fs_inside", "$insertedHelpers\n\n@fragment\nfn fs_inside")
+        }
+        if (diagnostic) {
+            wgsl = wgsl
+                .replace(
+                    "@fragment\nfn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n",
+                    "@fragment\nfn fs_inside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n" +
+                        "    m60_f16_record_fragment_lane(frag.xy, 1u);\n",
+                )
+                .replace(
+                    "@fragment\nfn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n",
+                    "@fragment\nfn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n" +
+                        "    m60_f16_record_fragment_lane(frag.xy, 2u);\n",
+                )
+        }
         return context.device.createShaderModule(ShaderModuleDescriptor(code = wgsl)).also {
             shaderModuleCache[cacheKey] = it
         }
     }
+
+    private fun loadM60F16FragmentLaneDiagnosticShader(): GPUShaderModule =
+        loadM60F16AaStencilCoverProbeShader(
+            cacheKey = "diagnostic://m60-f16-aa-stencil-cover-fragment-lane",
+            diagnostic = true,
+            boundedRuntimeCorrection = false,
+        )
+
+    private fun loadM60F16BoundedRuntimeCorrectionShader(): GPUShaderModule =
+        loadM60F16AaStencilCoverProbeShader(
+            cacheKey = "experimental://m60-f16-aa-stencil-cover-bounded-runtime-correction",
+            diagnostic = false,
+            boundedRuntimeCorrection = true,
+        )
+
+    private fun loadM60F16BoundedRuntimeCorrectionDiagnosticShader(): GPUShaderModule =
+        loadM60F16AaStencilCoverProbeShader(
+            cacheKey = "experimental://m60-f16-aa-stencil-cover-bounded-runtime-correction-diagnostic",
+            diagnostic = true,
+            boundedRuntimeCorrection = true,
+        )
 
     // ─── Rect pipeline (G1.2 / G2.3a) — full-screen tri + scissor + coverage ───
 
@@ -3112,9 +3185,21 @@ fn fs_inside
     private val m60F16FragmentLaneDiagnosticShaderLazy: Lazy<GPUShaderModule> = lazy {
         loadM60F16FragmentLaneDiagnosticShader()
     }
+    private val m60F16BoundedRuntimeCorrectionShaderLazy: Lazy<GPUShaderModule> = lazy {
+        loadM60F16BoundedRuntimeCorrectionShader()
+    }
+    private val m60F16BoundedRuntimeCorrectionDiagnosticShaderLazy: Lazy<GPUShaderModule> = lazy {
+        loadM60F16BoundedRuntimeCorrectionDiagnosticShader()
+    }
 
     private val m60F16FragmentLaneDiagnosticShader: GPUShaderModule
         get() = m60F16FragmentLaneDiagnosticShaderLazy.value
+
+    private val m60F16BoundedRuntimeCorrectionShader: GPUShaderModule
+        get() = m60F16BoundedRuntimeCorrectionShaderLazy.value
+
+    private val m60F16BoundedRuntimeCorrectionDiagnosticShader: GPUShaderModule
+        get() = m60F16BoundedRuntimeCorrectionDiagnosticShaderLazy.value
 
     /**
      * G3.3b.3d — which half of the AA falloff a cover sub-draw paints.
@@ -3160,6 +3245,9 @@ fn fs_inside
 
     private val m60F16FragmentLaneDiagnosticPipelineCache:
         MutableMap<Triple<SkBlendMode, SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
+    private val m60F16BoundedRuntimeCorrectionPipelineCache:
+        MutableMap<Pair<Triple<SkBlendMode, SkPathFillType, CoverageSide>, Boolean>, GPURenderPipeline> =
+            mutableMapOf()
 
     /**
      * AA-cover pipeline. Same fill-type encoding as [coverPipelineFor]
@@ -3261,6 +3349,75 @@ fn fs_inside
                     ),
                     fragment = FragmentState(
                         module = m60F16FragmentLaneDiagnosticShader,
+                        entryPoint = entryPoint,
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = readMask,
+                        stencilWriteMask = 0xFFu,
+                    ),
+                ),
+            )
+        }
+
+    private fun m60F16BoundedRuntimeCorrectionPipelineFor(
+        mode: SkBlendMode,
+        fillType: SkPathFillType,
+        side: CoverageSide,
+        diagnostic: Boolean,
+    ): GPURenderPipeline =
+        m60F16BoundedRuntimeCorrectionPipelineCache.getOrPut(Triple(mode, fillType, side) to diagnostic) {
+            val readMask: UInt = if (fillType.isEvenOdd()) 0x01u else 0xFFu
+            val insideCompare =
+                if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
+            val compare = when (side) {
+                CoverageSide.Inside -> insideCompare
+                CoverageSide.Outside ->
+                    if (insideCompare == GPUCompareFunction.Equal) GPUCompareFunction.NotEqual
+                    else GPUCompareFunction.Equal
+            }
+            val entryPoint = when (side) {
+                CoverageSide.Inside -> "fs_inside"
+                CoverageSide.Outside -> "fs_outside"
+            }
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = if (diagnostic) m60F16FragmentLaneDiagnosticPipelineLayout else aaPolygonPipelineLayout,
+                    vertex = VertexState(
+                        module = if (diagnostic) {
+                            m60F16BoundedRuntimeCorrectionDiagnosticShader
+                        } else {
+                            m60F16BoundedRuntimeCorrectionShader
+                        },
+                        entryPoint = "vs_main",
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                    ),
+                    fragment = FragmentState(
+                        module = if (diagnostic) {
+                            m60F16BoundedRuntimeCorrectionDiagnosticShader
+                        } else {
+                            m60F16BoundedRuntimeCorrectionShader
+                        },
                         entryPoint = entryPoint,
                         targets = listOf(
                             ColorTargetState(
@@ -9007,6 +9164,27 @@ fn fs_inside
         }
     }
 
+    private fun m60F16BoundedRuntimeCorrectionProbeEnabled(paint: SkPaint): Boolean {
+        val style = activeStrokeStyleForPathAaDiagnostics ?: return false
+        if (!targetColorSpaceBlend) return false
+        if (intermediateFormat != GPUTextureFormat.RGBA16Float) return false
+        if (!System.getProperty(WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG, "false").toBoolean()) return false
+        if (!System.getProperty(WEBGPU_M60_F16_BOUNDED_RUNTIME_CORRECTION_PROBE_FLAG, "false").toBoolean()) {
+            return false
+        }
+        if (paint.blendMode != SkBlendMode.kSrcOver) return false
+        if (paint.shader != null || paint.colorFilter != null || paint.maskFilter != null || paint.pathEffect != null) {
+            return false
+        }
+        if (kotlin.math.abs(style.strokeWidth - 10f) > 0.001f) return false
+        return when (style.cap to style.join) {
+            "butt" to "bevel",
+            "round" to "round",
+            "square" to "bevel" -> true
+            else -> false
+        }
+    }
+
     override fun setActiveClipShape(shape: SkClipShape?) {
         activeClipShape = shape
     }
@@ -11777,6 +11955,8 @@ fn fs_inside
                         clipShape = activeClipShape,
                         colorFilterPacked = polygonColorFilterPacked,
                         m60F16SourceColorCorrectionProbe = m60F16SourceColorCorrectionProbeEnabled(paint),
+                        m60F16BoundedRuntimeCorrectionProbe =
+                            m60F16BoundedRuntimeCorrectionProbeEnabled(paint),
                         m60F16BandMetadata = m60F16AaStencilCoverBandMetadata(paint),
                     ),
                 )
@@ -12017,6 +12197,8 @@ fn fs_inside
                             clipShape = activeClipShape,
                             colorFilterPacked = polygonColorFilterPacked,
                             m60F16SourceColorCorrectionProbe = m60F16SourceColorCorrectionProbeEnabled(paint),
+                            m60F16BoundedRuntimeCorrectionProbe =
+                                m60F16BoundedRuntimeCorrectionProbeEnabled(paint),
                             m60F16BandMetadata = m60F16AaStencilCoverBandMetadata(paint),
                         ),
                     )
@@ -12970,11 +13152,20 @@ fn fs_inside
                     setStencilReference(0u)
                     setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
                     val diagnosticBindGroup = res.m60F16FragmentLaneDiagnosticBindGroup
+                    val boundedRuntimeCorrection =
+                        d.m60F16BoundedRuntimeCorrectionProbe && d.m60F16BandMetadata != null
                     if (diagnosticBindGroup != null) {
                         setBindGroup(0u, diagnosticBindGroup)
                     }
                     setPipeline(
-                        if (diagnosticBindGroup != null) {
+                        if (boundedRuntimeCorrection) {
+                            m60F16BoundedRuntimeCorrectionPipelineFor(
+                                d.mode,
+                                d.fillType,
+                                CoverageSide.Inside,
+                                diagnosticBindGroup != null,
+                            )
+                        } else if (diagnosticBindGroup != null) {
                             m60F16FragmentLaneDiagnosticPipelineFor(d.mode, d.fillType, CoverageSide.Inside)
                         } else {
                             aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Inside)
@@ -12982,7 +13173,14 @@ fn fs_inside
                     )
                     draw((d.coverVerts.size / 2).toUInt())
                     setPipeline(
-                        if (diagnosticBindGroup != null) {
+                        if (boundedRuntimeCorrection) {
+                            m60F16BoundedRuntimeCorrectionPipelineFor(
+                                d.mode,
+                                d.fillType,
+                                CoverageSide.Outside,
+                                diagnosticBindGroup != null,
+                            )
+                        } else if (diagnosticBindGroup != null) {
                             m60F16FragmentLaneDiagnosticPipelineFor(d.mode, d.fillType, CoverageSide.Outside)
                         } else {
                             aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Outside)
@@ -16728,6 +16926,8 @@ fn fs_inside
         aaStencilCoverPipelineCache.clear()
         m60F16FragmentLaneDiagnosticPipelineCache.values.forEach { it.close() }
         m60F16FragmentLaneDiagnosticPipelineCache.clear()
+        m60F16BoundedRuntimeCorrectionPipelineCache.values.forEach { it.close() }
+        m60F16BoundedRuntimeCorrectionPipelineCache.clear()
         aaStencilCoverGradientPipelineCache.values.forEach { it.close() }
         aaStencilCoverGradientPipelineCache.clear()
         aaStencilCoverRadialGradientPipelineCache.values.forEach { it.close() }
@@ -16793,6 +16993,12 @@ fn fs_inside
         }
         if (m60F16FragmentLaneDiagnosticShaderLazy.isInitialized()) {
             m60F16FragmentLaneDiagnosticShader.close()
+        }
+        if (m60F16BoundedRuntimeCorrectionShaderLazy.isInitialized()) {
+            m60F16BoundedRuntimeCorrectionShader.close()
+        }
+        if (m60F16BoundedRuntimeCorrectionDiagnosticShaderLazy.isInitialized()) {
+            m60F16BoundedRuntimeCorrectionDiagnosticShader.close()
         }
         intermediateView.close()
         intermediateTexture.close()

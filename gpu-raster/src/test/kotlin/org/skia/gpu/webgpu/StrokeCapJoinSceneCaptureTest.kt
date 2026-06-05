@@ -103,14 +103,28 @@ class StrokeCapJoinSceneCaptureTest {
                     WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
                 }
             }
+            val boundedRuntimeCorrectionResult = withExperimentalStrokeCapJoinRender {
+                withM60F16BoundedRuntimeCorrectionProbe(true) {
+                    WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                        ctx,
+                        gm,
+                        targetColorSpaceBlend = true,
+                    )
+                }
+            }
+            val boundedRuntimeCorrectionGpu = boundedRuntimeCorrectionResult.bitmap
             val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = 0)
             val experimentalGpuCmp = TestUtils.compareBitmapsDetailed(experimentalGpu, reference, tolerance = 0)
             val correctedExperimentalGpuCmp =
                 TestUtils.compareBitmapsDetailed(correctedExperimentalGpu, reference, tolerance = 0)
+            val boundedRuntimeCorrectionGpuCmp =
+                TestUtils.compareBitmapsDetailed(boundedRuntimeCorrectionGpu, reference, tolerance = 0)
             val experimentalGpuToleranceProfile = toleranceProfile(experimentalGpu, reference)
             val regionStats = strokeRegionStats(experimentalGpu, reference)
             val residualStats = strokeResidualStats(experimentalGpu, reference)
             val correctedResidualStats = strokeResidualStats(correctedExperimentalGpu, reference)
+            val boundedRuntimeCorrectionResidualStats =
+                strokeResidualStats(boundedRuntimeCorrectionGpu, reference)
             val adapter = ctx.adapterInfo ?: "unknown-adapter"
 
             println(
@@ -132,14 +146,18 @@ class StrokeCapJoinSceneCaptureTest {
                     reference = reference,
                     experimentalGpu = experimentalGpu,
                     correctedExperimentalGpu = correctedExperimentalGpu,
+                    boundedRuntimeCorrectionGpu = boundedRuntimeCorrectionGpu,
                     cpuCmp = cpuCmp,
                     experimentalGpuCmp = experimentalGpuCmp,
                     correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
+                    boundedRuntimeCorrectionGpuCmp = boundedRuntimeCorrectionGpuCmp,
                     experimentalGpuToleranceProfile = experimentalGpuToleranceProfile,
                     regionStats = regionStats,
                     residualStats = residualStats,
                     correctedResidualStats = correctedResidualStats,
+                    boundedRuntimeCorrectionResidualStats = boundedRuntimeCorrectionResidualStats,
                     fragmentLaneRuntimeSnapshot = fragmentLaneRuntimeSnapshot,
+                    boundedRuntimeCorrectionSnapshot = boundedRuntimeCorrectionResult.snapshot,
                     adapter = adapter,
                 )
             }
@@ -163,14 +181,18 @@ class StrokeCapJoinSceneCaptureTest {
         reference: SkBitmap,
         experimentalGpu: SkBitmap,
         correctedExperimentalGpu: SkBitmap,
+        boundedRuntimeCorrectionGpu: SkBitmap,
         cpuCmp: BitmapComparison,
         experimentalGpuCmp: BitmapComparison,
         correctedExperimentalGpuCmp: BitmapComparison,
+        boundedRuntimeCorrectionGpuCmp: BitmapComparison,
         experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
         residualStats: StrokeResidualStats,
         correctedResidualStats: StrokeResidualStats,
+        boundedRuntimeCorrectionResidualStats: StrokeResidualStats,
         fragmentLaneRuntimeSnapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
+        boundedRuntimeCorrectionSnapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join").apply { mkdirs() }
@@ -179,6 +201,11 @@ class StrokeCapJoinSceneCaptureTest {
         writePng(File(dir, "cpu-diff.png"), CrossBackendHarness.pixelDiff(reference, cpuBitmap))
         writePng(File(dir, "gpu-experimental.png"), experimentalGpu)
         writePng(File(dir, "gpu-experimental-diff.png"), CrossBackendHarness.pixelDiff(reference, experimentalGpu))
+        writePng(File(dir, "gpu-bounded-runtime-correction-for398.png"), boundedRuntimeCorrectionGpu)
+        writePng(
+            File(dir, "gpu-bounded-runtime-correction-for398-diff.png"),
+            CrossBackendHarness.pixelDiff(reference, boundedRuntimeCorrectionGpu),
+        )
         File(dir, "gpu.png").delete()
         File(dir, "gpu-diff.png").delete()
         File(dir, "route-cpu.json").writeText(cpuRouteJson())
@@ -282,6 +309,17 @@ class StrokeCapJoinSceneCaptureTest {
             adapter = adapter,
         )
         writeM60F16FragmentLaneRuntimeSnapshotExport(fragmentLaneRuntimeSnapshot, adapter)
+        writeM60F16BoundedRuntimeCorrectionProbe(
+            reference = reference,
+            currentGpu = experimentalGpu,
+            correctedGpu = boundedRuntimeCorrectionGpu,
+            currentGpuCmp = experimentalGpuCmp,
+            correctedGpuCmp = boundedRuntimeCorrectionGpuCmp,
+            currentResidualStats = residualStats,
+            correctedResidualStats = boundedRuntimeCorrectionResidualStats,
+            snapshot = boundedRuntimeCorrectionSnapshot,
+            adapter = adapter,
+        )
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -631,6 +669,20 @@ class StrokeCapJoinSceneCaptureTest {
                 System.clearProperty(FOR380_CORRECTION_PROPERTY)
             } else {
                 System.setProperty(FOR380_CORRECTION_PROPERTY, previous)
+            }
+        }
+    }
+
+    private fun <T> withM60F16BoundedRuntimeCorrectionProbe(enabled: Boolean, block: () -> T): T {
+        val previous = System.getProperty(FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY)
+        System.setProperty(FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY, enabled.toString())
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY)
+            } else {
+                System.setProperty(FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY, previous)
             }
         }
     }
@@ -1293,6 +1345,36 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun writeM60F16BoundedRuntimeCorrectionProbe(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        correctedGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        correctedGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        correctedResidualStats: StrokeResidualStats,
+        snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/" +
+                "m60-f16-bounded-runtime-correction-probe-for398",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-bounded-runtime-correction-probe-for398.json").writeText(
+            m60F16BoundedRuntimeCorrectionProbeJson(
+                reference = reference,
+                currentGpu = currentGpu,
+                correctedGpu = correctedGpu,
+                currentGpuCmp = currentGpuCmp,
+                correctedGpuCmp = correctedGpuCmp,
+                currentResidualStats = currentResidualStats,
+                correctedResidualStats = correctedResidualStats,
+                snapshot = snapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
     private fun m60F16FragmentLaneRuntimeSnapshotExportJson(
         snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         adapter: String,
@@ -1441,6 +1523,217 @@ class StrokeCapJoinSceneCaptureTest {
                 "rtk git diff --check",
                 "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
                 "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16BoundedRuntimeCorrectionProbeJson(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        correctedGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        correctedGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        correctedResidualStats: StrokeResidualStats,
+        snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
+        adapter: String,
+    ): String {
+        val expected = M60_F16_FRAGMENT_LANE_EXPECTED_PIXELS
+        val expectedSet = expected.toSet()
+        val observedPixels = snapshot.samples
+            .filter { it.observedCandidateLane }
+            .map { it.x to it.y }
+            .distinct()
+            .sortedWith(compareBy<Pair<Int, Int>> { it.second }.thenBy { it.first })
+        val observedSet = observedPixels.toSet()
+        val falsePositives = observedPixels.filter { it !in expectedSet }
+        val falseNegatives = expected.filter { it !in observedSet }
+        val exactRuntimePredicate = snapshot.enabled &&
+            snapshot.samples.isNotEmpty() &&
+            snapshot.samples.size == expected.size &&
+            falsePositives.isEmpty() &&
+            falseNegatives.isEmpty() &&
+            snapshot.samples.all { it.valid && it.observedCandidateLane }
+        val changedPixels = changedPixels(currentGpu, correctedGpu)
+        val outsideChangedPixels = changedPixels.filter { it !in expectedSet }
+        val currentTotalResidual = imageResidual(currentGpu, reference)
+        val correctedTotalResidual = imageResidual(correctedGpu, reference)
+        val residualDelta = correctedTotalResidual - currentTotalResidual
+        val predicateEvaluations = expected.map { (x, y) ->
+            val referencePixel = reference.getPixel(x, y)
+            val currentPixel = currentGpu.getPixel(x, y)
+            val correctedPixel = correctedGpu.getPixel(x, y)
+            PredicateCorrectionPixel(
+                x = x,
+                y = y,
+                reference = referencePixel,
+                current = currentPixel,
+                corrected = correctedPixel,
+                currentResidual = sampleResidual(referencePixel, currentPixel),
+                correctedResidual = sampleResidual(referencePixel, correctedPixel),
+            )
+        }
+        val currentPredicateResidual = predicateEvaluations.sumOf { it.currentResidual }
+        val correctedPredicateResidual = predicateEvaluations.sumOf { it.correctedResidual }
+        val improvedPredicatePixels = predicateEvaluations.count { it.correctedResidual < it.currentResidual }
+        val regressedPredicatePixels = predicateEvaluations.count { it.correctedResidual > it.currentResidual }
+        val unchangedPredicatePixels = predicateEvaluations.count { it.correctedResidual == it.currentResidual }
+        val fullScenePixelDeltas = pixelResidualDeltas(currentGpu, correctedGpu, reference)
+        val classification = when {
+            !exactRuntimePredicate -> "bounded-correction-refused"
+            outsideChangedPixels.isNotEmpty() -> "bounded-correction-refused"
+            correctedTotalResidual > currentTotalResidual -> "bounded-correction-regresses"
+            correctedTotalResidual < currentTotalResidual -> "bounded-correction-reduces-residual"
+            else -> "bounded-correction-refused"
+        }
+        val reason = when (classification) {
+            "bounded-correction-reduces-residual" ->
+                "The FOR-398 opt-in shader changed only the FOR-397 pixels and reduced the total residual."
+            "bounded-correction-regresses" ->
+                "The FOR-398 opt-in shader kept the predicate bounded but increased total residual, so it is not promotable."
+            else -> when {
+                !exactRuntimePredicate ->
+                    "The FOR-397 runtime predicate proof was not exact for this evidence run; correction remains refused."
+                outsideChangedPixels.isNotEmpty() ->
+                    "The FOR-398 correction changed pixels outside the 8 FOR-397 predicate pixels; correction remains refused."
+                else ->
+                    "The FOR-398 correction did not reduce total residual; correction remains refused."
+            }
+        }
+        val nextStep = when (classification) {
+            "bounded-correction-reduces-residual" ->
+                "Audit the remaining residual and any predicate-pixel regressions before considering a separate promotion ticket."
+            "bounded-correction-regresses" ->
+                "Keep FOR-398 disabled and inspect the per-pixel residual deltas before changing the correction formula."
+            else ->
+                "Keep FOR-398 disabled and preserve FOR-397 as diagnostic evidence until the bounded predicate and correction formula are both safe."
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-398",
+              "sceneId": "m60-f16-bounded-runtime-correction-probe-for398",
+              "sourceSceneId": "m60-f16-fragment-lane-runtime-snapshot-export-for397",
+              "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-fragment-lane-runtime-snapshot-export-for397/m60-f16-fragment-lane-runtime-snapshot-export-for397.json",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-correction-experimentale-opt-in-bornee-aux-8-pixels-apres-for-397",
+              "sourceFinding": "global/kanvas/findings/for-397-exporte-le-snapshot-runtime-du-canal-fragment-m60-f16-et-prouve-8-pixels-exacts",
+              "decision": "M60_F16_BOUNDED_RUNTIME_CORRECTION_PROBE_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "bounded-correction-reduces-residual",
+                "bounded-correction-regresses",
+                "bounded-correction-refused"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "correctionAppliedByDefault": false,
+              "correctionGuard": ${FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY.jsonString()},
+              "boundedRendererPoint": "SkWebGpuDevice M60 F16 derived AA stencil-cover shader; fs_inside/fs_outside skip targetColorSpaceBlend only when m60_f16_candidate_lane(frag.xy) is true",
+              "requiredFor397Classification": "fragment-lane-runtime-snapshot-exported",
+              "requiredFor396Decision": "M60_F16_AA_STENCIL_COVER_FRAGMENT_LANE_DIAGNOSTIC_CHANNEL_INSTALLED",
+              "requiredFor394Decision": "M60_F16_AA_STENCIL_COVER_BAND_METADATA_TRANSPORT_RECORDED",
+              "guards": {
+                "experimentalStrokeRenderer": {
+                  "guardId": "$EXPERIMENTAL_RENDER_PROPERTY",
+                  "enabledForEvidenceRun": true,
+                  "enabledByDefault": false
+                },
+                "bandMetadataTransport": {
+                  "guardId": "$M60_F16_BAND_METADATA_TRANSPORT_PROPERTY",
+                  "enabledForEvidenceRun": ${System.getProperty(M60_F16_BAND_METADATA_TRANSPORT_PROPERTY, "false").toBoolean()},
+                  "enabledByDefault": false
+                },
+                "fragmentLaneDiagnostic": {
+                  "guardId": "$M60_F16_FRAGMENT_LANE_DIAGNOSTIC_PROPERTY",
+                  "enabledForEvidenceRun": ${snapshot.enabled},
+                  "enabledByDefault": false
+                },
+                "boundedRuntimeCorrection": {
+                  "guardId": "$FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY",
+                  "enabledForEvidenceRun": true,
+                  "enabledByDefault": false
+                }
+              },
+              "residualComparison": {
+                "currentTotalResidual": $currentTotalResidual,
+                "correctedTotalResidual": $correctedTotalResidual,
+                "deltaCorrectedMinusCurrent": $residualDelta,
+                "gainVsCurrent": ${currentTotalResidual - correctedTotalResidual},
+                "currentSimilarity": ${String.format(Locale.US, "%.6f", currentGpuCmp.similarity)},
+                "correctedSimilarity": ${String.format(Locale.US, "%.6f", correctedGpuCmp.similarity)},
+                "currentMismatchPixels": ${currentResidualStats.mismatchPixels},
+                "correctedMismatchPixels": ${correctedResidualStats.mismatchPixels},
+                "fullSceneImprovedPixels": ${fullScenePixelDeltas.improvedPixels},
+                "fullSceneRegressedPixels": ${fullScenePixelDeltas.regressedPixels},
+                "fullSceneUnchangedPixels": ${fullScenePixelDeltas.unchangedPixels}
+              },
+              "predicateProof": {
+                "api": "SkWebGpuDevice.m60F16FragmentLaneDiagnosticSnapshot()",
+                "propertyName": ${snapshot.propertyName.jsonString()},
+                "enabled": ${snapshot.enabled},
+                "exactMatchProvenByRuntimeReadback": $exactRuntimePredicate,
+                "expectedPixelCount": ${expected.size},
+                "observedPixelCount": ${observedPixels.size},
+                "falsePositiveCount": ${falsePositives.size},
+                "falseNegativeCount": ${falseNegatives.size},
+                "expectedPixels": [
+            ${expected.joinToString(",\n") { it.pixelJson().prependIndent("    ") }}
+                ],
+                "observedPixels": [
+            ${observedPixels.joinToString(",\n") { it.pixelJson().prependIndent("    ") }}
+                ],
+                "falsePositives": [
+            ${falsePositives.joinToString(",\n") { it.pixelJson().prependIndent("    ") }}
+                ],
+                "falseNegatives": [
+            ${falseNegatives.joinToString(",\n") { it.pixelJson().prependIndent("    ") }}
+                ]
+              },
+              "boundedMutationCheck": {
+                "changedPixelCount": ${changedPixels.size},
+                "changedPixelsWithinExpectedPredicate": ${outsideChangedPixels.isEmpty()},
+                "outsideExpectedChangedPixelCount": ${outsideChangedPixels.size},
+                "changedPixelsFirst64": [
+            ${changedPixels.take(64).joinToString(",\n") { it.pixelJson().prependIndent("    ") }}
+                ],
+                "outsideExpectedChangedPixelsFirst64": [
+            ${outsideChangedPixels.take(64).joinToString(",\n") { it.pixelJson().prependIndent("    ") }}
+                ]
+              },
+              "predicateResidualComparison": {
+                "currentPredicateResidual": $currentPredicateResidual,
+                "correctedPredicateResidual": $correctedPredicateResidual,
+                "deltaCorrectedMinusCurrent": ${correctedPredicateResidual - currentPredicateResidual},
+                "improvedPixels": $improvedPredicatePixels,
+                "regressedPixels": $regressedPredicatePixels,
+                "unchangedPixels": $unchangedPredicatePixels,
+                "pixels": [
+            ${predicateEvaluations.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+                ]
+              },
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "productionRuntimeConnected": false,
+                "generalizedOutsideM60F16": false,
+                "for380BroadCorrectionReintroduced": false
+              },
+              "classificationReason": ${reason.jsonString()},
+              "nextStep": ${nextStep.jsonString()},
+              "validationCommands": [
+                "rtk python3 scripts/validate_for398_m60_f16_bounded_runtime_correction_probe.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for398-pycache-parent python3 -m py_compile scripts/validate_for398_m60_f16_bounded_runtime_correction_probe.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true -Dkanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
                 "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
               ]
             }
@@ -6236,6 +6529,89 @@ class StrokeCapJoinSceneCaptureTest {
             kotlin.math.abs(((reference ushr shift) and 0xFF) - ((current ushr shift) and 0xFF))
         }
 
+    private fun imageResidual(candidate: SkBitmap, reference: SkBitmap): Int {
+        require(candidate.width == reference.width && candidate.height == reference.height)
+        var residual = 0
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                residual += sampleResidual(reference.getPixel(x, y), candidate.getPixel(x, y))
+            }
+        }
+        return residual
+    }
+
+    private fun changedPixels(a: SkBitmap, b: SkBitmap): List<Pair<Int, Int>> {
+        require(a.width == b.width && a.height == b.height)
+        val out = mutableListOf<Pair<Int, Int>>()
+        for (y in 0 until a.height) {
+            for (x in 0 until a.width) {
+                if (a.getPixel(x, y) != b.getPixel(x, y)) {
+                    out += x to y
+                }
+            }
+        }
+        return out
+    }
+
+    private fun pixelResidualDeltas(current: SkBitmap, corrected: SkBitmap, reference: SkBitmap): PixelResidualDeltas {
+        require(current.width == corrected.width && current.height == corrected.height)
+        require(current.width == reference.width && current.height == reference.height)
+        var improved = 0
+        var regressed = 0
+        var unchanged = 0
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                val referencePixel = reference.getPixel(x, y)
+                val currentResidual = sampleResidual(referencePixel, current.getPixel(x, y))
+                val correctedResidual = sampleResidual(referencePixel, corrected.getPixel(x, y))
+                when {
+                    correctedResidual < currentResidual -> improved++
+                    correctedResidual > currentResidual -> regressed++
+                    else -> unchanged++
+                }
+            }
+        }
+        return PixelResidualDeltas(improved, regressed, unchanged)
+    }
+
+    private data class PixelResidualDeltas(
+        val improvedPixels: Int,
+        val regressedPixels: Int,
+        val unchangedPixels: Int,
+    )
+
+    private data class PredicateCorrectionPixel(
+        val x: Int,
+        val y: Int,
+        val reference: Int,
+        val current: Int,
+        val corrected: Int,
+        val currentResidual: Int,
+        val correctedResidual: Int,
+    ) {
+        fun toJson(): String = """
+            {
+              "x": $x,
+              "y": $y,
+              "referenceRgba": ${rgbaJson(reference)},
+              "currentRgba": ${rgbaJson(current)},
+              "correctedRgba": ${rgbaJson(corrected)},
+              "currentResidual": $currentResidual,
+              "correctedResidual": $correctedResidual,
+              "deltaCorrectedMinusCurrent": ${correctedResidual - currentResidual},
+              "gainVsCurrent": ${currentResidual - correctedResidual}
+            }
+        """.trimIndent()
+
+        private fun rgbaJson(pixel: Int): String {
+            val r = (pixel ushr 16) and 0xFF
+            val g = (pixel ushr 8) and 0xFF
+            val b = pixel and 0xFF
+            val a = (pixel ushr 24) and 0xFF
+            return """[$r, $g, $b, $a]"""
+        }
+    }
+
     private fun rgbaArray(pixel: Int): IntArray = intArrayOf(
         (pixel ushr 16) and 0xFF,
         (pixel ushr 8) and 0xFF,
@@ -8057,6 +8433,8 @@ class StrokeCapJoinSceneCaptureTest {
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
         private const val EXPERIMENTAL_RENDER_PROPERTY = "kanvas.webgpu.strokeCapJoin.experimentalRender"
         private const val FOR380_CORRECTION_PROPERTY = "kanvas.webgpu.m60F16SourceColorCorrectionProbe.enabled"
+        private const val FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY =
+            "kanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled"
         private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
         private const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_PROPERTY =

@@ -181,6 +181,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
