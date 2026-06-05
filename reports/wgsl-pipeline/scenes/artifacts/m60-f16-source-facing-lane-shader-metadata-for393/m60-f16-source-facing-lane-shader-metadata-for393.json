@@ -1,0 +1,182 @@
+{
+  "adapter": "Apple M2 Max",
+  "allowedStatuses": [
+    "shader-exportable",
+    "requires-new-uniforms",
+    "not-derivable-currently"
+  ],
+  "candidateOnly": true,
+  "candidatePredicate": {
+    "derivationFormula": "(strokeBand == round-round && bandLocalX >= 39) || (strokeBand == butt-bevel && bandLocalX <= 17)",
+    "id": "source-facing-local-band-lane",
+    "idealSimulatedFullSceneImpactIfLaneRuntimeWereAvailable": {
+      "baseUncorrectedFullSceneResidual": 2014,
+      "deltaVsCurrent": -65,
+      "gainVsCurrent": 65,
+      "simulatedAfterResidual": 1949
+    },
+    "improvedPixelsRecovered": 8,
+    "metadataName": "sourceFacingLocalBandLane",
+    "regressionsIncluded": 0,
+    "requiredDerivationFields": [
+      "strokeBand",
+      "bandLocalX"
+    ],
+    "selectedPixels": 8
+  },
+  "classification": "requires-new-uniforms",
+  "classificationReason": "The AA stencil-cover path has enough data for coverage, clip and color, but not enough stable per-fragment band metadata to derive sourceFacingLocalBandLane. The minimal next extension is a disabled diagnostic uniform or equivalent metadata table in StencilCoverAaPolygonDraw/buildStencilCoverAaDrawResources and aa_stencil_cover.wgsl.",
+  "correctionAppliedByDefault": false,
+  "correctionPredicateEnabledByDefault": false,
+  "decision": "M60_F16_SOURCE_FACING_LANE_SHADER_METADATA_AUDITED",
+  "defaultBehaviorChanged": false,
+  "explicitOptInGuard": {
+    "correctionAllowedWhenEnabled": false,
+    "enabledByDefault": false,
+    "guardId": "kanvas.webgpu.m60F16SourceFacingLaneRuntimeCandidate.enabled",
+    "oldDrawWideProbeGuard": "kanvas.webgpu.m60F16SourceColorCorrectionProbe.enabled",
+    "oldDrawWideProbeUsed": false,
+    "preservedFromFor392": true,
+    "recognizedByRenderer": true,
+    "runtimeHookInstalled": false
+  },
+  "fallbackChanged": false,
+  "generalizedOutsideM60F16": false,
+  "guardEnabledEvaluationPreserved": {
+    "reason": "m60-f16-source-facing-lane-missing-per-fragment-runtime-metadata",
+    "residualDeltaWithGuardEnabled": 0,
+    "residualWithGuardEnabled": 2014,
+    "runtimeCorrectionApplied": false,
+    "runtimeHookInstalled": false
+  },
+  "limitedTo": "M60 F16 bounded stroke cap/join scene only",
+  "linear": "FOR-393",
+  "nonGoalsPreserved": {
+    "aaStencilCoverColorCorrectionRewrite": false,
+    "for380ProbeRouteUsed": false,
+    "generalFallbackChanged": false,
+    "m60F16CorrectionEnabled": false,
+    "promotionChanged": false,
+    "runtimePredicateActivated": false,
+    "scoringChanged": false,
+    "thresholdChanged": false,
+    "unrelatedScenesChanged": false
+  },
+  "oldDrawWideProbeBlockedWhenFor392GuardRequested": true,
+  "oldDrawWideProbeUsed": false,
+  "producer": "scripts/validate_for393_m60_f16_source_facing_lane_shader_metadata.py",
+  "producerInput": "FOR-392 runtime refusal plus FOR-391 sourceFacingLocalBandLane metadata evidence",
+  "promoted": false,
+  "renderedPixelsChanged": false,
+  "requiredFor391Classification": "source-facing-local-band-lane-stable-diagnostic-only",
+  "requiredFor391Decision": "M60_F16_SOURCE_FACING_LOCAL_BAND_LANE_METADATA_RECORDED",
+  "requiredFor392Classification": "runtime-hook-refused-missing-per-fragment-lane-metadata",
+  "requiredFor392Decision": "M60_F16_SOURCE_FACING_LANE_RUNTIME_OPT_IN_EVALUATED",
+  "runtimeHookInstalled": false,
+  "sceneId": "m60-f16-source-facing-lane-shader-metadata-for393",
+  "schemaVersion": 1,
+  "scoringChanged": false,
+  "secondarySourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-facing-lane-metadata-for391/m60-f16-source-facing-lane-metadata-for391.json",
+  "shaderMetadataAudit": {
+    "derivedInShader": false,
+    "diagnosticExported": false,
+    "metadataName": "sourceFacingLocalBandLane",
+    "path": {
+      "minimalExtensionPoint": {
+        "fields": [
+          "diagnostic lane metadata enable flag, disabled by default",
+          "bounded band metadata table: xStart, xEnd, strokeBandId/capJoinId",
+          "or equivalent segment/band metadata sufficient to derive bandLocalX from frag.xy"
+        ],
+        "owner": "StencilCoverAaPolygonDraw uniform packing",
+        "packer": "buildStencilCoverAaDrawResources",
+        "shader": "aa_stencil_cover.wgsl Uniforms"
+      },
+      "missingFields": [
+        "strokeBand per fragment or per band",
+        "bandLocalX per fragment",
+        "band xStart/xEnd bounds",
+        "band identity to cap/join mapping",
+        "sourceFacingLocalBandLane boolean"
+      ],
+      "preShaderAvailableData": [
+        "solid color premul/unpremul source color",
+        "viewport size",
+        "edgeCount",
+        "fillType",
+        "directed path edge segments as edges[256] vec4f(Ax, Ay, Bx, By)",
+        "cover quad vertices",
+        "stencil winding partition via inside/outside cover pipelines",
+        "scissor rectangle",
+        "clipShapeBounds",
+        "clipShapeRadiiKind",
+        "colorFilter payload",
+        "draw-wide targetColorSpaceBlend flag",
+        "host-side stroke style diagnostics: strokeWidth, cap, join"
+      ],
+      "renderPoint": "StencilCoverAaPolygonDraw solid-color AA stencil-cover cover pass",
+      "rendererSource": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+      "shaderAvailableData": [
+        "fragment position frag.xy",
+        "supersampled_path_cov(frag.xy)",
+        "clip_cov(frag.xy)",
+        "edge list and edgeCount",
+        "fillType",
+        "inside/outside stencil-cover side selected by pipeline",
+        "draw-wide targetColorSpaceBlend flag"
+      ],
+      "shaderEntryPoints": [
+        "fs_inside",
+        "fs_outside"
+      ],
+      "shaderSource": "gpu-raster/src/main/resources/shaders/aa_stencil_cover.wgsl",
+      "uniformPacker": "buildStencilCoverAaDrawResources"
+    },
+    "refusalReason": "source-facing-local-band-lane-requires-band-metadata-uniforms",
+    "safeToWireRuntimePredicate": false,
+    "shaderExportableWithCurrentUniforms": false,
+    "status": "requires-new-uniforms",
+    "whyUnsafe": "The current shader can see frag.xy, edge equations, fillType, clip and coverage, but it cannot map a fragment to the fixture stroke band or compute bandLocalX. Using the draw-wide targetColorSpaceBlend switch would reintroduce the FOR-389/FOR-392 unsafe path."
+  },
+  "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-facing-lane-runtime-opt-in-for392/m60-f16-source-facing-lane-runtime-opt-in-for392.json",
+  "sourceFinding": "global/kanvas/findings/for-392-refuse-lactivation-runtime-source-facing-local-band-lane-faute-de-metadata-par-fragment",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-exposer-metadata-lane-safe-par-fragment-apres-for-392",
+  "status": "requires-new-uniforms",
+  "supportClaim": false,
+  "thresholdChanged": false,
+  "validationCommands": [
+    "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+    "rtk python3 scripts/validate_for393_m60_f16_source_facing_lane_shader_metadata.py",
+    "rtk python3 scripts/validate_for392_m60_f16_source_facing_lane_runtime_opt_in.py",
+    "rtk python3 scripts/validate_for391_m60_f16_source_facing_lane_metadata.py",
+    "rtk python3 scripts/validate_for390_m60_f16_full_scene_regression_discriminator.py",
+    "rtk python3 scripts/validate_for389_m60_f16_source_coverage_full_scene_candidate.py",
+    "rtk python3 scripts/validate_for388_m60_f16_composition_metadata_audit.py",
+    "rtk python3 scripts/validate_for387_m60_f16_residual_fringe_discriminator_audit.py",
+    "rtk python3 scripts/validate_for386_m60_f16_coverage_regression_discriminator_audit.py",
+    "rtk python3 scripts/validate_for385_m60_f16_generalized_coverage_metadata_predicate_audit.py",
+    "rtk python3 scripts/validate_for384_m60_f16_pre_correction_geometry_coverage_metadata_audit.py",
+    "rtk python3 scripts/validate_for383_m60_f16_pre_probe_predicate_audit.py",
+    "rtk python3 scripts/validate_for382_m60_f16_coverage_composition_membership_audit.py",
+    "rtk python3 scripts/validate_for381_m60_f16_source_color_subzone_audit.py",
+    "rtk python3 scripts/validate_for380_m60_f16_source_color_correction_probe.py",
+    "rtk python3 scripts/validate_for379_m60_f16_effective_source_color_path.py",
+    "rtk python3 scripts/validate_for378_m60_f16_direct_source_color_evidence.py",
+    "rtk python3 scripts/validate_for377_m60_f16_linear_srgb_plausibility_audit.py",
+    "rtk python3 scripts/validate_for376_m60_f16_composition_quantization_candidate.py",
+    "rtk python3 scripts/validate_for375_m60_f16_effective_destination_candidate.py",
+    "rtk python3 scripts/validate_for374_m60_f16_candidate_regression_audit.py",
+    "rtk python3 scripts/validate_for373_m60_f16_candidate_policy_rgba_probe.py",
+    "rtk python3 scripts/validate_for372_m60_f16_effective_coverage_export.py",
+    "rtk python3 scripts/validate_for371_m60_f16_effective_coverage_access_audit.py",
+    "rtk python3 scripts/validate_for370_m60_f16_source_paint_capture_extension.py",
+    "rtk python3 scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+    "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+    "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+    "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+    "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk git diff --check"
+  ],
+  "wgslChanged": false
+}
