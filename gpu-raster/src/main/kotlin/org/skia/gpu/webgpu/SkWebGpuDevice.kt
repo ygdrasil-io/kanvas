@@ -198,6 +198,8 @@ private const val WEBGPU_M60_F16_AA_STENCIL_COVER_FRAGMENT_LANE_DIAGNOSTIC_FLAG:
     "kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled"
 private const val WEBGPU_M60_F16_BOUNDED_RUNTIME_CORRECTION_PROBE_FLAG: String =
     "kanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled"
+private const val WEBGPU_M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_FLAG: String =
+    "kanvas.webgpu.m60F16BoundedCorrectionApplicationPointDiagnostic.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -412,6 +414,28 @@ public class SkWebGpuDevice(
         val valid: Boolean,
     )
 
+    public data class M60F16BoundedCorrectionApplicationPointSnapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val diagnosticShader: String,
+        val pipelineLayout: String,
+        val samples: List<M60F16BoundedCorrectionApplicationPointSample>,
+    )
+
+    public data class M60F16BoundedCorrectionApplicationPointSample(
+        val x: Int,
+        val y: Int,
+        val candidateBranchReached: Boolean,
+        val coverageSide: String,
+        val colorAfterColorFilter: FloatArray,
+        val colorAfterTargetColorspaceIfNeeded: FloatArray,
+        val colorSentToBlendBeforeQuantization: FloatArray,
+        val coverageAlpha: Float,
+        val sourceAlphaAfterCoverage: Float,
+        val quantizedColorSentToBlend: FloatArray,
+        val valid: Boolean,
+    )
+
     public data class RawRectUniformColorWrite(
         val route: String,
         val drawIndex: Int,
@@ -519,12 +543,19 @@ public class SkWebGpuDevice(
             WEBGPU_M60_F16_AA_STENCIL_COVER_FRAGMENT_LANE_DIAGNOSTIC_FLAG,
             "false",
         ).toBoolean()
+    private val m60F16BoundedCorrectionApplicationPointDiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_FLAG,
+            "false",
+        ).toBoolean()
     private val rawRectUniformColorWrites: MutableList<RawRectUniformColorWrite> = mutableListOf()
     private val rawRgba8TextureUploads: MutableList<RawRgba8TextureUpload> = mutableListOf()
     private val outputReadbackBoundarySamples: MutableList<OutputReadbackSample> = mutableListOf()
     private val for258ShaderSideProbeSamples: MutableList<For258ShaderSideProbeSample> = mutableListOf()
     private val m60F16FragmentLaneDiagnosticSamples:
         MutableList<M60F16FragmentLaneDiagnosticSample> = mutableListOf()
+    private val m60F16BoundedCorrectionApplicationPointSamples:
+        MutableList<M60F16BoundedCorrectionApplicationPointSample> = mutableListOf()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
         PipelineKeyedCache("generated shader modules")
@@ -597,6 +628,16 @@ public class SkWebGpuDevice(
             diagnosticShader = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SHADER,
             pipelineLayout = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_LAYOUT,
             samples = m60F16FragmentLaneDiagnosticSamples.toList(),
+        )
+
+    public fun m60F16BoundedCorrectionApplicationPointSnapshot():
+        M60F16BoundedCorrectionApplicationPointSnapshot =
+        M60F16BoundedCorrectionApplicationPointSnapshot(
+            propertyName = WEBGPU_M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_FLAG,
+            enabled = m60F16BoundedCorrectionApplicationPointDiagnosticsEnabled,
+            diagnosticShader = M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_SHADER,
+            pipelineLayout = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_LAYOUT,
+            samples = m60F16BoundedCorrectionApplicationPointSamples.toList(),
         )
 
     public fun buildPipelineKeyIdentityForDiagnostics(axes: Map<String, String>): PipelineKey =
@@ -896,28 +937,56 @@ public class SkWebGpuDevice(
     }
 
     private suspend fun recordM60F16FragmentLaneDiagnostics(perDrawResources: List<DrawResources>) {
-        if (!m60F16AaStencilCoverFragmentLaneDiagnosticsEnabled) return
+        if (!m60F16AaStencilCoverFragmentLaneDiagnosticsEnabled &&
+            !m60F16BoundedCorrectionApplicationPointDiagnosticsEnabled
+        ) {
+            return
+        }
         m60F16FragmentLaneDiagnosticSamples.clear()
+        m60F16BoundedCorrectionApplicationPointSamples.clear()
         val readbacks = perDrawResources.mapNotNull { res ->
-            res.m60F16FragmentLaneDiagnosticStaging?.let(::M60F16FragmentLaneDiagnosticReadback)
+            res.m60F16FragmentLaneDiagnosticStaging?.let { staging ->
+                M60F16FragmentLaneDiagnosticReadback(
+                    staging = staging,
+                    bufferSize = res.m60F16FragmentLaneDiagnosticBufferSize,
+                )
+            }
         }
         readbacks.forEach { readback ->
+            val bufferSize = readback.bufferSize
+            val applicationPointFormat =
+                bufferSize == M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_BUFFER_SIZE
             readback.staging.mapAsync(
                 GPUMapMode.Read,
                 0uL,
-                M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
+                bufferSize,
             ).getOrThrow()
             val bytes = readback.staging
-                .getMappedRange(0uL, M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE)
+                .getMappedRange(0uL, bufferSize)
                 .toByteArray()
             readback.staging.unmap()
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
             M60_F16_FRAGMENT_LANE_DIAGNOSTIC_POINTS.forEachIndexed { index, point ->
-                val base = index * M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_STRIDE_BYTES
-                val x = buffer.getInt(base)
-                val y = buffer.getInt(base + 4)
-                val lane = buffer.getInt(base + 8)
-                val side = buffer.getInt(base + 12)
+                val base = if (applicationPointFormat) {
+                    index * M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_SAMPLE_STRIDE_BYTES
+                } else {
+                    index * M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_STRIDE_BYTES
+                }
+                val x: Int
+                val y: Int
+                val lane: Int
+                val side: Int
+                if (applicationPointFormat) {
+                    x = buffer.getFloat(base).toInt()
+                    y = buffer.getFloat(base + 4).toInt()
+                    lane = buffer.getFloat(base + 8).toInt()
+                    side = buffer.getFloat(base + 12).toInt()
+                } else {
+                    x = buffer.getInt(base)
+                    y = buffer.getInt(base + 4)
+                    lane = buffer.getInt(base + 8)
+                    side = buffer.getInt(base + 12)
+                }
                 if (lane != 0 || x != 0 || y != 0 || side != 0) {
                     m60F16FragmentLaneDiagnosticSamples += M60F16FragmentLaneDiagnosticSample(
                         x = x,
@@ -930,6 +999,43 @@ public class SkWebGpuDevice(
                         },
                         valid = x == point.first && y == point.second && lane == 1,
                     )
+                }
+                if (applicationPointFormat &&
+                    (lane != 0 || x != 0 || y != 0 || side != 0)
+                ) {
+                    val filtered = FloatArray(4) { channel ->
+                        buffer.getFloat(base + 16 + channel * 4)
+                    }
+                    val target = FloatArray(4) { channel ->
+                        buffer.getFloat(base + 32 + channel * 4)
+                    }
+                    val beforeQuantization = FloatArray(4) { channel ->
+                        buffer.getFloat(base + 48 + channel * 4)
+                    }
+                    val scalar = FloatArray(4) { channel ->
+                        buffer.getFloat(base + 64 + channel * 4)
+                    }
+                    val quantized = FloatArray(4) { channel ->
+                        buffer.getFloat(base + 80 + channel * 4)
+                    }
+                    m60F16BoundedCorrectionApplicationPointSamples +=
+                        M60F16BoundedCorrectionApplicationPointSample(
+                            x = x,
+                            y = y,
+                            candidateBranchReached = lane != 0,
+                            coverageSide = when (side) {
+                                1 -> "inside"
+                                2 -> "outside"
+                                else -> "unknown"
+                            },
+                            colorAfterColorFilter = filtered,
+                            colorAfterTargetColorspaceIfNeeded = target,
+                            colorSentToBlendBeforeQuantization = beforeQuantization,
+                            coverageAlpha = scalar[0],
+                            sourceAlphaAfterCoverage = scalar[1],
+                            quantizedColorSentToBlend = quantized,
+                            valid = x == point.first && y == point.second && lane == 1,
+                        )
                 }
             }
         }
@@ -2662,6 +2768,7 @@ public class SkWebGpuDevice(
         cacheKey: String,
         diagnostic: Boolean,
         boundedRuntimeCorrection: Boolean,
+        applicationPointDiagnostic: Boolean = false,
     ): GPUShaderModule {
         val cached = shaderModuleCache[cacheKey]
         if (cached != null) {
@@ -2676,10 +2783,17 @@ public class SkWebGpuDevice(
         if (diagnostic) {
             wgsl = wgsl.replace(
                 "@binding(0) @group(0) var<uniform> uniforms: Uniforms;\n",
-                """
+                if (applicationPointDiagnostic) {
+                    """
+@binding(0) @group(0) var<uniform> uniforms: Uniforms;
+@binding(1) @group(0) var<storage, read_write> m60F16FragmentLaneDiagnostic: array<vec4f, 48>;
+""".trimIndent() + "\n"
+                } else {
+                    """
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 @binding(1) @group(0) var<storage, read_write> m60F16FragmentLaneDiagnostic: array<vec4u, 8>;
-""".trimIndent() + "\n",
+""".trimIndent() + "\n"
+                },
             )
         }
         if (boundedRuntimeCorrection) {
@@ -2717,7 +2831,82 @@ fn m60_f16_quantize_after_bounded_runtime_correction(pixel: vec2f, c: vec4f) -> 
             }
             if (diagnostic) {
                 append(
-                    """
+                    if (applicationPointDiagnostic) {
+                        """
+fn m60_f16_application_point_slot(pixel: vec2f) -> i32 {
+    let px = u32(floor(pixel.x));
+    let py = u32(floor(pixel.y));
+    if (px == 93u && py == 74u) { return 0; }
+    if (px == 92u && py == 75u) { return 1; }
+    if (px == 91u && py == 76u) { return 2; }
+    if (px == 17u && py == 77u) { return 3; }
+    if (px == 90u && py == 77u) { return 4; }
+    if (px == 89u && py == 78u) { return 5; }
+    if (px == 88u && py == 79u) { return 6; }
+    if (px == 87u && py == 80u) { return 7; }
+    return -1;
+}
+
+fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
+    if (!m60_f16_candidate_lane(pixel)) {
+        return;
+    }
+    let slot = m60_f16_application_point_slot(pixel);
+    if (slot < 0) {
+        return;
+    }
+    let px = floor(pixel.x);
+    let py = floor(pixel.y);
+    let base = u32(slot) * 6u;
+    m60F16FragmentLaneDiagnostic[base] = vec4f(px, py, 1.0, f32(side));
+}
+
+fn m60_f16_record_application_point(
+    pixel: vec2f,
+    side: u32,
+    coverage: f32,
+    filtered: vec4f,
+    target_colorspace: vec4f,
+    before_quantization: vec4f,
+    quantized: vec4f
+) {
+    let slot = m60_f16_application_point_slot(pixel);
+    if (slot < 0) {
+        return;
+    }
+    let candidate = m60_f16_candidate_lane(pixel);
+    let px = floor(pixel.x);
+    let py = floor(pixel.y);
+    let base = u32(slot) * 6u;
+    m60F16FragmentLaneDiagnostic[base] = vec4f(px, py, select(0.0, 1.0, candidate), f32(side));
+    m60F16FragmentLaneDiagnostic[base + 1u] = filtered;
+    m60F16FragmentLaneDiagnostic[base + 2u] = target_colorspace;
+    m60F16FragmentLaneDiagnostic[base + 3u] = before_quantization;
+    m60F16FragmentLaneDiagnostic[base + 4u] = vec4f(coverage, before_quantization.a, quantized.a, 0.0);
+    m60F16FragmentLaneDiagnostic[base + 5u] = quantized;
+}
+
+fn m60_f16_application_point_output(pixel: vec2f, side: u32, coverage: f32) -> vec4f {
+    let filtered = apply_color_filter(uniforms.color);
+    let target_colorspace = apply_target_colorspace_if_needed(filtered);
+    let corrected = m60_f16_bounded_runtime_corrected_color(pixel);
+    let alpha = corrected.a * coverage;
+    let before_quantization = vec4f(corrected.rgb * alpha, alpha);
+    let quantized = m60_f16_quantize_after_bounded_runtime_correction(pixel, before_quantization);
+    m60_f16_record_application_point(
+        pixel,
+        side,
+        coverage,
+        filtered,
+        target_colorspace,
+        before_quantization,
+        quantized
+    );
+    return quantized;
+}
+""".trimIndent()
+                    } else {
+                        """
 fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     if (!m60_f16_candidate_lane(pixel)) {
         return;
@@ -2733,7 +2922,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     if (px == 88u && py == 79u) { m60F16FragmentLaneDiagnostic[6] = vec4u(px, py, 1u, side); }
     if (px == 87u && py == 80u) { m60F16FragmentLaneDiagnostic[7] = vec4u(px, py, 1u, side); }
 }
-""".trimIndent(),
+""".trimIndent()
+                    },
                 )
             }
         }
@@ -2752,6 +2942,21 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                     "@fragment\nfn fs_outside(@builtin(position) frag: vec4f) -> @location(0) vec4f {\n" +
                         "    m60_f16_record_fragment_lane(frag.xy, 2u);\n",
                 )
+        }
+        if (applicationPointDiagnostic) {
+            val boundedReturnBlock = """
+    let c = m60_f16_bounded_runtime_corrected_color(frag.xy);
+    let alpha = c.a * coverage;
+    return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));
+""".trimIndent()
+            wgsl = wgsl.replaceFirst(
+                boundedReturnBlock,
+                "    return m60_f16_application_point_output(frag.xy, 1u, coverage);",
+            )
+            wgsl = wgsl.replaceFirst(
+                boundedReturnBlock,
+                "    return m60_f16_application_point_output(frag.xy, 2u, coverage);",
+            )
         }
         return context.device.createShaderModule(ShaderModuleDescriptor(code = wgsl)).also {
             shaderModuleCache[cacheKey] = it
@@ -2777,6 +2982,14 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             cacheKey = "experimental://m60-f16-aa-stencil-cover-bounded-runtime-correction-diagnostic",
             diagnostic = true,
             boundedRuntimeCorrection = true,
+        )
+
+    private fun loadM60F16BoundedCorrectionApplicationPointDiagnosticShader(): GPUShaderModule =
+        loadM60F16AaStencilCoverProbeShader(
+            cacheKey = "experimental://m60-f16-aa-stencil-cover-bounded-correction-application-point-diagnostic",
+            diagnostic = true,
+            boundedRuntimeCorrection = true,
+            applicationPointDiagnostic = true,
         )
 
     // ─── Rect pipeline (G1.2 / G2.3a) — full-screen tri + scissor + coverage ───
@@ -3191,6 +3404,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     private val m60F16BoundedRuntimeCorrectionDiagnosticShaderLazy: Lazy<GPUShaderModule> = lazy {
         loadM60F16BoundedRuntimeCorrectionDiagnosticShader()
     }
+    private val m60F16BoundedCorrectionApplicationPointDiagnosticShaderLazy: Lazy<GPUShaderModule> = lazy {
+        loadM60F16BoundedCorrectionApplicationPointDiagnosticShader()
+    }
 
     private val m60F16FragmentLaneDiagnosticShader: GPUShaderModule
         get() = m60F16FragmentLaneDiagnosticShaderLazy.value
@@ -3200,6 +3416,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     private val m60F16BoundedRuntimeCorrectionDiagnosticShader: GPUShaderModule
         get() = m60F16BoundedRuntimeCorrectionDiagnosticShaderLazy.value
+
+    private val m60F16BoundedCorrectionApplicationPointDiagnosticShader: GPUShaderModule
+        get() = m60F16BoundedCorrectionApplicationPointDiagnosticShaderLazy.value
 
     /**
      * G3.3b.3d — which half of the AA falloff a cover sub-draw paints.
@@ -3405,7 +3624,11 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                     layout = if (diagnostic) m60F16FragmentLaneDiagnosticPipelineLayout else aaPolygonPipelineLayout,
                     vertex = VertexState(
                         module = if (diagnostic) {
-                            m60F16BoundedRuntimeCorrectionDiagnosticShader
+                            if (m60F16BoundedCorrectionApplicationPointDiagnosticsEnabled) {
+                                m60F16BoundedCorrectionApplicationPointDiagnosticShader
+                            } else {
+                                m60F16BoundedRuntimeCorrectionDiagnosticShader
+                            }
                         } else {
                             m60F16BoundedRuntimeCorrectionShader
                         },
@@ -3414,7 +3637,11 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                     ),
                     fragment = FragmentState(
                         module = if (diagnostic) {
-                            m60F16BoundedRuntimeCorrectionDiagnosticShader
+                            if (m60F16BoundedCorrectionApplicationPointDiagnosticsEnabled) {
+                                m60F16BoundedCorrectionApplicationPointDiagnosticShader
+                            } else {
+                                m60F16BoundedRuntimeCorrectionDiagnosticShader
+                            }
                         } else {
                             m60F16BoundedRuntimeCorrectionShader
                         },
@@ -13117,7 +13344,11 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                 // outside-half AA loss inherent to the G3.3b.3a single
                 // cover sub-draw.
                 res.m60F16FragmentLaneDiagnosticStorage?.let { storage ->
-                    encoder.clearBuffer(storage, 0uL, M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE)
+                    encoder.clearBuffer(
+                        storage,
+                        0uL,
+                        res.m60F16FragmentLaneDiagnosticBufferSize,
+                    )
                 }
                 encoder.beginRenderPass(
                     RenderPassDescriptor(
@@ -13197,7 +13428,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                         sourceOffset = 0uL,
                         destination = res.m60F16FragmentLaneDiagnosticStaging,
                         destinationOffset = 0uL,
-                        size = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
+                        size = res.m60F16FragmentLaneDiagnosticBufferSize,
                     )
                 }
                 return@forEachIndexed
@@ -14652,6 +14883,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         val m60F16FragmentLaneDiagnosticStorage: GPUBuffer? = null,
         val m60F16FragmentLaneDiagnosticStaging: GPUBuffer? = null,
         val m60F16FragmentLaneDiagnosticBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
+        val m60F16FragmentLaneDiagnosticBufferSize: ULong = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
         // L1a -- DropShadow-inside-Compose materialise target texture +
         // view. Allocated by [enqueueMaterializeDropShadowToScratch] and
         // owned by this DrawResources ; closed in [closeDrawResources]
@@ -14676,6 +14908,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     private data class M60F16FragmentLaneDiagnosticReadback(
         val staging: GPUBuffer,
+        val bufferSize: ULong,
     )
 
     private fun buildRectDrawResources(d: RectDraw): DrawResources {
@@ -16327,12 +16560,22 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                 ),
             ),
         )
+        val applicationPointDiagnosticForDraw =
+            m60F16BoundedCorrectionApplicationPointDiagnosticsEnabled &&
+                d.m60F16BoundedRuntimeCorrectionProbe
         val diagnosticEnabled =
             m60F16AaStencilCoverFragmentLaneDiagnosticsEnabled && d.m60F16BandMetadata != null
-        val diagnosticStorage = if (diagnosticEnabled) {
+        val anyDiagnosticEnabled =
+            diagnosticEnabled || (applicationPointDiagnosticForDraw && d.m60F16BandMetadata != null)
+        val diagnosticBufferSize = if (applicationPointDiagnosticForDraw) {
+            M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_BUFFER_SIZE
+        } else {
+            M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE
+        }
+        val diagnosticStorage = if (anyDiagnosticEnabled) {
             context.device.createBuffer(
                 BufferDescriptor(
-                    size = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
+                    size = diagnosticBufferSize,
                     usage = GPUBufferUsage.Storage or GPUBufferUsage.CopySrc or GPUBufferUsage.CopyDst,
                     label = "SkWebGpuDevice.m60F16FragmentLaneDiagnostic.storage.diagnosticOnly",
                 ),
@@ -16340,10 +16583,10 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         } else {
             null
         }
-        val diagnosticStaging = if (diagnosticEnabled) {
+        val diagnosticStaging = if (anyDiagnosticEnabled) {
             context.device.createBuffer(
                 BufferDescriptor(
-                    size = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
+                    size = diagnosticBufferSize,
                     usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
                     label = "SkWebGpuDevice.m60F16FragmentLaneDiagnostic.staging.diagnosticOnly",
                 ),
@@ -16351,7 +16594,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         } else {
             null
         }
-        val diagnosticBindGroup = if (diagnosticEnabled) {
+        val diagnosticBindGroup = if (anyDiagnosticEnabled) {
             context.device.createBindGroup(
                 BindGroupDescriptor(
                     layout = m60F16FragmentLaneDiagnosticBindGroupLayout,
@@ -16388,6 +16631,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             m60F16FragmentLaneDiagnosticStorage = diagnosticStorage,
             m60F16FragmentLaneDiagnosticStaging = diagnosticStaging,
             m60F16FragmentLaneDiagnosticBindGroup = diagnosticBindGroup,
+            m60F16FragmentLaneDiagnosticBufferSize = diagnosticBufferSize,
         )
     }
 
@@ -17000,6 +17244,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         if (m60F16BoundedRuntimeCorrectionDiagnosticShaderLazy.isInitialized()) {
             m60F16BoundedRuntimeCorrectionDiagnosticShader.close()
         }
+        if (m60F16BoundedCorrectionApplicationPointDiagnosticShaderLazy.isInitialized()) {
+            m60F16BoundedCorrectionApplicationPointDiagnosticShader.close()
+        }
         intermediateView.close()
         intermediateTexture.close()
         depthStencilView.close()
@@ -17019,6 +17266,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             "diagnostic in-memory variant of shaders/aa_stencil_cover.wgsl"
         const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_LAYOUT: String =
             "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer"
+        const val M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_SHADER: String =
+            "diagnostic in-memory FOR-399 bounded correction application-point variant of shaders/aa_stencil_cover.wgsl"
         const val RAW_COLOR_SENTINEL_TEXEL_SAMPLE_LIMIT: Int = 16
         const val FOR258_SHADER_SIDE_PROBE_SAMPLE_STRIDE_BYTES: Int = 16
         const val FOR258_SHADER_SIDE_PROBE_SAMPLE_COUNT: UInt = 2u
@@ -17029,6 +17278,13 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_COUNT: Int = 8
         val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE: ULong =
             (M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_STRIDE_BYTES *
+                M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_COUNT).toULong()
+        const val M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_VEC4S_PER_SAMPLE: Int = 6
+        const val M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_SAMPLE_STRIDE_BYTES: Int =
+            M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_VEC4S_PER_SAMPLE *
+                M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_STRIDE_BYTES
+        val M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_BUFFER_SIZE: ULong =
+            (M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_SAMPLE_STRIDE_BYTES *
                 M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_COUNT).toULong()
         val OUTPUT_READBACK_SENTINEL_POINTS: List<Pair<Int, Int>> = listOf(
             0 to 0,
