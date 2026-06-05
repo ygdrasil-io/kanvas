@@ -1,0 +1,1614 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-390",
+  "sceneId": "m60-f16-full-scene-regression-discriminator-for390",
+  "sourceSceneId": "m60-f16-source-coverage-full-scene-candidate-for389",
+  "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-coverage-full-scene-candidate-for389/m60-f16-source-coverage-full-scene-candidate-for389.json",
+  "secondarySourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-composition-metadata-audit-for388/m60-f16-composition-metadata-audit-for388.json",
+  "adapter": "Apple M2 Max",
+  "producer": "scripts/validate_for390_m60_f16_full_scene_regression_discriminator.py",
+  "producerInput": "FOR-389 selected full-scene samples; FOR-388 best-candidate context",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-caracteriser-les-8-regressions-full-scene-apres-for-389",
+  "sourceFinding": "global/kanvas/findings/for-389-montre-que-le-candidat-source-couverture-m60-f16-regresse-en-full-scene",
+  "requiredFor389Decision": "M60_F16_SOURCE_COVERAGE_FULL_SCENE_CANDIDATE_EVALUATED",
+  "requiredFor389Classification": "full-scene-regresses",
+  "requiredFor388Decision": "M60_F16_COMPOSITION_METADATA_AUDIT_RECORDED",
+  "requiredFor388Classification": "usable-correction-candidate",
+  "decision": "M60_F16_FULL_SCENE_REGRESSION_DISCRIMINATOR_RECORDED",
+  "classification": "narrower-metadata-defendable",
+  "allowedClassifications": [
+    "narrower-metadata-defendable",
+    "narrower-metadata-still-regresses",
+    "metadata-insufficient"
+  ],
+  "auditDoesNotProduceCorrection": true,
+  "auditDoesNotApplyRendererChange": true,
+  "correctionAppliedByDefault": false,
+  "correctionPredicateEnabled": false,
+  "runtimeHookInstalled": false,
+  "sourceCandidate": {
+    "id": "source-color-and-oriented-coverage-lane",
+    "for389Classification": "full-scene-regresses",
+    "selectedPixels": 16,
+    "improvedPixels": 8,
+    "regressedPixels": 8,
+    "precision": 0.5,
+    "recall": 1.0
+  },
+  "metadataOnlySelectionPolicy": {
+    "forbiddenSelectionFields": [
+      "currentErrorByChannel",
+      "currentResidual",
+      "currentRgba",
+      "deltaVsCurrent",
+      "for389EvaluationResult",
+      "gainVsCurrent",
+      "membershipCategory",
+      "membershipReason",
+      "probeErrorByChannel",
+      "probeMinusCurrentErrorByChannel",
+      "probeMinusCurrentRgba",
+      "probeResidual",
+      "probeRgba",
+      "referenceRgba"
+    ],
+    "selectionMayUseSkiaReference": false,
+    "selectionMayUseProbeOutcome": false,
+    "selectionMayUseProbeResidual": false,
+    "selectionMayUseCurrentResidual": false,
+    "selectionMayUseDeltaVsCurrent": false,
+    "selectionMayUseFor388Truth": false,
+    "selectionMayUseFor389Truth": false,
+    "evaluationMayUseTruthAndResiduals": true
+  },
+  "selectedPixelSummary": {
+    "totalSelectedByFor389": 16,
+    "improved": 8,
+    "regressed": 8,
+    "selectedResidualBefore": 734,
+    "selectedResidualAfterFor389": 1109
+  },
+  "selectedPixelComparison": [
+    {
+      "x": 52,
+      "y": 50,
+      "kind": "regressed",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 4,
+      "bandLocalXBucket": "left-terminal-0-8",
+      "bandEdgeDistance": 4,
+      "bandEdgeDistanceBucket": "edge-0-4",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55,
+        "for389EvaluationResult": "regressed-if-corrected",
+        "membershipCategory": "coverage-composition-plausible"
+      }
+    },
+    {
+      "x": 51,
+      "y": 51,
+      "kind": "regressed",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 3,
+      "bandLocalXBucket": "left-terminal-0-8",
+      "bandEdgeDistance": 3,
+      "bandEdgeDistanceBucket": "edge-0-4",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55,
+        "for389EvaluationResult": "regressed-if-corrected",
+        "membershipCategory": "coverage-composition-plausible"
+      }
+    },
+    {
+      "x": 50,
+      "y": 52,
+      "kind": "regressed",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 2,
+      "bandLocalXBucket": "left-terminal-0-8",
+      "bandEdgeDistance": 2,
+      "bandEdgeDistanceBucket": "edge-0-4",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55,
+        "for389EvaluationResult": "regressed-if-corrected",
+        "membershipCategory": "coverage-composition-plausible"
+      }
+    },
+    {
+      "x": 49,
+      "y": 53,
+      "kind": "regressed",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 1,
+      "bandLocalXBucket": "left-terminal-0-8",
+      "bandEdgeDistance": 1,
+      "bandEdgeDistanceBucket": "edge-0-4",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55,
+        "for389EvaluationResult": "regressed-if-corrected",
+        "membershipCategory": "coverage-composition-plausible"
+      }
+    },
+    {
+      "x": 48,
+      "y": 54,
+      "kind": "regressed",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 0,
+      "bandLocalXBucket": "left-terminal-0-8",
+      "bandEdgeDistance": 0,
+      "bandEdgeDistanceBucket": "edge-0-4",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55,
+        "for389EvaluationResult": "regressed-if-corrected",
+        "membershipCategory": "coverage-composition-plausible"
+      }
+    },
+    {
+      "x": 93,
+      "y": 74,
+      "kind": "improved",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        96
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "west-terminal",
+      "coverageOrthogonalNeighborhood": {
+        "center": 96,
+        "north": 0,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 1,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 96,
+      "transparentSourceAlphaByte": 96,
+      "bandLocalX": 45,
+      "bandLocalXBucket": "right-terminal-39-45",
+      "bandEdgeDistance": 2,
+      "bandEdgeDistanceBucket": "edge-0-4",
+      "fringeTopology": "1-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 52,
+        "probeResidual": 45,
+        "deltaVsCurrent": -7,
+        "for389EvaluationResult": "source-local-useful",
+        "membershipCategory": "source-locale-plausible"
+      }
+    },
+    {
+      "x": 92,
+      "y": 75,
+      "kind": "improved",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 44,
+      "bandLocalXBucket": "right-terminal-39-45",
+      "bandEdgeDistance": 3,
+      "bandEdgeDistanceBucket": "edge-0-4",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9,
+        "for389EvaluationResult": "source-local-useful",
+        "membershipCategory": "source-locale-plausible"
+      }
+    },
+    {
+      "x": 91,
+      "y": 76,
+      "kind": "improved",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 43,
+      "bandLocalXBucket": "right-terminal-39-45",
+      "bandEdgeDistance": 4,
+      "bandEdgeDistanceBucket": "edge-0-4",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9,
+        "for389EvaluationResult": "source-local-useful",
+        "membershipCategory": "source-locale-plausible"
+      }
+    },
+    {
+      "x": 17,
+      "y": 77,
+      "kind": "improved",
+      "strokeBand": "butt-bevel",
+      "cap": "butt",
+      "join": "bevel",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-east-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 0,
+        "east": 255,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 17,
+      "bandLocalXBucket": "source-adjacent-9-20",
+      "bandEdgeDistance": 17,
+      "bandEdgeDistanceBucket": "edge-9-17",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 52,
+        "probeResidual": 48,
+        "deltaVsCurrent": -4,
+        "for389EvaluationResult": "source-local-useful",
+        "membershipCategory": "source-locale-plausible"
+      }
+    },
+    {
+      "x": 90,
+      "y": 77,
+      "kind": "improved",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 42,
+      "bandLocalXBucket": "right-terminal-39-45",
+      "bandEdgeDistance": 5,
+      "bandEdgeDistanceBucket": "edge-5-8",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9,
+        "for389EvaluationResult": "source-local-useful",
+        "membershipCategory": "source-locale-plausible"
+      }
+    },
+    {
+      "x": 18,
+      "y": 78,
+      "kind": "regressed",
+      "strokeBand": "butt-bevel",
+      "cap": "butt",
+      "join": "bevel",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-east-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 0,
+        "east": 255,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 18,
+      "bandLocalXBucket": "source-adjacent-9-20",
+      "bandEdgeDistance": 18,
+      "bandEdgeDistanceBucket": "edge-18-20",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55,
+        "for389EvaluationResult": "regressed-if-corrected",
+        "membershipCategory": "coverage-composition-plausible"
+      }
+    },
+    {
+      "x": 89,
+      "y": 78,
+      "kind": "improved",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 41,
+      "bandLocalXBucket": "right-terminal-39-45",
+      "bandEdgeDistance": 6,
+      "bandEdgeDistanceBucket": "edge-5-8",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9,
+        "for389EvaluationResult": "source-local-useful",
+        "membershipCategory": "source-locale-plausible"
+      }
+    },
+    {
+      "x": 19,
+      "y": 79,
+      "kind": "regressed",
+      "strokeBand": "butt-bevel",
+      "cap": "butt",
+      "join": "bevel",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-east-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 0,
+        "east": 255,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 19,
+      "bandLocalXBucket": "source-adjacent-9-20",
+      "bandEdgeDistance": 19,
+      "bandEdgeDistanceBucket": "edge-18-20",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55,
+        "for389EvaluationResult": "regressed-if-corrected",
+        "membershipCategory": "coverage-composition-plausible"
+      }
+    },
+    {
+      "x": 88,
+      "y": 79,
+      "kind": "improved",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 40,
+      "bandLocalXBucket": "right-terminal-39-45",
+      "bandEdgeDistance": 7,
+      "bandEdgeDistanceBucket": "edge-5-8",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9,
+        "for389EvaluationResult": "source-local-useful",
+        "membershipCategory": "source-locale-plausible"
+      }
+    },
+    {
+      "x": 20,
+      "y": 80,
+      "kind": "regressed",
+      "strokeBand": "butt-bevel",
+      "cap": "butt",
+      "join": "bevel",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-east-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 0,
+        "east": 255,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 20,
+      "bandLocalXBucket": "source-adjacent-9-20",
+      "bandEdgeDistance": 20,
+      "bandEdgeDistanceBucket": "edge-18-20",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55,
+        "for389EvaluationResult": "regressed-if-corrected",
+        "membershipCategory": "coverage-composition-plausible"
+      }
+    },
+    {
+      "x": 87,
+      "y": 80,
+      "kind": "improved",
+      "strokeBand": "round-round",
+      "cap": "round",
+      "join": "round",
+      "transparentSourceRgba": [
+        59,
+        86,
+        190,
+        160
+      ],
+      "transparentSourceColorFamily": "blue-dominant-source",
+      "orientedCoverageSide": "north-west-solid",
+      "coverageOrthogonalNeighborhood": {
+        "center": 160,
+        "north": 255,
+        "south": 0,
+        "west": 255,
+        "east": 0,
+        "min": 0,
+        "max": 255,
+        "orthogonalNonZeroCount": 2,
+        "orthogonalPartialCount": 0
+      },
+      "coverageAlphaByte": 160,
+      "transparentSourceAlphaByte": 160,
+      "bandLocalX": 39,
+      "bandLocalXBucket": "right-terminal-39-45",
+      "bandEdgeDistance": 8,
+      "bandEdgeDistanceBucket": "edge-5-8",
+      "fringeTopology": "2-solid-orthogonal-neighbors",
+      "sourceCoverageRelation": "coverage-equals-transparent-source-alpha",
+      "evaluationOnly": {
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9,
+        "for389EvaluationResult": "source-local-useful",
+        "membershipCategory": "source-locale-plausible"
+      }
+    }
+  ],
+  "regressionMetadataGroups": [
+    {
+      "field": "transparentSourceRgba",
+      "description": "transparent source RGBA",
+      "groups": [
+        {
+          "value": "rgba(59,86,190,160)",
+          "count": 8
+        }
+      ]
+    },
+    {
+      "field": "transparentSourceColorFamily",
+      "description": "source color family",
+      "groups": [
+        {
+          "value": "blue-dominant-source",
+          "count": 8
+        }
+      ]
+    },
+    {
+      "field": "orientedCoverageSide",
+      "description": "oriented coverage side",
+      "groups": [
+        {
+          "value": "north-east-solid",
+          "count": 3
+        },
+        {
+          "value": "north-west-solid",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "field": "coverageOrthogonalNeighborhood",
+      "description": "orthogonal coverage neighborhood",
+      "groups": [
+        {
+          "value": "north=255,south=0,west=0,east=255",
+          "count": 3
+        },
+        {
+          "value": "north=255,south=0,west=255,east=0",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "field": "coverageAlphaByte",
+      "description": "coverage alpha",
+      "groups": [
+        {
+          "value": "160",
+          "count": 8
+        }
+      ]
+    },
+    {
+      "field": "transparentSourceAlphaByte",
+      "description": "transparent source alpha",
+      "groups": [
+        {
+          "value": "160",
+          "count": 8
+        }
+      ]
+    },
+    {
+      "field": "strokeBand",
+      "description": "stroke band",
+      "groups": [
+        {
+          "value": "butt-bevel",
+          "count": 3
+        },
+        {
+          "value": "round-round",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "field": "capJoin",
+      "description": "cap/join",
+      "groups": [
+        {
+          "value": "butt-bevel",
+          "count": 3
+        },
+        {
+          "value": "round-round",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "field": "bandLocalXBucket",
+      "description": "band local X bucket",
+      "groups": [
+        {
+          "value": "left-terminal-0-8",
+          "count": 5
+        },
+        {
+          "value": "source-adjacent-9-20",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "field": "bandEdgeDistanceBucket",
+      "description": "distance to local band edge",
+      "groups": [
+        {
+          "value": "edge-0-4",
+          "count": 5
+        },
+        {
+          "value": "edge-18-20",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "field": "fringeTopology",
+      "description": "fringe topology",
+      "groups": [
+        {
+          "value": "2-solid-orthogonal-neighbors",
+          "count": 8
+        }
+      ]
+    },
+    {
+      "field": "sourceCoverageRelation",
+      "description": "source/coverage relation",
+      "groups": [
+        {
+          "value": "coverage-equals-transparent-source-alpha",
+          "count": 8
+        }
+      ]
+    }
+  ],
+  "discriminatorCandidates": [
+    {
+      "id": "for389-source-color-and-oriented-coverage-lane",
+      "description": "Baseline FOR-389 source-color plus oriented coverage lane.",
+      "signalFamily": "source-color-plus-oriented-coverage",
+      "selectionMethod": "(round-round && blue source && orientedCoverageSide in {west-terminal,north-west-solid}) || (butt-bevel && blue source && orientedCoverageSide == north-east-solid && coverageAlphaByte >= 160)",
+      "scope": "FOR-389-selected-pixels",
+      "refinesCandidateId": "source-color-and-oriented-coverage-lane",
+      "inheritedSelectionFields": [
+        "strokeBand",
+        "transparentSourceColorFamily",
+        "orientedCoverageSide",
+        "coverageAlphaByte"
+      ],
+      "selectionFields": [
+        "strokeBand",
+        "transparentSourceColorFamily",
+        "orientedCoverageSide",
+        "coverageAlphaByte"
+      ],
+      "forbiddenSelectionFields": [],
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor388TruthAsSelection": false,
+      "usesFor389TruthAsSelection": false,
+      "selectedPixels": 16,
+      "improvedPixelsRecovered": 8,
+      "improvedTruth": 8,
+      "regressionsIncluded": 8,
+      "unchangedIncluded": 0,
+      "precision": 0.5,
+      "recall": 1.0,
+      "candidateClass": "narrower-metadata-still-regresses",
+      "selectedResidualIfApplied": {
+        "count": 16,
+        "beforeResidual": 734,
+        "afterResidual": 1109,
+        "deltaVsCurrent": 375,
+        "gainVsCurrent": -375
+      },
+      "estimatedFullSceneResidualIfAppliedToThisSubset": {
+        "baseUncorrectedFullSceneResidual": 2014,
+        "simulatedAfterResidual": 2389,
+        "deltaVsCurrent": 375,
+        "gainVsCurrent": -375
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 52,
+          "y": 50
+        },
+        {
+          "x": 51,
+          "y": 51
+        },
+        {
+          "x": 50,
+          "y": 52
+        },
+        {
+          "x": 49,
+          "y": 53
+        },
+        {
+          "x": 48,
+          "y": 54
+        },
+        {
+          "x": 93,
+          "y": 74
+        },
+        {
+          "x": 92,
+          "y": 75
+        },
+        {
+          "x": 91,
+          "y": 76
+        },
+        {
+          "x": 17,
+          "y": 77
+        },
+        {
+          "x": 90,
+          "y": 77
+        },
+        {
+          "x": 18,
+          "y": 78
+        },
+        {
+          "x": 89,
+          "y": 78
+        },
+        {
+          "x": 19,
+          "y": 79
+        },
+        {
+          "x": 88,
+          "y": 79
+        },
+        {
+          "x": 20,
+          "y": 80
+        },
+        {
+          "x": 87,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "alpha-96-terminal-only",
+      "description": "Keeps the lone 96-alpha west terminal selected by FOR-389.",
+      "signalFamily": "coverage-alpha-plus-orientation",
+      "selectionMethod": "coverageAlphaByte == 96 && orientedCoverageSide == west-terminal",
+      "scope": "FOR-389-selected-pixels",
+      "refinesCandidateId": "source-color-and-oriented-coverage-lane",
+      "inheritedSelectionFields": [
+        "strokeBand",
+        "transparentSourceColorFamily",
+        "orientedCoverageSide",
+        "coverageAlphaByte"
+      ],
+      "selectionFields": [
+        "coverageAlphaByte",
+        "orientedCoverageSide"
+      ],
+      "forbiddenSelectionFields": [],
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor388TruthAsSelection": false,
+      "usesFor389TruthAsSelection": false,
+      "selectedPixels": 1,
+      "improvedPixelsRecovered": 1,
+      "improvedTruth": 8,
+      "regressionsIncluded": 0,
+      "unchangedIncluded": 0,
+      "precision": 1.0,
+      "recall": 0.125,
+      "candidateClass": "metadata-insufficient",
+      "selectedResidualIfApplied": {
+        "count": 1,
+        "beforeResidual": 52,
+        "afterResidual": 45,
+        "deltaVsCurrent": -7,
+        "gainVsCurrent": 7
+      },
+      "estimatedFullSceneResidualIfAppliedToThisSubset": {
+        "baseUncorrectedFullSceneResidual": 2014,
+        "simulatedAfterResidual": 2007,
+        "deltaVsCurrent": -7,
+        "gainVsCurrent": 7
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 93,
+          "y": 74
+        }
+      ]
+    },
+    {
+      "id": "band-local-x-ge-17",
+      "description": "Tests whether the useful pixels sit away from the zero-local-x terminal.",
+      "signalFamily": "band-local-position",
+      "selectionMethod": "bandLocalX >= 17",
+      "scope": "FOR-389-selected-pixels",
+      "refinesCandidateId": "source-color-and-oriented-coverage-lane",
+      "inheritedSelectionFields": [
+        "strokeBand",
+        "transparentSourceColorFamily",
+        "orientedCoverageSide",
+        "coverageAlphaByte"
+      ],
+      "selectionFields": [
+        "bandLocalX"
+      ],
+      "forbiddenSelectionFields": [],
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor388TruthAsSelection": false,
+      "usesFor389TruthAsSelection": false,
+      "selectedPixels": 11,
+      "improvedPixelsRecovered": 8,
+      "improvedTruth": 8,
+      "regressionsIncluded": 3,
+      "unchangedIncluded": 0,
+      "precision": 0.7273,
+      "recall": 1.0,
+      "candidateClass": "narrower-metadata-still-regresses",
+      "selectedResidualIfApplied": {
+        "count": 11,
+        "beforeResidual": 734,
+        "afterResidual": 834,
+        "deltaVsCurrent": 100,
+        "gainVsCurrent": -100
+      },
+      "estimatedFullSceneResidualIfAppliedToThisSubset": {
+        "baseUncorrectedFullSceneResidual": 2014,
+        "simulatedAfterResidual": 2114,
+        "deltaVsCurrent": 100,
+        "gainVsCurrent": -100
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 93,
+          "y": 74
+        },
+        {
+          "x": 92,
+          "y": 75
+        },
+        {
+          "x": 91,
+          "y": 76
+        },
+        {
+          "x": 17,
+          "y": 77
+        },
+        {
+          "x": 90,
+          "y": 77
+        },
+        {
+          "x": 18,
+          "y": 78
+        },
+        {
+          "x": 89,
+          "y": 78
+        },
+        {
+          "x": 19,
+          "y": 79
+        },
+        {
+          "x": 88,
+          "y": 79
+        },
+        {
+          "x": 20,
+          "y": 80
+        },
+        {
+          "x": 87,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "round-right-terminal-only",
+      "description": "Keeps only the round/round right-terminal lane.",
+      "signalFamily": "stroke-band-plus-band-local-position",
+      "selectionMethod": "strokeBand == round-round && bandLocalX >= 39",
+      "scope": "FOR-389-selected-pixels",
+      "refinesCandidateId": "source-color-and-oriented-coverage-lane",
+      "inheritedSelectionFields": [
+        "strokeBand",
+        "transparentSourceColorFamily",
+        "orientedCoverageSide",
+        "coverageAlphaByte"
+      ],
+      "selectionFields": [
+        "strokeBand",
+        "bandLocalX"
+      ],
+      "forbiddenSelectionFields": [],
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor388TruthAsSelection": false,
+      "usesFor389TruthAsSelection": false,
+      "selectedPixels": 7,
+      "improvedPixelsRecovered": 7,
+      "improvedTruth": 8,
+      "regressionsIncluded": 0,
+      "unchangedIncluded": 0,
+      "precision": 1.0,
+      "recall": 0.875,
+      "candidateClass": "metadata-insufficient",
+      "selectedResidualIfApplied": {
+        "count": 7,
+        "beforeResidual": 682,
+        "afterResidual": 621,
+        "deltaVsCurrent": -61,
+        "gainVsCurrent": 61
+      },
+      "estimatedFullSceneResidualIfAppliedToThisSubset": {
+        "baseUncorrectedFullSceneResidual": 2014,
+        "simulatedAfterResidual": 1953,
+        "deltaVsCurrent": -61,
+        "gainVsCurrent": 61
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 93,
+          "y": 74
+        },
+        {
+          "x": 92,
+          "y": 75
+        },
+        {
+          "x": 91,
+          "y": 76
+        },
+        {
+          "x": 90,
+          "y": 77
+        },
+        {
+          "x": 89,
+          "y": 78
+        },
+        {
+          "x": 88,
+          "y": 79
+        },
+        {
+          "x": 87,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "exclude-round-left-terminal",
+      "description": "Drops the round/round left-terminal band positions that dominate regressions.",
+      "signalFamily": "stroke-band-plus-band-local-position",
+      "selectionMethod": "!(strokeBand == round-round && bandLocalX <= 8)",
+      "scope": "FOR-389-selected-pixels",
+      "refinesCandidateId": "source-color-and-oriented-coverage-lane",
+      "inheritedSelectionFields": [
+        "strokeBand",
+        "transparentSourceColorFamily",
+        "orientedCoverageSide",
+        "coverageAlphaByte"
+      ],
+      "selectionFields": [
+        "strokeBand",
+        "bandLocalX"
+      ],
+      "forbiddenSelectionFields": [],
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor388TruthAsSelection": false,
+      "usesFor389TruthAsSelection": false,
+      "selectedPixels": 11,
+      "improvedPixelsRecovered": 8,
+      "improvedTruth": 8,
+      "regressionsIncluded": 3,
+      "unchangedIncluded": 0,
+      "precision": 0.7273,
+      "recall": 1.0,
+      "candidateClass": "narrower-metadata-still-regresses",
+      "selectedResidualIfApplied": {
+        "count": 11,
+        "beforeResidual": 734,
+        "afterResidual": 834,
+        "deltaVsCurrent": 100,
+        "gainVsCurrent": -100
+      },
+      "estimatedFullSceneResidualIfAppliedToThisSubset": {
+        "baseUncorrectedFullSceneResidual": 2014,
+        "simulatedAfterResidual": 2114,
+        "deltaVsCurrent": 100,
+        "gainVsCurrent": -100
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 93,
+          "y": 74
+        },
+        {
+          "x": 92,
+          "y": 75
+        },
+        {
+          "x": 91,
+          "y": 76
+        },
+        {
+          "x": 17,
+          "y": 77
+        },
+        {
+          "x": 90,
+          "y": 77
+        },
+        {
+          "x": 18,
+          "y": 78
+        },
+        {
+          "x": 89,
+          "y": 78
+        },
+        {
+          "x": 19,
+          "y": 79
+        },
+        {
+          "x": 88,
+          "y": 79
+        },
+        {
+          "x": 20,
+          "y": 80
+        },
+        {
+          "x": 87,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "source-facing-local-band-lane",
+      "description": "Keeps the source-facing local lane: round/round right terminal plus the butt/bevel source-side corner.",
+      "signalFamily": "stroke-band-plus-source-facing-band-local-position",
+      "selectionMethod": "(strokeBand == round-round && bandLocalX >= 39) || (strokeBand == butt-bevel && bandLocalX <= 17)",
+      "scope": "FOR-389-selected-pixels",
+      "refinesCandidateId": "source-color-and-oriented-coverage-lane",
+      "inheritedSelectionFields": [
+        "strokeBand",
+        "transparentSourceColorFamily",
+        "orientedCoverageSide",
+        "coverageAlphaByte"
+      ],
+      "selectionFields": [
+        "strokeBand",
+        "bandLocalX"
+      ],
+      "forbiddenSelectionFields": [],
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor388TruthAsSelection": false,
+      "usesFor389TruthAsSelection": false,
+      "selectedPixels": 8,
+      "improvedPixelsRecovered": 8,
+      "improvedTruth": 8,
+      "regressionsIncluded": 0,
+      "unchangedIncluded": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "candidateClass": "narrower-metadata-defendable",
+      "selectedResidualIfApplied": {
+        "count": 8,
+        "beforeResidual": 734,
+        "afterResidual": 669,
+        "deltaVsCurrent": -65,
+        "gainVsCurrent": 65
+      },
+      "estimatedFullSceneResidualIfAppliedToThisSubset": {
+        "baseUncorrectedFullSceneResidual": 2014,
+        "simulatedAfterResidual": 1949,
+        "deltaVsCurrent": -65,
+        "gainVsCurrent": 65
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 93,
+          "y": 74
+        },
+        {
+          "x": 92,
+          "y": 75
+        },
+        {
+          "x": 91,
+          "y": 76
+        },
+        {
+          "x": 17,
+          "y": 77
+        },
+        {
+          "x": 90,
+          "y": 77
+        },
+        {
+          "x": 89,
+          "y": 78
+        },
+        {
+          "x": 88,
+          "y": 79
+        },
+        {
+          "x": 87,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "source-facing-local-band-lane-with-orientation",
+      "description": "Same local-lane split as the best candidate, with explicit oriented coverage side retained from FOR-389.",
+      "signalFamily": "stroke-band-plus-position-plus-oriented-coverage",
+      "selectionMethod": "(round-round && bandLocalX >= 39 && orientedCoverageSide in {west-terminal,north-west-solid}) || (butt-bevel && bandLocalX <= 17 && orientedCoverageSide == north-east-solid)",
+      "scope": "FOR-389-selected-pixels",
+      "refinesCandidateId": "source-color-and-oriented-coverage-lane",
+      "inheritedSelectionFields": [
+        "strokeBand",
+        "transparentSourceColorFamily",
+        "orientedCoverageSide",
+        "coverageAlphaByte"
+      ],
+      "selectionFields": [
+        "strokeBand",
+        "bandLocalX",
+        "orientedCoverageSide"
+      ],
+      "forbiddenSelectionFields": [],
+      "usesSkiaReferenceForSelection": false,
+      "usesProbeOutcomeForSelection": false,
+      "usesProbeResidualForSelection": false,
+      "usesDeltaVsCurrentForSelection": false,
+      "usesCurrentResidualForSelection": false,
+      "usesFor388TruthAsSelection": false,
+      "usesFor389TruthAsSelection": false,
+      "selectedPixels": 8,
+      "improvedPixelsRecovered": 8,
+      "improvedTruth": 8,
+      "regressionsIncluded": 0,
+      "unchangedIncluded": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "candidateClass": "narrower-metadata-defendable",
+      "selectedResidualIfApplied": {
+        "count": 8,
+        "beforeResidual": 734,
+        "afterResidual": 669,
+        "deltaVsCurrent": -65,
+        "gainVsCurrent": 65
+      },
+      "estimatedFullSceneResidualIfAppliedToThisSubset": {
+        "baseUncorrectedFullSceneResidual": 2014,
+        "simulatedAfterResidual": 1949,
+        "deltaVsCurrent": -65,
+        "gainVsCurrent": 65
+      },
+      "selectedPixelCoordinates": [
+        {
+          "x": 93,
+          "y": 74
+        },
+        {
+          "x": 92,
+          "y": 75
+        },
+        {
+          "x": 91,
+          "y": 76
+        },
+        {
+          "x": 17,
+          "y": 77
+        },
+        {
+          "x": 90,
+          "y": 77
+        },
+        {
+          "x": 89,
+          "y": 78
+        },
+        {
+          "x": 88,
+          "y": 79
+        },
+        {
+          "x": 87,
+          "y": 80
+        }
+      ]
+    }
+  ],
+  "bestDiscriminator": {
+    "id": "source-facing-local-band-lane",
+    "description": "Keeps the source-facing local lane: round/round right terminal plus the butt/bevel source-side corner.",
+    "signalFamily": "stroke-band-plus-source-facing-band-local-position",
+    "selectionMethod": "(strokeBand == round-round && bandLocalX >= 39) || (strokeBand == butt-bevel && bandLocalX <= 17)",
+    "scope": "FOR-389-selected-pixels",
+    "refinesCandidateId": "source-color-and-oriented-coverage-lane",
+    "inheritedSelectionFields": [
+      "strokeBand",
+      "transparentSourceColorFamily",
+      "orientedCoverageSide",
+      "coverageAlphaByte"
+    ],
+    "selectionFields": [
+      "strokeBand",
+      "bandLocalX"
+    ],
+    "forbiddenSelectionFields": [],
+    "usesSkiaReferenceForSelection": false,
+    "usesProbeOutcomeForSelection": false,
+    "usesProbeResidualForSelection": false,
+    "usesDeltaVsCurrentForSelection": false,
+    "usesCurrentResidualForSelection": false,
+    "usesFor388TruthAsSelection": false,
+    "usesFor389TruthAsSelection": false,
+    "selectedPixels": 8,
+    "improvedPixelsRecovered": 8,
+    "improvedTruth": 8,
+    "regressionsIncluded": 0,
+    "unchangedIncluded": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "candidateClass": "narrower-metadata-defendable",
+    "selectedResidualIfApplied": {
+      "count": 8,
+      "beforeResidual": 734,
+      "afterResidual": 669,
+      "deltaVsCurrent": -65,
+      "gainVsCurrent": 65
+    },
+    "estimatedFullSceneResidualIfAppliedToThisSubset": {
+      "baseUncorrectedFullSceneResidual": 2014,
+      "simulatedAfterResidual": 1949,
+      "deltaVsCurrent": -65,
+      "gainVsCurrent": 65
+    },
+    "selectedPixelCoordinates": [
+      {
+        "x": 93,
+        "y": 74
+      },
+      {
+        "x": 92,
+        "y": 75
+      },
+      {
+        "x": 91,
+        "y": 76
+      },
+      {
+        "x": 17,
+        "y": 77
+      },
+      {
+        "x": 90,
+        "y": 77
+      },
+      {
+        "x": 89,
+        "y": 78
+      },
+      {
+        "x": 88,
+        "y": 79
+      },
+      {
+        "x": 87,
+        "y": 80
+      }
+    ]
+  },
+  "classificationReason": "Inside the FOR-389 selected population, existing metadata includes a narrower source-facing local band lane that recovers all 8 FOR-389 improved pixels while selecting 0 of the 8 FOR-389 regressions. It is diagnostic-only and must be captured/named as renderer-owned metadata before any activation.",
+  "nextMove": "Do not activate the correction in FOR-390. A follow-up ticket may capture a stable renderer-owned source-facing local lane signal and re-evaluate it on the full M60 F16 scene before wiring a runtime predicate.",
+  "nonGoalsPreserved": {
+    "rendererBehaviorChanged": false,
+    "runtimeBehaviorChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryProductionChanged": false,
+    "coverageProductionChanged": false,
+    "fallbackChanged": false,
+    "scoreChanged": false,
+    "thresholdChanged": false,
+    "promotionChanged": false,
+    "correctionEnabled": false,
+    "probeEnabledByDefault": false
+  },
+  "validationCommands": [
+    "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+    "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+    "rtk python3 scripts/validate_for390_m60_f16_full_scene_regression_discriminator.py",
+    "rtk python3 scripts/validate_for389_m60_f16_source_coverage_full_scene_candidate.py",
+    "rtk python3 scripts/validate_for388_m60_f16_composition_metadata_audit.py",
+    "rtk python3 scripts/validate_for387_m60_f16_residual_fringe_discriminator_audit.py",
+    "rtk python3 scripts/validate_for386_m60_f16_coverage_regression_discriminator_audit.py",
+    "rtk python3 scripts/validate_for385_m60_f16_generalized_coverage_metadata_predicate_audit.py",
+    "rtk python3 scripts/validate_for384_m60_f16_pre_correction_geometry_coverage_metadata_audit.py",
+    "rtk python3 scripts/validate_for383_m60_f16_pre_probe_predicate_audit.py",
+    "rtk python3 scripts/validate_for382_m60_f16_coverage_composition_membership_audit.py",
+    "rtk python3 scripts/validate_for381_m60_f16_source_color_subzone_audit.py",
+    "rtk python3 scripts/validate_for380_m60_f16_source_color_correction_probe.py",
+    "rtk python3 scripts/validate_for379_m60_f16_effective_source_color_path.py",
+    "rtk python3 scripts/validate_for378_m60_f16_direct_source_color_evidence.py",
+    "rtk python3 scripts/validate_for377_m60_f16_linear_srgb_plausibility_audit.py",
+    "rtk python3 scripts/validate_for376_m60_f16_composition_quantization_candidate.py",
+    "rtk python3 scripts/validate_for375_m60_f16_effective_destination_candidate.py",
+    "rtk python3 scripts/validate_for374_m60_f16_candidate_regression_audit.py",
+    "rtk python3 scripts/validate_for373_m60_f16_candidate_policy_rgba_probe.py",
+    "rtk python3 scripts/validate_for372_m60_f16_effective_coverage_export.py",
+    "rtk python3 scripts/validate_for371_m60_f16_effective_coverage_access_audit.py",
+    "rtk python3 scripts/validate_for370_m60_f16_source_paint_capture_extension.py",
+    "rtk python3 scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+    "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+    "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+    "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+    "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk git diff --check"
+  ]
+}
