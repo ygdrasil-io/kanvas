@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-392",
+  "sceneId": "m60-f16-source-facing-lane-runtime-opt-in-for392",
+  "sourceSceneId": "m60-f16-source-facing-lane-metadata-for391",
+  "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-facing-lane-metadata-for391/m60-f16-source-facing-lane-metadata-for391.json",
+  "secondarySourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-coverage-full-scene-candidate-for389/m60-f16-source-coverage-full-scene-candidate-for389.json",
+  "broadProbeSourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-color-correction-probe-for380/m60-f16-source-color-correction-probe-for380.json",
+  "adapter": "Apple M2 Max",
+  "producer": "scripts/validate_for392_m60_f16_source_facing_lane_runtime_opt_in.py",
+  "producerInput": "FOR-391 metadata artifact plus FOR-389/FOR-380 runtime-risk evidence",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-evaluer-predicate-runtime-opt-in-source-facing-local-band-lane-apres-for-391",
+  "sourceFinding": "global/kanvas/findings/for-391-enregistre-source-facing-local-band-lane-comme-metadata-diagnostique-stable-m60-f16",
+  "requiredFor391Decision": "M60_F16_SOURCE_FACING_LOCAL_BAND_LANE_METADATA_RECORDED",
+  "requiredFor391Classification": "source-facing-local-band-lane-stable-diagnostic-only",
+  "requiredFor389Decision": "M60_F16_SOURCE_COVERAGE_FULL_SCENE_CANDIDATE_EVALUATED",
+  "requiredFor389Classification": "full-scene-regresses",
+  "requiredFor380Decision": "M60_F16_SOURCE_COLOR_CORRECTION_PROBE_RECORDED",
+  "requiredFor380Classification": "regression-detected",
+  "decision": "M60_F16_SOURCE_FACING_LANE_RUNTIME_OPT_IN_EVALUATED",
+  "classification": "runtime-hook-refused-missing-per-fragment-lane-metadata",
+  "allowedClassifications": [
+    "runtime-candidate-defendable-opt-in-only",
+    "runtime-candidate-non-activable-regresses",
+    "runtime-hook-refused-missing-per-fragment-lane-metadata"
+  ],
+  "candidateOnly": true,
+  "promoted": false,
+  "limitedTo": "M60 F16 bounded stroke cap/join scene only",
+  "supportClaim": false,
+  "correctionAppliedByDefault": false,
+  "correctionPredicateEnabledByDefault": false,
+  "defaultBehaviorChanged": false,
+  "rendererBehaviorChangedByDefault": false,
+  "wgslChanged": false,
+  "fallbackChanged": false,
+  "explicitOptInGuard": {
+    "guardId": "kanvas.webgpu.m60F16SourceFacingLaneRuntimeCandidate.enabled",
+    "enabledByDefault": false,
+    "recognizedByRenderer": true,
+    "requestedStateEvaluation": "stable-refusal",
+    "runtimeHookInstalled": false,
+    "correctionAllowedWhenEnabled": false,
+    "oldDrawWideProbeGuard": "kanvas.webgpu.m60F16SourceColorCorrectionProbe.enabled",
+    "oldDrawWideProbeBlockedWhenFor392GuardRequested": true,
+    "reason": "m60-f16-source-facing-lane-missing-per-fragment-runtime-metadata"
+  },
+  "defaultGuardOffProof": {
+    "currentBehaviorSource": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-coverage-full-scene-candidate-for389/m60-f16-source-coverage-full-scene-candidate-for389.json",
+    "baseUncorrectedFullSceneResidual": 2014,
+    "unchangedResidualWithGuardDisabled": 2014,
+    "baseUncorrectedMismatchPixels": 1004,
+    "uncorrectedSimilarity": 95.91,
+    "guardDisabledMatchesCurrentCounters": true,
+    "normalRouteRemainsRefused": true,
+    "fallbackReasonStable": "coverage.stroke-cap-join-visual-parity-below-threshold"
+  },
+  "candidatePredicate": {
+    "id": "source-facing-local-band-lane",
+    "metadataName": "sourceFacingLocalBandLane",
+    "selectionMethod": "sourceFacingLocalBandLane == true",
+    "derivationFormula": "(strokeBand == round-round && bandLocalX >= 39) || (strokeBand == butt-bevel && bandLocalX <= 17)",
+    "scope": "FOR-391/FOR-389 selected M60 F16 pixels",
+    "selectedPixels": 8,
+    "sameEightPixelsAsFor391": true,
+    "improvedPixelsRecovered": 8,
+    "improvedTruth": 8,
+    "regressionsIncluded": 0,
+    "unchangedIncluded": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "selectedResidualIfApplied": {
+      "count": 8,
+      "beforeResidual": 734,
+      "afterResidual": 669,
+      "deltaVsCurrent": -65,
+      "gainVsCurrent": 65
+    },
+    "idealSimulatedFullSceneImpactIfLaneRuntimeWereAvailable": {
+      "baseUncorrectedFullSceneResidual": 2014,
+      "simulatedAfterResidual": 1949,
+      "deltaVsCurrent": -65,
+      "gainVsCurrent": 65
+    },
+    "selectedPixelCoordinates": [
+      {
+        "x": 93,
+        "y": 74
+      },
+      {
+        "x": 92,
+        "y": 75
+      },
+      {
+        "x": 91,
+        "y": 76
+      },
+      {
+        "x": 17,
+        "y": 77
+      },
+      {
+        "x": 90,
+        "y": 77
+      },
+      {
+        "x": 89,
+        "y": 78
+      },
+      {
+        "x": 88,
+        "y": 79
+      },
+      {
+        "x": 87,
+        "y": 80
+      }
+    ]
+  },
+  "guardEnabledEvaluation": {
+    "mode": "requested-but-refused",
+    "runtimeCorrectionApplied": false,
+    "runtimeHookInstalled": false,
+    "residualWithGuardEnabled": 2014,
+    "residualDeltaWithGuardEnabled": 0,
+    "reason": "m60-f16-source-facing-lane-missing-per-fragment-runtime-metadata",
+    "candidateIdealResidualNotApplied": 1949,
+    "candidateIdealGainNotApplied": 65,
+    "driftFromFor391SelectedPixels": 0,
+    "includedRegressions": 0
+  },
+  "runtimeSafetyAudit": {
+    "perFragmentLaneMetadataAvailableInShader": false,
+    "drawWideCorrectionProbeAlreadyExists": true,
+    "drawWideCorrectionProbeKnownToRegress": true,
+    "drawWideCandidateResidual": 2389,
+    "drawWideCandidateDeltaVsCurrent": 375,
+    "fullProbeMismatchPixels": 3181,
+    "fullProbeSimilarity": 87.06,
+    "refuseBroadProbeAsImplementationOfLanePredicate": true,
+    "rendererGuard": {
+      "rendererSource": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+      "shaderSource": "gpu-raster/src/main/resources/shaders/aa_stencil_cover.wgsl",
+      "guardRecognizedByRenderer": true,
+      "enabledByDefault": false,
+      "runtimeHookInstalled": false,
+      "oldDrawWideProbeBlockedWhenFor392GuardRequested": true,
+      "refusalReason": "m60-f16-source-facing-lane-missing-per-fragment-runtime-metadata",
+      "missingRuntimeMetadata": [
+        "sourceFacingLocalBandLane",
+        "strokeBand",
+        "bandLocalX"
+      ],
+      "availableShaderControl": "draw-wide targetColorSpaceBlend flag only"
+    }
+  },
+  "candidatePixels": [
+    {
+      "x": 93,
+      "y": 74,
+      "sourceFacingLocalBandLane": true,
+      "reason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 45
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 52,
+        "probeResidual": 45,
+        "deltaVsCurrent": -7
+      }
+    },
+    {
+      "x": 92,
+      "y": 75,
+      "sourceFacingLocalBandLane": true,
+      "reason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 44
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    },
+    {
+      "x": 91,
+      "y": 76,
+      "sourceFacingLocalBandLane": true,
+      "reason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 43
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    },
+    {
+      "x": 17,
+      "y": 77,
+      "sourceFacingLocalBandLane": true,
+      "reason": "butt-bevel-source-side-bandLocalX-le-17",
+      "derivationInputs": {
+        "strokeBand": "butt-bevel",
+        "bandLocalX": 17
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 52,
+        "probeResidual": 48,
+        "deltaVsCurrent": -4
+      }
+    },
+    {
+      "x": 90,
+      "y": 77,
+      "sourceFacingLocalBandLane": true,
+      "reason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 42
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    },
+    {
+      "x": 89,
+      "y": 78,
+      "sourceFacingLocalBandLane": true,
+      "reason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 41
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    },
+    {
+      "x": 88,
+      "y": 79,
+      "sourceFacingLocalBandLane": true,
+      "reason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 40
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    },
+    {
+      "x": 87,
+      "y": 80,
+      "sourceFacingLocalBandLane": true,
+      "reason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 39
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    }
+  ],
+  "nonGoalsPreserved": {
+    "correctionEnabledByDefault": false,
+    "m60F16PromotedAsSupported": false,
+    "generalizedOutsideM60F16": false,
+    "globalScoringChanged": false,
+    "thresholdChanged": false,
+    "fallbackChanged": false,
+    "unrelatedWgslRuntimeChanged": false,
+    "unrelatedScenesChanged": false
+  },
+  "classificationReason": "The sourceFacingLocalBandLane predicate still selects the same 8 useful FOR-391 pixels with no included regression and an ideal simulated residual of 2014 -> 1949. It is not activated because the current AA stencil-cover shader only has a draw-wide colour-space control, not per-fragment strokeBand/bandLocalX/sourceFacingLocalBandLane metadata. Routing the new guard through the older draw-wide FOR-380 probe would reproduce a known regressing path instead of the lane predicate.",
+  "nextMove": "Do not activate the predicate. A future ticket must first expose lane-safe per-fragment runtime metadata or a bounded shader-side predicate, then re-run this opt-in evaluation.",
+  "validationCommands": [
+    "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+    "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+    "rtk python3 scripts/validate_for392_m60_f16_source_facing_lane_runtime_opt_in.py",
+    "rtk python3 scripts/validate_for391_m60_f16_source_facing_lane_metadata.py",
+    "rtk python3 scripts/validate_for390_m60_f16_full_scene_regression_discriminator.py",
+    "rtk python3 scripts/validate_for389_m60_f16_source_coverage_full_scene_candidate.py",
+    "rtk python3 scripts/validate_for388_m60_f16_composition_metadata_audit.py",
+    "rtk python3 scripts/validate_for387_m60_f16_residual_fringe_discriminator_audit.py",
+    "rtk python3 scripts/validate_for386_m60_f16_coverage_regression_discriminator_audit.py",
+    "rtk python3 scripts/validate_for385_m60_f16_generalized_coverage_metadata_predicate_audit.py",
+    "rtk python3 scripts/validate_for384_m60_f16_pre_correction_geometry_coverage_metadata_audit.py",
+    "rtk python3 scripts/validate_for383_m60_f16_pre_probe_predicate_audit.py",
+    "rtk python3 scripts/validate_for382_m60_f16_coverage_composition_membership_audit.py",
+    "rtk python3 scripts/validate_for381_m60_f16_source_color_subzone_audit.py",
+    "rtk python3 scripts/validate_for380_m60_f16_source_color_correction_probe.py",
+    "rtk python3 scripts/validate_for379_m60_f16_effective_source_color_path.py",
+    "rtk python3 scripts/validate_for378_m60_f16_direct_source_color_evidence.py",
+    "rtk python3 scripts/validate_for377_m60_f16_linear_srgb_plausibility_audit.py",
+    "rtk python3 scripts/validate_for376_m60_f16_composition_quantization_candidate.py",
+    "rtk python3 scripts/validate_for375_m60_f16_effective_destination_candidate.py",
+    "rtk python3 scripts/validate_for374_m60_f16_candidate_regression_audit.py",
+    "rtk python3 scripts/validate_for373_m60_f16_candidate_policy_rgba_probe.py",
+    "rtk python3 scripts/validate_for372_m60_f16_effective_coverage_export.py",
+    "rtk python3 scripts/validate_for371_m60_f16_effective_coverage_access_audit.py",
+    "rtk python3 scripts/validate_for370_m60_f16_source_paint_capture_extension.py",
+    "rtk python3 scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+    "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+    "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+    "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+    "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk git diff --check"
+  ]
+}
