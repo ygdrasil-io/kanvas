@@ -1,0 +1,2752 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-419",
+  "sceneId": "m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419",
+  "classification": "application-point-storage-hook-not-on-rendered-return-path",
+  "summary": {
+    "recordCount": 16,
+    "drawCounts": {
+      "1": 6,
+      "3": 10
+    },
+    "for418StorageObservedZeroFieldRecords": 16,
+    "for419ApplicationPointStorageObservedRecords": 0,
+    "for419ColorTargetNonzeroRecords": 16
+  },
+  "guard": {
+    "propertyName": "kanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled",
+    "enabledForEvidenceRun": true,
+    "enabledByDefault": false
+  },
+  "sourceChecks": {
+    "guardDefaultFalse": true,
+    "shaderVariantUsesStorageZeroCause": true,
+    "entryLaneRecordDisabledForFor419": true,
+    "nonzeroPreservingWrite": true,
+    "pipelineCacheClosed": true,
+    "shaderModuleClosed": true,
+    "testPropertyForwarded": true
+  },
+  "sourceInspection": {
+    "diagnosticShader": "diagnostic in-memory FOR-419 nonzero-preserving shader-return storage variant of shaders/aa_stencil_cover.wgsl",
+    "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+    "scratchFormat": "RGBA16Float",
+    "storageLayout": {
+      "sampleStrideBytes": 96,
+      "vec4Bytes": 16,
+      "vec4sPerSubdrawSample": 6,
+      "subdrawsPerPixel": 2
+    },
+    "interpretation": "The FOR-419 shader variant disables the entry lane storage write and preserves only nonzero application-point writes. The continued nonzero color target with zero application-point storage isolates the divergence to the shader-return diagnostic instrumentation path, not storage offsets, side mapping, post-draw clears, fixed blend, or render-pass load/store."
+  },
+  "records": [
+    {
+      "drawIndex": 1,
+      "pixel": {
+        "x": 92,
+        "y": 75
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 0,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 0,
+            "baseByteOffset": 0,
+            "fieldVec4Offsets": {
+              "header": 0,
+              "colorAfterColorFilter": 1,
+              "colorAfterTargetColorspaceIfNeeded": 2,
+              "sourceColorBeforeQuantization": 3,
+              "coverageSourceAlphaQuantizedAlpha": 4,
+              "sourceColorSentToBlend": 5
+            },
+            "fieldByteOffsets": {
+              "header": 0,
+              "colorAfterColorFilter": 16,
+              "colorAfterTargetColorspaceIfNeeded": 32,
+              "sourceColorBeforeQuantization": 48,
+              "coverageSourceAlphaQuantizedAlpha": 64,
+              "sourceColorSentToBlend": 80
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 0,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 6,
+            "baseByteOffset": 96,
+            "fieldVec4Offsets": {
+              "header": 6,
+              "colorAfterColorFilter": 7,
+              "colorAfterTargetColorspaceIfNeeded": 8,
+              "sourceColorBeforeQuantization": 9,
+              "coverageSourceAlphaQuantizedAlpha": 10,
+              "sourceColorSentToBlend": 11
+            },
+            "fieldByteOffsets": {
+              "header": 96,
+              "colorAfterColorFilter": 112,
+              "colorAfterTargetColorspaceIfNeeded": 128,
+              "sourceColorBeforeQuantization": 144,
+              "coverageSourceAlphaQuantizedAlpha": 160,
+              "sourceColorSentToBlend": 176
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 1,
+      "pixel": {
+        "x": 91,
+        "y": 76
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 1,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 12,
+            "baseByteOffset": 192,
+            "fieldVec4Offsets": {
+              "header": 12,
+              "colorAfterColorFilter": 13,
+              "colorAfterTargetColorspaceIfNeeded": 14,
+              "sourceColorBeforeQuantization": 15,
+              "coverageSourceAlphaQuantizedAlpha": 16,
+              "sourceColorSentToBlend": 17
+            },
+            "fieldByteOffsets": {
+              "header": 192,
+              "colorAfterColorFilter": 208,
+              "colorAfterTargetColorspaceIfNeeded": 224,
+              "sourceColorBeforeQuantization": 240,
+              "coverageSourceAlphaQuantizedAlpha": 256,
+              "sourceColorSentToBlend": 272
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 1,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 18,
+            "baseByteOffset": 288,
+            "fieldVec4Offsets": {
+              "header": 18,
+              "colorAfterColorFilter": 19,
+              "colorAfterTargetColorspaceIfNeeded": 20,
+              "sourceColorBeforeQuantization": 21,
+              "coverageSourceAlphaQuantizedAlpha": 22,
+              "sourceColorSentToBlend": 23
+            },
+            "fieldByteOffsets": {
+              "header": 288,
+              "colorAfterColorFilter": 304,
+              "colorAfterTargetColorspaceIfNeeded": 320,
+              "sourceColorBeforeQuantization": 336,
+              "coverageSourceAlphaQuantizedAlpha": 352,
+              "sourceColorSentToBlend": 368
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 1,
+      "pixel": {
+        "x": 90,
+        "y": 77
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 2,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 24,
+            "baseByteOffset": 384,
+            "fieldVec4Offsets": {
+              "header": 24,
+              "colorAfterColorFilter": 25,
+              "colorAfterTargetColorspaceIfNeeded": 26,
+              "sourceColorBeforeQuantization": 27,
+              "coverageSourceAlphaQuantizedAlpha": 28,
+              "sourceColorSentToBlend": 29
+            },
+            "fieldByteOffsets": {
+              "header": 384,
+              "colorAfterColorFilter": 400,
+              "colorAfterTargetColorspaceIfNeeded": 416,
+              "sourceColorBeforeQuantization": 432,
+              "coverageSourceAlphaQuantizedAlpha": 448,
+              "sourceColorSentToBlend": 464
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 2,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 30,
+            "baseByteOffset": 480,
+            "fieldVec4Offsets": {
+              "header": 30,
+              "colorAfterColorFilter": 31,
+              "colorAfterTargetColorspaceIfNeeded": 32,
+              "sourceColorBeforeQuantization": 33,
+              "coverageSourceAlphaQuantizedAlpha": 34,
+              "sourceColorSentToBlend": 35
+            },
+            "fieldByteOffsets": {
+              "header": 480,
+              "colorAfterColorFilter": 496,
+              "colorAfterTargetColorspaceIfNeeded": 512,
+              "sourceColorBeforeQuantization": 528,
+              "coverageSourceAlphaQuantizedAlpha": 544,
+              "sourceColorSentToBlend": 560
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 1,
+      "pixel": {
+        "x": 89,
+        "y": 78
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 3,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 36,
+            "baseByteOffset": 576,
+            "fieldVec4Offsets": {
+              "header": 36,
+              "colorAfterColorFilter": 37,
+              "colorAfterTargetColorspaceIfNeeded": 38,
+              "sourceColorBeforeQuantization": 39,
+              "coverageSourceAlphaQuantizedAlpha": 40,
+              "sourceColorSentToBlend": 41
+            },
+            "fieldByteOffsets": {
+              "header": 576,
+              "colorAfterColorFilter": 592,
+              "colorAfterTargetColorspaceIfNeeded": 608,
+              "sourceColorBeforeQuantization": 624,
+              "coverageSourceAlphaQuantizedAlpha": 640,
+              "sourceColorSentToBlend": 656
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 3,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 42,
+            "baseByteOffset": 672,
+            "fieldVec4Offsets": {
+              "header": 42,
+              "colorAfterColorFilter": 43,
+              "colorAfterTargetColorspaceIfNeeded": 44,
+              "sourceColorBeforeQuantization": 45,
+              "coverageSourceAlphaQuantizedAlpha": 46,
+              "sourceColorSentToBlend": 47
+            },
+            "fieldByteOffsets": {
+              "header": 672,
+              "colorAfterColorFilter": 688,
+              "colorAfterTargetColorspaceIfNeeded": 704,
+              "sourceColorBeforeQuantization": 720,
+              "coverageSourceAlphaQuantizedAlpha": 736,
+              "sourceColorSentToBlend": 752
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 1,
+      "pixel": {
+        "x": 88,
+        "y": 79
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 4,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 48,
+            "baseByteOffset": 768,
+            "fieldVec4Offsets": {
+              "header": 48,
+              "colorAfterColorFilter": 49,
+              "colorAfterTargetColorspaceIfNeeded": 50,
+              "sourceColorBeforeQuantization": 51,
+              "coverageSourceAlphaQuantizedAlpha": 52,
+              "sourceColorSentToBlend": 53
+            },
+            "fieldByteOffsets": {
+              "header": 768,
+              "colorAfterColorFilter": 784,
+              "colorAfterTargetColorspaceIfNeeded": 800,
+              "sourceColorBeforeQuantization": 816,
+              "coverageSourceAlphaQuantizedAlpha": 832,
+              "sourceColorSentToBlend": 848
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 4,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 54,
+            "baseByteOffset": 864,
+            "fieldVec4Offsets": {
+              "header": 54,
+              "colorAfterColorFilter": 55,
+              "colorAfterTargetColorspaceIfNeeded": 56,
+              "sourceColorBeforeQuantization": 57,
+              "coverageSourceAlphaQuantizedAlpha": 58,
+              "sourceColorSentToBlend": 59
+            },
+            "fieldByteOffsets": {
+              "header": 864,
+              "colorAfterColorFilter": 880,
+              "colorAfterTargetColorspaceIfNeeded": 896,
+              "sourceColorBeforeQuantization": 912,
+              "coverageSourceAlphaQuantizedAlpha": 928,
+              "sourceColorSentToBlend": 944
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 1,
+      "pixel": {
+        "x": 87,
+        "y": 80
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.086242676,
+        0.125488281,
+        0.278320313,
+        0.376464844
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 5,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 60,
+            "baseByteOffset": 960,
+            "fieldVec4Offsets": {
+              "header": 60,
+              "colorAfterColorFilter": 61,
+              "colorAfterTargetColorspaceIfNeeded": 62,
+              "sourceColorBeforeQuantization": 63,
+              "coverageSourceAlphaQuantizedAlpha": 64,
+              "sourceColorSentToBlend": 65
+            },
+            "fieldByteOffsets": {
+              "header": 960,
+              "colorAfterColorFilter": 976,
+              "colorAfterTargetColorspaceIfNeeded": 992,
+              "sourceColorBeforeQuantization": 1008,
+              "coverageSourceAlphaQuantizedAlpha": 1024,
+              "sourceColorSentToBlend": 1040
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": false,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 5,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 66,
+            "baseByteOffset": 1056,
+            "fieldVec4Offsets": {
+              "header": 66,
+              "colorAfterColorFilter": 67,
+              "colorAfterTargetColorspaceIfNeeded": 68,
+              "sourceColorBeforeQuantization": 69,
+              "coverageSourceAlphaQuantizedAlpha": 70,
+              "sourceColorSentToBlend": 71
+            },
+            "fieldByteOffsets": {
+              "header": 1056,
+              "colorAfterColorFilter": 1072,
+              "colorAfterTargetColorspaceIfNeeded": 1088,
+              "sourceColorBeforeQuantization": 1104,
+              "coverageSourceAlphaQuantizedAlpha": 1120,
+              "sourceColorSentToBlend": 1136
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 3,
+      "pixel": {
+        "x": 101,
+        "y": 37
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 6,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 72,
+            "baseByteOffset": 1152,
+            "fieldVec4Offsets": {
+              "header": 72,
+              "colorAfterColorFilter": 73,
+              "colorAfterTargetColorspaceIfNeeded": 74,
+              "sourceColorBeforeQuantization": 75,
+              "coverageSourceAlphaQuantizedAlpha": 76,
+              "sourceColorSentToBlend": 77
+            },
+            "fieldByteOffsets": {
+              "header": 1152,
+              "colorAfterColorFilter": 1168,
+              "colorAfterTargetColorspaceIfNeeded": 1184,
+              "sourceColorBeforeQuantization": 1200,
+              "coverageSourceAlphaQuantizedAlpha": 1216,
+              "sourceColorSentToBlend": 1232
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 6,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 78,
+            "baseByteOffset": 1248,
+            "fieldVec4Offsets": {
+              "header": 78,
+              "colorAfterColorFilter": 79,
+              "colorAfterTargetColorspaceIfNeeded": 80,
+              "sourceColorBeforeQuantization": 81,
+              "coverageSourceAlphaQuantizedAlpha": 82,
+              "sourceColorSentToBlend": 83
+            },
+            "fieldByteOffsets": {
+              "header": 1248,
+              "colorAfterColorFilter": 1264,
+              "colorAfterTargetColorspaceIfNeeded": 1280,
+              "sourceColorBeforeQuantization": 1296,
+              "coverageSourceAlphaQuantizedAlpha": 1312,
+              "sourceColorSentToBlend": 1328
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 3,
+      "pixel": {
+        "x": 102,
+        "y": 37
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 7,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 84,
+            "baseByteOffset": 1344,
+            "fieldVec4Offsets": {
+              "header": 84,
+              "colorAfterColorFilter": 85,
+              "colorAfterTargetColorspaceIfNeeded": 86,
+              "sourceColorBeforeQuantization": 87,
+              "coverageSourceAlphaQuantizedAlpha": 88,
+              "sourceColorSentToBlend": 89
+            },
+            "fieldByteOffsets": {
+              "header": 1344,
+              "colorAfterColorFilter": 1360,
+              "colorAfterTargetColorspaceIfNeeded": 1376,
+              "sourceColorBeforeQuantization": 1392,
+              "coverageSourceAlphaQuantizedAlpha": 1408,
+              "sourceColorSentToBlend": 1424
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 7,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 90,
+            "baseByteOffset": 1440,
+            "fieldVec4Offsets": {
+              "header": 90,
+              "colorAfterColorFilter": 91,
+              "colorAfterTargetColorspaceIfNeeded": 92,
+              "sourceColorBeforeQuantization": 93,
+              "coverageSourceAlphaQuantizedAlpha": 94,
+              "sourceColorSentToBlend": 95
+            },
+            "fieldByteOffsets": {
+              "header": 1440,
+              "colorAfterColorFilter": 1456,
+              "colorAfterTargetColorspaceIfNeeded": 1472,
+              "sourceColorBeforeQuantization": 1488,
+              "coverageSourceAlphaQuantizedAlpha": 1504,
+              "sourceColorSentToBlend": 1520
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 3,
+      "pixel": {
+        "x": 99,
+        "y": 38
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 8,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 96,
+            "baseByteOffset": 1536,
+            "fieldVec4Offsets": {
+              "header": 96,
+              "colorAfterColorFilter": 97,
+              "colorAfterTargetColorspaceIfNeeded": 98,
+              "sourceColorBeforeQuantization": 99,
+              "coverageSourceAlphaQuantizedAlpha": 100,
+              "sourceColorSentToBlend": 101
+            },
+            "fieldByteOffsets": {
+              "header": 1536,
+              "colorAfterColorFilter": 1552,
+              "colorAfterTargetColorspaceIfNeeded": 1568,
+              "sourceColorBeforeQuantization": 1584,
+              "coverageSourceAlphaQuantizedAlpha": 1600,
+              "sourceColorSentToBlend": 1616
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 8,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 102,
+            "baseByteOffset": 1632,
+            "fieldVec4Offsets": {
+              "header": 102,
+              "colorAfterColorFilter": 103,
+              "colorAfterTargetColorspaceIfNeeded": 104,
+              "sourceColorBeforeQuantization": 105,
+              "coverageSourceAlphaQuantizedAlpha": 106,
+              "sourceColorSentToBlend": 107
+            },
+            "fieldByteOffsets": {
+              "header": 1632,
+              "colorAfterColorFilter": 1648,
+              "colorAfterTargetColorspaceIfNeeded": 1664,
+              "sourceColorBeforeQuantization": 1680,
+              "coverageSourceAlphaQuantizedAlpha": 1696,
+              "sourceColorSentToBlend": 1712
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 3,
+      "pixel": {
+        "x": 100,
+        "y": 38
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 9,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 108,
+            "baseByteOffset": 1728,
+            "fieldVec4Offsets": {
+              "header": 108,
+              "colorAfterColorFilter": 109,
+              "colorAfterTargetColorspaceIfNeeded": 110,
+              "sourceColorBeforeQuantization": 111,
+              "coverageSourceAlphaQuantizedAlpha": 112,
+              "sourceColorSentToBlend": 113
+            },
+            "fieldByteOffsets": {
+              "header": 1728,
+              "colorAfterColorFilter": 1744,
+              "colorAfterTargetColorspaceIfNeeded": 1760,
+              "sourceColorBeforeQuantization": 1776,
+              "coverageSourceAlphaQuantizedAlpha": 1792,
+              "sourceColorSentToBlend": 1808
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 9,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 114,
+            "baseByteOffset": 1824,
+            "fieldVec4Offsets": {
+              "header": 114,
+              "colorAfterColorFilter": 115,
+              "colorAfterTargetColorspaceIfNeeded": 116,
+              "sourceColorBeforeQuantization": 117,
+              "coverageSourceAlphaQuantizedAlpha": 118,
+              "sourceColorSentToBlend": 119
+            },
+            "fieldByteOffsets": {
+              "header": 1824,
+              "colorAfterColorFilter": 1840,
+              "colorAfterTargetColorspaceIfNeeded": 1856,
+              "sourceColorBeforeQuantization": 1872,
+              "coverageSourceAlphaQuantizedAlpha": 1888,
+              "sourceColorSentToBlend": 1904
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 3,
+      "pixel": {
+        "x": 101,
+        "y": 38
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 10,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 120,
+            "baseByteOffset": 1920,
+            "fieldVec4Offsets": {
+              "header": 120,
+              "colorAfterColorFilter": 121,
+              "colorAfterTargetColorspaceIfNeeded": 122,
+              "sourceColorBeforeQuantization": 123,
+              "coverageSourceAlphaQuantizedAlpha": 124,
+              "sourceColorSentToBlend": 125
+            },
+            "fieldByteOffsets": {
+              "header": 1920,
+              "colorAfterColorFilter": 1936,
+              "colorAfterTargetColorspaceIfNeeded": 1952,
+              "sourceColorBeforeQuantization": 1968,
+              "coverageSourceAlphaQuantizedAlpha": 1984,
+              "sourceColorSentToBlend": 2000
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 10,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 126,
+            "baseByteOffset": 2016,
+            "fieldVec4Offsets": {
+              "header": 126,
+              "colorAfterColorFilter": 127,
+              "colorAfterTargetColorspaceIfNeeded": 128,
+              "sourceColorBeforeQuantization": 129,
+              "coverageSourceAlphaQuantizedAlpha": 130,
+              "sourceColorSentToBlend": 131
+            },
+            "fieldByteOffsets": {
+              "header": 2016,
+              "colorAfterColorFilter": 2032,
+              "colorAfterTargetColorspaceIfNeeded": 2048,
+              "sourceColorBeforeQuantization": 2064,
+              "coverageSourceAlphaQuantizedAlpha": 2080,
+              "sourceColorSentToBlend": 2096
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 3,
+      "pixel": {
+        "x": 102,
+        "y": 38
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 11,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 132,
+            "baseByteOffset": 2112,
+            "fieldVec4Offsets": {
+              "header": 132,
+              "colorAfterColorFilter": 133,
+              "colorAfterTargetColorspaceIfNeeded": 134,
+              "sourceColorBeforeQuantization": 135,
+              "coverageSourceAlphaQuantizedAlpha": 136,
+              "sourceColorSentToBlend": 137
+            },
+            "fieldByteOffsets": {
+              "header": 2112,
+              "colorAfterColorFilter": 2128,
+              "colorAfterTargetColorspaceIfNeeded": 2144,
+              "sourceColorBeforeQuantization": 2160,
+              "coverageSourceAlphaQuantizedAlpha": 2176,
+              "sourceColorSentToBlend": 2192
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 11,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 138,
+            "baseByteOffset": 2208,
+            "fieldVec4Offsets": {
+              "header": 138,
+              "colorAfterColorFilter": 139,
+              "colorAfterTargetColorspaceIfNeeded": 140,
+              "sourceColorBeforeQuantization": 141,
+              "coverageSourceAlphaQuantizedAlpha": 142,
+              "sourceColorSentToBlend": 143
+            },
+            "fieldByteOffsets": {
+              "header": 2208,
+              "colorAfterColorFilter": 2224,
+              "colorAfterTargetColorspaceIfNeeded": 2240,
+              "sourceColorBeforeQuantization": 2256,
+              "coverageSourceAlphaQuantizedAlpha": 2272,
+              "sourceColorSentToBlend": 2288
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 3,
+      "pixel": {
+        "x": 103,
+        "y": 38
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 12,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 144,
+            "baseByteOffset": 2304,
+            "fieldVec4Offsets": {
+              "header": 144,
+              "colorAfterColorFilter": 145,
+              "colorAfterTargetColorspaceIfNeeded": 146,
+              "sourceColorBeforeQuantization": 147,
+              "coverageSourceAlphaQuantizedAlpha": 148,
+              "sourceColorSentToBlend": 149
+            },
+            "fieldByteOffsets": {
+              "header": 2304,
+              "colorAfterColorFilter": 2320,
+              "colorAfterTargetColorspaceIfNeeded": 2336,
+              "sourceColorBeforeQuantization": 2352,
+              "coverageSourceAlphaQuantizedAlpha": 2368,
+              "sourceColorSentToBlend": 2384
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 12,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 150,
+            "baseByteOffset": 2400,
+            "fieldVec4Offsets": {
+              "header": 150,
+              "colorAfterColorFilter": 151,
+              "colorAfterTargetColorspaceIfNeeded": 152,
+              "sourceColorBeforeQuantization": 153,
+              "coverageSourceAlphaQuantizedAlpha": 154,
+              "sourceColorSentToBlend": 155
+            },
+            "fieldByteOffsets": {
+              "header": 2400,
+              "colorAfterColorFilter": 2416,
+              "colorAfterTargetColorspaceIfNeeded": 2432,
+              "sourceColorBeforeQuantization": 2448,
+              "coverageSourceAlphaQuantizedAlpha": 2464,
+              "sourceColorSentToBlend": 2480
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 3,
+      "pixel": {
+        "x": 104,
+        "y": 38
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 13,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 156,
+            "baseByteOffset": 2496,
+            "fieldVec4Offsets": {
+              "header": 156,
+              "colorAfterColorFilter": 157,
+              "colorAfterTargetColorspaceIfNeeded": 158,
+              "sourceColorBeforeQuantization": 159,
+              "coverageSourceAlphaQuantizedAlpha": 160,
+              "sourceColorSentToBlend": 161
+            },
+            "fieldByteOffsets": {
+              "header": 2496,
+              "colorAfterColorFilter": 2512,
+              "colorAfterTargetColorspaceIfNeeded": 2528,
+              "sourceColorBeforeQuantization": 2544,
+              "coverageSourceAlphaQuantizedAlpha": 2560,
+              "sourceColorSentToBlend": 2576
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 13,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 162,
+            "baseByteOffset": 2592,
+            "fieldVec4Offsets": {
+              "header": 162,
+              "colorAfterColorFilter": 163,
+              "colorAfterTargetColorspaceIfNeeded": 164,
+              "sourceColorBeforeQuantization": 165,
+              "coverageSourceAlphaQuantizedAlpha": 166,
+              "sourceColorSentToBlend": 167
+            },
+            "fieldByteOffsets": {
+              "header": 2592,
+              "colorAfterColorFilter": 2608,
+              "colorAfterTargetColorspaceIfNeeded": 2624,
+              "sourceColorBeforeQuantization": 2640,
+              "coverageSourceAlphaQuantizedAlpha": 2656,
+              "sourceColorSentToBlend": 2672
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 3,
+      "pixel": {
+        "x": 98,
+        "y": 39
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 14,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 168,
+            "baseByteOffset": 2688,
+            "fieldVec4Offsets": {
+              "header": 168,
+              "colorAfterColorFilter": 169,
+              "colorAfterTargetColorspaceIfNeeded": 170,
+              "sourceColorBeforeQuantization": 171,
+              "coverageSourceAlphaQuantizedAlpha": 172,
+              "sourceColorSentToBlend": 173
+            },
+            "fieldByteOffsets": {
+              "header": 2688,
+              "colorAfterColorFilter": 2704,
+              "colorAfterTargetColorspaceIfNeeded": 2720,
+              "sourceColorBeforeQuantization": 2736,
+              "coverageSourceAlphaQuantizedAlpha": 2752,
+              "sourceColorSentToBlend": 2768
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 14,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 174,
+            "baseByteOffset": 2784,
+            "fieldVec4Offsets": {
+              "header": 174,
+              "colorAfterColorFilter": 175,
+              "colorAfterTargetColorspaceIfNeeded": 176,
+              "sourceColorBeforeQuantization": 177,
+              "coverageSourceAlphaQuantizedAlpha": 178,
+              "sourceColorSentToBlend": 179
+            },
+            "fieldByteOffsets": {
+              "header": 2784,
+              "colorAfterColorFilter": 2800,
+              "colorAfterTargetColorspaceIfNeeded": 2816,
+              "sourceColorBeforeQuantization": 2832,
+              "coverageSourceAlphaQuantizedAlpha": 2848,
+              "sourceColorSentToBlend": 2864
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    },
+    {
+      "drawIndex": 3,
+      "pixel": {
+        "x": 99,
+        "y": 39
+      },
+      "colorTargetFor418RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "colorTargetFor419RgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "classification": "application-point-storage-hook-not-reached",
+      "hypothesisSupport": {
+        "valueCalculatedAfterStorageWrite": false,
+        "wrongFieldOrBranchWritten": false,
+        "storageOffsetOrStrideIncorrect": false,
+        "wrongSideOrSubdraw": false,
+        "diagnosticShaderDivergesFromRenderedReturn": true,
+        "storageWriteClearedAfterDraw": false
+      },
+      "subdraws": [
+        {
+          "subdrawRole": "inside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 15,
+            "subdrawOrdinal": 0,
+            "subdrawSideOffset": 0,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 180,
+            "baseByteOffset": 2880,
+            "fieldVec4Offsets": {
+              "header": 180,
+              "colorAfterColorFilter": 181,
+              "colorAfterTargetColorspaceIfNeeded": 182,
+              "sourceColorBeforeQuantization": 183,
+              "coverageSourceAlphaQuantizedAlpha": 184,
+              "sourceColorSentToBlend": 185
+            },
+            "fieldByteOffsets": {
+              "header": 2880,
+              "colorAfterColorFilter": 2896,
+              "colorAfterTargetColorspaceIfNeeded": 2912,
+              "sourceColorBeforeQuantization": 2928,
+              "coverageSourceAlphaQuantizedAlpha": 2944,
+              "sourceColorSentToBlend": 2960
+            }
+          }
+        },
+        {
+          "subdrawRole": "outside",
+          "for418": {
+            "shaderObserved": true,
+            "candidateBranchReached": true,
+            "colorAfterColorFilter": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "colorAfterTargetColorspaceIfNeeded": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "correctedColorBeforeCoverage": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "coverageOrAaAlpha": 0.0,
+            "sourceAlphaAfterCoverage": 0.0,
+            "sourceColorBeforeQuantization": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "sourceColorSentToBlend": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "quantizedAlphaSentToBlend": 0.0
+          },
+          "for419": {
+            "applicationPointStorageObserved": false,
+            "candidateBranchReached": false,
+            "sourceColorSentToBlend": null
+          },
+          "storageLayout": {
+            "sampleSlot": 15,
+            "subdrawOrdinal": 1,
+            "subdrawSideOffset": 1,
+            "sampleStrideBytes": 96,
+            "baseVec4Index": 186,
+            "baseByteOffset": 2976,
+            "fieldVec4Offsets": {
+              "header": 186,
+              "colorAfterColorFilter": 187,
+              "colorAfterTargetColorspaceIfNeeded": 188,
+              "sourceColorBeforeQuantization": 189,
+              "coverageSourceAlphaQuantizedAlpha": 190,
+              "sourceColorSentToBlend": 191
+            },
+            "fieldByteOffsets": {
+              "header": 2976,
+              "colorAfterColorFilter": 2992,
+              "colorAfterTargetColorspaceIfNeeded": 3008,
+              "sourceColorBeforeQuantization": 3024,
+              "coverageSourceAlphaQuantizedAlpha": 3040,
+              "sourceColorSentToBlend": 3056
+            }
+          }
+        }
+      ],
+      "reason": "FOR-418 entry storage observed this pixel with zero fields while the color target was nonzero. FOR-419 removed the entry write and allowed only the application-point return hook to write nonzero outputs; storage then observed no application-point record while the same scratch color target stayed nonzero."
+    }
+  ],
+  "rawArtifacts": {
+    "for418": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-storage-vs-color-target-for418/raw-runtime-snapshot-for418.json",
+    "for419": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419/raw-runtime-snapshot-for419.json"
+  }
+}
