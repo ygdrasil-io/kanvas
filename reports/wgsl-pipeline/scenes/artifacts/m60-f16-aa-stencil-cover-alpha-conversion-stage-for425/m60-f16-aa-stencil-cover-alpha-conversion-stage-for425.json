@@ -1,0 +1,468 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-425",
+          "sceneId": "m60-f16-aa-stencil-cover-alpha-conversion-stage-for425",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-425-m60-f16-localiser-conversion-alpha-aa-stencil-cover",
+          "sourceArtifacts": {
+            "for424": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-partial-coverage-alpha-for424/m60-f16-aa-stencil-cover-partial-coverage-alpha-for424.json",
+            "for423": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-reference-source-coverage-for423/m60-f16-aa-stencil-cover-reference-source-coverage-for423.json",
+            "for422": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-source-comparison-for422/m60-f16-aa-stencil-cover-verified-source-comparison-for422.json",
+            "for412": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412.json",
+            "for419": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419/m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "classification": "alpha-drop-before-shader-return",
+          "globalClassification": "alpha-drop-before-shader-return",
+          "allowedClassifications": [
+            "alpha-drop-before-shader-return",
+            "alpha-drop-at-source-alpha-application",
+            "alpha-drop-at-quantization",
+            "alpha-drop-after-source-field",
+            "alpha-conversion-stage-incomplete"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "comparisonPolicy": {
+            "scope": "Exactly the 6 FOR-424 partial pixels whose CPU coverage alpha is 160/255 and observed source alpha is 96/255.",
+            "stageOrder": [
+              "coverageOrAaAlpha",
+              "sourceAlphaAfterCoverage",
+              "sourceColorBeforeQuantization.alpha",
+              "quantizedAlphaSentToBlend",
+              "sourceColorSentToBlend.alpha"
+            ],
+            "classificationMeaning": "The first available stage whose alpha byte equals 96 while an earlier stage remains 160 names the conversion point.",
+            "noRenderingFixApplied": true
+          },
+          "structuralSummary": {
+            "diagnosticReturnPathVerified": true,
+            "partialPixelCount": 6,
+            "expectedPartialPixelCount": 6,
+            "expectedCoverage160Count": 6,
+            "observedSourceAlpha96Count": 6,
+            "localizedPixelCount": 6,
+            "majorityStage": "alpha-drop-before-shader-return",
+            "majorityStageCount": 6,
+            "classificationCounts": {
+              "alpha-drop-before-shader-return": 6,
+              "alpha-drop-at-source-alpha-application": 0,
+              "alpha-drop-at-quantization": 0,
+              "alpha-drop-after-source-field": 0,
+              "alpha-conversion-stage-incomplete": 0
+            }
+          },
+          "partialPixels": [
+                {
+      "x": 92,
+      "y": 75,
+      "drawIndex": 1,
+      "subdrawOrdinal": 0,
+      "subdrawRole": "inside",
+      "classification": "alpha-drop-before-shader-return",
+      "classificationReason": "The first captured alpha stage already equals 96/255, so the drop happened before the shader return diagnostic stage.",
+      "referenceCoverage": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "coverageExpectedByte": 160,
+        "coverageExpectedAlpha": 0.627451003
+      },
+      "observedSource": {
+        "available": true,
+        "shaderObserved": true,
+        "captureSynthetic": false,
+        "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+        "sourceAlpha": 0.376470625,
+        "sourceAlphaByte": 96
+      },
+      "stages": {
+        "coverageOrAaAlpha": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceAlphaAfterCoverage": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorBeforeQuantization": {
+          "rgbaFloat": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "alpha": 0.375000000,
+          "alphaByte": 96
+        },
+        "quantizedAlphaSentToBlend": {
+  "available": true,
+  "alpha": 0.376470625,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorSentToBlend": {
+          "rgbaFloat": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "alpha": 0.376470625,
+          "alphaByte": 96
+        },
+        "sourceFieldUsedByFOR408Replay": [0.232790515, 0.338159621, 0.742399454, 1.000000000]
+      },
+      "stageDeltas": {
+        "coverageOrAaAlphaMinusExpectedByte": -64,
+        "sourceAlphaAfterCoverageMinusExpectedByte": -64,
+        "quantizedAlphaSentToBlendMinusExpectedByte": -64,
+        "sourceColorSentToBlendMinusExpectedByte": -64
+      }
+    },
+    {
+      "x": 91,
+      "y": 76,
+      "drawIndex": 1,
+      "subdrawOrdinal": 0,
+      "subdrawRole": "inside",
+      "classification": "alpha-drop-before-shader-return",
+      "classificationReason": "The first captured alpha stage already equals 96/255, so the drop happened before the shader return diagnostic stage.",
+      "referenceCoverage": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "coverageExpectedByte": 160,
+        "coverageExpectedAlpha": 0.627451003
+      },
+      "observedSource": {
+        "available": true,
+        "shaderObserved": true,
+        "captureSynthetic": false,
+        "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+        "sourceAlpha": 0.376470625,
+        "sourceAlphaByte": 96
+      },
+      "stages": {
+        "coverageOrAaAlpha": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceAlphaAfterCoverage": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorBeforeQuantization": {
+          "rgbaFloat": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "alpha": 0.375000000,
+          "alphaByte": 96
+        },
+        "quantizedAlphaSentToBlend": {
+  "available": true,
+  "alpha": 0.376470625,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorSentToBlend": {
+          "rgbaFloat": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "alpha": 0.376470625,
+          "alphaByte": 96
+        },
+        "sourceFieldUsedByFOR408Replay": [0.232790515, 0.338159621, 0.742399454, 1.000000000]
+      },
+      "stageDeltas": {
+        "coverageOrAaAlphaMinusExpectedByte": -64,
+        "sourceAlphaAfterCoverageMinusExpectedByte": -64,
+        "quantizedAlphaSentToBlendMinusExpectedByte": -64,
+        "sourceColorSentToBlendMinusExpectedByte": -64
+      }
+    },
+    {
+      "x": 90,
+      "y": 77,
+      "drawIndex": 1,
+      "subdrawOrdinal": 0,
+      "subdrawRole": "inside",
+      "classification": "alpha-drop-before-shader-return",
+      "classificationReason": "The first captured alpha stage already equals 96/255, so the drop happened before the shader return diagnostic stage.",
+      "referenceCoverage": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "coverageExpectedByte": 160,
+        "coverageExpectedAlpha": 0.627451003
+      },
+      "observedSource": {
+        "available": true,
+        "shaderObserved": true,
+        "captureSynthetic": false,
+        "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+        "sourceAlpha": 0.376470625,
+        "sourceAlphaByte": 96
+      },
+      "stages": {
+        "coverageOrAaAlpha": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceAlphaAfterCoverage": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorBeforeQuantization": {
+          "rgbaFloat": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "alpha": 0.375000000,
+          "alphaByte": 96
+        },
+        "quantizedAlphaSentToBlend": {
+  "available": true,
+  "alpha": 0.376470625,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorSentToBlend": {
+          "rgbaFloat": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "alpha": 0.376470625,
+          "alphaByte": 96
+        },
+        "sourceFieldUsedByFOR408Replay": [0.232790515, 0.338159621, 0.742399454, 1.000000000]
+      },
+      "stageDeltas": {
+        "coverageOrAaAlphaMinusExpectedByte": -64,
+        "sourceAlphaAfterCoverageMinusExpectedByte": -64,
+        "quantizedAlphaSentToBlendMinusExpectedByte": -64,
+        "sourceColorSentToBlendMinusExpectedByte": -64
+      }
+    },
+    {
+      "x": 89,
+      "y": 78,
+      "drawIndex": 1,
+      "subdrawOrdinal": 0,
+      "subdrawRole": "inside",
+      "classification": "alpha-drop-before-shader-return",
+      "classificationReason": "The first captured alpha stage already equals 96/255, so the drop happened before the shader return diagnostic stage.",
+      "referenceCoverage": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "coverageExpectedByte": 160,
+        "coverageExpectedAlpha": 0.627451003
+      },
+      "observedSource": {
+        "available": true,
+        "shaderObserved": true,
+        "captureSynthetic": false,
+        "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+        "sourceAlpha": 0.376470625,
+        "sourceAlphaByte": 96
+      },
+      "stages": {
+        "coverageOrAaAlpha": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceAlphaAfterCoverage": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorBeforeQuantization": {
+          "rgbaFloat": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "alpha": 0.375000000,
+          "alphaByte": 96
+        },
+        "quantizedAlphaSentToBlend": {
+  "available": true,
+  "alpha": 0.376470625,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorSentToBlend": {
+          "rgbaFloat": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "alpha": 0.376470625,
+          "alphaByte": 96
+        },
+        "sourceFieldUsedByFOR408Replay": [0.232790515, 0.338159621, 0.742399454, 1.000000000]
+      },
+      "stageDeltas": {
+        "coverageOrAaAlphaMinusExpectedByte": -64,
+        "sourceAlphaAfterCoverageMinusExpectedByte": -64,
+        "quantizedAlphaSentToBlendMinusExpectedByte": -64,
+        "sourceColorSentToBlendMinusExpectedByte": -64
+      }
+    },
+    {
+      "x": 88,
+      "y": 79,
+      "drawIndex": 1,
+      "subdrawOrdinal": 0,
+      "subdrawRole": "inside",
+      "classification": "alpha-drop-before-shader-return",
+      "classificationReason": "The first captured alpha stage already equals 96/255, so the drop happened before the shader return diagnostic stage.",
+      "referenceCoverage": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "coverageExpectedByte": 160,
+        "coverageExpectedAlpha": 0.627451003
+      },
+      "observedSource": {
+        "available": true,
+        "shaderObserved": true,
+        "captureSynthetic": false,
+        "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+        "sourceAlpha": 0.376470625,
+        "sourceAlphaByte": 96
+      },
+      "stages": {
+        "coverageOrAaAlpha": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceAlphaAfterCoverage": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorBeforeQuantization": {
+          "rgbaFloat": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "alpha": 0.375000000,
+          "alphaByte": 96
+        },
+        "quantizedAlphaSentToBlend": {
+  "available": true,
+  "alpha": 0.376470625,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorSentToBlend": {
+          "rgbaFloat": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "alpha": 0.376470625,
+          "alphaByte": 96
+        },
+        "sourceFieldUsedByFOR408Replay": [0.232790515, 0.338159621, 0.742399454, 1.000000000]
+      },
+      "stageDeltas": {
+        "coverageOrAaAlphaMinusExpectedByte": -64,
+        "sourceAlphaAfterCoverageMinusExpectedByte": -64,
+        "quantizedAlphaSentToBlendMinusExpectedByte": -64,
+        "sourceColorSentToBlendMinusExpectedByte": -64
+      }
+    },
+    {
+      "x": 87,
+      "y": 80,
+      "drawIndex": 1,
+      "subdrawOrdinal": 0,
+      "subdrawRole": "inside",
+      "classification": "alpha-drop-before-shader-return",
+      "classificationReason": "The first captured alpha stage already equals 96/255, so the drop happened before the shader return diagnostic stage.",
+      "referenceCoverage": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "coverageExpectedByte": 160,
+        "coverageExpectedAlpha": 0.627451003
+      },
+      "observedSource": {
+        "available": true,
+        "shaderObserved": true,
+        "captureSynthetic": false,
+        "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+        "sourceAlpha": 0.376470625,
+        "sourceAlphaByte": 96
+      },
+      "stages": {
+        "coverageOrAaAlpha": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceAlphaAfterCoverage": {
+  "available": true,
+  "alpha": 0.375000000,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorBeforeQuantization": {
+          "rgbaFloat": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "alpha": 0.375000000,
+          "alphaByte": 96
+        },
+        "quantizedAlphaSentToBlend": {
+  "available": true,
+  "alpha": 0.376470625,
+  "alphaByte": 96,
+  "deltaFromExpectedByte": -64,
+  "deltaFromObservedByte": 0
+},
+        "sourceColorSentToBlend": {
+          "rgbaFloat": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "alpha": 0.376470625,
+          "alphaByte": 96
+        },
+        "sourceFieldUsedByFOR408Replay": [0.232790515, 0.338159621, 0.742399454, 1.000000000]
+      },
+      "stageDeltas": {
+        "coverageOrAaAlphaMinusExpectedByte": -64,
+        "sourceAlphaAfterCoverageMinusExpectedByte": -64,
+        "quantizedAlphaSentToBlendMinusExpectedByte": -64,
+        "sourceColorSentToBlendMinusExpectedByte": -64
+      }
+    }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "renderingFixApplied": false,
+            "wgsl4kModified": false,
+            "fullWgslDumpStored": false
+          },
+          "classificationReason": "The majority of FOR-424 partial pixels already expose 96/255 at coverageOrAaAlpha.",
+          "nextStep": "Inspect the pre-return coverage derivation path before applying any rendering correction.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for425_m60_f16_aa_stencil_cover_alpha_conversion_stage.py",
+            "rtk python3 scripts/validate_for424_m60_f16_aa_stencil_cover_partial_coverage_alpha.py",
+            "rtk python3 scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+            "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for425-pycache python3 -m py_compile scripts/validate_for425_m60_f16_aa_stencil_cover_alpha_conversion_stage.py",
+            "rtk git diff --check",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin"
+          ]
+        }
