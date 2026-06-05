@@ -500,6 +500,98 @@ internal object SkBitmapDescriptorCoverageLowering {
     var lower: (CoveragePlan) -> CoverageLoweringResult = CoveragePlanAdapter::lower
 }
 
+public object SkScanFillPathSubsampleTrace {
+    public data class Target(public val x: Int, public val y: Int)
+
+    public data class PixelMask(
+        public val x: Int,
+        public val y: Int,
+        public val supers: Int,
+        public val mask4x4: Int,
+        public val scanFillPathSamples: Int,
+        public val tracedSpanCount: Int,
+        public val source: String,
+    )
+
+    private data class MutablePixelMask(
+        val target: Target,
+        val supers: Int,
+        var mask: Int = 0,
+        var scanFillPathSamples: Int = 0,
+        var tracedSpanCount: Int = 0,
+    )
+
+    private data class Session(
+        val targets: Set<Target>,
+        val supers: Int,
+        val pixels: MutableMap<Target, MutablePixelMask>,
+    )
+
+    private val active = ThreadLocal<Session?>()
+    private val lastSnapshot = ThreadLocal<List<PixelMask>>()
+
+    public fun configureForTargets(targets: Set<Target>, supers: Int = 4) {
+        require(supers == 4) { "FOR-428 scanFillPath subsample trace only supports 4x4 samples" }
+        val sortedTargets = targets.sortedWith(compareBy<Target> { it.y }.thenBy { it.x })
+        active.set(
+            Session(
+                targets = sortedTargets.toSet(),
+                supers = supers,
+                pixels = sortedTargets.associateWith { target ->
+                    MutablePixelMask(target = target, supers = supers)
+                }.toMutableMap(),
+            ),
+        )
+        lastSnapshot.remove()
+    }
+
+    public fun reset() {
+        lastSnapshot.set(snapshot())
+        active.remove()
+    }
+
+    public fun snapshot(): List<PixelMask> {
+        val session = active.get()
+        if (session == null) return lastSnapshot.get().orEmpty()
+        return session.pixels.values
+            .sortedWith(compareBy<MutablePixelMask> { it.target.y }.thenBy { it.target.x })
+            .map { pixel ->
+                PixelMask(
+                    x = pixel.target.x,
+                    y = pixel.target.y,
+                    supers = pixel.supers,
+                    mask4x4 = pixel.mask,
+                    scanFillPathSamples = pixel.scanFillPathSamples,
+                    tracedSpanCount = pixel.tracedSpanCount,
+                    source = "SkBitmapDevice.scanFillPath.addSpanCoverage",
+                )
+            }
+    }
+
+    internal fun recordSpanCoverage(
+        pixelX: Int,
+        pixelY: Int,
+        subrowY: Int,
+        supers: Int,
+        spanLeft: Float,
+        spanRight: Float,
+        samplesAddedByScanFillPath: Int,
+    ) {
+        val session = active.get() ?: return
+        if (supers != session.supers || subrowY !in 0 until supers) return
+        val target = Target(pixelX, pixelY)
+        val pixel = session.pixels[target] ?: return
+        pixel.scanFillPathSamples += samplesAddedByScanFillPath
+        pixel.tracedSpanCount += 1
+        for (sx in 0 until supers) {
+            val sampleX = pixelX + (sx + 0.5f) / supers
+            if (sampleX >= spanLeft && sampleX < spanRight) {
+                pixel.mask = pixel.mask or (1 shl (subrowY * supers + sx))
+            }
+        }
+    }
+}
+
 public data class SkBitmapDescriptorCoverageDiagnostics(
     val mode: String,
     val backend: BackendKind,
@@ -3131,14 +3223,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                     if (!before && inside) {
                         spanStart = crossX[j]
                     } else if (before && !inside) {
-                        addSpanCoverage(spanStart, crossX[j], clip, supers, coverage)
+                        addSpanCoverage(spanStart, crossX[j], clip, supers, coverage, py, k)
                     }
                 }
                 // Trailing span — for inverse fills with no crossings (or
                 // an even number of them) the right portion of the clip
                 // remains in the fill set and needs to be flushed.
                 if (inside) {
-                    addSpanCoverage(spanStart, clipRightF, clip, supers, coverage)
+                    addSpanCoverage(spanStart, clipRightF, clip, supers, coverage, py, k)
                 }
             }
 
@@ -3247,7 +3339,13 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
     }
 
     private fun addSpanCoverage(
-        xL: Float, xR: Float, clip: SkIRect, supers: Int, coverage: IntArray,
+        xL: Float,
+        xR: Float,
+        clip: SkIRect,
+        supers: Int,
+        coverage: IntArray,
+        py: Int,
+        subrowY: Int,
     ) {
         if (xR <= xL) return
         val left = xL.coerceAtLeast(clip.left.toFloat())
@@ -3262,6 +3360,15 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
             if (width <= 0f) continue
             val samples = (width * supers + 0.5f).toInt().coerceIn(0, supers)
             coverage[px - clip.left] += samples
+            SkScanFillPathSubsampleTrace.recordSpanCoverage(
+                pixelX = px,
+                pixelY = py,
+                subrowY = subrowY,
+                supers = supers,
+                spanLeft = cellL,
+                spanRight = cellR,
+                samplesAddedByScanFillPath = samples,
+            )
         }
     }
 
