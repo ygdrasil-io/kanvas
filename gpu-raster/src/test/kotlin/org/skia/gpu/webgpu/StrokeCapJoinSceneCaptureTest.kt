@@ -383,6 +383,15 @@ class StrokeCapJoinSceneCaptureTest {
                 adapter = adapter,
             )
         }
+        if (System.getProperty(FOR402_PASS_WRITE_PROBE_PROPERTY, "false").toBoolean()) {
+            writeM60F16PassWriteProbe(
+                reference = reference,
+                currentGpu = experimentalGpu,
+                currentResidualStats = residualStats,
+                snapshot = coverageStencilContributionMapSnapshot,
+                adapter = adapter,
+            )
+        }
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -1558,6 +1567,28 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun writeM60F16PassWriteProbe(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        currentResidualStats: StrokeResidualStats,
+        snapshot: SkWebGpuDevice.M60F16CoverageStencilContributionMapSnapshot,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/" +
+                "m60-f16-pass-write-probe-for402",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-pass-write-probe-for402.json").writeText(
+            m60F16PassWriteProbeJson(
+                reference = reference,
+                currentGpu = currentGpu,
+                currentResidualStats = currentResidualStats,
+                snapshot = snapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
     private fun m60F16FragmentLaneRuntimeSnapshotExportJson(
         snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         adapter: String,
@@ -2533,6 +2564,222 @@ class StrokeCapJoinSceneCaptureTest {
               ]
             }
         """.trimIndent() + "\n"
+    }
+
+    private fun m60F16PassWriteProbeJson(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        currentResidualStats: StrokeResidualStats,
+        snapshot: SkWebGpuDevice.M60F16CoverageStencilContributionMapSnapshot,
+        adapter: String,
+    ): String {
+        val for397Pixels = M60_F16_FRAGMENT_LANE_EXPECTED_PIXELS
+        val for397Set = for397Pixels.toSet()
+        val for400Window = m60F16For400WindowPixels(snapshot.windowRadius)
+        val for400SamplesByPixel = collapseM60F16CoverageStencilContributionMapSamples(snapshot.samples)
+            .associateBy { it.x to it.y }
+        val selected = finalResidualOriginPixels(reference, currentGpu)
+            .take(FOR401_FINAL_RESIDUAL_ORIGIN_MAP_SAMPLE_LIMIT)
+            .map { pixel ->
+                val coordinate = pixel.x to pixel.y
+                val attribution = when {
+                    for400SamplesByPixel[coordinate]?.hasEffectiveContribution() == true ->
+                        "writtenByM60AaStencilCover"
+                    else -> "readbackOnlyUnknown"
+                }
+                pixel.copy(
+                    belongsToFor397Predicate = coordinate in for397Set,
+                    belongsToFor400Window = coordinate in for400Window,
+                    attributionCandidate = attribution,
+                ) to for400SamplesByPixel[coordinate]
+            }
+        val selectedPixels = selected.map { it.first }
+        val selectedInFor397 = selectedPixels.count { it.belongsToFor397Predicate }
+        val selectedInFor400 = selectedPixels.count { it.belongsToFor400Window }
+        val for400EffectiveSelected = selected.count { (_, sample) -> sample?.hasEffectiveContribution() == true }
+        val classification = "pass-write-probe-inconclusive"
+        val classificationReason =
+            "The FOR-402 opt-in artifact preserves the 16 FOR-401 final residual coordinates, " +
+                "but Kanvas currently exposes only the FOR-400 radius-1 M60 AA stencil-cover " +
+                "contribution snapshot, not a per-draw framebuffer write hook before final readback. " +
+                "FOR-400 contribution evidence is retained as context only and is not treated as " +
+                "proof of a pass write."
+        val nextStep =
+            "Instrument SkWebGpuDevice render-pass draw submission or the post-draw/pre-readback " +
+                "texture boundary for these 16 coordinates, recording draw id and pipeline family " +
+                "before final readback packing."
+        val selectedJson = selected.joinToString(",\n") { (pixel, sample) ->
+            passWriteProbePixelJson(pixel, sample).prependIndent("    ")
+        }
+        val for397Json = for397Pixels.joinToString(",\n") { it.pixelJson().prependIndent("    ") }
+        val for400WindowJson = for400Window
+            .sortedWith(compareBy<Pair<Int, Int>> { it.second }.thenBy { it.first })
+            .joinToString(",\n") { it.pixelJson().prependIndent("    ") }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-402",
+              "sceneId": "m60-f16-pass-write-probe-for402",
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+              "sourceMemory": "global/kanvas/findings/for-401-localise-le-residu-m60-f16-au-readback-final-sans-writer-identifie",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMethod": "writeM60F16PassWriteProbe",
+              "decision": "M60_F16_PASS_WRITE_PROBE_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "final-residual-written-by-m60-aa-stencil-cover",
+                "final-residual-written-by-other-draw",
+                "final-residual-not-observed-before-readback",
+                "pass-write-probe-inconclusive"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "correctionAppliedByDefault": false,
+              "guards": {
+                "experimentalStrokeRenderer": {
+                  "guardId": "$EXPERIMENTAL_RENDER_PROPERTY",
+                  "enabledForEvidenceRun": true,
+                  "enabledByDefault": false
+                },
+                "bandMetadataTransport": {
+                  "guardId": "$M60_F16_BAND_METADATA_TRANSPORT_PROPERTY",
+                  "enabledForEvidenceRun": ${System.getProperty(M60_F16_BAND_METADATA_TRANSPORT_PROPERTY, "false").toBoolean()},
+                  "enabledByDefault": false
+                },
+                "fragmentLaneDiagnostic": {
+                  "guardId": "$M60_F16_FRAGMENT_LANE_DIAGNOSTIC_PROPERTY",
+                  "enabledForEvidenceRun": ${System.getProperty(M60_F16_FRAGMENT_LANE_DIAGNOSTIC_PROPERTY, "false").toBoolean()},
+                  "enabledByDefault": false
+                },
+                "boundedRuntimeCorrection": {
+                  "guardId": "$FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY",
+                  "enabledForEvidenceRun": ${System.getProperty(FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY, "false").toBoolean()},
+                  "enabledByDefault": false
+                },
+                "coverageStencilContributionMap": {
+                  "guardId": "$FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY",
+                  "enabledForEvidenceRun": ${snapshot.enabled},
+                  "enabledByDefault": false
+                },
+                "finalResidualOriginMap": {
+                  "guardId": "$FOR401_FINAL_RESIDUAL_ORIGIN_MAP_PROPERTY",
+                  "enabledForEvidenceRun": ${System.getProperty(FOR401_FINAL_RESIDUAL_ORIGIN_MAP_PROPERTY, "false").toBoolean()},
+                  "enabledByDefault": false
+                },
+                "passWriteProbe": {
+                  "guardId": "$FOR402_PASS_WRITE_PROBE_PROPERTY",
+                  "enabledForEvidenceRun": true,
+                  "enabledByDefault": false
+                }
+              },
+              "sourceFinding": {
+                "linear": "FOR-401",
+                "classification": "residual-visible-only-at-final-readback",
+                "selectedResidualTotal": 1560,
+                "writtenByM60AaStencilCover": 0,
+                "writtenByOtherPath": 0,
+                "readbackOnlyUnknown": 16,
+                "supportClaim": false,
+                "promoted": false
+              },
+              "probeScope": {
+                "sampleSource": "exact FOR-401 final residual selection",
+                "sampleLimit": $FOR401_FINAL_RESIDUAL_ORIGIN_MAP_SAMPLE_LIMIT,
+                "deterministicTieBreak": ["residualTotal desc", "y asc", "x asc"],
+                "directPassWriteInstrumentationAvailable": false,
+                "availableWriterEvidence": "SkWebGpuDevice.m60F16CoverageStencilContributionMapSnapshot() FOR-400 radius-1 M60 AA stencil-cover contribution samples",
+                "missingInstrumentationPoint": "SkWebGpuDevice render-pass draw submission or post-draw/pre-readback texture boundary with draw id and pipeline family per sampled coordinate"
+              },
+              "for397PredicatePixels": [
+            $for397Json
+              ],
+              "for400WindowPixels": [
+            $for400WindowJson
+              ],
+              "passWriteSummary": {
+                "currentTotalResidual": ${imageResidual(currentGpu, reference)},
+                "currentMismatchPixels": ${currentResidualStats.mismatchPixels},
+                "selectedPixelCount": ${selectedPixels.size},
+                "selectedResidualTotal": ${selectedPixels.sumOf { it.residualTotal }},
+                "selectedInFor397PredicateCount": $selectedInFor397,
+                "selectedInFor400WindowCount": $selectedInFor400,
+                "selectedOutsideFor400WindowCount": ${selectedPixels.size - selectedInFor400},
+                "m60AaStencilCoverWriteCount": 0,
+                "otherDrawWriteCount": 0,
+                "notObservedBeforeReadbackCount": 0,
+                "passWriteProbeInconclusiveCount": ${selectedPixels.size},
+                "for400EffectiveSelectedContributionCount": $for400EffectiveSelected
+              },
+              "selectedPixels": [
+            $selectedJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "correctionApplied": false,
+                "for380BroadCorrectionReintroduced": false,
+                "generalizedOutsideM60F16": false
+              },
+              "classificationReason": ${classificationReason.jsonString()},
+              "nextStep": ${nextStep.jsonString()},
+              "validationCommands": [
+                "rtk python3 scripts/validate_for402_m60_f16_pass_write_probe.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for402-pycache-agent python3 -m py_compile scripts/validate_for402_m60_f16_pass_write_probe.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true -Dkanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled=true -Dkanvas.webgpu.m60F16CoverageStencilContributionMap.enabled=true -Dkanvas.webgpu.m60F16FinalResidualOriginMap.enabled=true -Dkanvas.webgpu.m60F16PassWriteProbe.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun passWriteProbePixelJson(
+        pixel: FinalResidualOriginPixel,
+        for400Sample: SkWebGpuDevice.M60F16CoverageStencilContributionMapSample?,
+    ): String {
+        val hasFor400EffectiveContribution = for400Sample?.hasEffectiveContribution() == true
+        val inspectedEvidence = if (for400Sample == null) {
+            "no FOR-400 radius-1 sample for this coordinate"
+        } else {
+            "FOR-400 radius-1 M60 AA stencil-cover contribution sample"
+        }
+        val missingReason = if (hasFor400EffectiveContribution) {
+            "FOR-400 reported an effective M60 AA stencil-cover contribution for this coordinate."
+        } else {
+            "No direct per-draw framebuffer write hook is available before final readback; FOR-400 contribution evidence alone cannot name a writer."
+        }
+        return """
+            {
+              "x": ${pixel.x},
+              "y": ${pixel.y},
+              "currentGpuRgba": ${rgbaJson(pixel.currentGpu)},
+              "referenceRgba": ${rgbaJson(pixel.reference)},
+              "residualByChannel": ${channelErrorJson(pixel.residualByChannel)},
+              "residualTotal": ${pixel.residualTotal},
+              "belongsToFor397Predicate": ${pixel.belongsToFor397Predicate},
+              "belongsToFor400Window": ${pixel.belongsToFor400Window},
+              "for401AttributionCandidate": ${pixel.attributionCandidate.jsonString()},
+              "classification": "pass-write-probe-inconclusive",
+              "observedWrite": {
+                "observed": false,
+                "available": false,
+                "m60AaStencilCoverWriteObserved": false,
+                "otherDrawWriteObserved": false,
+                "drawId": null,
+                "pipelineFamily": null,
+                "inspectedEvidence": ${inspectedEvidence.jsonString()},
+                "for400SamplePresent": ${for400Sample != null},
+                "for400EffectiveContribution": $hasFor400EffectiveContribution,
+                "reason": ${missingReason.jsonString()}
+              }
+            }
+        """.trimIndent()
     }
 
     private fun collapseM60F16CoverageStencilContributionMapSamples(
@@ -9323,6 +9570,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16CoverageStencilContributionMap.enabled"
         private const val FOR401_FINAL_RESIDUAL_ORIGIN_MAP_PROPERTY =
             "kanvas.webgpu.m60F16FinalResidualOriginMap.enabled"
+        private const val FOR402_PASS_WRITE_PROBE_PROPERTY =
+            "kanvas.webgpu.m60F16PassWriteProbe.enabled"
         private const val FOR401_FINAL_RESIDUAL_ORIGIN_MAP_SAMPLE_LIMIT = 16
         private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
