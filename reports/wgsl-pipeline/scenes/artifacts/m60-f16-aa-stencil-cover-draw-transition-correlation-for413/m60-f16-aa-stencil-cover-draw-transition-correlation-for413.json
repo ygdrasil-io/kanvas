@@ -1,0 +1,5701 @@
+{
+  "adapter": "Apple M2 Max",
+  "allowedClassifications": [
+    "draw-boundary-unavailable",
+    "draw-change-explained-by-shader-return",
+    "draw-change-unattributed-shader-unavailable",
+    "draw-mutates-despite-zero-shader-return",
+    "draw-unchanged-after-zero-shader-return"
+  ],
+  "classification": "draw-mutates-despite-zero-shader-return",
+  "classificationReason": "All 16 FOR-401 pixels have at least one draw transition where the FOR-410/FOR-405 boundary mutates while the real FOR-412 sourceColorSentToBlend values observed for that draw are zero.",
+  "comparisonPolicy": {
+    "for400UsedAsDirectProof": false,
+    "missingShaderReturnTreatedAsZero": false,
+    "noSyntheticShaderReturn": true,
+    "replaySourceField": "FOR-412 sourceColorSentToBlend",
+    "sourceOverReplay": "premultiplied kSrcOver applied in subdraw order",
+    "tolerance": 1e-06
+  },
+  "correctionAppliedByDefault": false,
+  "decision": "FOR-413 localizes AA stencil-cover intermediate-texture mutations to draw 1 and draw 3. Across the 16 FOR-401 pixels, every pixel has a draw transition that mutates despite real zero shader returns captured by FOR-412.",
+  "defaultRenderingChanged": false,
+  "globalClassification": "draw-mutates-despite-zero-shader-return",
+  "guards": {
+    "derivedOnly": {
+      "defaultRenderingChanged": false,
+      "enabledByDefault": false,
+      "notes": "FOR-413 consumes checked-in artifacts and adds no runtime guard or rendering code."
+    }
+  },
+  "linear": "FOR-413",
+  "nextStep": "Instrument the WebGPU blend/render-pass/store boundary around the mutating draw transitions, with draw 1 and draw 3 separated, because FOR-413 shows intermediate texture mutations despite zero observed shader returns.",
+  "nonGoalsPreserved": [
+    "No rendering correction is applied.",
+    "No default rendering behavior changes.",
+    "No support or promotion claim is made for M60 F16.",
+    "No score, threshold, or scene promotion policy changes.",
+    "FOR-400 is not used as direct write proof.",
+    "Unavailable FOR-412 shader returns are not converted into synthetic zero sources."
+  ],
+  "producer": "scripts/validate_for413_m60_f16_aa_stencil_cover_draw_transition_correlation.py",
+  "producerMethod": "derived Python correlation over existing FOR-401/FOR-405/FOR-410/FOR-412 artifacts",
+  "promoted": false,
+  "runtimeOwner": "none; derived evidence only",
+  "sceneId": "m60-f16-aa-stencil-cover-draw-transition-correlation-for413",
+  "schemaVersion": 1,
+  "scope": {
+    "blendMode": "kSrcOver",
+    "drawTransitions": [
+      {
+        "afterDrawIndex": 3,
+        "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+        "drawIndex": 1
+      },
+      {
+        "afterDrawIndex": 5,
+        "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+        "drawIndex": 3
+      },
+      {
+        "afterDrawIndex": null,
+        "afterSource": "FOR-405 post-pass collapsed sample",
+        "drawIndex": 5
+      }
+    ],
+    "generalizedOutsideM60F16": false,
+    "pipelineFamily": "StencilCoverAaPolygonDraw",
+    "selectedPixelCount": 16,
+    "transitionCount": 48
+  },
+  "scoringChanged": false,
+  "selectedPixels": [
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 1 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.290527344,
+              0.251464844,
+              0.098144531,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.640136719,
+            "maxChannelFloat": 0.290527344,
+            "signedRgbaFloat": [
+              -0.290527344,
+              -0.251464844,
+              -0.098144531,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.290527344,
+                0.251464844,
+                0.098144531,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.640136719,
+              "maxChannelFloat": 0.290527344,
+              "signedRgbaFloat": [
+                -0.290527344,
+                -0.251464844,
+                -0.098144531,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "1->3",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-unchanged-after-zero-shader-return",
+          "classificationReason": "The draw leaves the intermediate texture unchanged and every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "3->5",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 92,
+      "y": 75
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 1 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.290527344,
+              0.251464844,
+              0.098144531,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.640136719,
+            "maxChannelFloat": 0.290527344,
+            "signedRgbaFloat": [
+              -0.290527344,
+              -0.251464844,
+              -0.098144531,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.290527344,
+                0.251464844,
+                0.098144531,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.640136719,
+              "maxChannelFloat": 0.290527344,
+              "signedRgbaFloat": [
+                -0.290527344,
+                -0.251464844,
+                -0.098144531,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "1->3",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-unchanged-after-zero-shader-return",
+          "classificationReason": "The draw leaves the intermediate texture unchanged and every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "3->5",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 91,
+      "y": 76
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 1 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.290527344,
+              0.251464844,
+              0.098144531,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.640136719,
+            "maxChannelFloat": 0.290527344,
+            "signedRgbaFloat": [
+              -0.290527344,
+              -0.251464844,
+              -0.098144531,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.290527344,
+                0.251464844,
+                0.098144531,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.640136719,
+              "maxChannelFloat": 0.290527344,
+              "signedRgbaFloat": [
+                -0.290527344,
+                -0.251464844,
+                -0.098144531,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "1->3",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-unchanged-after-zero-shader-return",
+          "classificationReason": "The draw leaves the intermediate texture unchanged and every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "3->5",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 90,
+      "y": 77
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 1 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.290527344,
+              0.251464844,
+              0.098144531,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.640136719,
+            "maxChannelFloat": 0.290527344,
+            "signedRgbaFloat": [
+              -0.290527344,
+              -0.251464844,
+              -0.098144531,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.290527344,
+                0.251464844,
+                0.098144531,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.640136719,
+              "maxChannelFloat": 0.290527344,
+              "signedRgbaFloat": [
+                -0.290527344,
+                -0.251464844,
+                -0.098144531,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "1->3",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-unchanged-after-zero-shader-return",
+          "classificationReason": "The draw leaves the intermediate texture unchanged and every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "3->5",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 89,
+      "y": 78
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 1 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.290527344,
+              0.251464844,
+              0.098144531,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.640136719,
+            "maxChannelFloat": 0.290527344,
+            "signedRgbaFloat": [
+              -0.290527344,
+              -0.251464844,
+              -0.098144531,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.290527344,
+                0.251464844,
+                0.098144531,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.640136719,
+              "maxChannelFloat": 0.290527344,
+              "signedRgbaFloat": [
+                -0.290527344,
+                -0.251464844,
+                -0.098144531,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "1->3",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-unchanged-after-zero-shader-return",
+          "classificationReason": "The draw leaves the intermediate texture unchanged and every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "3->5",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 88,
+      "y": 79
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 1 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.290527344,
+              0.251464844,
+              0.098144531,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.640136719,
+            "maxChannelFloat": 0.290527344,
+            "signedRgbaFloat": [
+              -0.290527344,
+              -0.251464844,
+              -0.098144531,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.290527344,
+                0.251464844,
+                0.098144531,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.640136719,
+              "maxChannelFloat": 0.290527344,
+              "signedRgbaFloat": [
+                -0.290527344,
+                -0.251464844,
+                -0.098144531,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "1->3",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-unchanged-after-zero-shader-return",
+          "classificationReason": "The draw leaves the intermediate texture unchanged and every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "3->5",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.709472656,
+            0.748535156,
+            0.901855469,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 87,
+      "y": 80
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 3 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "1->3",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              1.0,
+              0.458984375,
+              0.702148437,
+              0.0
+            ],
+            "absoluteTotalFloat": 2.161132812,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              -1.0,
+              -0.458984375,
+              -0.702148437,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                1.0,
+                0.458984375,
+                0.702148437,
+                0.0
+              ],
+              "absoluteTotalFloat": 2.161132812,
+              "maxChannelFloat": 1.0,
+              "signedRgbaFloat": [
+                -1.0,
+                -0.458984375,
+                -0.702148437,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "3->5",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 101,
+      "y": 37
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 3 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "1->3",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              1.0,
+              0.458984375,
+              0.702148437,
+              0.0
+            ],
+            "absoluteTotalFloat": 2.161132812,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              -1.0,
+              -0.458984375,
+              -0.702148437,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                1.0,
+                0.458984375,
+                0.702148437,
+                0.0
+              ],
+              "absoluteTotalFloat": 2.161132812,
+              "maxChannelFloat": 1.0,
+              "signedRgbaFloat": [
+                -1.0,
+                -0.458984375,
+                -0.702148437,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "3->5",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 102,
+      "y": 37
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 3 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "1->3",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              1.0,
+              0.458984375,
+              0.702148437,
+              0.0
+            ],
+            "absoluteTotalFloat": 2.161132812,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              -1.0,
+              -0.458984375,
+              -0.702148437,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                1.0,
+                0.458984375,
+                0.702148437,
+                0.0
+              ],
+              "absoluteTotalFloat": 2.161132812,
+              "maxChannelFloat": 1.0,
+              "signedRgbaFloat": [
+                -1.0,
+                -0.458984375,
+                -0.702148437,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "3->5",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 99,
+      "y": 38
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 3 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "1->3",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              1.0,
+              0.458984375,
+              0.702148437,
+              0.0
+            ],
+            "absoluteTotalFloat": 2.161132812,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              -1.0,
+              -0.458984375,
+              -0.702148437,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                1.0,
+                0.458984375,
+                0.702148437,
+                0.0
+              ],
+              "absoluteTotalFloat": 2.161132812,
+              "maxChannelFloat": 1.0,
+              "signedRgbaFloat": [
+                -1.0,
+                -0.458984375,
+                -0.702148437,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "3->5",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 100,
+      "y": 38
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 3 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "1->3",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              1.0,
+              0.458984375,
+              0.702148437,
+              0.0
+            ],
+            "absoluteTotalFloat": 2.161132812,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              -1.0,
+              -0.458984375,
+              -0.702148437,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                1.0,
+                0.458984375,
+                0.702148437,
+                0.0
+              ],
+              "absoluteTotalFloat": 2.161132812,
+              "maxChannelFloat": 1.0,
+              "signedRgbaFloat": [
+                -1.0,
+                -0.458984375,
+                -0.702148437,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "3->5",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 101,
+      "y": 38
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 3 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "1->3",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              1.0,
+              0.458984375,
+              0.702148437,
+              0.0
+            ],
+            "absoluteTotalFloat": 2.161132812,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              -1.0,
+              -0.458984375,
+              -0.702148437,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                1.0,
+                0.458984375,
+                0.702148437,
+                0.0
+              ],
+              "absoluteTotalFloat": 2.161132812,
+              "maxChannelFloat": 1.0,
+              "signedRgbaFloat": [
+                -1.0,
+                -0.458984375,
+                -0.702148437,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "3->5",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 102,
+      "y": 38
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 3 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "1->3",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              1.0,
+              0.458984375,
+              0.702148437,
+              0.0
+            ],
+            "absoluteTotalFloat": 2.161132812,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              -1.0,
+              -0.458984375,
+              -0.702148437,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                1.0,
+                0.458984375,
+                0.702148437,
+                0.0
+              ],
+              "absoluteTotalFloat": 2.161132812,
+              "maxChannelFloat": 1.0,
+              "signedRgbaFloat": [
+                -1.0,
+                -0.458984375,
+                -0.702148437,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "3->5",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 103,
+      "y": 38
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 3 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "1->3",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              1.0,
+              0.458984375,
+              0.702148437,
+              0.0
+            ],
+            "absoluteTotalFloat": 2.161132812,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              -1.0,
+              -0.458984375,
+              -0.702148437,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                1.0,
+                0.458984375,
+                0.702148437,
+                0.0
+              ],
+              "absoluteTotalFloat": 2.161132812,
+              "maxChannelFloat": 1.0,
+              "signedRgbaFloat": [
+                -1.0,
+                -0.458984375,
+                -0.702148437,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "3->5",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 104,
+      "y": 38
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 3 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            0.5,
+            0.5,
+            0.5,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-change-unattributed-shader-unavailable",
+          "classificationReason": "The draw changes the intermediate texture but at least one shader return for this draw is unavailable.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.5,
+              0.5,
+              0.5,
+              0.0
+            ],
+            "absoluteTotalFloat": 1.5,
+            "maxChannelFloat": 0.5,
+            "signedRgbaFloat": [
+              -0.5,
+              -0.5,
+              -0.5,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.5,
+                0.5,
+                0.5,
+                0.0
+              ],
+              "absoluteTotalFloat": 1.5,
+              "maxChannelFloat": 0.5,
+              "signedRgbaFloat": [
+                -0.5,
+                -0.5,
+                -0.5,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "1->3",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            0.5,
+            0.5,
+            0.5,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.5,
+              0.041015625,
+              0.202148437,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.743164062,
+            "maxChannelFloat": 0.5,
+            "signedRgbaFloat": [
+              -0.5,
+              0.041015625,
+              -0.202148437,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.5,
+                0.041015625,
+                0.202148437,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.743164062,
+              "maxChannelFloat": 0.5,
+              "signedRgbaFloat": [
+                -0.5,
+                0.041015625,
+                -0.202148437,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              0.5,
+              0.5,
+              0.5,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              0.5,
+              0.5,
+              0.5,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "3->5",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 98,
+      "y": 39
+    },
+    {
+      "classification": "draw-mutates-despite-zero-shader-return",
+      "classificationReason": "Draw 3 has the highest-priority transition class `draw-mutates-despite-zero-shader-return` for this pixel.",
+      "transitions": [
+        {
+          "afterRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 1,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "1->3",
+          "withinTolerance": true
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "beforeRgbaFloat": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 3 predraw compute readback",
+          "classification": "draw-mutates-despite-zero-shader-return",
+          "classificationReason": "The draw changes the intermediate texture while every real FOR-412 shader return for this draw is zero.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              1.0,
+              0.458984375,
+              0.702148437,
+              0.0
+            ],
+            "absoluteTotalFloat": 2.161132812,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              -1.0,
+              -0.458984375,
+              -0.702148437,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "drawIndex": 3,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": true,
+            "allObservedSourcesZero": true,
+            "realObservedCount": 2,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 0,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-captured",
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": true,
+              "sourceColorSentToBlend": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 2,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                1.0,
+                0.458984375,
+                0.702148437,
+                0.0
+              ],
+              "absoluteTotalFloat": 2.161132812,
+              "maxChannelFloat": 1.0,
+              "signedRgbaFloat": [
+                -1.0,
+                -0.458984375,
+                -0.702148437,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": false
+            },
+            "replayedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 0,
+            "startRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "withinTolerance": false
+          },
+          "transitionId": "3->5",
+          "withinTolerance": false
+        },
+        {
+          "afterRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "afterSource": "FOR-405 post-pass collapsed sample",
+          "beforeRgbaFloat": [
+            0.0,
+            0.541015625,
+            0.297851563,
+            1.0
+          ],
+          "beforeSource": "FOR-410 drawIndex 5 predraw compute readback",
+          "classification": "draw-boundary-unavailable",
+          "classificationReason": "The before/after state boundaries are present, but the shader-return boundary for this draw is unavailable; no synthetic zero is used.",
+          "delta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "absoluteTotalFloat": 0.0,
+            "maxChannelFloat": 0.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": true
+          },
+          "drawIndex": 5,
+          "shaderReturnState": {
+            "allAvailableNonSynthetic": false,
+            "allObservedSourcesZero": false,
+            "realObservedCount": 0,
+            "subdrawCount": 2,
+            "syntheticCount": 0,
+            "unavailableCount": 2,
+            "unavailableTreatedAsSyntheticZero": false
+          },
+          "shaderReturnSubdraws": [
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 0,
+              "subdrawRole": "inside"
+            },
+            {
+              "blendMode": "kSrcOver",
+              "captureSynthetic": false,
+              "classification": "shader-return-unavailable",
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "shaderObserved": false,
+              "sourceColorSentToBlend": null,
+              "subdrawOrdinal": 1,
+              "subdrawRole": "outside"
+            }
+          ],
+          "sourceOverReplay": {
+            "inputSourceField": "sourceColorSentToBlend",
+            "inputsUsedCount": 0,
+            "replayVsAfterDelta": {
+              "absoluteRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "absoluteTotalFloat": 0.0,
+              "maxChannelFloat": 0.0,
+              "signedRgbaFloat": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "tolerance": 1e-06,
+              "withinTolerance": true
+            },
+            "replayedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "skippedUnavailableAsSyntheticZero": false,
+            "sourceUnavailableCount": 2,
+            "startRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "withinTolerance": true
+          },
+          "transitionId": "5->postPass",
+          "withinTolerance": true
+        }
+      ],
+      "x": 99,
+      "y": 39
+    }
+  ],
+  "sourceArtifacts": {
+    "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+    "for405": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-pass-readback-for405/m60-f16-aa-stencil-cover-post-pass-readback-for405.json",
+    "for410": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-predraw-dst-readback-for410/m60-f16-aa-stencil-cover-predraw-dst-readback-for410.json",
+    "for412": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412.json"
+  },
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-413-m60-f16-correler-les-transitions-de-draw-aa-stencil-cover-avec-le-retour-shader",
+  "sourceFinding": "global/kanvas/findings/for-412-capture-la-source-shader-retourne-au-blend-et-classe-les-16-pixels-comme-zero-shader-return-post-pass-colore-1",
+  "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+  "supportClaim": false,
+  "thresholdChanged": false,
+  "transitionSummary": {
+    "byClassification": {
+      "draw-boundary-unavailable": 25,
+      "draw-change-unattributed-shader-unavailable": 1,
+      "draw-mutates-despite-zero-shader-return": 16,
+      "draw-unchanged-after-zero-shader-return": 6
+    },
+    "draw1MutatesDespiteZeroShaderReturnPixelCount": 6,
+    "draw3MutatesDespiteZeroShaderReturnPixelCount": 10,
+    "firstStateChangeDrawCounts": {
+      "1": 7,
+      "3": 9
+    },
+    "mutatesDespiteZeroShaderReturnDrawCounts": {
+      "1": 6,
+      "3": 10
+    },
+    "mutatesDespiteZeroShaderReturnPixelCount": 16,
+    "shaderUnavailableDrawCounts": {
+      "1": 10,
+      "5": 16
+    },
+    "stateChangeDrawCounts": {
+      "1": 7,
+      "3": 10
+    }
+  },
+  "validationCommands": [
+    "rtk python3 scripts/validate_for413_m60_f16_aa_stencil_cover_draw_transition_correlation.py",
+    "rtk python3 scripts/validate_for412_m60_f16_aa_stencil_cover_shader_return_diagnostic.py",
+    "rtk python3 scripts/validate_for410_m60_f16_aa_stencil_cover_predraw_dst_readback.py",
+    "rtk python3 scripts/validate_for405_m60_f16_aa_stencil_cover_post_pass_readback.py",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk git diff --check",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for413-pycache python3 -m py_compile scripts/validate_for413_m60_f16_aa_stencil_cover_draw_transition_correlation.py"
+  ]
+}
