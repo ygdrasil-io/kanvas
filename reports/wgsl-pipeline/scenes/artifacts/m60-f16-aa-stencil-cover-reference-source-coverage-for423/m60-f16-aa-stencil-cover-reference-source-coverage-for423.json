@@ -1,0 +1,2255 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-423",
+          "sceneId": "m60-f16-aa-stencil-cover-reference-source-coverage-for423",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-423-m60-f16-comparer-source-coverage-verifiees-reference-scene",
+          "sourceFinding": "global/kanvas/findings/for-422-source-verifiee-correspond-scratch-et-mutation-finale",
+          "sourceArtifacts": {
+            "for422": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-source-comparison-for422/m60-f16-aa-stencil-cover-verified-source-comparison-for422.json",
+            "for421": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-return-path-diagnostic-for421/m60-f16-aa-stencil-cover-verified-return-path-diagnostic-for421.json",
+            "for372": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-effective-coverage-export-for372/m60-f16-effective-coverage-export-for372.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "classification": "verified-coverage-diverges-from-reference",
+          "globalClassification": "verified-coverage-diverges-from-reference",
+          "allowedClassifications": [
+            "verified-source-and-coverage-match-reference",
+            "verified-source-diverges-from-reference",
+            "verified-coverage-diverges-from-reference",
+            "reference-comparison-incomplete"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "comparisonPolicy": {
+            "verifiedSourceMeaning": "sourceColorSentToBlend is the non-synthetic vec4f captured by the FOR-421 verified return-path instrumentation.",
+            "coverageReferenceMeaning": "coverageExpectedAlpha is read from BoundedStrokeCapJoinCoverageMaskGM alpha at the same selected pixel.",
+            "sourceReferenceMeaning": "expectedSourcePremulRgbaFloat is paintSourceRgba premultiplied by coverageExpectedAlpha.",
+            "finalReferenceMeaning": "referenceRgba is the Skia/reference bitmap pixel for the selected scene coordinate.",
+            "tolerance": 0.007843138,
+            "boundedRecordPolicy": "One record per selected pixel and sampled draw; no framebuffer dump or WGSL source dump is stored."
+          },
+          "structuralSummary": {
+            "diagnosticReturnPathVerified": true,
+            "selectedPixelCount": 16,
+            "localComparisonCount": 48,
+            "decisiveComparisonCount": 16,
+            "verifiedSourceRecordCount": 16,
+            "coverageReferenceCount": 48,
+            "coverageDivergenceCount": 6,
+            "sourceDivergenceCount": 10,
+            "sourceCoverageMatchCount": 0,
+            "incompleteCount": 32,
+            "classificationCounts": {
+              "verified-source-and-coverage-match-reference": 0,
+              "verified-source-diverges-from-reference": 10,
+              "verified-coverage-diverges-from-reference": 6,
+              "reference-comparison-incomplete": 32
+            }
+          },
+          "localComparisons": [
+                        {
+              "x": 101,
+              "y": 37,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteTotalFloat": 1.992156863,
+  "maxChannelFloat": 0.733333349,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 37,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteTotalFloat": 1.992156863,
+  "maxChannelFloat": 0.733333349,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteTotalFloat": 1.992156863,
+  "maxChannelFloat": 0.733333349,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 100,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteTotalFloat": 1.992156863,
+  "maxChannelFloat": 0.733333349,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 101,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteTotalFloat": 1.992156863,
+  "maxChannelFloat": 0.733333349,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteTotalFloat": 1.992156863,
+  "maxChannelFloat": 0.733333349,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 103,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteTotalFloat": 1.992156863,
+  "maxChannelFloat": 0.733333349,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 104,
+              "y": 38,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteTotalFloat": 1.992156863,
+  "maxChannelFloat": 0.733333349,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 98,
+              "y": 39,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteTotalFloat": 1.992156863,
+  "maxChannelFloat": 0.733333349,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 39,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgba8": [255, 255, 255, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteRgbaFloat": [0.733333349, 0.525490165, 0.733333349, 0.000000000],
+  "absoluteTotalFloat": 1.992156863,
+  "maxChannelFloat": 0.733333349,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 92,
+              "y": 75,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-coverage-diverges-from-reference",
+              "classificationReason": "The verified source alpha differs from the CPU coverage-mask alpha for this selected pixel.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                "coverageObservedAlpha": 0.376470625,
+                "coverageVsReferenceDelta": 0.250980377,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [0.086274512, -0.214071527, 0.091426373, -0.250980377],
+  "absoluteRgbaFloat": [0.086274512, 0.214071527, 0.091426373, 0.250980377],
+  "absoluteTotalFloat": 0.642752767,
+  "maxChannelFloat": 0.250980377,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 91,
+              "y": 76,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-coverage-diverges-from-reference",
+              "classificationReason": "The verified source alpha differs from the CPU coverage-mask alpha for this selected pixel.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                "coverageObservedAlpha": 0.376470625,
+                "coverageVsReferenceDelta": 0.250980377,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [0.086274512, -0.214071527, 0.091426373, -0.250980377],
+  "absoluteRgbaFloat": [0.086274512, 0.214071527, 0.091426373, 0.250980377],
+  "absoluteTotalFloat": 0.642752767,
+  "maxChannelFloat": 0.250980377,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 90,
+              "y": 77,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-coverage-diverges-from-reference",
+              "classificationReason": "The verified source alpha differs from the CPU coverage-mask alpha for this selected pixel.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                "coverageObservedAlpha": 0.376470625,
+                "coverageVsReferenceDelta": 0.250980377,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [0.086274512, -0.214071527, 0.091426373, -0.250980377],
+  "absoluteRgbaFloat": [0.086274512, 0.214071527, 0.091426373, 0.250980377],
+  "absoluteTotalFloat": 0.642752767,
+  "maxChannelFloat": 0.250980377,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 89,
+              "y": 78,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-coverage-diverges-from-reference",
+              "classificationReason": "The verified source alpha differs from the CPU coverage-mask alpha for this selected pixel.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                "coverageObservedAlpha": 0.376470625,
+                "coverageVsReferenceDelta": 0.250980377,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [0.086274512, -0.214071527, 0.091426373, -0.250980377],
+  "absoluteRgbaFloat": [0.086274512, 0.214071527, 0.091426373, 0.250980377],
+  "absoluteTotalFloat": 0.642752767,
+  "maxChannelFloat": 0.250980377,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 88,
+              "y": 79,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-coverage-diverges-from-reference",
+              "classificationReason": "The verified source alpha differs from the CPU coverage-mask alpha for this selected pixel.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                "coverageObservedAlpha": 0.376470625,
+                "coverageVsReferenceDelta": 0.250980377,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [0.086274512, -0.214071527, 0.091426373, -0.250980377],
+  "absoluteRgbaFloat": [0.086274512, 0.214071527, 0.091426373, 0.250980377],
+  "absoluteTotalFloat": 0.642752767,
+  "maxChannelFloat": 0.250980377,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 87,
+              "y": 80,
+              "drawIndex": 1,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-coverage-diverges-from-reference",
+              "classificationReason": "The verified source alpha differs from the CPU coverage-mask alpha for this selected pixel.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+                "coverageObservedAlpha": 0.376470625,
+                "coverageVsReferenceDelta": 0.250980377,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [0.086274512, -0.214071527, 0.091426373, -0.250980377],
+  "absoluteRgbaFloat": [0.086274512, 0.214071527, 0.091426373, 0.250980377],
+  "absoluteTotalFloat": 0.642752767,
+  "maxChannelFloat": 0.250980377,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 101,
+              "y": 37,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-diverges-from-reference",
+              "classificationReason": "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "coverageObservedAlpha": 1.000000000,
+                "coverageVsReferenceDelta": 0.000000000,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [-0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteRgbaFloat": [0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteTotalFloat": 1.305882454,
+  "maxChannelFloat": 0.701960802,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 37,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-diverges-from-reference",
+              "classificationReason": "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "coverageObservedAlpha": 1.000000000,
+                "coverageVsReferenceDelta": 0.000000000,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [-0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteRgbaFloat": [0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteTotalFloat": 1.305882454,
+  "maxChannelFloat": 0.701960802,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-diverges-from-reference",
+              "classificationReason": "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "coverageObservedAlpha": 1.000000000,
+                "coverageVsReferenceDelta": 0.000000000,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [-0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteRgbaFloat": [0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteTotalFloat": 1.305882454,
+  "maxChannelFloat": 0.701960802,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 100,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-diverges-from-reference",
+              "classificationReason": "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "coverageObservedAlpha": 1.000000000,
+                "coverageVsReferenceDelta": 0.000000000,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [-0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteRgbaFloat": [0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteTotalFloat": 1.305882454,
+  "maxChannelFloat": 0.701960802,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 101,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-diverges-from-reference",
+              "classificationReason": "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "coverageObservedAlpha": 1.000000000,
+                "coverageVsReferenceDelta": 0.000000000,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [-0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteRgbaFloat": [0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteTotalFloat": 1.305882454,
+  "maxChannelFloat": 0.701960802,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-diverges-from-reference",
+              "classificationReason": "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "coverageObservedAlpha": 1.000000000,
+                "coverageVsReferenceDelta": 0.000000000,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [-0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteRgbaFloat": [0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteTotalFloat": 1.305882454,
+  "maxChannelFloat": 0.701960802,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 103,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-diverges-from-reference",
+              "classificationReason": "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "coverageObservedAlpha": 1.000000000,
+                "coverageVsReferenceDelta": 0.000000000,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [-0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteRgbaFloat": [0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteTotalFloat": 1.305882454,
+  "maxChannelFloat": 0.701960802,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 104,
+              "y": 38,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-diverges-from-reference",
+              "classificationReason": "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "coverageObservedAlpha": 1.000000000,
+                "coverageVsReferenceDelta": 0.000000000,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [-0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteRgbaFloat": [0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteTotalFloat": 1.305882454,
+  "maxChannelFloat": 0.701960802,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 98,
+              "y": 39,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-diverges-from-reference",
+              "classificationReason": "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "coverageObservedAlpha": 1.000000000,
+                "coverageVsReferenceDelta": 0.000000000,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [-0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteRgbaFloat": [0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteTotalFloat": 1.305882454,
+  "maxChannelFloat": 0.701960802,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.500000000, 0.500000000, 0.500000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 39,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": true,
+              "classification": "verified-source-diverges-from-reference",
+              "classificationReason": "The verified source color differs from paintSourceRgba premultiplied by the CPU coverage-mask alpha.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "coverageObservedAlpha": 1.000000000,
+                "coverageVsReferenceDelta": 0.000000000,
+                "sourceVsReferenceDelta": {
+  "signedRgbaFloat": [-0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteRgbaFloat": [0.701960802, 0.305882394, 0.298039228, 0.000000000],
+  "absoluteTotalFloat": 1.305882454,
+  "maxChannelFloat": 0.701960802,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 92,
+              "y": 75,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 91,
+              "y": 76,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 90,
+              "y": 77,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 89,
+              "y": 78,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 88,
+              "y": 79,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 87,
+              "y": 80,
+              "drawIndex": 3,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 101,
+              "y": 37,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 37,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 100,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 101,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 102,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 103,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 104,
+              "y": 38,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 98,
+              "y": 39,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 99,
+              "y": 39,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "square-bevel",
+                "cap": "square",
+                "join": "bevel",
+                "paintSourceRgba": [179, 60, 0, 255],
+                "coverageExpectedByte": 255,
+                "coverageExpectedAlpha": 1.000000000,
+                "expectedSourcePremulRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+                "referenceRgba": [68, 121, 68, 255],
+                "currentGpuRgba": [68, 121, 68, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+                "dstAfterRgba8": [0, 138, 76, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [-0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteRgbaFloat": [0.266666681, 0.066505820, 0.031184882, 0.000000000],
+  "absoluteTotalFloat": 0.364357382,
+  "maxChannelFloat": 0.266666681,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 92,
+              "y": 75,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 91,
+              "y": 76,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 90,
+              "y": 77,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 89,
+              "y": 78,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 88,
+              "y": 79,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            },
+            {
+              "x": 87,
+              "y": 80,
+              "drawIndex": 5,
+              "pipelineFamily": "StencilCoverAaPolygonDraw",
+              "blendMode": "kSrcOver",
+              "decisiveForGlobalClassification": false,
+              "classification": "reference-comparison-incomplete",
+              "classificationReason": "The comparison is incomplete because the verified source, reference band, final output, or return-path proof is unavailable.",
+              "reference": {
+                "strokeBand": "round-round",
+                "cap": "round",
+                "join": "round",
+                "paintSourceRgba": [0, 138, 76, 255],
+                "coverageExpectedByte": 160,
+                "coverageExpectedAlpha": 0.627451003,
+                "expectedSourcePremulRgbaFloat": [0.000000000, 0.339561731, 0.187005013, 0.627451003],
+                "referenceRgba": [133, 150, 214, 255],
+                "currentGpuRgba": [181, 191, 230, 255]
+              },
+              "verifiedSource": {
+                "available": false,
+                "subdrawOrdinal": null,
+                "subdrawRole": null,
+                "sourceColorSentToBlend": null,
+                "coverageObservedAlpha": null,
+                "coverageVsReferenceDelta": null,
+                "sourceVsReferenceDelta": null
+              },
+              "finalOutput": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstAfterRgba8": [181, 191, 230, 255],
+                "dstAfterVsReferenceDelta": {
+  "signedRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteRgbaFloat": [0.187904000, 0.160299838, 0.062639773, 0.000000000],
+  "absoluteTotalFloat": 0.410843611,
+  "maxChannelFloat": 0.187904000,
+  "withinTolerance": false,
+  "tolerance": 0.007843138
+}
+              }
+            }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "renderingFixApplied": false,
+            "wgsl4kModified": false,
+            "fullWgslDumpStored": false
+          },
+          "classificationReason": "At least one decisive sample has verified source alpha/coverage that diverges from the CPU coverage-mask reference.",
+          "nextStep": "Target the AA stencil-cover coverage/stencil side: the verified alpha sent to blend does not match the CPU coverage-mask reference.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+            "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+            "rtk python3 scripts/validate_for421_m60_f16_aa_stencil_cover_verified_return_path_diagnostic.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for423-pycache python3 -m py_compile scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+            "rtk git diff --check",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+          ]
+        }
