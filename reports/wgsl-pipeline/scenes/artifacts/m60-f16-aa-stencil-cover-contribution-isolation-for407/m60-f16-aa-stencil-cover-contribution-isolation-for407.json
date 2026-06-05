@@ -1,0 +1,3163 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-407",
+  "sceneId": "m60-f16-aa-stencil-cover-contribution-isolation-for407",
+  "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-407-m60-f16-isoler-couverture-couleur-blend-dans-la-passe-aa-stencil-cover",
+  "sourceMemory": {
+    "for405": "global/kanvas/findings/for-405-observe-les-couleurs-post-passe-aa-stencil-cover-m60-f16",
+    "for406": "global/kanvas/findings/for-406-montre-que-la-divergence-m60-f16-est-deja-visible-en-post-passe-aa-stencil-cover"
+  },
+  "sourceArtifacts": {
+    "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+    "for404": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-runtime-hook-for404/m60-f16-aa-stencil-cover-runtime-hook-for404.json",
+    "for405": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-pass-readback-for405/m60-f16-aa-stencil-cover-post-pass-readback-for405.json",
+    "for406": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-post-pass-reference-comparison-for406/m60-f16-post-pass-reference-comparison-for406.json"
+  },
+  "producer": "scripts/validate_for407_m60_f16_aa_stencil_cover_contribution_isolation.py",
+  "decision": "M60_F16_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_RECORDED",
+  "classification": "insufficient-per-subdraw-data",
+  "globalClassification": "insufficient-per-subdraw-data",
+  "globalConclusion": "per-subdraw-inputs-required-before-root-cause-classification",
+  "allowedPixelClassifications": [
+    "blend-source-over-wrong",
+    "coverage-aa-wrong",
+    "draw-order-or-accumulation-wrong",
+    "insufficient-per-subdraw-data",
+    "source-color-wrong"
+  ],
+  "allowedGlobalClassifications": [
+    "blend-source-over-wrong",
+    "coverage-aa-wrong",
+    "draw-order-or-accumulation-wrong",
+    "insufficient-per-subdraw-data",
+    "source-color-wrong"
+  ],
+  "supportClaim": false,
+  "promoted": false,
+  "correctionAppliedByDefault": false,
+  "defaultRenderingChanged": false,
+  "sourceContext": {
+    "for401Classification": "residual-visible-only-at-final-readback",
+    "for401CurrentTotalResidual": 62748,
+    "for401CurrentMismatchPixels": 1615,
+    "for401SelectedResidualTotal": 1560,
+    "for401SelectedPixelCount": 16,
+    "for404Classification": "aa-stencil-cover-post-pass-readback-blocked",
+    "for405Classification": "aa-stencil-cover-post-pass-color-observed",
+    "for405PostPassObservedCount": 16,
+    "for406Classification": "post-pass-already-diverged",
+    "for406GlobalConclusion": "divergence-already-visible-in-post-pass",
+    "for406PostPassAlreadyDivergedCount": 16,
+    "for406SelectedPostPassToSkiaDeltaTotal": 1560,
+    "for400EvidencePolicy": "context-only-not-direct-write-proof",
+    "for400UsedAsDirectProof": false
+  },
+  "availableData": {
+    "selectedFinalResidualPixels": true,
+    "postPassBoundaryRgba16FloatReadback": true,
+    "postPassBoundaryEventCount": 3,
+    "postPassBoundaryDrawIndexes": [
+      1,
+      3,
+      5
+    ],
+    "postPassMatchesCurrentGpuFinalCount": 16,
+    "cpuMatchesSkiaCount": 16,
+    "postPassToSkiaDeltaTotal": 1560,
+    "finalGpuToSkiaDeltaTotal": 1560
+  },
+  "missingData": [
+    {
+      "field": "dstBeforeRgbaFloat",
+      "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+    },
+    {
+      "field": "sourceColorPremulRgbaFloat",
+      "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+    },
+    {
+      "field": "coverageOrAaAlpha",
+      "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+    },
+    {
+      "field": "expectedSourceOverRgbaFloat",
+      "whyRequired": "needed to compare the pass output with independently replayed source-over"
+    },
+    {
+      "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+      "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+    },
+    {
+      "field": "subdrawRole",
+      "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+    }
+  ],
+  "classificationRules": {
+    "coverage-aa-wrong": "requires per-pixel/subdraw coverage or AA alpha compared with expected coverage",
+    "source-color-wrong": "requires per-pixel/subdraw source color actually consumed by the pass",
+    "blend-source-over-wrong": "requires source, coverage, destination-before, and independently replayed source-over output",
+    "draw-order-or-accumulation-wrong": "requires after-each inside/outside subdraw state or equivalent accumulation trace",
+    "insufficient-per-subdraw-data": "selected post-pass colors are known, but at least one required per-subdraw input for all four concrete root-cause classes is absent"
+  },
+  "isolationSummary": {
+    "selectedPixelCount": 16,
+    "insufficientPerSubdrawDataCount": 16,
+    "coverageAaWrongCount": 0,
+    "sourceColorWrongCount": 0,
+    "blendSourceOverWrongCount": 0,
+    "drawOrderOrAccumulationWrongCount": 0,
+    "postPassAlreadyDivergedCount": 16,
+    "postPassObservedCount": 16,
+    "postPassEqualsCurrentGpuFinalCount": 16,
+    "cpuEqualsSkiaCount": 16,
+    "selectedPostPassToSkiaDeltaTotal": 1560,
+    "selectedCurrentGpuFinalToSkiaDeltaTotal": 1560,
+    "for401SelectedResidualTotal": 1560
+  },
+  "minimalNextHook": {
+    "required": true,
+    "guardId": "kanvas.webgpu.m60F16AaStencilCoverContributionIsolation.enabled",
+    "enabledByDefault": false,
+    "scope": "M60 F16 only, StencilCoverAaPolygonDraw only, exactly the 16 FOR-401 coordinates",
+    "implementationPoint": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt around the StencilCoverAaPolygonDraw cover sub-draw execution",
+    "recordLimit": {
+      "pixelCount": 16,
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "drawIndexes": [
+        1,
+        3,
+        5
+      ]
+    },
+    "recordFields": [
+      "pixel coordinate",
+      "drawIndex",
+      "subdrawOrdinal",
+      "subdrawRole inside/outside/other",
+      "dstBeforeRgbaFloat from the intermediate texture",
+      "sourceColorPremulRgbaFloat used by the draw",
+      "coverageOrAaAlpha used by the fragment",
+      "blendMode, expected kSrcOver",
+      "expectedSourceOverRgbaFloat recomputed from the recorded inputs",
+      "dstAfterRgbaFloat after that subdraw"
+    ],
+    "successCriterion": "each FOR-401 pixel can be assigned to coverage-aa-wrong, source-color-wrong, blend-source-over-wrong, or draw-order-or-accumulation-wrong without using FOR-400 as direct write proof"
+  },
+  "selectedPixels": [
+    {
+      "index": 0,
+      "x": 92,
+      "y": 75,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "for401ReferenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "for401ResidualTotal": 105,
+        "postPassObservedRgba8": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.709472656,
+          0.748535156,
+          0.901855469,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "cpuRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "skiaRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 1,
+      "x": 91,
+      "y": 76,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "for401ReferenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "for401ResidualTotal": 105,
+        "postPassObservedRgba8": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.709472656,
+          0.748535156,
+          0.901855469,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "cpuRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "skiaRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 2,
+      "x": 90,
+      "y": 77,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "for401ReferenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "for401ResidualTotal": 105,
+        "postPassObservedRgba8": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.709472656,
+          0.748535156,
+          0.901855469,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "cpuRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "skiaRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 3,
+      "x": 89,
+      "y": 78,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "for401ReferenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "for401ResidualTotal": 105,
+        "postPassObservedRgba8": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.709472656,
+          0.748535156,
+          0.901855469,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "cpuRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "skiaRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 4,
+      "x": 88,
+      "y": 79,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "for401ReferenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "for401ResidualTotal": 105,
+        "postPassObservedRgba8": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.709472656,
+          0.748535156,
+          0.901855469,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "cpuRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "skiaRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 5,
+      "x": 87,
+      "y": 80,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "for401ReferenceRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "for401ResidualTotal": 105,
+        "postPassObservedRgba8": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.709472656,
+          0.748535156,
+          0.901855469,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          181,
+          191,
+          230,
+          255
+        ],
+        "cpuRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "skiaRgba": [
+          133,
+          150,
+          214,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 48,
+            "g": 41,
+            "b": 16,
+            "a": 0
+          },
+          "absoluteTotal": 105,
+          "maxChannelDelta": 48
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.709472656,
+              0.748535156,
+              0.901855469,
+              1.0
+            ],
+            "observedRgba8": [
+              181,
+              191,
+              230,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 6,
+      "x": 101,
+      "y": 37,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "for401ReferenceRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "for401ResidualTotal": 93,
+        "postPassObservedRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "cpuRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "skiaRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "observedRgba8": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 7,
+      "x": 102,
+      "y": 37,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "for401ReferenceRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "for401ResidualTotal": 93,
+        "postPassObservedRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "cpuRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "skiaRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "observedRgba8": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 8,
+      "x": 99,
+      "y": 38,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "for401ReferenceRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "for401ResidualTotal": 93,
+        "postPassObservedRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "cpuRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "skiaRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "observedRgba8": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 9,
+      "x": 100,
+      "y": 38,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "for401ReferenceRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "for401ResidualTotal": 93,
+        "postPassObservedRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "cpuRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "skiaRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "observedRgba8": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 10,
+      "x": 101,
+      "y": 38,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "for401ReferenceRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "for401ResidualTotal": 93,
+        "postPassObservedRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "cpuRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "skiaRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "observedRgba8": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 11,
+      "x": 102,
+      "y": 38,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "for401ReferenceRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "for401ResidualTotal": 93,
+        "postPassObservedRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "cpuRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "skiaRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "observedRgba8": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 12,
+      "x": 103,
+      "y": 38,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "for401ReferenceRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "for401ResidualTotal": 93,
+        "postPassObservedRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "cpuRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "skiaRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "observedRgba8": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 13,
+      "x": 104,
+      "y": 38,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "for401ReferenceRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "for401ResidualTotal": 93,
+        "postPassObservedRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "cpuRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "skiaRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "observedRgba8": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 14,
+      "x": 98,
+      "y": 39,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "for401ReferenceRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "for401ResidualTotal": 93,
+        "postPassObservedRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "cpuRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "skiaRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "observedRgba8": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    },
+    {
+      "index": 15,
+      "x": 99,
+      "y": 39,
+      "classification": "insufficient-per-subdraw-data",
+      "classificationReason": "FOR-401/FOR-405/FOR-406 prove the post-pass color already diverges, but the sources do not expose per-subdraw source color, AA coverage, destination-before, source-over replay, or inside/outside accumulation.",
+      "availableEvidence": {
+        "for401CurrentGpuRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "for401ReferenceRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "for401ResidualByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "for401ResidualTotal": 93,
+        "postPassObservedRgba8": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "postPassObservedRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ],
+        "currentGpuFinalRgba": [
+          0,
+          138,
+          76,
+          255
+        ],
+        "cpuRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "skiaRgba": [
+          68,
+          121,
+          68,
+          255
+        ],
+        "postPassEqualsCurrentGpuFinal": true,
+        "cpuEqualsSkia": true,
+        "postPassToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "currentGpuFinalToSkiaDelta": {
+          "signedByChannel": {
+            "r": -68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteByChannel": {
+            "r": 68,
+            "g": 17,
+            "b": 8,
+            "a": 0
+          },
+          "absoluteTotal": 93,
+          "maxChannelDelta": 68
+        },
+        "observedAfterStencilCoverDraws": [
+          {
+            "drawIndex": 1,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "observedRgba8": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          {
+            "drawIndex": 3,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          },
+          {
+            "drawIndex": 5,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "fillType": "kWinding",
+            "blendMode": "kSrcOver",
+            "targetWithinScissor": true,
+            "readbackAvailable": true,
+            "observedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "observedRgba8": [
+              0,
+              138,
+              76,
+              255
+            ]
+          }
+        ],
+        "for400UsedAsDirectProof": false
+      },
+      "missingEvidence": [
+        {
+          "field": "dstBeforeRgbaFloat",
+          "whyRequired": "needed to replay source-over and separate bad blend math from bad inputs"
+        },
+        {
+          "field": "sourceColorPremulRgbaFloat",
+          "whyRequired": "needed to decide whether the source color supplied to the pass is wrong"
+        },
+        {
+          "field": "coverageOrAaAlpha",
+          "whyRequired": "needed to decide whether AA coverage, not color or blend, is wrong"
+        },
+        {
+          "field": "expectedSourceOverRgbaFloat",
+          "whyRequired": "needed to compare the pass output with independently replayed source-over"
+        },
+        {
+          "field": "dstAfterEachInsideOutsideSubdrawRgbaFloat",
+          "whyRequired": "needed to identify inside/outside draw order or accumulation mistakes"
+        },
+        {
+          "field": "subdrawRole",
+          "whyRequired": "needed to tie a sample to inside cover, outside cover, or another sub-draw role"
+        }
+      ],
+      "excludedClassifications": {
+        "coverage-aa-wrong": "coverageOrAaAlpha is not present per pixel/subdraw",
+        "source-color-wrong": "sourceColorPremulRgbaFloat is not present per pixel/subdraw",
+        "blend-source-over-wrong": "dstBefore/source/coverage inputs and independent source-over output are not present",
+        "draw-order-or-accumulation-wrong": "only post-draw boundary colors are available; inside/outside subdraw order and after-each-subdraw accumulation are not present"
+      }
+    }
+  ],
+  "nonGoalsPreserved": {
+    "defaultRenderingChanged": false,
+    "supportClaimRaised": false,
+    "promoted": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "correctionApplied": false,
+    "for380BroadCorrectionReintroduced": false,
+    "for400UsedAsDirectProof": false,
+    "generalizedOutsideM60F16": false,
+    "kotlinRenderingChanged": false
+  },
+  "classificationReason": "Existing FOR-401/FOR-405/FOR-406 evidence proves all 16 selected pixels diverge by the post-pass boundary, but it does not contain per-subdraw source color, AA coverage, destination-before, independently replayed source-over, or inside/outside accumulation.",
+  "validationCommands": [
+    "rtk python3 scripts/validate_for407_m60_f16_aa_stencil_cover_contribution_isolation.py",
+    "rtk python3 scripts/validate_for406_m60_f16_post_pass_reference_comparison.py",
+    "rtk python3 scripts/validate_for405_m60_f16_aa_stencil_cover_post_pass_readback.py",
+    "rtk python3 scripts/validate_for404_m60_f16_aa_stencil_cover_runtime_hook.py",
+    "rtk python3 scripts/validate_for403_m60_f16_direct_pass_write_hook.py",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk git diff --check"
+  ]
+}
