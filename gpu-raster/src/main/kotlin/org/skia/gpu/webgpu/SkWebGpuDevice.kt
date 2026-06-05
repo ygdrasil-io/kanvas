@@ -495,6 +495,44 @@ public class SkWebGpuDevice(
         val reason: String,
     )
 
+    public data class M60F16AaStencilCoverPostPassReadbackSnapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val requestedBoundary: String,
+        val observedBoundary: String,
+        val diagnosticShader: String,
+        val pipelineLayout: String,
+        val intermediateFormat: String,
+        val sampleLimit: Int,
+        val events: List<M60F16AaStencilCoverPostPassReadbackEvent>,
+    )
+
+    public data class M60F16AaStencilCoverPostPassReadbackEvent(
+        val drawIndex: Int,
+        val pipelineFamily: String,
+        val fillType: String,
+        val blendMode: String,
+        val scissor: IntArray,
+        val edgeCount: Int,
+        val coverVertexCount: Int,
+        val copyAttempted: Boolean,
+        val copySucceeded: Boolean,
+        val copyFailureReason: String?,
+        val samples: List<M60F16AaStencilCoverPostPassReadbackSample>,
+    )
+
+    public data class M60F16AaStencilCoverPostPassReadbackSample(
+        val x: Int,
+        val y: Int,
+        val targetWithinScissor: Boolean,
+        val readbackAttempted: Boolean,
+        val readbackAvailable: Boolean,
+        val observedRgbaFloat: FloatArray?,
+        val observedRgba8: IntArray?,
+        val classification: String,
+        val reason: String,
+    )
+
     public data class RawRectUniformColorWrite(
         val route: String,
         val drawIndex: Int,
@@ -626,6 +664,10 @@ public class SkWebGpuDevice(
         MutableList<M60F16CoverageStencilContributionMapSample> = mutableListOf()
     private val m60F16AaStencilCoverPostPassRuntimeHookEvents:
         MutableList<M60F16AaStencilCoverPostPassRuntimeHookEvent> = mutableListOf()
+    private val m60F16AaStencilCoverPostPassReadbackEvents:
+        MutableList<M60F16AaStencilCoverPostPassReadbackEvent> = mutableListOf()
+    private val m60F16AaStencilCoverPostPassPendingReadbacks:
+        MutableList<M60F16AaStencilCoverPostPassReadback> = mutableListOf()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
         PipelineKeyedCache("generated shader modules")
@@ -731,6 +773,20 @@ public class SkWebGpuDevice(
             observedBoundary = "StencilCoverAaPolygonDraw runtime branch after inside/outside cover draw encoding",
             sampleLimit = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.size,
             events = m60F16AaStencilCoverPostPassRuntimeHookEvents.toList(),
+        )
+
+    public fun m60F16AaStencilCoverPostPassReadbackSnapshot():
+        M60F16AaStencilCoverPostPassReadbackSnapshot =
+        M60F16AaStencilCoverPostPassReadbackSnapshot(
+            propertyName = WEBGPU_M60_F16_DIRECT_PASS_WRITE_HOOK_FLAG,
+            enabled = m60F16DirectPassWriteHookEnabled,
+            requestedBoundary = "after StencilCoverAaPolygonDraw cover sub-draws before final present/readback",
+            observedBoundary = "compute textureLoad from intermediate RGBA16Float after StencilCoverAaPolygonDraw render pass",
+            diagnosticShader = M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SHADER,
+            pipelineLayout = M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_LAYOUT,
+            intermediateFormat = intermediateFormat.name,
+            sampleLimit = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.size,
+            events = m60F16AaStencilCoverPostPassReadbackEvents.toList(),
         )
 
     public fun buildPipelineKeyIdentityForDiagnostics(axes: Map<String, String>): PipelineKey =
@@ -1185,7 +1241,186 @@ public class SkWebGpuDevice(
         }
     }
 
+    private fun recordM60F16AaStencilCoverPostPassFormatUnsupported(
+        drawIndex: Int,
+        d: StencilCoverAaPolygonDraw,
+    ) {
+        if (!m60F16DirectPassWriteHookEnabled || d.m60F16BandMetadata == null) {
+            return
+        }
+        val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
+            val targetWithinScissor = m60F16PointWithinScissor(x, y, d.scissor)
+            M60F16AaStencilCoverPostPassReadbackSample(
+                x = x,
+                y = y,
+                targetWithinScissor = targetWithinScissor,
+                readbackAttempted = false,
+                readbackAvailable = false,
+                observedRgbaFloat = null,
+                observedRgba8 = null,
+                classification = if (targetWithinScissor) {
+                    "aa-stencil-cover-post-pass-format-unsupported"
+                } else {
+                    "aa-stencil-cover-post-pass-readback-inconclusive"
+                },
+                reason = if (targetWithinScissor) {
+                    "FOR-405 post-pass readback is scoped to the M60 F16 intermediate; current intermediate format is ${intermediateFormat.name}."
+                } else {
+                    "The coordinate is outside this StencilCoverAaPolygonDraw scissor, so this pass cannot provide a post-pass color sample for it."
+                },
+            )
+        }
+        m60F16AaStencilCoverPostPassReadbackEvents +=
+            m60F16PostPassReadbackEvent(
+                drawIndex = drawIndex,
+                d = d,
+                copyAttempted = false,
+                copySucceeded = false,
+                copyFailureReason = "intermediate format ${intermediateFormat.name} is not RGBA16Float",
+                samples = samples,
+            )
+    }
+
+    private suspend fun recordM60F16AaStencilCoverPostPassReadbacks() {
+        if (!m60F16DirectPassWriteHookEnabled) return
+        val readbacks = m60F16AaStencilCoverPostPassPendingReadbacks.toList()
+        m60F16AaStencilCoverPostPassPendingReadbacks.clear()
+        readbacks.forEach { readback ->
+            val metadata = readback.metadata
+            try {
+                readback.staging.mapAsync(
+                    GPUMapMode.Read,
+                    0uL,
+                    readback.bufferSize,
+                ).getOrThrow()
+                val bytes = readback.staging
+                    .getMappedRange(0uL, readback.bufferSize)
+                    .toByteArray()
+                readback.staging.unmap()
+                val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+                val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.mapIndexed { index, (x, y) ->
+                    val targetWithinScissor = m60F16PointWithinScissor(x, y, metadata.scissor)
+                    val base = index * M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SAMPLE_STRIDE_BYTES
+                    val observed = FloatArray(4) { channel ->
+                        buffer.getFloat(base + channel * Float.SIZE_BYTES)
+                    }
+                    val valid = targetWithinScissor && observed.all { value -> value >= 0f }
+                    M60F16AaStencilCoverPostPassReadbackSample(
+                        x = x,
+                        y = y,
+                        targetWithinScissor = targetWithinScissor,
+                        readbackAttempted = true,
+                        readbackAvailable = valid,
+                        observedRgbaFloat = if (valid) observed else null,
+                        observedRgba8 = if (valid) {
+                            IntArray(4) { channel ->
+                                ((observed[channel] * 255f) + 0.5f).toInt().coerceIn(0, 255)
+                            }
+                        } else {
+                            null
+                        },
+                        classification = if (valid) {
+                            "aa-stencil-cover-post-pass-color-observed"
+                        } else {
+                            "aa-stencil-cover-post-pass-readback-inconclusive"
+                        },
+                        reason = if (valid) {
+                            "FOR-405 compute diagnostic sampled the intermediate texture after the StencilCoverAaPolygonDraw cover sub-draws and before the final present/readback."
+                        } else {
+                            "The compute diagnostic ran, but this coordinate did not produce an in-bounds post-pass color sample for this draw."
+                        },
+                    )
+                }
+                m60F16AaStencilCoverPostPassReadbackEvents +=
+                    m60F16PostPassReadbackEvent(
+                        metadata = metadata,
+                        copyAttempted = true,
+                        copySucceeded = true,
+                        copyFailureReason = null,
+                        samples = samples,
+                    )
+            } catch (t: Throwable) {
+                val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
+                    val targetWithinScissor = m60F16PointWithinScissor(x, y, metadata.scissor)
+                    M60F16AaStencilCoverPostPassReadbackSample(
+                        x = x,
+                        y = y,
+                        targetWithinScissor = targetWithinScissor,
+                        readbackAttempted = true,
+                        readbackAvailable = false,
+                        observedRgbaFloat = null,
+                        observedRgba8 = null,
+                        classification = if (targetWithinScissor) {
+                            "aa-stencil-cover-post-pass-copy-blocked"
+                        } else {
+                            "aa-stencil-cover-post-pass-readback-inconclusive"
+                        },
+                        reason = "FOR-405 post-pass compute/copy readback failed: ${t::class.simpleName}: ${t.message}",
+                    )
+                }
+                m60F16AaStencilCoverPostPassReadbackEvents +=
+                    m60F16PostPassReadbackEvent(
+                        metadata = metadata,
+                        copyAttempted = true,
+                        copySucceeded = false,
+                        copyFailureReason = "${t::class.simpleName}: ${t.message}",
+                        samples = samples,
+                    )
+            }
+        }
+    }
+
     private fun targetColorSpaceBlendFlag(): Float = if (targetColorSpaceBlend) 1f else 0f
+
+    private fun m60F16PointWithinScissor(x: Int, y: Int, scissor: IntArray): Boolean =
+        x >= scissor[0] &&
+            y >= scissor[1] &&
+            x < scissor[0] + scissor[2] &&
+            y < scissor[1] + scissor[3]
+
+    private fun m60F16PostPassReadbackEvent(
+        drawIndex: Int,
+        d: StencilCoverAaPolygonDraw,
+        copyAttempted: Boolean,
+        copySucceeded: Boolean,
+        copyFailureReason: String?,
+        samples: List<M60F16AaStencilCoverPostPassReadbackSample>,
+    ): M60F16AaStencilCoverPostPassReadbackEvent =
+        m60F16PostPassReadbackEvent(
+            metadata = M60F16AaStencilCoverPostPassReadbackMetadata(
+                drawIndex = drawIndex,
+                fillType = d.fillType.name,
+                blendMode = d.mode.name,
+                scissor = d.scissor.copyOf(),
+                edgeCount = d.edgeCount,
+                coverVertexCount = d.coverVerts.size / 2,
+            ),
+            copyAttempted = copyAttempted,
+            copySucceeded = copySucceeded,
+            copyFailureReason = copyFailureReason,
+            samples = samples,
+        )
+
+    private fun m60F16PostPassReadbackEvent(
+        metadata: M60F16AaStencilCoverPostPassReadbackMetadata,
+        copyAttempted: Boolean,
+        copySucceeded: Boolean,
+        copyFailureReason: String?,
+        samples: List<M60F16AaStencilCoverPostPassReadbackSample>,
+    ): M60F16AaStencilCoverPostPassReadbackEvent =
+        M60F16AaStencilCoverPostPassReadbackEvent(
+            drawIndex = metadata.drawIndex,
+            pipelineFamily = "StencilCoverAaPolygonDraw",
+            fillType = metadata.fillType,
+            blendMode = metadata.blendMode,
+            scissor = metadata.scissor.copyOf(),
+            edgeCount = metadata.edgeCount,
+            coverVertexCount = metadata.coverVertexCount,
+            copyAttempted = copyAttempted,
+            copySucceeded = copySucceeded,
+            copyFailureReason = copyFailureReason,
+            samples = samples,
+        )
 
     private fun recordM60F16AaStencilCoverPostPassRuntimeHook(
         drawIndex: Int,
@@ -1195,11 +1430,7 @@ public class SkWebGpuDevice(
             return
         }
         val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
-            val targetWithinScissor =
-                x >= d.scissor[0] &&
-                    y >= d.scissor[1] &&
-                    x < d.scissor[0] + d.scissor[2] &&
-                    y < d.scissor[1] + d.scissor[3]
+            val targetWithinScissor = m60F16PointWithinScissor(x, y, d.scissor)
             val classification = if (targetWithinScissor) {
                 "aa-stencil-cover-post-pass-readback-blocked"
             } else {
@@ -4059,6 +4290,13 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     private val for258ShaderSideProbeShader: GPUShaderModule
         get() = for258ShaderSideProbeShaderLazy.value
 
+    private val m60F16AaStencilCoverPostPassReadbackShaderLazy: Lazy<GPUShaderModule> = lazy {
+        loadShader(M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SHADER)
+    }
+
+    private val m60F16AaStencilCoverPostPassReadbackShader: GPUShaderModule
+        get() = m60F16AaStencilCoverPostPassReadbackShaderLazy.value
+
     private val for258ShaderSideProbeBindGroupLayoutLazy: Lazy<GPUBindGroupLayout> = lazy {
         context.device.createBindGroupLayout(
             BindGroupLayoutDescriptor(
@@ -4102,6 +4340,24 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     private val for258ShaderSideProbePipeline: GPUComputePipeline
         get() = for258ShaderSideProbePipelineLazy.value
+
+    private val m60F16AaStencilCoverPostPassReadbackPipelineLazy: Lazy<GPUComputePipeline> = lazy {
+        context.device.createComputePipeline(
+            ComputePipelineDescriptor(
+                layout = context.device.createPipelineLayout(
+                    PipelineLayoutDescriptor(bindGroupLayouts = listOf(for258ShaderSideProbeBindGroupLayout)),
+                ),
+                compute = ProgrammableStage(
+                    module = m60F16AaStencilCoverPostPassReadbackShader,
+                    entryPoint = "cs_main",
+                ),
+                label = "SkWebGpuDevice.m60F16AaStencilCoverPostPassReadback.pipeline.diagnosticOnly",
+            ),
+        )
+    }
+
+    private val m60F16AaStencilCoverPostPassReadbackPipeline: GPUComputePipeline
+        get() = m60F16AaStencilCoverPostPassReadbackPipelineLazy.value
 
     // ─── Bitmap shader (G5.1) — drawImageRect with kLinear / kClamp / SrcOver ──
 
@@ -13462,6 +13718,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         val colorView = intermediateView
         if (m60F16DirectPassWriteHookEnabled) {
             m60F16AaStencilCoverPostPassRuntimeHookEvents.clear()
+            m60F16AaStencilCoverPostPassReadbackEvents.clear()
+            m60F16AaStencilCoverPostPassPendingReadbacks.clear()
         }
 
         // G-suivi (round 17 follow-up) -- drop pending draws whose vertex
@@ -13744,6 +14002,40 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                     end()
                 }
                 recordM60F16AaStencilCoverPostPassRuntimeHook(i, d)
+                if (intermediateFormat != GPUTextureFormat.RGBA16Float) {
+                    recordM60F16AaStencilCoverPostPassFormatUnsupported(i, d)
+                } else if (res.m60F16AaStencilCoverPostPassReadbackBindGroup != null) {
+                    encoder.clearBuffer(
+                        res.m60F16AaStencilCoverPostPassReadbackStorage!!,
+                        0uL,
+                        res.m60F16AaStencilCoverPostPassReadbackBufferSize,
+                    )
+                    val pass = encoder.beginComputePass()
+                    pass.setPipeline(m60F16AaStencilCoverPostPassReadbackPipeline)
+                    pass.setBindGroup(0u, res.m60F16AaStencilCoverPostPassReadbackBindGroup)
+                    pass.dispatchWorkgroups(M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SAMPLE_COUNT)
+                    pass.end()
+                    encoder.copyBufferToBuffer(
+                        source = res.m60F16AaStencilCoverPostPassReadbackStorage,
+                        sourceOffset = 0uL,
+                        destination = res.m60F16AaStencilCoverPostPassReadbackStaging!!,
+                        destinationOffset = 0uL,
+                        size = res.m60F16AaStencilCoverPostPassReadbackBufferSize,
+                    )
+                    m60F16AaStencilCoverPostPassPendingReadbacks +=
+                        M60F16AaStencilCoverPostPassReadback(
+                            metadata = M60F16AaStencilCoverPostPassReadbackMetadata(
+                                drawIndex = i,
+                                fillType = d.fillType.name,
+                                blendMode = d.mode.name,
+                                scissor = d.scissor.copyOf(),
+                                edgeCount = d.edgeCount,
+                                coverVertexCount = d.coverVerts.size / 2,
+                            ),
+                            staging = res.m60F16AaStencilCoverPostPassReadbackStaging,
+                            bufferSize = res.m60F16AaStencilCoverPostPassReadbackBufferSize,
+                        )
+                }
                 if (res.m60F16FragmentLaneDiagnosticStorage != null &&
                     res.m60F16FragmentLaneDiagnosticStaging != null
                 ) {
@@ -15027,6 +15319,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             it.materializeTargetTexture?.close()
             it.m60F16FragmentLaneDiagnosticStaging?.close()
             it.m60F16FragmentLaneDiagnosticStorage?.close()
+            it.m60F16AaStencilCoverPostPassReadbackStaging?.close()
+            it.m60F16AaStencilCoverPostPassReadbackStorage?.close()
         }
     }
 
@@ -15073,6 +15367,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
         recordFor258ShaderSideProbe(for258ShaderSideProbeReadback)
         recordM60F16FragmentLaneDiagnostics(perDrawResources)
+        recordM60F16AaStencilCoverPostPassReadbacks()
         val pixels = target.readPixels()
         recordOutputReadbackBoundary(pixels)
 
@@ -15208,6 +15503,11 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         val m60F16FragmentLaneDiagnosticStaging: GPUBuffer? = null,
         val m60F16FragmentLaneDiagnosticBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
         val m60F16FragmentLaneDiagnosticBufferSize: ULong = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
+        val m60F16AaStencilCoverPostPassReadbackStorage: GPUBuffer? = null,
+        val m60F16AaStencilCoverPostPassReadbackStaging: GPUBuffer? = null,
+        val m60F16AaStencilCoverPostPassReadbackBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
+        val m60F16AaStencilCoverPostPassReadbackBufferSize: ULong =
+            M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_BUFFER_SIZE,
         // L1a -- DropShadow-inside-Compose materialise target texture +
         // view. Allocated by [enqueueMaterializeDropShadowToScratch] and
         // owned by this DrawResources ; closed in [closeDrawResources]
@@ -15231,6 +15531,21 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     )
 
     private data class M60F16FragmentLaneDiagnosticReadback(
+        val staging: GPUBuffer,
+        val bufferSize: ULong,
+    )
+
+    private data class M60F16AaStencilCoverPostPassReadbackMetadata(
+        val drawIndex: Int,
+        val fillType: String,
+        val blendMode: String,
+        val scissor: IntArray,
+        val edgeCount: Int,
+        val coverVertexCount: Int,
+    )
+
+    private data class M60F16AaStencilCoverPostPassReadback(
+        val metadata: M60F16AaStencilCoverPostPassReadbackMetadata,
         val staging: GPUBuffer,
         val bufferSize: ULong,
     )
@@ -16939,6 +17254,44 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         } else {
             null
         }
+        val postPassReadbackEnabled =
+            m60F16DirectPassWriteHookEnabled && d.m60F16BandMetadata != null &&
+                intermediateFormat == GPUTextureFormat.RGBA16Float
+        val postPassReadbackStorage = if (postPassReadbackEnabled) {
+            context.device.createBuffer(
+                BufferDescriptor(
+                    size = M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_BUFFER_SIZE,
+                    usage = GPUBufferUsage.Storage or GPUBufferUsage.CopySrc or GPUBufferUsage.CopyDst,
+                    label = "SkWebGpuDevice.m60F16AaStencilCoverPostPassReadback.storage.diagnosticOnly",
+                ),
+            )
+        } else {
+            null
+        }
+        val postPassReadbackStaging = if (postPassReadbackEnabled) {
+            context.device.createBuffer(
+                BufferDescriptor(
+                    size = M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_BUFFER_SIZE,
+                    usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                    label = "SkWebGpuDevice.m60F16AaStencilCoverPostPassReadback.staging.diagnosticOnly",
+                ),
+            )
+        } else {
+            null
+        }
+        val postPassReadbackBindGroup = if (postPassReadbackEnabled) {
+            context.device.createBindGroup(
+                BindGroupDescriptor(
+                    layout = for258ShaderSideProbeBindGroupLayout,
+                    entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = intermediateView),
+                        BindGroupEntry(binding = 1u, resource = BufferBinding(buffer = postPassReadbackStorage!!)),
+                    ),
+                ),
+            )
+        } else {
+            null
+        }
         val stencilVB = context.device.createBuffer(
             BufferDescriptor(
                 size = (d.stencilVerts.size * Float.SIZE_BYTES).toULong(),
@@ -16964,6 +17317,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             m60F16FragmentLaneDiagnosticStaging = diagnosticStaging,
             m60F16FragmentLaneDiagnosticBindGroup = diagnosticBindGroup,
             m60F16FragmentLaneDiagnosticBufferSize = diagnosticBufferSize,
+            m60F16AaStencilCoverPostPassReadbackStorage = postPassReadbackStorage,
+            m60F16AaStencilCoverPostPassReadbackStaging = postPassReadbackStaging,
+            m60F16AaStencilCoverPostPassReadbackBindGroup = postPassReadbackBindGroup,
         )
     }
 
@@ -17567,6 +17923,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         if (for258ShaderSideProbeShaderLazy.isInitialized()) {
             for258ShaderSideProbeShader.close()
         }
+        if (m60F16AaStencilCoverPostPassReadbackShaderLazy.isInitialized()) {
+            m60F16AaStencilCoverPostPassReadbackShader.close()
+        }
         if (m60F16FragmentLaneDiagnosticShaderLazy.isInitialized()) {
             m60F16FragmentLaneDiagnosticShader.close()
         }
@@ -17597,6 +17956,10 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             "shaders/shader_side_probe_for258_diagnostic_only.wgsl"
         const val FOR258_SHADER_SIDE_PROBE_LAYOUT: String =
             "diagnostic-only compute layout: binding0 intermediate texture, binding1 storage buffer"
+        const val M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SHADER: String =
+            "shaders/m60_f16_aa_stencil_cover_post_pass_readback_for405_diagnostic_only.wgsl"
+        const val M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_LAYOUT: String =
+            "diagnostic-only compute layout: binding0 intermediate RGBA16Float texture, binding1 16-sample storage buffer"
         const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SHADER: String =
             "diagnostic in-memory variant of shaders/aa_stencil_cover.wgsl"
         const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_LAYOUT: String =
@@ -17611,6 +17974,11 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         val FOR258_SHADER_SIDE_PROBE_BUFFER_SIZE: ULong =
             (FOR258_SHADER_SIDE_PROBE_SAMPLE_STRIDE_BYTES * FOR258_SHADER_SIDE_PROBE_SAMPLE_COUNT.toInt())
                 .toULong()
+        const val M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SAMPLE_STRIDE_BYTES: Int = 16
+        const val M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SAMPLE_COUNT: UInt = 16u
+        val M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_BUFFER_SIZE: ULong =
+            (M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SAMPLE_STRIDE_BYTES *
+                M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SAMPLE_COUNT.toInt()).toULong()
         const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_STRIDE_BYTES: Int = 16
         const val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_COUNT: Int = 8
         val M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE: ULong =

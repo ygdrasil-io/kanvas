@@ -188,6 +188,8 @@ class StrokeCapJoinSceneCaptureTest {
                         coverageStencilContributionMapResult.coverageStencilContributionMapSnapshot,
                     aaStencilCoverPostPassRuntimeHookSnapshot =
                         coverageStencilContributionMapResult.aaStencilCoverPostPassRuntimeHookSnapshot,
+                    aaStencilCoverPostPassReadbackSnapshot =
+                        coverageStencilContributionMapResult.aaStencilCoverPostPassReadbackSnapshot,
                     adapter = adapter,
                 )
             }
@@ -231,6 +233,8 @@ class StrokeCapJoinSceneCaptureTest {
             SkWebGpuDevice.M60F16CoverageStencilContributionMapSnapshot,
         aaStencilCoverPostPassRuntimeHookSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverPostPassRuntimeHookSnapshot,
+        aaStencilCoverPostPassReadbackSnapshot:
+            SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
         adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join").apply { mkdirs() }
@@ -402,6 +406,14 @@ class StrokeCapJoinSceneCaptureTest {
                 currentGpu = experimentalGpu,
                 currentResidualStats = residualStats,
                 snapshot = aaStencilCoverPostPassRuntimeHookSnapshot,
+                adapter = adapter,
+            )
+            writeM60F16AaStencilCoverPostPassReadback(
+                reference = reference,
+                currentGpu = experimentalGpu,
+                currentResidualStats = residualStats,
+                runtimeHookSnapshot = aaStencilCoverPostPassRuntimeHookSnapshot,
+                readbackSnapshot = aaStencilCoverPostPassReadbackSnapshot,
                 adapter = adapter,
             )
         }
@@ -1619,6 +1631,30 @@ class StrokeCapJoinSceneCaptureTest {
                 currentGpu = currentGpu,
                 currentResidualStats = currentResidualStats,
                 snapshot = snapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun writeM60F16AaStencilCoverPostPassReadback(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        currentResidualStats: StrokeResidualStats,
+        runtimeHookSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassRuntimeHookSnapshot,
+        readbackSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/" +
+                "m60-f16-aa-stencil-cover-post-pass-readback-for405",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-aa-stencil-cover-post-pass-readback-for405.json").writeText(
+            m60F16AaStencilCoverPostPassReadbackJson(
+                reference = reference,
+                currentGpu = currentGpu,
+                currentResidualStats = currentResidualStats,
+                runtimeHookSnapshot = runtimeHookSnapshot,
+                readbackSnapshot = readbackSnapshot,
                 adapter = adapter,
             ),
         )
@@ -3070,6 +3106,271 @@ class StrokeCapJoinSceneCaptureTest {
                 "pipelineFamily": "StencilCoverAaPolygonDraw",
                 "for400ContributionEvidenceUsedAsProof": false,
                 "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+                "inspectedEvents": [
+            $inspectedEventsJson
+                ]
+              }
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16AaStencilCoverPostPassReadbackJson(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        currentResidualStats: StrokeResidualStats,
+        runtimeHookSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassRuntimeHookSnapshot,
+        readbackSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ): String {
+        val selected = for401SelectedResidualOriginPixels()
+        val samplesByPixel = readbackSnapshot.events
+            .flatMap { event ->
+                event.samples.map { sample -> (sample.x to sample.y) to (event to sample) }
+            }
+            .groupBy({ it.first }, { it.second })
+        fun selectedSample(pixel: FinalResidualOriginPixel):
+            Pair<SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackEvent, SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSample>? {
+            val inspected = samplesByPixel[pixel.x to pixel.y].orEmpty()
+            return inspected.lastOrNull { (_, sample) ->
+                sample.classification == "aa-stencil-cover-post-pass-color-observed"
+            } ?: inspected.firstOrNull { (_, sample) ->
+                sample.classification == "aa-stencil-cover-post-pass-format-unsupported"
+            } ?: inspected.firstOrNull { (_, sample) ->
+                sample.classification == "aa-stencil-cover-post-pass-copy-blocked"
+            } ?: inspected.firstOrNull { (_, sample) ->
+                sample.classification == "aa-stencil-cover-post-pass-readback-inconclusive"
+            }
+        }
+        val selectedClassifications = selected.map { pixel ->
+            selectedSample(pixel)?.second?.classification
+                ?: "aa-stencil-cover-post-pass-readback-inconclusive"
+        }
+        val classification = when {
+            selectedClassifications.any { it == "aa-stencil-cover-post-pass-color-observed" } ->
+                "aa-stencil-cover-post-pass-color-observed"
+            selectedClassifications.any { it == "aa-stencil-cover-post-pass-format-unsupported" } ->
+                "aa-stencil-cover-post-pass-format-unsupported"
+            selectedClassifications.any { it == "aa-stencil-cover-post-pass-copy-blocked" } ->
+                "aa-stencil-cover-post-pass-copy-blocked"
+            else -> "aa-stencil-cover-post-pass-readback-inconclusive"
+        }
+        val selectedJson = selected.zip(selectedClassifications).joinToString(",\n") { (pixel, pixelClass) ->
+            aaStencilCoverPostPassReadbackPixelJson(
+                pixel = pixel,
+                classification = pixelClass,
+                inspected = samplesByPixel[pixel.x to pixel.y].orEmpty(),
+            ).prependIndent("    ")
+        }
+        val eventsJson = readbackSnapshot.events.joinToString(",\n") { event ->
+            aaStencilCoverPostPassReadbackEventJson(event).prependIndent("    ")
+        }
+        val classificationReason = when (classification) {
+            "aa-stencil-cover-post-pass-color-observed" ->
+                "FOR-405 observed deterministic post-pass colors by sampling the intermediate RGBA16Float texture after StencilCoverAaPolygonDraw and before final present/readback."
+            "aa-stencil-cover-post-pass-format-unsupported" ->
+                "The localized runtime attempt reached StencilCoverAaPolygonDraw, but the intermediate format was not the M60 F16 RGBA16Float target required by this diagnostic."
+            "aa-stencil-cover-post-pass-copy-blocked" ->
+                "The localized runtime attempt reached StencilCoverAaPolygonDraw, but WebGPU copy/map readback failed before colors could be decoded."
+            else ->
+                "The localized runtime attempt ran, but did not produce enough in-bounds post-pass samples to identify colors for the FOR-401 coordinates."
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-405",
+              "sceneId": "m60-f16-aa-stencil-cover-post-pass-readback-for405",
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-runtime-hook-for404/m60-f16-aa-stencil-cover-runtime-hook-for404.json",
+              "sourceArtifacts": {
+                "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+                "for404": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-runtime-hook-for404/m60-f16-aa-stencil-cover-runtime-hook-for404.json"
+              },
+              "sourceMemory": "global/kanvas/findings/for-404-ajoute-un-hook-runtime-borne-aa-stencil-cover-mais-bloque-sur-le-readback-post-pass",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMethod": "writeM60F16AaStencilCoverPostPassReadback",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "decision": "M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "aa-stencil-cover-post-pass-color-observed",
+                "aa-stencil-cover-post-pass-format-unsupported",
+                "aa-stencil-cover-post-pass-copy-blocked",
+                "aa-stencil-cover-post-pass-readback-inconclusive"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "correctionAppliedByDefault": false,
+              "defaultRenderingChanged": false,
+              "guards": {
+                "experimentalStrokeRenderer": {
+                  "guardId": "$EXPERIMENTAL_RENDER_PROPERTY",
+                  "enabledForEvidenceRun": true,
+                  "enabledByDefault": false
+                },
+                "aaStencilCoverPostPassRuntimeHook": {
+                  "guardId": "$FOR404_AA_STENCIL_COVER_RUNTIME_HOOK_PROPERTY",
+                  "enabledForEvidenceRun": ${runtimeHookSnapshot.enabled},
+                  "enabledByDefault": false
+                },
+                "aaStencilCoverPostPassReadback": {
+                  "guardId": "$FOR404_AA_STENCIL_COVER_RUNTIME_HOOK_PROPERTY",
+                  "enabledForEvidenceRun": ${readbackSnapshot.enabled},
+                  "enabledByDefault": false
+                },
+                "coverageStencilContributionMap": {
+                  "guardId": "$FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY",
+                  "enabledForEvidenceRun": ${System.getProperty(FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY, "false").toBoolean()},
+                  "enabledByDefault": false,
+                  "evidencePolicy": "context-only-not-direct-write-proof"
+                }
+              },
+              "sourceContext": {
+                "for404Classification": "aa-stencil-cover-post-pass-readback-blocked",
+                "for404RuntimeApi": "SkWebGpuDevice.m60F16AaStencilCoverPostPassRuntimeHookSnapshot()",
+                "for404RuntimeEventCount": ${runtimeHookSnapshot.events.size},
+                "for400EvidencePolicy": "context-only-not-direct-write-proof",
+                "for400UsedAsDirectProof": false,
+                "for401Classification": "residual-visible-only-at-final-readback",
+                "for401CurrentTotalResidual": 62748,
+                "for401CurrentMismatchPixels": 1615,
+                "for401SelectedResidualTotal": 1560,
+                "for401SelectedPixelCount": 16
+              },
+              "runtimeReadback": {
+                "api": "SkWebGpuDevice.m60F16AaStencilCoverPostPassReadbackSnapshot()",
+                "propertyName": ${readbackSnapshot.propertyName.jsonString()},
+                "enabled": ${readbackSnapshot.enabled},
+                "requestedBoundary": ${readbackSnapshot.requestedBoundary.jsonString()},
+                "observedBoundary": ${readbackSnapshot.observedBoundary.jsonString()},
+                "diagnosticShader": ${readbackSnapshot.diagnosticShader.jsonString()},
+                "pipelineLayout": ${readbackSnapshot.pipelineLayout.jsonString()},
+                "intermediateFormat": ${readbackSnapshot.intermediateFormat.jsonString()},
+                "pipelineFamily": "StencilCoverAaPolygonDraw",
+                "sampleLimit": ${readbackSnapshot.sampleLimit},
+                "eventCount": ${readbackSnapshot.events.size},
+                "postPassReadbackAvailable": ${selectedClassifications.any { it == "aa-stencil-cover-post-pass-color-observed" }},
+                "events": [
+            $eventsJson
+                ]
+              },
+              "postPassSummary": {
+                "currentTotalResidual": 62748,
+                "currentMismatchPixels": 1615,
+                "selectedPixelCount": ${selected.size},
+                "selectedResidualTotal": ${selected.sumOf { it.residualTotal }},
+                "postPassObservedCount": ${selectedClassifications.count { it == "aa-stencil-cover-post-pass-color-observed" }},
+                "postPassFormatUnsupportedCount": ${selectedClassifications.count { it == "aa-stencil-cover-post-pass-format-unsupported" }},
+                "postPassCopyBlockedCount": ${selectedClassifications.count { it == "aa-stencil-cover-post-pass-copy-blocked" }},
+                "postPassReadbackInconclusiveCount": ${selectedClassifications.count { it == "aa-stencil-cover-post-pass-readback-inconclusive" }}
+              },
+              "selectedPixels": [
+            $selectedJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "correctionApplied": false,
+                "for380BroadCorrectionReintroduced": false,
+                "for400UsedAsDirectProof": false,
+                "generalizedOutsideM60F16": false
+              },
+              "classificationReason": ${classificationReason.jsonString()},
+              "validationCommands": [
+                "rtk python3 scripts/validate_for405_m60_f16_aa_stencil_cover_post_pass_readback.py",
+                "rtk python3 scripts/validate_for404_m60_f16_aa_stencil_cover_runtime_hook.py",
+                "rtk python3 scripts/validate_for403_m60_f16_direct_pass_write_hook.py",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16DirectPassWriteHook.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true -Dkanvas.webgpu.m60F16CoverageStencilContributionMap.enabled=true -Dkanvas.webgpu.m60F16FinalResidualOriginMap.enabled=true -Dkanvas.webgpu.m60F16PassWriteProbe.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun aaStencilCoverPostPassReadbackEventJson(
+        event: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackEvent,
+    ): String {
+        val samplesJson = event.samples.joinToString(",\n") { sample ->
+            """
+                {
+                  "x": ${sample.x},
+                  "y": ${sample.y},
+                  "targetWithinScissor": ${sample.targetWithinScissor},
+                  "readbackAttempted": ${sample.readbackAttempted},
+                  "readbackAvailable": ${sample.readbackAvailable},
+                  "observedRgbaFloat": ${sample.observedRgbaFloat?.floatJson() ?: "null"},
+                  "observedRgba8": ${sample.observedRgba8?.let { intArrayJson(it) } ?: "null"},
+                  "classification": ${sample.classification.jsonString()},
+                  "reason": ${sample.reason.jsonString()}
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "drawIndex": ${event.drawIndex},
+              "pipelineFamily": ${event.pipelineFamily.jsonString()},
+              "fillType": ${event.fillType.jsonString()},
+              "blendMode": ${event.blendMode.jsonString()},
+              "scissor": ${intArrayJson(event.scissor)},
+              "edgeCount": ${event.edgeCount},
+              "coverVertexCount": ${event.coverVertexCount},
+              "copyAttempted": ${event.copyAttempted},
+              "copySucceeded": ${event.copySucceeded},
+              "copyFailureReason": ${event.copyFailureReason?.jsonString() ?: "null"},
+              "samples": [
+            $samplesJson
+              ]
+            }
+        """.trimIndent()
+    }
+
+    private fun aaStencilCoverPostPassReadbackPixelJson(
+        pixel: FinalResidualOriginPixel,
+        classification: String,
+        inspected: List<Pair<SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackEvent, SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSample>>,
+    ): String {
+        val observed = inspected.lastOrNull { (_, sample) ->
+            sample.classification == "aa-stencil-cover-post-pass-color-observed"
+        }
+        val targetingEvents = inspected.filter { (_, sample) -> sample.targetWithinScissor }
+        val inspectedEventsJson = inspected.joinToString(",\n") { (event, sample) ->
+            """
+                {
+                  "drawIndex": ${event.drawIndex},
+                  "pipelineFamily": ${event.pipelineFamily.jsonString()},
+                  "targetWithinScissor": ${sample.targetWithinScissor},
+                  "readbackAttempted": ${sample.readbackAttempted},
+                  "readbackAvailable": ${sample.readbackAvailable},
+                  "classification": ${sample.classification.jsonString()}
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "x": ${pixel.x},
+              "y": ${pixel.y},
+              "currentGpuRgba": ${rgbaJson(pixel.currentGpu)},
+              "referenceRgba": ${rgbaJson(pixel.reference)},
+              "residualByChannel": ${channelErrorJson(pixel.residualByChannel)},
+              "residualTotal": ${pixel.residualTotal},
+              "for401AttributionCandidate": "readbackOnlyUnknown",
+              "classification": ${classification.jsonString()},
+              "postPass": {
+                "observed": ${observed != null},
+                "readbackAvailable": ${observed != null},
+                "observedRgbaFloat": ${observed?.second?.observedRgbaFloat?.floatJson() ?: "null"},
+                "observedRgba8": ${observed?.second?.observedRgba8?.let { intArrayJson(it) } ?: "null"},
+                "targetingStencilCoverAaDrawCount": ${targetingEvents.size},
+                "inspectedStencilCoverAaDrawCount": ${inspected.size},
+                "drawIds": [${targetingEvents.joinToString(", ") { it.first.drawIndex.toString() }}],
+                "pipelineFamily": "StencilCoverAaPolygonDraw",
+                "for400ContributionEvidenceUsedAsProof": false,
+                "reason": ${((observed?.second?.reason) ?: "FOR-405 did not observe a post-pass color for this coordinate.").jsonString()},
                 "inspectedEvents": [
             $inspectedEventsJson
                 ]
