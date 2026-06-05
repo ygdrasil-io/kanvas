@@ -162,6 +162,7 @@ class StrokeCapJoinSceneCaptureTest {
         writeM60F16SourcePaintCaptureExtension(residualStats, adapter)
         writeM60F16EffectiveCoverageExport(residualStats, adapter)
         writeM60F16CandidatePolicyRgbaProbe(residualStats, adapter)
+        writeM60F16CandidateRegressionAudit(residualStats, adapter)
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -794,6 +795,18 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun writeM60F16CandidateRegressionAudit(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-candidate-regression-audit-for374",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-candidate-regression-audit-for374.json").writeText(
+            m60F16CandidateRegressionAuditJson(residualStats, adapter),
+        )
+    }
+
     private fun m60F16CandidatePolicyRgbaProbeJson(
         residualStats: StrokeResidualStats,
         adapter: String,
@@ -864,6 +877,127 @@ class StrokeCapJoinSceneCaptureTest {
                 "kadreChanged": false,
                 "f16PremulBlendRuntimeChanged": false,
                 "skBitmapGetPixelChanged": false,
+                "rendererSceneBranchAdded": false,
+                "rendererCoordinateBranchAdded": false,
+                "rendererSelectedCellBranchAdded": false,
+                "fullGmCropPathAdded": false
+              },
+              "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16CandidateRegressionAuditJson(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val samples = residualStats.highDeltaSamples.take(FOR374_REQUIRED_SAMPLE_COUNT)
+        val candidateSamples = samples.mapIndexed { index, sample ->
+            candidatePolicySample(index + 1, sample, coverageMask)
+        }
+        val auditSamples = candidateSamples.map { candidateRegressionSample(it) }
+        val currentResidual = auditSamples.sumOf { it.currentResidual }
+        val candidateTotalResidual = auditSamples.sumOf { it.candidateResidual }
+        val regressingSamples = auditSamples.count { it.candidateResidualDeltaVsCurrent > 0 }
+        val improvedSamples = auditSamples.count { it.candidateResidualDeltaVsCurrent < 0 }
+        val destinationConflictSamples = auditSamples.count {
+            it.inverseDestinationEstimate.possible && it.inverseDestinationEstimate.conflictsWithWhiteDestination
+        }
+        val sourceTintSamples = auditSamples.count { it.regressionDirection == "source-tint-too-strong" }
+        val quantizationOnlySamples = auditSamples.count {
+            kotlin.math.abs(it.candidateResidualDeltaVsCurrent) <= 4 && !it.inverseDestinationEstimate.conflictsWithWhiteDestination
+        }
+        val classification = candidateRegressionClassification(
+            sampleCount = auditSamples.size,
+            candidateTotalResidual = candidateTotalResidual,
+            currentResidual = currentResidual,
+            regressingSamples = regressingSamples,
+            destinationConflictSamples = destinationConflictSamples,
+            sourceTintSamples = sourceTintSamples,
+            quantizationOnlySamples = quantizationOnlySamples,
+        )
+        val likelyMissingParameter = when (classification) {
+            "candidate-regression-likely-destination-model" ->
+                "effective-destination-color-or-background-model-before-stroke-composition"
+            "candidate-regression-likely-coverage-model" ->
+                "reference-effective-coverage-or-effective-source-alpha"
+            "candidate-regression-likely-quantization-model" ->
+                "current-path-quantization-and-rounding-policy"
+            "candidate-regression-mixed" ->
+                "destination-coverage-quantization-needs-separated-probes"
+            else ->
+                "blocked-by-insufficient-diagnostic-signal"
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-374",
+              "sceneId": "m60-f16-candidate-regression-audit-for374",
+              "sourceSceneId": "m60-f16-candidate-policy-rgba-probe-for373",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-diagnostic-source-over-white-regresse-apres-for-373",
+              "sourceFinding": "global/kanvas/findings/for-373-calcule-la-candidate-policy-rgba-m60-f16-mais-augmente-le-residuel",
+              "requiredFor373Decision": "M60_F16_CANDIDATE_POLICY_RGBA_PROBE_RECORDED",
+              "requiredFor373Classification": "candidate-policy-regresses",
+              "decision": "M60_F16_CANDIDATE_REGRESSION_AUDIT_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "candidate-regression-likely-destination-model",
+                "candidate-regression-likely-coverage-model",
+                "candidate-regression-likely-quantization-model",
+                "candidate-regression-mixed",
+                "candidate-regression-blocked"
+              ],
+              "candidatePolicyId": ${f16CandidatePolicyId().jsonString()},
+              "candidatePolicyUnderAudit": ${f16CandidatePolicyId().jsonString()},
+              "auditInputSource": "FOR-373 preserved samples plus diagnostic inverse destination math",
+              "auditDoesNotProduceCorrection": true,
+              "auditDoesNotApplyRendererChange": true,
+              "currentResidual": $currentResidual,
+              "requiredCurrentResidual": $FOR373_CURRENT_RESIDUAL,
+              "requiredFor373CandidateTotalResidual": 1033,
+              "candidateTotalResidual": $candidateTotalResidual,
+              "candidateTotalResidualDeltaVsCurrent": ${candidateTotalResidual - currentResidual},
+              "sampleCount": ${auditSamples.size},
+              "regressingSampleCount": $regressingSamples,
+              "improvedSampleCount": $improvedSamples,
+              "destinationConflictSampleCount": $destinationConflictSamples,
+              "sourceTintRegressionSampleCount": $sourceTintSamples,
+              "quantizationOnlySampleCount": $quantizationOnlySamples,
+              "likelyMissingParameter": ${likelyMissingParameter.jsonString()},
+              "classificationReason": ${candidateRegressionReason(classification).jsonString()},
+              "inverseDestinationModel": {
+                "formula": "destination=(reference-(source*effectiveAlpha))/(1-effectiveAlpha) per RGB channel",
+                "source": "referenceRgba, paintSourceRgba and effectiveSourceAlpha from FOR-373",
+                "diagnosticOnly": true,
+                "appliedToRenderer": false,
+                "usedAsCorrection": false,
+                "whiteDestinationByte": 255
+              },
+              "samples": [
+            ${auditSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "nonGoalsPreserved": {
+                "rendererBehaviorChanged": false,
+                "runtimeBehaviorChanged": false,
+                "gpuOrWgslChanged": false,
+                "geometryProductionChanged": false,
+                "coverageProductionChanged": false,
+                "fallbackChanged": false,
+                "kadreChanged": false,
+                "f16PremulBlendRuntimeChanged": false,
+                "skBitmapGetPixelChanged": false,
+                "scoreIncreased": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "candidatePolicyRgbaAppliedToRenderer": false,
+                "candidatePolicyRgbaReadFromRenderer": false,
+                "candidatePolicyRgbaReadFromGpuImage": false,
+                "newCandidatePolicyProduced": false,
+                "inverseDestinationAppliedAsCorrection": false,
                 "rendererSceneBranchAdded": false,
                 "rendererCoordinateBranchAdded": false,
                 "rendererSelectedCellBranchAdded": false,
@@ -968,7 +1102,136 @@ class StrokeCapJoinSceneCaptureTest {
           "candidateImprovesSample": $candidateImprovesSample,
           "rendererAppliedCandidate": false
         }
+        """.trimIndent()
+
+    private fun candidateRegressionSample(sample: CandidatePolicySample): CandidateRegressionAuditSample {
+        val reference = rgbaArray(sample.reference)
+        val current = rgbaArray(sample.current)
+        val source = rgbaArray(sample.paintSource)
+        val candidate = sample.candidatePolicyRgba
+        val currentError = channelAbsError(reference, current)
+        val candidateError = channelAbsError(reference, candidate)
+        val candidateMinusCurrent = IntArray(4) { candidateError[it] - currentError[it] }
+        val dominantChannelIndex = dominantRegressionChannel(candidateMinusCurrent)
+        val dominantChannel = if (candidateMinusCurrent[dominantChannelIndex] > 0) {
+            channelName(dominantChannelIndex)
+        } else {
+            "none"
+        }
+        val inverseDestination = inverseDestinationEstimate(reference, source, sample.effectiveSourceAlpha)
+        return CandidateRegressionAuditSample(
+            candidate = sample,
+            currentErrorByChannel = currentError,
+            candidateErrorByChannel = candidateError,
+            candidateMinusCurrentErrorByChannel = candidateMinusCurrent,
+            dominantRegressionChannel = dominantChannel,
+            largestCandidateMinusCurrentErrorChannel = channelName(dominantChannelIndex),
+            regressionDirection = regressionDirection(reference, source, candidate, candidateMinusCurrent, dominantChannelIndex),
+            inverseDestinationEstimate = inverseDestination,
+        )
+    }
+
+    private data class CandidateRegressionAuditSample(
+        val candidate: CandidatePolicySample,
+        val currentErrorByChannel: IntArray,
+        val candidateErrorByChannel: IntArray,
+        val candidateMinusCurrentErrorByChannel: IntArray,
+        val dominantRegressionChannel: String,
+        val largestCandidateMinusCurrentErrorChannel: String,
+        val regressionDirection: String,
+        val inverseDestinationEstimate: InverseDestinationEstimate,
+    ) {
+        val currentResidual: Int = candidate.currentResidual
+        val candidateResidual: Int = candidate.candidateResidual
+        val candidateResidualDeltaVsCurrent: Int = candidate.candidateResidualDeltaVsCurrent
+    }
+
+    private fun CandidateRegressionAuditSample.toJson(): String = """
+        {
+          "index": ${candidate.index},
+          "x": ${candidate.x},
+          "y": ${candidate.y},
+          "strokeBand": ${candidate.strokeBand.jsonString()},
+          "referenceRgba": ${rgbaJson(candidate.reference)},
+          "currentRgba": ${rgbaJson(candidate.current)},
+          "gpuRgba": ${rgbaJson(candidate.current)},
+          "sampleResidual": $currentResidual,
+          "currentResidual": $currentResidual,
+          "maxChannelDelta": ${candidate.maxChannelDelta},
+          "paintSourceRgba": ${rgbaJson(candidate.paintSource)},
+          "paintSourceStatus": "known-from-BoundedStrokeCapJoinGM",
+          "paintSourceAlpha": ${candidate.paintSourceAlpha},
+          "cap": ${candidate.cap.jsonString()},
+          "join": ${candidate.join.jsonString()},
+          "strokeWidth": ${String.format(Locale.US, "%.1f", candidate.strokeWidth)},
+          "sourceCoverageByte": ${candidate.sourceCoverageByte},
+          "sourceCoverage": ${String.format(Locale.US, "%.6f", candidate.sourceCoverage)},
+          "sourceCoverageStatus": "preserved-from-FOR-372-diagnostic-mask-alpha",
+          "effectiveSourceAlphaByte": ${candidate.effectiveSourceAlphaByte},
+          "effectiveSourceAlpha": ${String.format(Locale.US, "%.6f", candidate.effectiveSourceAlpha)},
+          "effectiveSourceAlphaStatus": "opaque-source-paint-alpha-multiplied-by-exported-coverage",
+          "coverageProvenance": "cpu.coverage.stroke-cap-join-oracle / PathStrokeCoverage / diagnostic transparent GM alpha mask",
+          "coverageReadSource": "alpha-channel-from-transparent-cpu-diagnostic-mask",
+          "coverageReconstructedFromRgbaDeltas": false,
+          "referenceCurrentRgbaUsedForCoverage": false,
+          "sampleDeltaRgbaUsedForCoverage": false,
+          "candidatePolicyId": ${f16CandidatePolicyId().jsonString()},
+          "candidatePolicyRgba": ${rgbaArrayJson(candidate.candidatePolicyRgba)},
+          "candidatePolicyRgbaStatus": "calculated-by-straight-srgb-quantized-alpha-src-over-white",
+          "candidatePolicyRgbaSource": "calculated-by-diagnostic-policy",
+          "candidatePolicyRgbaReadFromRenderer": false,
+          "candidatePolicyRgbaReadFromGpuImage": false,
+          "candidateResidual": $candidateResidual,
+          "candidateResidualDeltaVsCurrent": $candidateResidualDeltaVsCurrent,
+          "candidateImprovesSample": ${candidate.candidateImprovesSample},
+          "currentErrorByChannel": ${channelErrorJson(currentErrorByChannel)},
+          "candidateErrorByChannel": ${channelErrorJson(candidateErrorByChannel)},
+          "candidateMinusCurrentErrorByChannel": ${channelErrorJson(candidateMinusCurrentErrorByChannel)},
+          "dominantRegressionChannel": ${dominantRegressionChannel.jsonString()},
+          "largestCandidateMinusCurrentErrorChannel": ${largestCandidateMinusCurrentErrorChannel.jsonString()},
+          "regressionDirection": ${regressionDirection.jsonString()},
+          "inverseDestinationEstimate": ${inverseDestinationEstimate.toJson()},
+          "inverseDestinationUsedAsCorrection": false,
+          "rendererAppliedCandidate": false
+        }
     """.trimIndent()
+
+    private data class InverseDestinationEstimate(
+        val possible: Boolean,
+        val alpha: Double,
+        val rgbFloat: DoubleArray?,
+        val rgbRounded: IntArray?,
+        val rgbClamped: IntArray?,
+        val hasOutOfSrgbChannel: Boolean,
+        val averageDeviationFromWhite: Double?,
+        val conflictsWithWhiteDestination: Boolean,
+        val status: String,
+    ) {
+        fun toJson(): String {
+            val rgbFloatJson = rgbFloat?.joinToString(prefix = "[", postfix = "]") {
+                String.format(Locale.US, "%.3f", it)
+            } ?: "null"
+            val rgbRoundedJson = rgbRounded?.joinToString(prefix = "[", postfix = "]") ?: "null"
+            val rgbClampedJson = rgbClamped?.joinToString(prefix = "[", postfix = "]") ?: "null"
+            val deviationJson = averageDeviationFromWhite?.let { String.format(Locale.US, "%.3f", it) } ?: "null"
+            return """
+                {
+                  "possible": $possible,
+                  "alpha": ${String.format(Locale.US, "%.6f", alpha)},
+                  "formula": "destination=(reference-(source*alpha))/(1-alpha)",
+                  "rgbFloat": $rgbFloatJson,
+                  "rgbRounded": $rgbRoundedJson,
+                  "rgbClampedToSrgb": $rgbClampedJson,
+                  "hasOutOfSrgbChannel": $hasOutOfSrgbChannel,
+                  "averageDeviationFromWhite": $deviationJson,
+                  "conflictsWithWhiteDestination": $conflictsWithWhiteDestination,
+                  "diagnosticOnly": true,
+                  "usedAsCorrection": false,
+                  "status": ${jsonString(status)}
+                }
+            """.trimIndent()
+        }
+    }
 
     private fun m60F16EffectiveCoverageExportJson(
         residualStats: StrokeResidualStats,
@@ -1248,6 +1511,135 @@ class StrokeCapJoinSceneCaptureTest {
             kotlin.math.abs(((reference ushr shift) and 0xFF) - ((current ushr shift) and 0xFF))
         }
 
+    private fun rgbaArray(pixel: Int): IntArray = intArrayOf(
+        (pixel ushr 16) and 0xFF,
+        (pixel ushr 8) and 0xFF,
+        pixel and 0xFF,
+        (pixel ushr 24) and 0xFF,
+    )
+
+    private fun channelAbsError(reference: IntArray, value: IntArray): IntArray =
+        IntArray(4) { kotlin.math.abs(reference[it] - value[it]) }
+
+    private fun dominantRegressionChannel(candidateMinusCurrent: IntArray): Int {
+        var best = 0
+        for (index in 1..2) {
+            if (candidateMinusCurrent[index] > candidateMinusCurrent[best]) {
+                best = index
+            }
+        }
+        return best
+    }
+
+    private fun regressionDirection(
+        reference: IntArray,
+        source: IntArray,
+        candidate: IntArray,
+        candidateMinusCurrent: IntArray,
+        dominantChannelIndex: Int,
+    ): String {
+        if (candidateMinusCurrent[dominantChannelIndex] <= 0) {
+            return "candidate-improves-or-neutral"
+        }
+        val candidateDelta = candidate[dominantChannelIndex] - reference[dominantChannelIndex]
+        val sourceDelta = source[dominantChannelIndex] - reference[dominantChannelIndex]
+        if (candidateDelta != 0 && sourceDelta != 0 && candidateDelta.sign() == sourceDelta.sign()) {
+            return "source-tint-too-strong"
+        }
+        return when {
+            candidateDelta > 0 -> "too-light"
+            candidateDelta < 0 -> "too-dark"
+            else -> "mixed"
+        }
+    }
+
+    private fun inverseDestinationEstimate(
+        reference: IntArray,
+        source: IntArray,
+        alpha: Double,
+    ): InverseDestinationEstimate {
+        if (alpha <= 0.0 || alpha >= 1.0) {
+            return InverseDestinationEstimate(
+                possible = false,
+                alpha = alpha,
+                rgbFloat = null,
+                rgbRounded = null,
+                rgbClamped = null,
+                hasOutOfSrgbChannel = false,
+                averageDeviationFromWhite = null,
+                conflictsWithWhiteDestination = false,
+                status = "blocked-by-alpha-boundary",
+            )
+        }
+        val rgbFloat = DoubleArray(3) { index ->
+            ((reference[index] / 255.0) - (source[index] / 255.0) * alpha) / (1.0 - alpha) * 255.0
+        }
+        val rgbRounded = IntArray(3) { index -> kotlin.math.round(rgbFloat[index]).toInt() }
+        val rgbClamped = IntArray(3) { index -> rgbRounded[index].coerceIn(0, 255) }
+        val hasOutOfSrgbChannel = rgbFloat.any { it < 0.0 || it > 255.0 }
+        val averageDeviation = rgbFloat.sumOf { kotlin.math.abs(it - 255.0) } / 3.0
+        val conflictsWithWhite = hasOutOfSrgbChannel || averageDeviation >= 32.0
+        return InverseDestinationEstimate(
+            possible = true,
+            alpha = alpha,
+            rgbFloat = rgbFloat,
+            rgbRounded = rgbRounded,
+            rgbClamped = rgbClamped,
+            hasOutOfSrgbChannel = hasOutOfSrgbChannel,
+            averageDeviationFromWhite = averageDeviation,
+            conflictsWithWhiteDestination = conflictsWithWhite,
+            status = if (conflictsWithWhite) {
+                "inverse-destination-incompatible-with-white-assumption"
+            } else {
+                "inverse-destination-compatible-with-white-assumption"
+            },
+        )
+    }
+
+    private fun candidateRegressionClassification(
+        sampleCount: Int,
+        candidateTotalResidual: Int,
+        currentResidual: Int,
+        regressingSamples: Int,
+        destinationConflictSamples: Int,
+        sourceTintSamples: Int,
+        quantizationOnlySamples: Int,
+    ): String {
+        if (sampleCount != FOR374_REQUIRED_SAMPLE_COUNT || candidateTotalResidual <= currentResidual) {
+            return "candidate-regression-blocked"
+        }
+        if (destinationConflictSamples >= 7 && sourceTintSamples >= 7) {
+            return "candidate-regression-likely-destination-model"
+        }
+        if (regressingSamples >= 7 && destinationConflictSamples < 4) {
+            return "candidate-regression-likely-coverage-model"
+        }
+        if (quantizationOnlySamples >= 7) {
+            return "candidate-regression-likely-quantization-model"
+        }
+        return "candidate-regression-mixed"
+    }
+
+    private fun candidateRegressionReason(classification: String): String =
+        when (classification) {
+            "candidate-regression-likely-destination-model" ->
+                "Most regressing samples point in the source tint direction, and the inverse destination estimate is incompatible with a white destination."
+            "candidate-regression-likely-coverage-model" ->
+                "The residual increase is broad, but the inverse destination estimate does not consistently contradict white."
+            "candidate-regression-likely-quantization-model" ->
+                "Most deltas are small enough to be explained by rounding or quantization."
+            "candidate-regression-mixed" ->
+                "Multiple diagnostic signals remain plausible and should be separated by one-axis probes."
+            else ->
+                "The audit cannot classify the regression without changing the diagnostic assumptions."
+        }
+
+    private fun Int.sign(): Int = when {
+        this > 0 -> 1
+        this < 0 -> -1
+        else -> 0
+    }
+
     private fun candidatePolicyRgba(sourceColor: Int, sourceCoverageByte: Int): IntArray {
         val sourceAlphaByte = (sourceColor ushr 24) and 0xFF
         val effectiveAlphaByte = quantizeAlphaRound((sourceAlphaByte / 255.0) * (sourceCoverageByte / 255.0))
@@ -1289,6 +1681,17 @@ class StrokeCapJoinSceneCaptureTest {
     }
 
     private fun rgbaArrayJson(rgba: IntArray): String = """[${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${rgba[3]}]"""
+
+    private fun channelErrorJson(channels: IntArray): String =
+        """{"r": ${channels[0]}, "g": ${channels[1]}, "b": ${channels[2]}, "a": ${channels[3]}}"""
+
+    private fun channelName(index: Int): String =
+        when (index) {
+            0 -> "red"
+            1 -> "green"
+            2 -> "blue"
+            else -> "alpha"
+        }
 
     private fun f16CandidatePolicyId(): String =
         listOf("straight", "srgb", "quantized", "alpha", "src", "over", "white").joinToString("_")
@@ -1378,6 +1781,7 @@ class StrokeCapJoinSceneCaptureTest {
         private const val FOR370_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR372_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR373_REQUIRED_SAMPLE_COUNT = 10
+        private const val FOR374_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR373_CURRENT_RESIDUAL = 856
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
         private const val EXPERIMENTAL_RENDER_PROPERTY = "kanvas.webgpu.strokeCapJoin.experimentalRender"
