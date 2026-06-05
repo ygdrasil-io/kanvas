@@ -1,0 +1,608 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-391",
+  "sceneId": "m60-f16-source-facing-lane-metadata-for391",
+  "sourceSceneId": "m60-f16-full-scene-regression-discriminator-for390",
+  "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-full-scene-regression-discriminator-for390/m60-f16-full-scene-regression-discriminator-for390.json",
+  "secondarySourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-coverage-full-scene-candidate-for389/m60-f16-source-coverage-full-scene-candidate-for389.json",
+  "adapter": "Apple M2 Max",
+  "producer": "scripts/validate_for391_m60_f16_source_facing_lane_metadata.py",
+  "producerInput": "FOR-389 selected full-scene samples plus FOR-390 discriminator evidence",
+  "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-capturer-metadata-source-facing-local-band-lane-apres-for-390",
+  "sourceFinding": "global/kanvas/findings/for-390-isole-une-lane-locale-source-facing-m60-f16-8-utiles-0-regression-sans-activation",
+  "requiredFor390Decision": "M60_F16_FULL_SCENE_REGRESSION_DISCRIMINATOR_RECORDED",
+  "requiredFor390Classification": "narrower-metadata-defendable",
+  "requiredFor389Decision": "M60_F16_SOURCE_COVERAGE_FULL_SCENE_CANDIDATE_EVALUATED",
+  "requiredFor389Classification": "full-scene-regresses",
+  "decision": "M60_F16_SOURCE_FACING_LOCAL_BAND_LANE_METADATA_RECORDED",
+  "classification": "source-facing-local-band-lane-stable-diagnostic-only",
+  "allowedClassifications": [
+    "source-facing-local-band-lane-stable-diagnostic-only",
+    "source-facing-local-band-lane-counter-drift",
+    "source-facing-local-band-lane-oracle-contaminated"
+  ],
+  "auditDoesNotProduceCorrection": true,
+  "auditDoesNotApplyRendererChange": true,
+  "correctionAppliedByDefault": false,
+  "correctionPredicateEnabled": false,
+  "runtimeHookInstalled": false,
+  "metadata": {
+    "name": "sourceFacingLocalBandLane",
+    "id": "source-facing-local-band-lane",
+    "description": "Diagnostic source-facing local band lane derived from renderer-owned stroke band metadata before correction.",
+    "status": "diagnostic-pre-correction-metadata",
+    "derivedPreCorrection": true,
+    "rendererOwnedInputMetadata": true,
+    "selectionPrimaryField": "sourceFacingLocalBandLane",
+    "derivationFormula": "(strokeBand == round-round && bandLocalX >= 39) || (strokeBand == butt-bevel && bandLocalX <= 17)",
+    "derivationRules": [
+      {
+        "strokeBand": "round-round",
+        "bandLocalX": ">= 39",
+        "sourceFacingLocalBandLane": true
+      },
+      {
+        "strokeBand": "butt-bevel",
+        "bandLocalX": "<= 17",
+        "sourceFacingLocalBandLane": true
+      }
+    ],
+    "derivationFields": [
+      "strokeBand",
+      "bandLocalX"
+    ],
+    "forbiddenDerivationFields": [
+      "bestDiscriminator",
+      "currentErrorByChannel",
+      "currentResidual",
+      "currentRgba",
+      "deltaVsCurrent",
+      "for389EvaluationResult",
+      "for390EvaluationResult",
+      "gainVsCurrent",
+      "membershipCategory",
+      "membershipReason",
+      "probeErrorByChannel",
+      "probeMinusCurrentErrorByChannel",
+      "probeMinusCurrentRgba",
+      "probeResidual",
+      "probeRgba",
+      "referenceRgba",
+      "truth"
+    ],
+    "usesSkiaReferenceForDerivation": false,
+    "usesProbeOutcomeForDerivation": false,
+    "usesProbeResidualForDerivation": false,
+    "usesCurrentResidualForDerivation": false,
+    "usesDeltaVsCurrentForDerivation": false,
+    "usesFor389TruthForDerivation": false,
+    "usesFor390TruthForDerivation": false
+  },
+  "selection": {
+    "scope": "FOR-389-selected-full-scene-pixels",
+    "refinesCandidateId": "source-color-and-oriented-coverage-lane",
+    "selectionMethod": "sourceFacingLocalBandLane == true",
+    "selectedPixels": 8,
+    "improvedPixelsRecovered": 8,
+    "improvedTruth": 8,
+    "regressionsIncluded": 0,
+    "unchangedIncluded": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "selectedResidualIfApplied": {
+      "count": 8,
+      "beforeResidual": 734,
+      "afterResidual": 669,
+      "deltaVsCurrent": -65,
+      "gainVsCurrent": 65
+    },
+    "estimatedFullSceneResidualIfAppliedToThisSubset": {
+      "baseUncorrectedFullSceneResidual": 2014,
+      "simulatedAfterResidual": 1949,
+      "deltaVsCurrent": -65,
+      "gainVsCurrent": 65
+    },
+    "selectedPixelCoordinates": [
+      {
+        "x": 93,
+        "y": 74
+      },
+      {
+        "x": 92,
+        "y": 75
+      },
+      {
+        "x": 91,
+        "y": 76
+      },
+      {
+        "x": 17,
+        "y": 77
+      },
+      {
+        "x": 90,
+        "y": 77
+      },
+      {
+        "x": 89,
+        "y": 78
+      },
+      {
+        "x": 88,
+        "y": 79
+      },
+      {
+        "x": 87,
+        "y": 80
+      }
+    ]
+  },
+  "metadataPixels": [
+    {
+      "x": 52,
+      "y": 50,
+      "sourceFacingLocalBandLane": false,
+      "sourceFacingLocalBandLaneReason": "outside-source-facing-local-band-lane",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 4
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 4,
+        "bandWidth": 48,
+        "bandEdgeDistance": 4
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "regressed-if-corrected",
+        "kind": "regressed",
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55
+      }
+    },
+    {
+      "x": 51,
+      "y": 51,
+      "sourceFacingLocalBandLane": false,
+      "sourceFacingLocalBandLaneReason": "outside-source-facing-local-band-lane",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 3
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 3,
+        "bandWidth": 48,
+        "bandEdgeDistance": 3
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "regressed-if-corrected",
+        "kind": "regressed",
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55
+      }
+    },
+    {
+      "x": 50,
+      "y": 52,
+      "sourceFacingLocalBandLane": false,
+      "sourceFacingLocalBandLaneReason": "outside-source-facing-local-band-lane",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 2
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 2,
+        "bandWidth": 48,
+        "bandEdgeDistance": 2
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "regressed-if-corrected",
+        "kind": "regressed",
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55
+      }
+    },
+    {
+      "x": 49,
+      "y": 53,
+      "sourceFacingLocalBandLane": false,
+      "sourceFacingLocalBandLaneReason": "outside-source-facing-local-band-lane",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 1
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 1,
+        "bandWidth": 48,
+        "bandEdgeDistance": 1
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "regressed-if-corrected",
+        "kind": "regressed",
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55
+      }
+    },
+    {
+      "x": 48,
+      "y": 54,
+      "sourceFacingLocalBandLane": false,
+      "sourceFacingLocalBandLaneReason": "outside-source-facing-local-band-lane",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 0
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 0,
+        "bandWidth": 48,
+        "bandEdgeDistance": 0
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "regressed-if-corrected",
+        "kind": "regressed",
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55
+      }
+    },
+    {
+      "x": 93,
+      "y": 74,
+      "sourceFacingLocalBandLane": true,
+      "sourceFacingLocalBandLaneReason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 45
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 45,
+        "bandWidth": 48,
+        "bandEdgeDistance": 2
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 52,
+        "probeResidual": 45,
+        "deltaVsCurrent": -7
+      }
+    },
+    {
+      "x": 92,
+      "y": 75,
+      "sourceFacingLocalBandLane": true,
+      "sourceFacingLocalBandLaneReason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 44
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 44,
+        "bandWidth": 48,
+        "bandEdgeDistance": 3
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    },
+    {
+      "x": 91,
+      "y": 76,
+      "sourceFacingLocalBandLane": true,
+      "sourceFacingLocalBandLaneReason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 43
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 43,
+        "bandWidth": 48,
+        "bandEdgeDistance": 4
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    },
+    {
+      "x": 17,
+      "y": 77,
+      "sourceFacingLocalBandLane": true,
+      "sourceFacingLocalBandLaneReason": "butt-bevel-source-side-bandLocalX-le-17",
+      "derivationInputs": {
+        "strokeBand": "butt-bevel",
+        "bandLocalX": 17
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "butt-bevel",
+        "cap": "butt",
+        "join": "bevel",
+        "bandLocalX": 17,
+        "bandWidth": 48,
+        "bandEdgeDistance": 17
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 52,
+        "probeResidual": 48,
+        "deltaVsCurrent": -4
+      }
+    },
+    {
+      "x": 90,
+      "y": 77,
+      "sourceFacingLocalBandLane": true,
+      "sourceFacingLocalBandLaneReason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 42
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 42,
+        "bandWidth": 48,
+        "bandEdgeDistance": 5
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    },
+    {
+      "x": 18,
+      "y": 78,
+      "sourceFacingLocalBandLane": false,
+      "sourceFacingLocalBandLaneReason": "outside-source-facing-local-band-lane",
+      "derivationInputs": {
+        "strokeBand": "butt-bevel",
+        "bandLocalX": 18
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "butt-bevel",
+        "cap": "butt",
+        "join": "bevel",
+        "bandLocalX": 18,
+        "bandWidth": 48,
+        "bandEdgeDistance": 18
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "regressed-if-corrected",
+        "kind": "regressed",
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55
+      }
+    },
+    {
+      "x": 89,
+      "y": 78,
+      "sourceFacingLocalBandLane": true,
+      "sourceFacingLocalBandLaneReason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 41
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 41,
+        "bandWidth": 48,
+        "bandEdgeDistance": 6
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    },
+    {
+      "x": 19,
+      "y": 79,
+      "sourceFacingLocalBandLane": false,
+      "sourceFacingLocalBandLaneReason": "outside-source-facing-local-band-lane",
+      "derivationInputs": {
+        "strokeBand": "butt-bevel",
+        "bandLocalX": 19
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "butt-bevel",
+        "cap": "butt",
+        "join": "bevel",
+        "bandLocalX": 19,
+        "bandWidth": 48,
+        "bandEdgeDistance": 19
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "regressed-if-corrected",
+        "kind": "regressed",
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55
+      }
+    },
+    {
+      "x": 88,
+      "y": 79,
+      "sourceFacingLocalBandLane": true,
+      "sourceFacingLocalBandLaneReason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 40
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 40,
+        "bandWidth": 48,
+        "bandEdgeDistance": 7
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    },
+    {
+      "x": 20,
+      "y": 80,
+      "sourceFacingLocalBandLane": false,
+      "sourceFacingLocalBandLaneReason": "outside-source-facing-local-band-lane",
+      "derivationInputs": {
+        "strokeBand": "butt-bevel",
+        "bandLocalX": 20
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "butt-bevel",
+        "cap": "butt",
+        "join": "bevel",
+        "bandLocalX": 20,
+        "bandWidth": 48,
+        "bandEdgeDistance": 20
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "regressed-if-corrected",
+        "kind": "regressed",
+        "currentResidual": 0,
+        "probeResidual": 55,
+        "deltaVsCurrent": 55
+      }
+    },
+    {
+      "x": 87,
+      "y": 80,
+      "sourceFacingLocalBandLane": true,
+      "sourceFacingLocalBandLaneReason": "round-round-right-terminal-bandLocalX-ge-39",
+      "derivationInputs": {
+        "strokeBand": "round-round",
+        "bandLocalX": 39
+      },
+      "preCorrectionRendererMetadata": {
+        "strokeBand": "round-round",
+        "cap": "round",
+        "join": "round",
+        "bandLocalX": 39,
+        "bandWidth": 48,
+        "bandEdgeDistance": 8
+      },
+      "evaluationOnly": {
+        "for389EvaluationResult": "source-local-useful",
+        "kind": "improved",
+        "currentResidual": 105,
+        "probeResidual": 96,
+        "deltaVsCurrent": -9
+      }
+    }
+  ],
+  "for390Reproduction": {
+    "sourceBestDiscriminatorId": "source-facing-local-band-lane",
+    "selectedPixelsMatchFor390": true,
+    "improvedPixelsMatchFor390": true,
+    "regressionsMatchFor390": true,
+    "estimatedResidualMatchesFor390": true
+  },
+  "antiOraclePolicy": {
+    "metadataMayUseSkiaReference": false,
+    "metadataMayUseProbeOutcome": false,
+    "metadataMayUseProbeResidual": false,
+    "metadataMayUseCurrentResidual": false,
+    "metadataMayUseDeltaVsCurrent": false,
+    "metadataMayUseFor389Truth": false,
+    "metadataMayUseFor390Truth": false,
+    "evaluationMayUseTruthAndResiduals": true
+  },
+  "nonGoalsPreserved": {
+    "rendererBehaviorChanged": false,
+    "runtimeBehaviorChanged": false,
+    "gpuOrWgslChanged": false,
+    "geometryProductionChanged": false,
+    "coverageProductionChanged": false,
+    "fallbackChanged": false,
+    "scoreChanged": false,
+    "thresholdChanged": false,
+    "promotionChanged": false,
+    "correctionEnabled": false,
+    "runtimeHookInstalled": false,
+    "probeEnabledByDefault": false
+  },
+  "classificationReason": "The explicit sourceFacingLocalBandLane metadata is derived only from pre-correction strokeBand and bandLocalX metadata, then reproduces the FOR-390 best discriminator counts without using reference, probe, residual, delta, or FOR-389/FOR-390 truth as selection inputs.",
+  "nextMove": "Keep FOR-391 diagnostic-only. A separate future ticket must evaluate any runtime predicate behind an explicit opt-in guard before activation.",
+  "validationCommands": [
+    "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+    "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+    "rtk python3 scripts/validate_for391_m60_f16_source_facing_lane_metadata.py",
+    "rtk python3 scripts/validate_for390_m60_f16_full_scene_regression_discriminator.py",
+    "rtk python3 scripts/validate_for389_m60_f16_source_coverage_full_scene_candidate.py",
+    "rtk python3 scripts/validate_for388_m60_f16_composition_metadata_audit.py",
+    "rtk python3 scripts/validate_for387_m60_f16_residual_fringe_discriminator_audit.py",
+    "rtk python3 scripts/validate_for386_m60_f16_coverage_regression_discriminator_audit.py",
+    "rtk python3 scripts/validate_for385_m60_f16_generalized_coverage_metadata_predicate_audit.py",
+    "rtk python3 scripts/validate_for384_m60_f16_pre_correction_geometry_coverage_metadata_audit.py",
+    "rtk python3 scripts/validate_for383_m60_f16_pre_probe_predicate_audit.py",
+    "rtk python3 scripts/validate_for382_m60_f16_coverage_composition_membership_audit.py",
+    "rtk python3 scripts/validate_for381_m60_f16_source_color_subzone_audit.py",
+    "rtk python3 scripts/validate_for380_m60_f16_source_color_correction_probe.py",
+    "rtk python3 scripts/validate_for379_m60_f16_effective_source_color_path.py",
+    "rtk python3 scripts/validate_for378_m60_f16_direct_source_color_evidence.py",
+    "rtk python3 scripts/validate_for377_m60_f16_linear_srgb_plausibility_audit.py",
+    "rtk python3 scripts/validate_for376_m60_f16_composition_quantization_candidate.py",
+    "rtk python3 scripts/validate_for375_m60_f16_effective_destination_candidate.py",
+    "rtk python3 scripts/validate_for374_m60_f16_candidate_regression_audit.py",
+    "rtk python3 scripts/validate_for373_m60_f16_candidate_policy_rgba_probe.py",
+    "rtk python3 scripts/validate_for372_m60_f16_effective_coverage_export.py",
+    "rtk python3 scripts/validate_for371_m60_f16_effective_coverage_access_audit.py",
+    "rtk python3 scripts/validate_for370_m60_f16_source_paint_capture_extension.py",
+    "rtk python3 scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+    "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+    "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+    "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+    "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk git diff --check"
+  ]
+}
