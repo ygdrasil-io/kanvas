@@ -1,0 +1,2143 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-406",
+  "sceneId": "m60-f16-post-pass-reference-comparison-for406",
+  "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+  "sourceMemory": "global/kanvas/findings/for-405-observe-les-couleurs-post-passe-aa-stencil-cover-m60-f16",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-406-m60-f16-comparer-post-passe-aa-stencil-cover-aux-references-cpu-skia",
+  "sourceArtifacts": {
+    "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+    "for404": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-runtime-hook-for404/m60-f16-aa-stencil-cover-runtime-hook-for404.json",
+    "for405": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-pass-readback-for405/m60-f16-aa-stencil-cover-post-pass-readback-for405.json"
+  },
+  "sourceContext": {
+    "for401Classification": "residual-visible-only-at-final-readback",
+    "for401CurrentTotalResidual": 62748,
+    "for401CurrentMismatchPixels": 1615,
+    "for401SelectedResidualTotal": 1560,
+    "for401SelectedPixelCount": 16,
+    "for404Classification": "aa-stencil-cover-post-pass-readback-blocked",
+    "for405Classification": "aa-stencil-cover-post-pass-color-observed",
+    "for405PostPassObservedCount": 16,
+    "for400EvidencePolicy": "context-only-not-direct-write-proof",
+    "for400UsedAsDirectProof": false
+  },
+  "producer": "scripts/validate_for406_m60_f16_post_pass_reference_comparison.py",
+  "sourceProducer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+  "decision": "M60_F16_POST_PASS_REFERENCE_COMPARISON_RECORDED",
+  "classification": "post-pass-already-diverged",
+  "globalClassification": "post-pass-already-diverged",
+  "globalConclusion": "divergence-already-visible-in-post-pass",
+  "allowedPixelClassifications": [
+    "comparison-data-missing",
+    "post-pass-already-diverged",
+    "present-readback-diverged",
+    "reference-match-inconclusive"
+  ],
+  "allowedGlobalClassifications": [
+    "comparison-data-missing",
+    "post-pass-already-diverged",
+    "present-readback-diverged",
+    "reference-match-inconclusive"
+  ],
+  "supportClaim": false,
+  "promoted": false,
+  "correctionAppliedByDefault": false,
+  "defaultRenderingChanged": false,
+  "comparisonInputs": {
+    "cpuPng": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu.png",
+      "dimensions": [
+        192,
+        128
+      ],
+      "sha256": "11790510de820f1563e3847206624c69917f58b4aeb06d6eb2c1305535e3a90e"
+    },
+    "skiaPng": {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/skia.png",
+      "dimensions": [
+        192,
+        128
+      ],
+      "sha256": "11790510de820f1563e3847206624c69917f58b4aeb06d6eb2c1305535e3a90e"
+    },
+    "cpuSkiaEqualitySource": "StrokeCapJoinSceneCaptureTest asserts cpuCmp similarity 100.0 and matchingPixels == totalPixels.",
+    "postPassSource": "FOR-405 selectedPixels[].postPass.observedRgba8",
+    "currentGpuFinalSource": "FOR-401 selectedPixels[].currentGpuRgba",
+    "skiaSource": "m60-bounded-stroke-cap-join/skia.png sampled at the FOR-401 coordinates",
+    "cpuSource": "m60-bounded-stroke-cap-join/cpu.png sampled at the FOR-401 coordinates"
+  },
+  "classificationRules": {
+    "post-pass-already-diverged": "post-pass observed RGBA8 differs from CPU or Skia at the same coordinate",
+    "present-readback-diverged": "post-pass observed RGBA8 matches CPU and Skia, but current GPU final differs from Skia",
+    "reference-match-inconclusive": "post-pass, current GPU final, CPU, and Skia byte samples match, so this comparison does not explain a residual",
+    "comparison-data-missing": "one or more required per-pixel inputs are absent"
+  },
+  "comparisonSummary": {
+    "selectedPixelCount": 16,
+    "postPassAlreadyDivergedCount": 16,
+    "presentReadbackDivergedCount": 0,
+    "referenceMatchInconclusiveCount": 0,
+    "comparisonDataMissingCount": 0,
+    "postPassObservedCount": 16,
+    "postPassEqualsCurrentGpuFinalCount": 16,
+    "cpuEqualsSkiaCount": 16,
+    "selectedPostPassToSkiaDeltaTotal": 1560,
+    "selectedCurrentGpuFinalToSkiaDeltaTotal": 1560,
+    "for401SelectedResidualTotal": 1560
+  },
+  "selectedPixels": [
+    {
+      "index": 0,
+      "x": 92,
+      "y": 75,
+      "postPassObservedRgba8": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "cpuRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "skiaRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "for401ReferenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "for401ResidualByChannel": {
+        "r": 48,
+        "g": 41,
+        "b": 16,
+        "a": 0
+      },
+      "for401ResidualTotal": 105,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "x": 91,
+      "y": 76,
+      "postPassObservedRgba8": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "cpuRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "skiaRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "for401ReferenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "for401ResidualByChannel": {
+        "r": 48,
+        "g": 41,
+        "b": 16,
+        "a": 0
+      },
+      "for401ResidualTotal": 105,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "x": 90,
+      "y": 77,
+      "postPassObservedRgba8": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "cpuRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "skiaRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "for401ReferenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "for401ResidualByChannel": {
+        "r": 48,
+        "g": 41,
+        "b": 16,
+        "a": 0
+      },
+      "for401ResidualTotal": 105,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "x": 89,
+      "y": 78,
+      "postPassObservedRgba8": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "cpuRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "skiaRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "for401ReferenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "for401ResidualByChannel": {
+        "r": 48,
+        "g": 41,
+        "b": 16,
+        "a": 0
+      },
+      "for401ResidualTotal": 105,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "x": 88,
+      "y": 79,
+      "postPassObservedRgba8": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "cpuRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "skiaRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "for401ReferenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "for401ResidualByChannel": {
+        "r": 48,
+        "g": 41,
+        "b": 16,
+        "a": 0
+      },
+      "for401ResidualTotal": 105,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "x": 87,
+      "y": 80,
+      "postPassObservedRgba8": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.709472656,
+        0.748535156,
+        0.901855469,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        181,
+        191,
+        230,
+        255
+      ],
+      "cpuRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "skiaRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "for401ReferenceRgba": [
+        133,
+        150,
+        214,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 48,
+          "g": 41,
+          "b": 16,
+          "a": 0
+        },
+        "absoluteTotal": 105,
+        "maxChannelDelta": 48
+      },
+      "for401ResidualByChannel": {
+        "r": 48,
+        "g": 41,
+        "b": 16,
+        "a": 0
+      },
+      "for401ResidualTotal": 105,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "x": 101,
+      "y": 37,
+      "postPassObservedRgba8": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "cpuRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "skiaRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "for401ReferenceRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "for401ResidualByChannel": {
+        "r": 68,
+        "g": 17,
+        "b": 8,
+        "a": 0
+      },
+      "for401ResidualTotal": 93,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "x": 102,
+      "y": 37,
+      "postPassObservedRgba8": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "cpuRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "skiaRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "for401ReferenceRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "for401ResidualByChannel": {
+        "r": 68,
+        "g": 17,
+        "b": 8,
+        "a": 0
+      },
+      "for401ResidualTotal": 93,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "x": 99,
+      "y": 38,
+      "postPassObservedRgba8": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "cpuRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "skiaRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "for401ReferenceRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "for401ResidualByChannel": {
+        "r": 68,
+        "g": 17,
+        "b": 8,
+        "a": 0
+      },
+      "for401ResidualTotal": 93,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "x": 100,
+      "y": 38,
+      "postPassObservedRgba8": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "cpuRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "skiaRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "for401ReferenceRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "for401ResidualByChannel": {
+        "r": 68,
+        "g": 17,
+        "b": 8,
+        "a": 0
+      },
+      "for401ResidualTotal": 93,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "x": 101,
+      "y": 38,
+      "postPassObservedRgba8": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "cpuRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "skiaRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "for401ReferenceRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "for401ResidualByChannel": {
+        "r": 68,
+        "g": 17,
+        "b": 8,
+        "a": 0
+      },
+      "for401ResidualTotal": 93,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "x": 102,
+      "y": 38,
+      "postPassObservedRgba8": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "cpuRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "skiaRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "for401ReferenceRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "for401ResidualByChannel": {
+        "r": 68,
+        "g": 17,
+        "b": 8,
+        "a": 0
+      },
+      "for401ResidualTotal": 93,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "x": 103,
+      "y": 38,
+      "postPassObservedRgba8": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "cpuRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "skiaRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "for401ReferenceRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "for401ResidualByChannel": {
+        "r": 68,
+        "g": 17,
+        "b": 8,
+        "a": 0
+      },
+      "for401ResidualTotal": 93,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "x": 104,
+      "y": 38,
+      "postPassObservedRgba8": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "cpuRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "skiaRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "for401ReferenceRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "for401ResidualByChannel": {
+        "r": 68,
+        "g": 17,
+        "b": 8,
+        "a": 0
+      },
+      "for401ResidualTotal": 93,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 14,
+      "x": 98,
+      "y": 39,
+      "postPassObservedRgba8": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "cpuRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "skiaRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "for401ReferenceRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "for401ResidualByChannel": {
+        "r": 68,
+        "g": 17,
+        "b": 8,
+        "a": 0
+      },
+      "for401ResidualTotal": 93,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    },
+    {
+      "index": 15,
+      "x": 99,
+      "y": 39,
+      "postPassObservedRgba8": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "postPassObservedRgbaFloat": [
+        0.0,
+        0.541015625,
+        0.297851563,
+        1.0
+      ],
+      "currentGpuFinalRgba": [
+        0,
+        138,
+        76,
+        255
+      ],
+      "cpuRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "skiaRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "for401ReferenceRgba": [
+        68,
+        121,
+        68,
+        255
+      ],
+      "postPassToCpuDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "postPassToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "currentGpuFinalToSkiaDelta": {
+        "signedByChannel": {
+          "r": -68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteByChannel": {
+          "r": 68,
+          "g": 17,
+          "b": 8,
+          "a": 0
+        },
+        "absoluteTotal": 93,
+        "maxChannelDelta": 68
+      },
+      "for401ResidualByChannel": {
+        "r": 68,
+        "g": 17,
+        "b": 8,
+        "a": 0
+      },
+      "for401ResidualTotal": 93,
+      "postPassEqualsCurrentGpuFinal": true,
+      "cpuEqualsSkia": true,
+      "for400UsedAsDirectProof": false,
+      "classification": "post-pass-already-diverged",
+      "classificationReason": "The FOR-405 post-pass RGBA8 sample already differs from the CPU/Skia references at the FOR-401 coordinate, and it matches the current GPU final byte sample.",
+      "inspectedPostPassEvents": [
+        {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "targetWithinScissor": true,
+          "readbackAttempted": true,
+          "readbackAvailable": true,
+          "classification": "aa-stencil-cover-post-pass-color-observed"
+        }
+      ]
+    }
+  ],
+  "nonGoalsPreserved": {
+    "defaultRenderingChanged": false,
+    "supportClaimRaised": false,
+    "promoted": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "correctionApplied": false,
+    "for380BroadCorrectionReintroduced": false,
+    "for400UsedAsDirectProof": false,
+    "generalizedOutsideM60F16": false
+  },
+  "classificationReason": "All 16 FOR-401 coordinates have FOR-405 post-pass RGBA8 samples that match the FOR-401 current GPU final bytes and differ from byte-identical CPU/Skia references; the divergence is therefore already visible after the AA stencil-cover pass, not only at final present/readback.",
+  "validationCommands": [
+    "rtk python3 scripts/validate_for406_m60_f16_post_pass_reference_comparison.py",
+    "rtk python3 scripts/validate_for405_m60_f16_aa_stencil_cover_post_pass_readback.py",
+    "rtk python3 scripts/validate_for404_m60_f16_aa_stencil_cover_runtime_hook.py",
+    "rtk python3 scripts/validate_for403_m60_f16_direct_pass_write_hook.py",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk git diff --check"
+  ]
+}
