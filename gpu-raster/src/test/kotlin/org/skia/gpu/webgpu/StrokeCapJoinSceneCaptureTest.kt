@@ -163,6 +163,7 @@ class StrokeCapJoinSceneCaptureTest {
         writeM60F16EffectiveCoverageExport(residualStats, adapter)
         writeM60F16CandidatePolicyRgbaProbe(residualStats, adapter)
         writeM60F16CandidateRegressionAudit(residualStats, adapter)
+        writeM60F16EffectiveDestinationCandidate(residualStats, adapter)
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -200,7 +201,7 @@ class StrokeCapJoinSceneCaptureTest {
               "result": "target-colorspace blend path matches CPU 128 on the isolated neutral AA sample",
               "sourceRoute": "webgpu.present-pass.srgb-to-rec2020-after-blend",
               "targetRoute": "webgpu.target-colorspace-blend.solid-coverage",
-              "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+              "command": "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
             }
             """.trimIndent() + "\n",
         )
@@ -807,6 +808,18 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun writeM60F16EffectiveDestinationCandidate(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-effective-destination-candidate-for375",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-effective-destination-candidate-for375.json").writeText(
+            m60F16EffectiveDestinationCandidateJson(residualStats, adapter),
+        )
+    }
+
     private fun m60F16CandidatePolicyRgbaProbeJson(
         residualStats: StrokeResidualStats,
         adapter: String,
@@ -1008,6 +1021,99 @@ class StrokeCapJoinSceneCaptureTest {
         """.trimIndent() + "\n"
     }
 
+    private fun m60F16EffectiveDestinationCandidateJson(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val samples = residualStats.highDeltaSamples.take(FOR375_REQUIRED_SAMPLE_COUNT)
+        val for374Samples = samples.mapIndexed { index, sample ->
+            candidateRegressionSample(candidatePolicySample(index + 1, sample, coverageMask))
+        }
+        val candidateSamples = for374Samples.map { effectiveDestinationCandidateSample(it) }
+        val currentResidual = candidateSamples.sumOf { it.currentResidual }
+        val for373CandidateTotalResidual = candidateSamples.sumOf { it.for373CandidateResidual }
+        val effectiveDestinationCandidateTotalResidual =
+            candidateSamples.sumOf { it.effectiveDestinationCandidateResidual }
+        val classification = effectiveDestinationCandidateClassification(
+            sampleCount = candidateSamples.size,
+            effectiveDestinationCandidateTotalResidual = effectiveDestinationCandidateTotalResidual,
+            currentResidual = currentResidual,
+        )
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-375",
+              "sceneId": "m60-f16-effective-destination-candidate-for375",
+              "sourceSceneId": "m60-f16-candidate-regression-audit-for374",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-candidate-sur-destination-effective-apres-for-374",
+              "sourceFinding": "global/kanvas/findings/for-374-isole-le-modele-de-destination-effective-comme-cause-probable-de-regression-m60-f16",
+              "requiredFor374Decision": "M60_F16_CANDIDATE_REGRESSION_AUDIT_RECORDED",
+              "requiredFor374Classification": "candidate-regression-likely-destination-model",
+              "decision": "M60_F16_EFFECTIVE_DESTINATION_CANDIDATE_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "effective-destination-candidate-explains-reference",
+                "effective-destination-candidate-reduces-residual",
+                "effective-destination-candidate-neutral",
+                "effective-destination-candidate-regresses",
+                "effective-destination-candidate-blocked"
+              ],
+              "candidatePolicyId": "source_over_effective_destination_diagnostic",
+              "sourceCandidatePolicyId": ${f16CandidatePolicyId().jsonString()},
+              "candidateInputSource": "FOR-374 preserved samples plus inverseDestinationEstimate.rgbClampedToSrgb",
+              "candidateFormula": "destinationRgb=inverseDestinationEstimate.rgbClampedToSrgb; alpha=effectiveSourceAlphaByte/255.0; rgb=floor(((sourceRgb/255.0)*alpha + (destinationRgb/255.0)*(1.0-alpha))*256.0) clamped to [0,255]; a=255",
+              "candidateRgbaSource": "calculated-by-diagnostic-policy",
+              "candidateReadFromRenderer": false,
+              "candidateReadFromGpuImage": false,
+              "candidateAppliedToRenderer": false,
+              "destinationSource": "inverseDestinationEstimate.rgbClampedToSrgb",
+              "destinationReadFromRenderer": false,
+              "destinationReadFromGpuImage": false,
+              "destinationAppliedToRenderer": false,
+              "currentResidual": $currentResidual,
+              "requiredCurrentResidual": $FOR373_CURRENT_RESIDUAL,
+              "requiredFor373CandidateTotalResidual": $FOR373_CANDIDATE_TOTAL_RESIDUAL,
+              "for373CandidateTotalResidual": $for373CandidateTotalResidual,
+              "effectiveDestinationCandidateTotalResidual": $effectiveDestinationCandidateTotalResidual,
+              "effectiveDestinationCandidateTotalDeltaVsCurrent": ${effectiveDestinationCandidateTotalResidual - currentResidual},
+              "effectiveDestinationCandidateTotalDeltaVsFor373Candidate": ${effectiveDestinationCandidateTotalResidual - for373CandidateTotalResidual},
+              "sampleCount": ${candidateSamples.size},
+              "samples": [
+            ${candidateSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "nonGoalsPreserved": {
+                "rendererBehaviorChanged": false,
+                "runtimeBehaviorChanged": false,
+                "gpuOrWgslChanged": false,
+                "geometryProductionChanged": false,
+                "coverageProductionChanged": false,
+                "fallbackChanged": false,
+                "kadreChanged": false,
+                "f16PremulBlendRuntimeChanged": false,
+                "skBitmapGetPixelChanged": false,
+                "scoreIncreased": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "candidateAppliedToRenderer": false,
+                "candidateReadFromRenderer": false,
+                "candidateReadFromGpuImage": false,
+                "destinationAppliedToRenderer": false,
+                "destinationReadFromRenderer": false,
+                "destinationReadFromGpuImage": false,
+                "rendererSceneBranchAdded": false,
+                "rendererCoordinateBranchAdded": false,
+                "rendererSelectedCellBranchAdded": false,
+                "fullGmCropPathAdded": false
+              },
+              "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+        """.trimIndent() + "\n"
+    }
+
     private fun candidatePolicySample(index: Int, sample: ResidualSample, coverageMask: SkBitmap): CandidatePolicySample {
         val band = strokePaintBands().first { sample.x in it.xStart until it.xEnd }
         val currentResidual = sampleResidual(sample.reference, sample.gpu)
@@ -1195,6 +1301,76 @@ class StrokeCapJoinSceneCaptureTest {
           "rendererAppliedCandidate": false
         }
     """.trimIndent()
+
+    private fun effectiveDestinationCandidateSample(
+        sample: CandidateRegressionAuditSample,
+    ): EffectiveDestinationCandidateSample {
+        val destination = sample.inverseDestinationEstimate.rgbClamped
+        if (!sample.inverseDestinationEstimate.possible || destination == null) {
+            return EffectiveDestinationCandidateSample(
+                for374Sample = sample,
+                effectiveDestinationRgba = null,
+                effectiveDestinationCandidateRgba = null,
+                effectiveDestinationCandidateResidual = sample.currentResidual,
+                effectiveDestinationCandidateDeltaVsCurrent = 0,
+                effectiveDestinationCandidateDeltaVsFor373Candidate =
+                    sample.currentResidual - sample.candidateResidual,
+                effectiveDestinationCandidateStatus = "blocked-by-missing-effective-destination",
+            )
+        }
+        val candidate = sourceOverEffectiveDestinationRgba(
+            sourceColor = sample.candidate.paintSource,
+            effectiveAlphaByte = sample.candidate.effectiveSourceAlphaByte,
+            destinationRgb = destination,
+        )
+        val residual = sampleResidual(sample.candidate.reference, rgbaToPixel(candidate))
+        return EffectiveDestinationCandidateSample(
+            for374Sample = sample,
+            effectiveDestinationRgba = intArrayOf(destination[0], destination[1], destination[2], 255),
+            effectiveDestinationCandidateRgba = candidate,
+            effectiveDestinationCandidateResidual = residual,
+            effectiveDestinationCandidateDeltaVsCurrent = residual - sample.currentResidual,
+            effectiveDestinationCandidateDeltaVsFor373Candidate = residual - sample.candidateResidual,
+            effectiveDestinationCandidateStatus = "calculated-from-inverse-destination-rgb-clamped-to-srgb",
+        )
+    }
+
+    private data class EffectiveDestinationCandidateSample(
+        val for374Sample: CandidateRegressionAuditSample,
+        val effectiveDestinationRgba: IntArray?,
+        val effectiveDestinationCandidateRgba: IntArray?,
+        val effectiveDestinationCandidateResidual: Int,
+        val effectiveDestinationCandidateDeltaVsCurrent: Int,
+        val effectiveDestinationCandidateDeltaVsFor373Candidate: Int,
+        val effectiveDestinationCandidateStatus: String,
+    ) {
+        val currentResidual: Int = for374Sample.currentResidual
+        val for373CandidateResidual: Int = for374Sample.candidateResidual
+    }
+
+    private fun EffectiveDestinationCandidateSample.toJson(): String {
+        val base = for374Sample.toJson().trim()
+        val suffix = """
+          "effectiveDestinationInputSource": "inverseDestinationEstimate.rgbClampedToSrgb",
+          "effectiveDestinationRgba": ${effectiveDestinationRgba?.let { rgbaArrayJson(it) } ?: "null"},
+          "effectiveDestinationReadFromRenderer": false,
+          "effectiveDestinationReadFromGpuImage": false,
+          "effectiveDestinationAppliedToRenderer": false,
+          "effectiveDestinationCandidatePolicyId": "source_over_effective_destination_diagnostic",
+          "effectiveDestinationCandidateRgba": ${effectiveDestinationCandidateRgba?.let { rgbaArrayJson(it) } ?: "null"},
+          "effectiveDestinationCandidateStatus": ${effectiveDestinationCandidateStatus.jsonString()},
+          "effectiveDestinationCandidateSource": "calculated-by-diagnostic-policy",
+          "effectiveDestinationCandidateReadFromRenderer": false,
+          "effectiveDestinationCandidateReadFromGpuImage": false,
+          "effectiveDestinationCandidateAppliedToRenderer": false,
+          "effectiveDestinationCandidateResidual": $effectiveDestinationCandidateResidual,
+          "effectiveDestinationCandidateDeltaVsCurrent": $effectiveDestinationCandidateDeltaVsCurrent,
+          "effectiveDestinationCandidateDeltaVsFor373Candidate": $effectiveDestinationCandidateDeltaVsFor373Candidate,
+          "effectiveDestinationCandidateImprovesCurrent": ${effectiveDestinationCandidateDeltaVsCurrent < 0},
+          "effectiveDestinationCandidateImprovesFor373Candidate": ${effectiveDestinationCandidateDeltaVsFor373Candidate < 0}
+        """.trimIndent().prependIndent("  ")
+        return base.replace(Regex("\n\\s*}$"), ",\n$suffix\n}")
+    }
 
     private data class InverseDestinationEstimate(
         val possible: Boolean,
@@ -1620,6 +1796,26 @@ class StrokeCapJoinSceneCaptureTest {
         return "candidate-regression-mixed"
     }
 
+    private fun effectiveDestinationCandidateClassification(
+        sampleCount: Int,
+        effectiveDestinationCandidateTotalResidual: Int,
+        currentResidual: Int,
+    ): String {
+        if (sampleCount != FOR375_REQUIRED_SAMPLE_COUNT) {
+            return "effective-destination-candidate-blocked"
+        }
+        if (effectiveDestinationCandidateTotalResidual <= 64) {
+            return "effective-destination-candidate-explains-reference"
+        }
+        if (effectiveDestinationCandidateTotalResidual < currentResidual) {
+            return "effective-destination-candidate-reduces-residual"
+        }
+        if (effectiveDestinationCandidateTotalResidual == currentResidual) {
+            return "effective-destination-candidate-neutral"
+        }
+        return "effective-destination-candidate-regresses"
+    }
+
     private fun candidateRegressionReason(classification: String): String =
         when (classification) {
             "candidate-regression-likely-destination-model" ->
@@ -1648,6 +1844,20 @@ class StrokeCapJoinSceneCaptureTest {
             quantize256((((sourceColor ushr 16) and 0xFF) / 255.0) * alpha + (1.0 - alpha)),
             quantize256((((sourceColor ushr 8) and 0xFF) / 255.0) * alpha + (1.0 - alpha)),
             quantize256(((sourceColor and 0xFF) / 255.0) * alpha + (1.0 - alpha)),
+            255,
+        )
+    }
+
+    private fun sourceOverEffectiveDestinationRgba(
+        sourceColor: Int,
+        effectiveAlphaByte: Int,
+        destinationRgb: IntArray,
+    ): IntArray {
+        val alpha = effectiveAlphaByte / 255.0
+        return intArrayOf(
+            quantize256((((sourceColor ushr 16) and 0xFF) / 255.0) * alpha + (destinationRgb[0] / 255.0) * (1.0 - alpha)),
+            quantize256((((sourceColor ushr 8) and 0xFF) / 255.0) * alpha + (destinationRgb[1] / 255.0) * (1.0 - alpha)),
+            quantize256(((sourceColor and 0xFF) / 255.0) * alpha + (destinationRgb[2] / 255.0) * (1.0 - alpha)),
             255,
         )
     }
@@ -1782,7 +1992,9 @@ class StrokeCapJoinSceneCaptureTest {
         private const val FOR372_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR373_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR374_REQUIRED_SAMPLE_COUNT = 10
+        private const val FOR375_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR373_CURRENT_RESIDUAL = 856
+        private const val FOR373_CANDIDATE_TOTAL_RESIDUAL = 1033
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
         private const val EXPERIMENTAL_RENDER_PROPERTY = "kanvas.webgpu.strokeCapJoin.experimentalRender"
 
