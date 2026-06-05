@@ -163,6 +163,19 @@ class StrokeCapJoinSceneCaptureTest {
                         }
                     }
                 }
+                val contributionIsolationResult = withExperimentalStrokeCapJoinRender {
+                    withM60F16BoundedRuntimeCorrectionProbe(true) {
+                        withM60F16DirectPassWriteHook(true) {
+                            withM60F16AaStencilCoverContributionIsolationDiagnostic(true) {
+                                WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                                    ctx,
+                                    gm,
+                                    targetColorSpaceBlend = true,
+                                )
+                            }
+                        }
+                    }
+                }
                 writeEvidence(
                     cpuBitmap = cpuBitmap,
                     reference = reference,
@@ -190,6 +203,11 @@ class StrokeCapJoinSceneCaptureTest {
                         coverageStencilContributionMapResult.aaStencilCoverPostPassRuntimeHookSnapshot,
                     aaStencilCoverPostPassReadbackSnapshot =
                         coverageStencilContributionMapResult.aaStencilCoverPostPassReadbackSnapshot,
+                    aaStencilCoverContributionIsolationSnapshot =
+                        contributionIsolationResult.aaStencilCoverContributionIsolationSnapshot,
+                    aaStencilCoverContributionIsolationPostPassSnapshot =
+                        contributionIsolationResult.aaStencilCoverPostPassReadbackSnapshot,
+                    aaStencilCoverContributionIsolationBoundedRuntimeCorrectionProbe = true,
                     adapter = adapter,
                 )
             }
@@ -235,6 +253,11 @@ class StrokeCapJoinSceneCaptureTest {
             SkWebGpuDevice.M60F16AaStencilCoverPostPassRuntimeHookSnapshot,
         aaStencilCoverPostPassReadbackSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        aaStencilCoverContributionIsolationSnapshot:
+            SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
+        aaStencilCoverContributionIsolationPostPassSnapshot:
+            SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        aaStencilCoverContributionIsolationBoundedRuntimeCorrectionProbe: Boolean,
         adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join").apply { mkdirs() }
@@ -414,6 +437,15 @@ class StrokeCapJoinSceneCaptureTest {
                 currentResidualStats = residualStats,
                 runtimeHookSnapshot = aaStencilCoverPostPassRuntimeHookSnapshot,
                 readbackSnapshot = aaStencilCoverPostPassReadbackSnapshot,
+                adapter = adapter,
+            )
+        }
+        if (aaStencilCoverContributionIsolationSnapshot.enabled) {
+            writeM60F16AaStencilCoverContributionIsolation(
+                snapshot = aaStencilCoverContributionIsolationSnapshot,
+                postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
+                boundedRuntimeCorrectionProbeEnabledForEvidenceRun =
+                    aaStencilCoverContributionIsolationBoundedRuntimeCorrectionProbe,
                 adapter = adapter,
             )
         }
@@ -814,6 +846,37 @@ class StrokeCapJoinSceneCaptureTest {
                 System.clearProperty(FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY)
             } else {
                 System.setProperty(FOR400_COVERAGE_STENCIL_CONTRIBUTION_MAP_PROPERTY, previous)
+            }
+        }
+    }
+
+    private fun <T> withM60F16DirectPassWriteHook(enabled: Boolean, block: () -> T): T {
+        val previous = System.getProperty(FOR404_AA_STENCIL_COVER_RUNTIME_HOOK_PROPERTY)
+        System.setProperty(FOR404_AA_STENCIL_COVER_RUNTIME_HOOK_PROPERTY, enabled.toString())
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FOR404_AA_STENCIL_COVER_RUNTIME_HOOK_PROPERTY)
+            } else {
+                System.setProperty(FOR404_AA_STENCIL_COVER_RUNTIME_HOOK_PROPERTY, previous)
+            }
+        }
+    }
+
+    private fun <T> withM60F16AaStencilCoverContributionIsolationDiagnostic(
+        enabled: Boolean,
+        block: () -> T,
+    ): T {
+        val previous = System.getProperty(FOR408_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_PROPERTY)
+        System.setProperty(FOR408_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_PROPERTY, enabled.toString())
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FOR408_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_PROPERTY)
+            } else {
+                System.setProperty(FOR408_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_PROPERTY, previous)
             }
         }
     }
@@ -1655,6 +1718,27 @@ class StrokeCapJoinSceneCaptureTest {
                 currentResidualStats = currentResidualStats,
                 runtimeHookSnapshot = runtimeHookSnapshot,
                 readbackSnapshot = readbackSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun writeM60F16AaStencilCoverContributionIsolation(
+        snapshot: SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        boundedRuntimeCorrectionProbeEnabledForEvidenceRun: Boolean,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/" +
+                "m60-f16-aa-stencil-cover-per-subdraw-hook-for408",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-aa-stencil-cover-per-subdraw-hook-for408.json").writeText(
+            m60F16AaStencilCoverContributionIsolationJson(
+                snapshot = snapshot,
+                postPassSnapshot = postPassSnapshot,
+                boundedRuntimeCorrectionProbeEnabledForEvidenceRun =
+                    boundedRuntimeCorrectionProbeEnabledForEvidenceRun,
                 adapter = adapter,
             ),
         )
@@ -3381,6 +3465,209 @@ class StrokeCapJoinSceneCaptureTest {
 
     private fun intArrayJson(values: IntArray): String =
         values.joinToString(prefix = "[", postfix = "]")
+
+    private fun m60F16AaStencilCoverContributionIsolationJson(
+        snapshot: SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        boundedRuntimeCorrectionProbeEnabledForEvidenceRun: Boolean,
+        adapter: String,
+    ): String {
+        val selected = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS
+        val samples = snapshot.events.flatMap { event -> event.samples.map { sample -> event to sample } }
+        val observedSamples = samples.count { (_, sample) -> sample.shaderObserved }
+        val missingFramebufferState = samples.count { (_, sample) ->
+            sample.shaderObserved &&
+                listOf(sample.dstBeforeRgbaFloat, sample.expectedSourceOverRgbaFloat, sample.dstAfterRgbaFloat)
+                    .any { it == null }
+        }
+        val postPassByPixel = postPassSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to sample } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, values) -> values.lastOrNull { it.readbackAvailable } }
+        val classification = when {
+            observedSamples > 0 && missingFramebufferState > 0 ->
+                "per-subdraw-framebuffer-state-unavailable"
+            observedSamples > 0 -> "per-subdraw-inputs-captured"
+            snapshot.enabled -> "per-subdraw-hook-no-samples"
+            else -> "per-subdraw-hook-disabled"
+        }
+        val selectedJson = selected.joinToString(",\n") { (x, y) ->
+            val pixelSamples = samples
+                .filter { (_, sample) -> sample.x == x && sample.y == y }
+                .sortedWith(
+                    compareBy<Pair<
+                        SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationEvent,
+                        SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSample,
+                        >> { it.first.drawIndex }.thenBy { it.second.subdrawOrdinal },
+                )
+            val postPass = postPassByPixel[x to y]
+            val pixelClass = when {
+                pixelSamples.any { (_, sample) -> sample.shaderObserved && sample.missingFields.isNotEmpty() } ->
+                    "per-subdraw-framebuffer-state-unavailable"
+                pixelSamples.any { (_, sample) -> sample.shaderObserved } ->
+                    "per-subdraw-inputs-captured"
+                else -> "per-subdraw-sample-not-observed"
+            }
+            val subdrawJson = pixelSamples.joinToString(",\n") { (event, sample) ->
+                aaStencilCoverContributionIsolationSampleJson(event, sample).prependIndent("      ")
+            }
+            """
+            {
+              "x": $x,
+              "y": $y,
+              "classification": ${pixelClass.jsonString()},
+              "postPassDstAfterRgbaFloat": ${postPass?.observedRgbaFloat.floatArrayOrNullJson()},
+              "postPassDstAfterRgba8": ${postPass?.observedRgba8.intArrayOrNullJson()},
+              "subdrawCount": ${pixelSamples.size},
+              "shaderObservedSubdrawCount": ${pixelSamples.count { (_, sample) -> sample.shaderObserved }},
+              "perSubdraw": [
+            $subdrawJson
+              ]
+            }
+            """.trimIndent().prependIndent("    ")
+        }
+        val eventsJson = snapshot.events.joinToString(",\n") { event ->
+            """
+            {
+              "drawIndex": ${event.drawIndex},
+              "pipelineFamily": ${event.pipelineFamily.jsonString()},
+              "fillType": ${event.fillType.jsonString()},
+              "blendMode": ${event.blendMode.jsonString()},
+              "scissor": ${intArrayJson(event.scissor)},
+              "edgeCount": ${event.edgeCount},
+              "coverVertexCount": ${event.coverVertexCount},
+              "sampleCount": ${event.samples.size}
+            }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-408",
+              "sceneId": "m60-f16-aa-stencil-cover-per-subdraw-hook-for408",
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-408-m60-f16-hook-per-subdraw-aa-stencil-cover-contribution-isolation",
+              "sourceMemory": {
+                "for407": "global/kanvas/findings/for-407-formalise-le-manque-de-donnees-per-subdraw-pour-isoler-la-cause-m60-f16"
+              },
+              "sourceArtifacts": {
+                "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+                "for405": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-pass-readback-for405/m60-f16-aa-stencil-cover-post-pass-readback-for405.json",
+                "for406": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-post-pass-reference-comparison-for406/m60-f16-post-pass-reference-comparison-for406.json",
+                "for407": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-contribution-isolation-for407/m60-f16-aa-stencil-cover-contribution-isolation-for407.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "decision": "M60_F16_AA_STENCIL_COVER_PER_SUBDRAW_HOOK_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "coverage-aa-wrong",
+                "source-color-wrong",
+                "blend-source-over-wrong",
+                "draw-order-or-accumulation-wrong",
+                "per-subdraw-framebuffer-state-unavailable",
+                "per-subdraw-inputs-captured",
+                "per-subdraw-hook-no-samples",
+                "per-subdraw-hook-disabled"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "correctionAppliedByDefault": false,
+              "defaultRenderingChanged": false,
+              "guards": {
+                "experimentalStrokeRenderer": {"guardId": "$EXPERIMENTAL_RENDER_PROPERTY", "enabledForEvidenceRun": true, "enabledByDefault": false},
+                "bandMetadataTransport": {"guardId": "$M60_F16_BAND_METADATA_TRANSPORT_PROPERTY", "enabledForEvidenceRun": ${System.getProperty(M60_F16_BAND_METADATA_TRANSPORT_PROPERTY, "false").toBoolean()}, "enabledByDefault": false},
+                "boundedRuntimeCorrection": {"guardId": "$FOR398_BOUNDED_RUNTIME_CORRECTION_PROPERTY", "enabledForEvidenceRun": $boundedRuntimeCorrectionProbeEnabledForEvidenceRun, "enabledByDefault": false, "usage": "opt-in diagnostic transport for FOR-408; not a default rendering correction"},
+                "postPassReadback": {"guardId": "$FOR404_AA_STENCIL_COVER_RUNTIME_HOOK_PROPERTY", "enabledForEvidenceRun": ${postPassSnapshot.enabled}, "enabledByDefault": false},
+                "contributionIsolation": {"guardId": "$FOR408_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_PROPERTY", "enabledForEvidenceRun": ${snapshot.enabled}, "enabledByDefault": false}
+              },
+              "runtimeSnapshot": {
+                "api": "SkWebGpuDevice.m60F16AaStencilCoverContributionIsolationSnapshot()",
+                "propertyName": ${snapshot.propertyName.jsonString()},
+                "enabled": ${snapshot.enabled},
+                "requestedBoundary": ${snapshot.requestedBoundary.jsonString()},
+                "observedBoundary": ${snapshot.observedBoundary.jsonString()},
+                "diagnosticShader": ${snapshot.diagnosticShader.jsonString()},
+                "pipelineLayout": ${snapshot.pipelineLayout.jsonString()},
+                "sampleLimit": ${snapshot.sampleLimit},
+                "eventCount": ${snapshot.events.size},
+                "events": [
+            $eventsJson
+                ]
+              },
+              "isolationSummary": {
+                "selectedPixelCount": ${selected.size},
+                "rawRuntimeEventCount": ${snapshot.events.size},
+                "rawRuntimeSampleCount": ${samples.size},
+                "shaderObservedSubdrawCount": $observedSamples,
+                "missingFramebufferStateSubdrawCount": $missingFramebufferState,
+                "postPassObservedPixelCount": ${postPassByPixel.values.count { it != null }},
+                "for400EvidencePolicy": "context-only-not-direct-write-proof",
+                "for400UsedAsDirectProof": false
+              },
+              "selectedPixels": [
+            $selectedJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "correctionApplied": false,
+                "for400UsedAsDirectProof": false,
+                "generalizedOutsideM60F16": false
+              },
+              "classificationReason": "FOR-408 captures shader-side source color and coverage per inside/outside subdraw where the bounded M60 F16 fragment hook observes a selected FOR-401 coordinate. WebGPU fixed-function blending still does not expose per-subdraw dstBefore/dstAfter framebuffer state or an independent source-over replay input at this fragment boundary.",
+              "validationCommands": [
+                "rtk python3 scripts/validate_for408_m60_f16_aa_stencil_cover_per_subdraw_hook.py",
+                "rtk python3 scripts/validate_for407_m60_f16_aa_stencil_cover_contribution_isolation.py",
+                "rtk python3 scripts/validate_for406_m60_f16_post_pass_reference_comparison.py",
+                "rtk python3 scripts/validate_for405_m60_f16_aa_stencil_cover_post_pass_readback.py",
+                "rtk python3 scripts/validate_for404_m60_f16_aa_stencil_cover_runtime_hook.py",
+                "rtk python3 scripts/validate_for403_m60_f16_direct_pass_write_hook.py",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun aaStencilCoverContributionIsolationSampleJson(
+        event: SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationEvent,
+        sample: SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSample,
+    ): String {
+        val missingJson = sample.missingFields.joinToString(", ") { it.jsonString() }
+        return """
+            {
+              "drawIndex": ${event.drawIndex},
+              "pipelineFamily": ${event.pipelineFamily.jsonString()},
+              "coordinate": {"x": ${sample.x}, "y": ${sample.y}},
+              "subdrawOrdinal": ${sample.subdrawOrdinal},
+              "subdrawRole": ${sample.subdrawRole.jsonString()},
+              "targetWithinScissor": ${sample.targetWithinScissor},
+              "shaderObserved": ${sample.shaderObserved},
+              "dstBeforeRgbaFloat": ${sample.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+              "sourceColorPremulRgbaFloat": ${sample.sourceColorPremulRgbaFloat.floatArrayOrNullJson()},
+              "coverageOrAaAlpha": ${sample.coverageOrAaAlpha?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+              "blendMode": ${sample.blendMode.jsonString()},
+              "expectedSourceOverRgbaFloat": ${sample.expectedSourceOverRgbaFloat.floatArrayOrNullJson()},
+              "dstAfterRgbaFloat": ${sample.dstAfterRgbaFloat.floatArrayOrNullJson()},
+              "postPassDstAfterRgbaFloat": ${sample.postPassDstAfterRgbaFloat.floatArrayOrNullJson()},
+              "missingFields": [$missingJson],
+              "classification": ${sample.classification.jsonString()},
+              "reason": ${sample.reason.jsonString()}
+            }
+        """.trimIndent()
+    }
+
+    private fun FloatArray?.floatArrayOrNullJson(): String =
+        this?.floatJson() ?: "null"
+
+    private fun IntArray?.intArrayOrNullJson(): String =
+        this?.let { intArrayJson(it) } ?: "null"
 
     private fun collapseM60F16CoverageStencilContributionMapSamples(
         samples: List<SkWebGpuDevice.M60F16CoverageStencilContributionMapSample>,
@@ -10212,6 +10499,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16PassWriteProbe.enabled"
         private const val FOR404_AA_STENCIL_COVER_RUNTIME_HOOK_PROPERTY =
             "kanvas.webgpu.m60F16DirectPassWriteHook.enabled"
+        private const val FOR408_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_PROPERTY =
+            "kanvas.webgpu.m60F16AaStencilCoverContributionIsolation.enabled"
         private const val FOR401_FINAL_RESIDUAL_ORIGIN_MAP_SAMPLE_LIMIT = 16
         private const val M60_F16_BAND_METADATA_TRANSPORT_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
@@ -10229,6 +10518,24 @@ class StrokeCapJoinSceneCaptureTest {
             89 to 78,
             88 to 79,
             87 to 80,
+        )
+        private val M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS = listOf(
+            92 to 75,
+            91 to 76,
+            90 to 77,
+            89 to 78,
+            88 to 79,
+            87 to 80,
+            101 to 37,
+            102 to 37,
+            99 to 38,
+            100 to 38,
+            101 to 38,
+            102 to 38,
+            103 to 38,
+            104 to 38,
+            98 to 39,
+            99 to 39,
         )
 
         private fun jsonString(value: String): String = buildString {
