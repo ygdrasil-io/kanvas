@@ -1,0 +1,1571 @@
+{
+  "classification": "storage-zero-while-same-pass-color-target-nonzero",
+  "classificationReason": "The direct FOR-418 scratch+storage pass covers the same 16 mutating FOR-401 pixels. For every record, shader-return storage is observed but remains zero, while the same pass's no-blend RGBA16Float color target is non-zero.",
+  "correctionAppliedByDefault": false,
+  "decision": "do-not-change-rendering-route",
+  "defaultRenderingChanged": false,
+  "globalClassification": "FOR-418 narrows divergence to storage/shader-return side-channel",
+  "guards": {
+    "enabledByDefault": false,
+    "for412ShaderReturnDiagnostic": "kanvas.webgpu.m60F16AaStencilCoverShaderReturnDiagnostic.enabled",
+    "for417IsolatedColorTarget": "kanvas.webgpu.m60F16AaStencilCoverIsolatedColorTarget.enabled",
+    "for418StorageColorTargetComparison": "kanvas.webgpu.m60F16AaStencilCoverStorageColorTargetComparison.enabled"
+  },
+  "linear": "FOR-418",
+  "nextStep": "Inspect why the diagnostic storage branch writes zero while @location(0) still produces the non-zero color-target output in the same pass.",
+  "nonGoalsPreserved": [
+    "No default rendering route changed.",
+    "No score, threshold, fallback, or promotion changed.",
+    "No value is synthesized when a runtime hook is unavailable."
+  ],
+  "promoted": false,
+  "records": [
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 1,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "1->3",
+      "x": 92,
+      "y": 75
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 1,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "1->3",
+      "x": 91,
+      "y": 76
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 1,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "1->3",
+      "x": 90,
+      "y": 77
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 1,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "1->3",
+      "x": 89,
+      "y": 78
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 1,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "1->3",
+      "x": 88,
+      "y": 79
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.086242676,
+          0.125488281,
+          0.278320313,
+          0.376464844
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 1,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": false,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "absoluteTotalFloat": 0.866516114,
+            "maxChannelFloat": 0.376464844,
+            "signedRgbaFloat": [
+              0.086242676,
+              0.125488281,
+              0.278320313,
+              0.376464844
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "1->3",
+      "x": 87,
+      "y": 80
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 3,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "3->5",
+      "x": 101,
+      "y": 37
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 3,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "3->5",
+      "x": 102,
+      "y": 37
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 3,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "3->5",
+      "x": 99,
+      "y": 38
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 3,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "3->5",
+      "x": 100,
+      "y": 38
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 3,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "3->5",
+      "x": 101,
+      "y": 38
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 3,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "3->5",
+      "x": 102,
+      "y": 38
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 3,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "3->5",
+      "x": 103,
+      "y": 38
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 3,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "3->5",
+      "x": 104,
+      "y": 38
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 3,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "3->5",
+      "x": 98,
+      "y": 39
+    },
+    {
+      "blendMode": "kSrcOver",
+      "classification": "storage-zero-while-same-pass-color-target-nonzero",
+      "colorTarget": {
+        "classification": "storage-color-target-comparison-color-target-observed",
+        "readbackAvailable": true,
+        "reason": "FOR-418 sampled the RGBA16Float scratch target from the same no-blend pass that wrote shader-return storage.",
+        "scratchOutputRgbaFloat": [
+          0.0,
+          0.541015625,
+          0.297851563,
+          1.0
+        ]
+      },
+      "divergenceReason": "FOR-418 wrote zero to shader-return storage while the same diagnostic scratch render pass produced a non-zero RGBA16Float color target sample.",
+      "drawIndex": 3,
+      "for412Baseline": "shader-return-zero-but-post-pass-colored",
+      "for413Classification": "draw-mutates-despite-zero-shader-return",
+      "for414Classification": "post-draw-matches-next-predraw",
+      "for417Classification": "isolated-color-target-output-nonzero-matches-mutation",
+      "pipelineFamily": "StencilCoverAaPolygonDraw",
+      "storageSamples": [
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "inside"
+        },
+        {
+          "candidateBranchReached": true,
+          "classification": "storage-color-target-comparison-storage-captured",
+          "reason": "FOR-418 captured the same shader-return value in storage during the no-blend scratch pass that writes the comparison color target.",
+          "shaderObserved": true,
+          "sourceColorSentToBlend": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "storageVsColorTargetDelta": {
+            "absoluteRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "absoluteTotalFloat": 1.838867188,
+            "maxChannelFloat": 1.0,
+            "signedRgbaFloat": [
+              0.0,
+              0.541015625,
+              0.297851563,
+              1.0
+            ],
+            "tolerance": 1e-06,
+            "withinTolerance": false
+          },
+          "subdrawRole": "outside"
+        }
+      ],
+      "transitionId": "3->5",
+      "x": 99,
+      "y": 39
+    }
+  ],
+  "runtimeSummary": {
+    "colorTargetEvents": 3,
+    "colorTargetNonZeroRecords": 16,
+    "coveredMutationRecords": 16,
+    "rawRuntime": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-storage-vs-color-target-for418/raw-runtime-snapshot-for418.json",
+    "storageEvents": 3,
+    "storageZeroRecords": 16
+  },
+  "sceneId": "m60-f16-aa-stencil-cover-storage-vs-color-target-for418",
+  "schemaVersion": 1,
+  "scope": {
+    "blendMode": "kSrcOver",
+    "draws": [
+      1,
+      3
+    ],
+    "intermediateFormat": "RGBA16Float",
+    "pipelineFamily": "StencilCoverAaPolygonDraw",
+    "pixelCount": 16,
+    "points": [
+      {
+        "x": 92,
+        "y": 75
+      },
+      {
+        "x": 91,
+        "y": 76
+      },
+      {
+        "x": 90,
+        "y": 77
+      },
+      {
+        "x": 89,
+        "y": 78
+      },
+      {
+        "x": 88,
+        "y": 79
+      },
+      {
+        "x": 87,
+        "y": 80
+      },
+      {
+        "x": 101,
+        "y": 37
+      },
+      {
+        "x": 102,
+        "y": 37
+      },
+      {
+        "x": 99,
+        "y": 38
+      },
+      {
+        "x": 100,
+        "y": 38
+      },
+      {
+        "x": 101,
+        "y": 38
+      },
+      {
+        "x": 102,
+        "y": 38
+      },
+      {
+        "x": 103,
+        "y": 38
+      },
+      {
+        "x": 104,
+        "y": 38
+      },
+      {
+        "x": 98,
+        "y": 39
+      },
+      {
+        "x": 99,
+        "y": 39
+      }
+    ]
+  },
+  "scoringChanged": false,
+  "sourceArtifacts": {
+    "for412": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412.json",
+    "for417": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417/m60-f16-aa-stencil-cover-isolated-color-target-runtime-for417.json",
+    "rawFor418Runtime": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-storage-vs-color-target-for418/raw-runtime-snapshot-for418.json"
+  },
+  "sourceCodeAudit": {
+    "captureTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+    "checks": {
+      "captureWritesRawSnapshot": true,
+      "pipelineCacheClosed": true,
+      "resourcesClosed": true,
+      "runtimeGuardDisabledByDefault": true,
+      "runtimeGuardPresent": true,
+      "samePassShaderStorageAndColorTarget": true,
+      "separateScratchTarget": true,
+      "snapshotExported": true
+    },
+    "source": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+    "testSink": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt"
+  },
+  "sourceSceneId": "m60-bounded-stroke-cap-join",
+  "supportClaim": "diagnostic evidence only",
+  "thresholdChanged": false,
+  "validationCommands": [
+    "rtk python3 scripts/validate_for418_m60_f16_aa_stencil_cover_storage_vs_color_target.py",
+    "rtk python3 scripts/validate_for417_m60_f16_aa_stencil_cover_isolated_color_target_runtime.py",
+    "rtk python3 scripts/validate_for416_m60_f16_aa_stencil_cover_isolated_color_target.py",
+    "rtk python3 scripts/validate_for415_m60_f16_aa_stencil_cover_blend_render_pass_state.py",
+    "rtk python3 scripts/validate_for414_m60_f16_aa_stencil_cover_post_draw_readback.py",
+    "rtk python3 scripts/validate_for413_m60_f16_aa_stencil_cover_draw_transition_correlation.py",
+    "rtk python3 scripts/validate_for412_m60_f16_aa_stencil_cover_shader_return_diagnostic.py",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for418-pycache python3 -m py_compile scripts/validate_for418_m60_f16_aa_stencil_cover_storage_vs_color_target.py",
+    "rtk git diff --check",
+    "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+  ]
+}
