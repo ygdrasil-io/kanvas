@@ -192,6 +192,8 @@ private const val WEBGPU_M60_F16_SOURCE_FACING_LANE_RUNTIME_CANDIDATE_FLAG: Stri
     "kanvas.webgpu.m60F16SourceFacingLaneRuntimeCandidate.enabled"
 private const val WEBGPU_M60_F16_AA_STENCIL_COVER_BAND_METADATA_TRANSPORT_FLAG: String =
     "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled"
+private const val WEBGPU_M60_F16_SOURCE_FACING_LANE_SHADER_READBACK_FLAG: String =
+    "kanvas.webgpu.m60F16SourceFacingLaneShaderReadback.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -490,6 +492,8 @@ public class SkWebGpuDevice(
         System.getProperty(OUTPUT_READBACK_BOUNDARY_PROPERTY, "false").toBoolean()
     private val for258ShaderSideProbeDiagnosticsEnabled: Boolean =
         System.getProperty(FOR258_SHADER_SIDE_PROBE_PROPERTY, "false").toBoolean()
+    private val m60F16SourceFacingLaneShaderReadbackDiagnosticsEnabled: Boolean =
+        System.getProperty(WEBGPU_M60_F16_SOURCE_FACING_LANE_SHADER_READBACK_FLAG, "false").toBoolean()
     private val rawRectUniformColorWrites: MutableList<RawRectUniformColorWrite> = mutableListOf()
     private val rawRgba8TextureUploads: MutableList<RawRgba8TextureUpload> = mutableListOf()
     private val outputReadbackBoundarySamples: MutableList<OutputReadbackSample> = mutableListOf()
