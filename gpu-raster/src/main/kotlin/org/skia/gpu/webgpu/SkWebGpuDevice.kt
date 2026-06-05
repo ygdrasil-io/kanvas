@@ -748,6 +748,10 @@ public class SkWebGpuDevice(
         val sourceColorSentToBlend: FloatArray?,
         val sourceFieldUsedByFOR408Replay: FloatArray?,
         val quantizedAlphaSentToBlend: Float?,
+        val rawPathCoverage: Float? = null,
+        val clipCoverage: Float? = null,
+        val finalCoverage: Float? = null,
+        val coveredSubsamples4x4: Int? = null,
         val captureSynthetic: Boolean,
         val classification: String,
         val reason: String,
@@ -1759,7 +1763,7 @@ public class SkWebGpuDevice(
                                 null
                             },
                             coverageOrAaAlpha = if (observed) scalar[0] else null,
-                            sourceAlphaAfterCoverage = if (observed) scalar[1] else null,
+                            sourceAlphaAfterCoverage = if (observed) beforeQuantization[3] else null,
                             sourceColorBeforeQuantization = if (observed) beforeQuantization else null,
                             sourceColorSentToBlend = if (observed) quantized else null,
                             sourceFieldUsedByFOR408Replay = if (observed) {
@@ -1767,7 +1771,15 @@ public class SkWebGpuDevice(
                             } else {
                                 null
                             },
-                            quantizedAlphaSentToBlend = if (observed) scalar[2] else null,
+                            quantizedAlphaSentToBlend = if (observed) quantized[3] else null,
+                            rawPathCoverage = if (observed) scalar[1] else null,
+                            clipCoverage = if (observed) scalar[2] else null,
+                            finalCoverage = if (observed) scalar[0] else null,
+                            coveredSubsamples4x4 = if (observed) {
+                                kotlin.math.round(scalar[3]).toInt()
+                            } else {
+                                null
+                            },
                             captureSynthetic = false,
                             classification = if (observed) {
                                 "shader-return-captured"
@@ -2300,7 +2312,7 @@ public class SkWebGpuDevice(
                                 null
                             },
                             coverageOrAaAlpha = if (observed) scalar[0] else null,
-                            sourceAlphaAfterCoverage = if (observed) scalar[1] else null,
+                            sourceAlphaAfterCoverage = if (observed) beforeQuantization[3] else null,
                             sourceColorBeforeQuantization = if (observed) beforeQuantization else null,
                             sourceColorSentToBlend = if (observed) quantized else null,
                             sourceFieldUsedByFOR408Replay = if (observed) {
@@ -2308,7 +2320,15 @@ public class SkWebGpuDevice(
                             } else {
                                 null
                             },
-                            quantizedAlphaSentToBlend = if (observed) scalar[2] else null,
+                            quantizedAlphaSentToBlend = if (observed) quantized[3] else null,
+                            rawPathCoverage = if (observed) scalar[1] else null,
+                            clipCoverage = if (observed) scalar[2] else null,
+                            finalCoverage = if (observed) scalar[0] else null,
+                            coveredSubsamples4x4 = if (observed) {
+                                kotlin.math.round(scalar[3]).toInt()
+                            } else {
+                                null
+                            },
                             captureSynthetic = false,
                             classification = if (observed) {
                                 "storage-color-target-comparison-storage-captured"
@@ -4453,6 +4473,28 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     );
 }
 
+fn m60_f16_raw_path_coverage(pixel: vec2f, side: u32) -> f32 {
+    if (uniforms.edgeCount == 0u) {
+        return select(0.0, 1.0, side == 1u);
+    }
+    return supersampled_path_cov(pixel);
+}
+
+fn m60_f16_covered_subsamples_4x4(pixel: vec2f) -> f32 {
+    if (uniforms.edgeCount == 0u) {
+        return 16.0;
+    }
+    var covered: f32 = 0.0;
+    for (var sy: u32 = 0u; sy < 4u; sy = sy + 1u) {
+        let y = floor(pixel.y) + (f32(sy) + 0.5) * 0.25;
+        for (var sx: u32 = 0u; sx < 4u; sx = sx + 1u) {
+            let x = floor(pixel.x) + (f32(sx) + 0.5) * 0.25;
+            covered = covered + sample_covered(vec2f(x, y));
+        }
+    }
+    return covered;
+}
+
 fn m60_f16_record_application_point(
     pixel: vec2f,
     side: u32,
@@ -4492,9 +4534,9 @@ ${if (storageZeroCauseDiagnostic) {
     m60F16FragmentLaneDiagnostic[base + 3u] = before_quantization;
     m60F16FragmentLaneDiagnostic[base + 4u] = vec4f(
         coverage,
-        before_quantization.a,
-        quantized.a,
-        ${if (storageZeroCauseDiagnostic) "1.0" else "0.0"}
+        m60_f16_raw_path_coverage(pixel, side),
+        clip_cov(pixel),
+        m60_f16_covered_subsamples_4x4(pixel)
     );
     m60F16FragmentLaneDiagnostic[base + 5u] = quantized;
 }

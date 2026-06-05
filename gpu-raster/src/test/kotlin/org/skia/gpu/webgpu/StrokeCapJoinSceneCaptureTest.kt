@@ -574,6 +574,11 @@ class StrokeCapJoinSceneCaptureTest {
                 storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
                 adapter = adapter,
             )
+            writeM60F16AaStencilCoverCoverageInputStage(
+                finalWgslSnapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
+                storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                adapter = adapter,
+            )
         }
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
@@ -3828,6 +3833,310 @@ class StrokeCapJoinSceneCaptureTest {
             "Add the missing bounded stage field before attempting a renderer correction."
     }
 
+    private fun writeM60F16AaStencilCoverCoverageInputStage(
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-aa-stencil-cover-coverage-input-stage-for426"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16AaStencilCoverCoverageInputStageJson(
+                sceneId = sceneId,
+                finalWgslSnapshot = finalWgslSnapshot,
+                storageSnapshot = storageSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16AaStencilCoverCoverageInputStageJson(
+        sceneId: String,
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val summaries = finalWgslSnapshot.variants.map { m60F16FinalWgslVariantSummary(it) }
+        val diagnosticReturnPathVerified = summaries
+            .filter { it.logicalName != "normal-bounded-runtime-correction" }
+            .all { summary ->
+                summary.functions["fs_inside"]?.returnsApplicationPointOutput == true &&
+                    summary.functions["fs_outside"]?.returnsApplicationPointOutput == true
+            }
+        val coverageInputInstrumentationPresent = finalWgslSnapshot.variants
+            .filter { it.logicalName != "normal-bounded-runtime-correction" }
+            .all { variant ->
+                variant.source.contains("m60_f16_raw_path_coverage") &&
+                    variant.source.contains("m60_f16_covered_subsamples_4x4") &&
+                    variant.source.contains("clip_cov(pixel)")
+            }
+        val storageByKey = storageSnapshot.storageEvents
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val records = storageByKey.keys
+            .filter { it.drawIndex == 1 && partialPoints.contains(it.x to it.y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.drawIndex }.thenBy { it.y }.thenBy { it.x })
+            .map { key ->
+                val sourceRecords = storageByKey[key].orEmpty()
+                    .sortedWith(
+                        compareBy<Pair<
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                            >> { it.second.subdrawOrdinal }.thenBy { it.second.subdrawRole },
+                    )
+                val verifiedSources = sourceRecords.filter { (_, sample) ->
+                    sample.shaderObserved && !sample.captureSynthetic && sample.sourceColorSentToBlend != null
+                }
+                val bestSource = verifiedSources.maxByOrNull { (_, sample) -> sample.sourceColorSentToBlend?.getOrNull(3) ?: -1f }
+                val sample = bestSource?.second
+                val expectedCoverageByte = (coverageMask.getPixel(key.x, key.y) ushr 24) and 0xFF
+                val for425CoverageOrAaAlphaByte = m60F16AlphaByte(sample?.coverageOrAaAlpha)
+                val rawPathCoverageByte = m60F16AlphaByte(sample?.rawPathCoverage)
+                val clipCoverageByte = m60F16AlphaByte(sample?.clipCoverage)
+                val finalCoverageByte = m60F16AlphaByte(sample?.finalCoverage)
+                val classification = m60F16CoverageInputStageClassification(
+                    sample = sample,
+                    expectedCoverageByte = expectedCoverageByte,
+                    for425CoverageOrAaAlphaByte = for425CoverageOrAaAlphaByte,
+                    rawPathCoverageByte = rawPathCoverageByte,
+                    clipCoverageByte = clipCoverageByte,
+                    finalCoverageByte = finalCoverageByte,
+                    diagnosticReturnPathVerified = diagnosticReturnPathVerified,
+                    coverageInputInstrumentationPresent = coverageInputInstrumentationPresent,
+                )
+                M60F16CoverageInputStageRecord(
+                    key = key,
+                    source = bestSource,
+                    expectedCoverageByte = expectedCoverageByte,
+                    for425CoverageOrAaAlphaByte = for425CoverageOrAaAlphaByte,
+                    rawPathCoverageByte = rawPathCoverageByte,
+                    clipCoverageByte = clipCoverageByte,
+                    finalCoverageByte = finalCoverageByte,
+                    classification = classification,
+                )
+            }
+        val classificationOrder = listOf(
+            "path-coverage-already-96",
+            "clip-reduces-160-to-96",
+            "coverage-product-matches-160",
+            "inside-outside-selection-mismatch",
+            "coverage-input-stage-incomplete",
+        )
+        val classificationCounts = records.groupingBy { it.classification }.eachCount()
+        val majorityStage = classificationOrder.maxWithOrNull(
+            compareBy<String> { classificationCounts[it] ?: 0 }.thenByDescending { classificationOrder.indexOf(it) },
+        ) ?: "coverage-input-stage-incomplete"
+        val recordsJson = records.joinToString(",\n") { record ->
+            m60F16CoverageInputStageRecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-426",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-426-m60-f16-mesurer-path-coverage-brut-et-clip-avant-coverage-or-aa-alpha",
+              "sourceFindingMemory": "global/kanvas/findings/for-425-alpha-conversion-stage-before-shader-return",
+              "sourceArtifacts": {
+                "for425": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-alpha-conversion-stage-for425/m60-f16-aa-stencil-cover-alpha-conversion-stage-for425.json",
+                "for424": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-partial-coverage-alpha-for424/m60-f16-aa-stencil-cover-partial-coverage-alpha-for424.json",
+                "for423": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-reference-source-coverage-for423/m60-f16-aa-stencil-cover-reference-source-coverage-for423.json",
+                "for422": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-source-comparison-for422/m60-f16-aa-stencil-cover-verified-source-comparison-for422.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${majorityStage.jsonString()},
+              "globalClassification": ${majorityStage.jsonString()},
+              "allowedClassifications": [
+                "path-coverage-already-96",
+                "clip-reduces-160-to-96",
+                "coverage-product-matches-160",
+                "inside-outside-selection-mismatch",
+                "coverage-input-stage-incomplete"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "comparisonPolicy": {
+                "scope": "Exactly the 6 FOR-425 partial pixels whose CPU coverage alpha is 160/255 and coverageOrAaAlpha is 96/255.",
+                "stageOrder": [
+                  "rawPathCoverage = supersampled_path_cov(frag.xy)",
+                  "clipCoverage = clip_cov(frag.xy)",
+                  "finalCoverage = rawPathCoverage * clipCoverage",
+                  "coverageOrAaAlpha passed to m60_f16_application_point_output"
+                ],
+                "subsampleGrid": "coveredSubsamples4x4 counts covered samples over the same 4x4 grid used by supersampled_path_cov.",
+                "noRenderingFixApplied": true
+              },
+              "structuralSummary": {
+                "diagnosticReturnPathVerified": $diagnosticReturnPathVerified,
+                "coverageInputInstrumentationPresent": $coverageInputInstrumentationPresent,
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "expectedCoverage160Count": ${records.count { it.expectedCoverageByte == 160 }},
+                "for425CoverageOrAaAlpha96Count": ${records.count { it.for425CoverageOrAaAlphaByte == 96 }},
+                "rawPathCoverage96Count": ${records.count { it.rawPathCoverageByte == 96 }},
+                "clipCoverage255Count": ${records.count { it.clipCoverageByte == 255 }},
+                "finalCoverage96Count": ${records.count { it.finalCoverageByte == 96 }},
+                "localizedPixelCount": ${records.count { it.classification != "coverage-input-stage-incomplete" }},
+                "majorityStage": ${majorityStage.jsonString()},
+                "majorityStageCount": ${classificationCounts[majorityStage] ?: 0},
+                "classificationCounts": {
+                  "path-coverage-already-96": ${classificationCounts["path-coverage-already-96"] ?: 0},
+                  "clip-reduces-160-to-96": ${classificationCounts["clip-reduces-160-to-96"] ?: 0},
+                  "coverage-product-matches-160": ${classificationCounts["coverage-product-matches-160"] ?: 0},
+                  "inside-outside-selection-mismatch": ${classificationCounts["inside-outside-selection-mismatch"] ?: 0},
+                  "coverage-input-stage-incomplete": ${classificationCounts["coverage-input-stage-incomplete"] ?: 0}
+                }
+              },
+              "partialPixels": [
+            $recordsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "runtimeDeviceChangedOutsideOptInInstrumentation": false,
+                "renderingFixApplied": false,
+                "wgsl4kModified": false
+              },
+              "classificationReason": ${m60F16CoverageInputStageGlobalReason(majorityStage).jsonString()},
+              "nextStep": ${m60F16CoverageInputStageNextStep(majorityStage).jsonString()},
+              "validationCommands": [
+                "rtk python3 scripts/validate_for426_m60_f16_aa_stencil_cover_coverage_input_stage.py",
+                "rtk python3 scripts/validate_for425_m60_f16_aa_stencil_cover_alpha_conversion_stage.py",
+                "rtk python3 scripts/validate_for424_m60_f16_aa_stencil_cover_partial_coverage_alpha.py",
+                "rtk python3 scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+                "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for426-pycache python3 -m py_compile scripts/validate_for426_m60_f16_aa_stencil_cover_coverage_input_stage.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16CoverageInputStageRecordJson(record: M60F16CoverageInputStageRecord): String {
+        val event = record.source?.first
+        val sample = record.source?.second
+        val entryPoint = when (sample?.subdrawRole) {
+            "inside" -> "fs_inside"
+            "outside" -> "fs_outside"
+            else -> null
+        }
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "subdrawOrdinal": ${sample?.subdrawOrdinal ?: "null"},
+              "subdrawRole": ${sample?.subdrawRole?.jsonString() ?: "null"},
+              "entryPoint": ${entryPoint?.jsonString() ?: "null"},
+              "edgeCount": ${event?.edgeCount ?: "null"},
+              "fillType": ${event?.fillType?.jsonString() ?: "null"},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16CoverageInputStageLocalReason(record.classification).jsonString()},
+              "expectedCoverageByte": ${record.expectedCoverageByte},
+              "for425CoverageOrAaAlphaByte": ${record.for425CoverageOrAaAlphaByte ?: "null"},
+              "rawPathCoverage": ${sample?.rawPathCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+              "rawPathCoverageByte": ${record.rawPathCoverageByte ?: "null"},
+              "clipCoverage": ${sample?.clipCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+              "clipCoverageByte": ${record.clipCoverageByte ?: "null"},
+              "finalCoverage": ${sample?.finalCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+              "finalCoverageByte": ${record.finalCoverageByte ?: "null"},
+              "coveredSubsamples4x4": ${sample?.coveredSubsamples4x4 ?: "null"},
+              "stageDeltas": {
+                "rawMinusExpectedByte": ${record.rawPathCoverageByte?.let { it - record.expectedCoverageByte } ?: "null"},
+                "clipMinusFullByte": ${record.clipCoverageByte?.let { it - 255 } ?: "null"},
+                "finalMinusExpectedByte": ${record.finalCoverageByte?.let { it - record.expectedCoverageByte } ?: "null"},
+                "finalMinusFor425CoverageOrAaAlphaByte": ${if (record.finalCoverageByte != null && record.for425CoverageOrAaAlphaByte != null) record.finalCoverageByte - record.for425CoverageOrAaAlphaByte else "null"}
+              }
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16CoverageInputStageClassification(
+        sample: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample?,
+        expectedCoverageByte: Int,
+        for425CoverageOrAaAlphaByte: Int?,
+        rawPathCoverageByte: Int?,
+        clipCoverageByte: Int?,
+        finalCoverageByte: Int?,
+        diagnosticReturnPathVerified: Boolean,
+        coverageInputInstrumentationPresent: Boolean,
+    ): String {
+        if (!diagnosticReturnPathVerified || !coverageInputInstrumentationPresent || sample == null) {
+            return "coverage-input-stage-incomplete"
+        }
+        if (!sample.shaderObserved || sample.captureSynthetic || sample.sourceColorSentToBlend == null) {
+            return "coverage-input-stage-incomplete"
+        }
+        if (sample.subdrawRole != "inside" || sample.subdrawOrdinal != 0) {
+            return "inside-outside-selection-mismatch"
+        }
+        if (expectedCoverageByte != 160 || for425CoverageOrAaAlphaByte != 96) {
+            return "coverage-input-stage-incomplete"
+        }
+        if (rawPathCoverageByte == null || clipCoverageByte == null || finalCoverageByte == null) {
+            return "coverage-input-stage-incomplete"
+        }
+        return when {
+            rawPathCoverageByte == 96 && finalCoverageByte == 96 -> "path-coverage-already-96"
+            rawPathCoverageByte == 160 && finalCoverageByte == 96 && clipCoverageByte < 255 ->
+                "clip-reduces-160-to-96"
+            rawPathCoverageByte == 160 && finalCoverageByte == 160 -> "coverage-product-matches-160"
+            else -> "coverage-input-stage-incomplete"
+        }
+    }
+
+    private fun m60F16CoverageInputStageLocalReason(classification: String): String = when (classification) {
+        "path-coverage-already-96" ->
+            "The raw supersampled path coverage is already 96/255 before clip multiplication, so the 160/255 to 96/255 mismatch is upstream of clip_cov."
+        "clip-reduces-160-to-96" ->
+            "The raw path coverage remains 160/255 and clip_cov reduces the final coverage passed to the shader-return diagnostic to 96/255."
+        "coverage-product-matches-160" ->
+            "The raw path coverage and clip product still match the CPU reference 160/255; a later inside/outside or handoff stage must explain the FOR-425 drop."
+        "inside-outside-selection-mismatch" ->
+            "The selected record does not come from the expected inside subdraw for the FOR-425 partial pixel."
+        else ->
+            "The raw path, clip, or final coverage fields are missing or contradictory."
+    }
+
+    private fun m60F16CoverageInputStageGlobalReason(classification: String): String = when (classification) {
+        "path-coverage-already-96" ->
+            "The majority of FOR-425 partial pixels already report 96/255 from supersampled_path_cov before clip_cov."
+        "clip-reduces-160-to-96" ->
+            "The majority of FOR-425 partial pixels keep raw path coverage at 160/255, then clip_cov reduces the product to 96/255."
+        "coverage-product-matches-160" ->
+            "The majority of FOR-425 partial pixels still match 160/255 through the raw and clipped coverage product."
+        "inside-outside-selection-mismatch" ->
+            "The majority of records point at an inside/outside selection mismatch instead of a raw coverage or clip reduction."
+        else ->
+            "The FOR-426 input-stage data is incomplete and cannot localize the pre-coverageOrAaAlpha mismatch."
+    }
+
+    private fun m60F16CoverageInputStageNextStep(classification: String): String = when (classification) {
+        "path-coverage-already-96" ->
+            "Inspect supersampled_path_cov/sample_covered winding evaluation for these six pixels before applying any rendering correction."
+        "clip-reduces-160-to-96" ->
+            "Inspect analytical clip coverage at the six pixels before applying any rendering correction."
+        "coverage-product-matches-160" ->
+            "Inspect the coverage handoff between product calculation and m60_f16_application_point_output."
+        "inside-outside-selection-mismatch" ->
+            "Inspect stencil compare side selection for the inside/outside cover subdraws."
+        else ->
+            "Add the missing bounded input-stage field before attempting a renderer correction."
+    }
+
     private data class M60F16FinalWgslFunctionSummary(
         val name: String,
         val present: Boolean,
@@ -6888,6 +7197,20 @@ class StrokeCapJoinSceneCaptureTest {
         val expectedCoverageByte: Int,
         val expectedCoverage: Float,
         val observedAlphaByte: Int?,
+        val classification: String,
+    )
+
+    private data class M60F16CoverageInputStageRecord(
+        val key: M60F16DrawPixelKey,
+        val source: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val expectedCoverageByte: Int,
+        val for425CoverageOrAaAlphaByte: Int?,
+        val rawPathCoverageByte: Int?,
+        val clipCoverageByte: Int?,
+        val finalCoverageByte: Int?,
         val classification: String,
     )
 
