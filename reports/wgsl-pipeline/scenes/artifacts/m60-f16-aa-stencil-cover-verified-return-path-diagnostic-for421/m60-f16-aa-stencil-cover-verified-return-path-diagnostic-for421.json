@@ -1,0 +1,83 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-421",
+          "sceneId": "m60-f16-aa-stencil-cover-verified-return-path-diagnostic-for421",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-421-m60-f16-corriger-instrumentation-diagnostique-vrai-retour-wgsl",
+          "sourceFinding": "global/kanvas/findings/for-420-export-wgsl-final-confirme-hooks-diagnostiques-hors-chemin-rendered-return",
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "classification": "verified-return-path-storage-nonzero",
+          "allowedClassifications": [
+            "verified-return-path-storage-nonzero",
+            "verified-return-path-storage-still-zero",
+            "verified-return-path-color-target-unavailable",
+            "diagnostic-return-path-instrumentation-unavailable"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "guards": {
+            "finalWgslDiagnostic": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false},
+            "shaderReturnStorageZeroCause": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false}
+          },
+          "structuralSummary": {
+            "diagnosticReturnPathVerified": true,
+            "for419EntryStorageDisabled": true,
+            "storageSampleCount": 96,
+            "storageObservedCount": 32,
+            "storageNonzeroSourceCount": 32,
+            "colorTargetSampleCount": 48,
+            "colorTargetNonzeroCount": 16
+          },
+          "variants": [
+            {
+  "logicalName": "normal-bounded-runtime-correction",
+  "sourceHashSha256": "530395caccdddb4b836de4be11e46d71986b2ca46667c9bba71528059af8417a",
+  "divergenceFromNormal": "baseline-normal-bounded-runtime-correction",
+  "fsInsideReturnsApplicationPointOutput": false,
+  "fsOutsideReturnsApplicationPointOutput": false,
+  "fsInsideCallsEntryStorage": false,
+  "fsOutsideCallsEntryStorage": false,
+  "containsOutputNonzeroGate": false
+},
+{
+  "logicalName": "for412-shader-return-storage",
+  "sourceHashSha256": "6a6140c8253017f8ac28afe89fb6d1f386b359611fb37c412010912d7f8ea949",
+  "divergenceFromNormal": "replaces-normal-return-with-application-point-storage-hook",
+  "fsInsideReturnsApplicationPointOutput": true,
+  "fsOutsideReturnsApplicationPointOutput": true,
+  "fsInsideCallsEntryStorage": true,
+  "fsOutsideCallsEntryStorage": true,
+  "containsOutputNonzeroGate": false
+},
+{
+  "logicalName": "for418-storage-vs-color-target",
+  "sourceHashSha256": "6a6140c8253017f8ac28afe89fb6d1f386b359611fb37c412010912d7f8ea949",
+  "divergenceFromNormal": "shares-for412-shader-return-source; pipeline target differs in FOR-418",
+  "fsInsideReturnsApplicationPointOutput": true,
+  "fsOutsideReturnsApplicationPointOutput": true,
+  "fsInsideCallsEntryStorage": true,
+  "fsOutsideCallsEntryStorage": true,
+  "containsOutputNonzeroGate": false
+},
+{
+  "logicalName": "for419-storage-zero-cause",
+  "sourceHashSha256": "c70b9a26d41291a2f79dc72f499b844e968dcf3a2787529728b7f1cc5ce4e312",
+  "divergenceFromNormal": "removes-entry-storage-hook-and-keeps-application-point-return-substitution",
+  "fsInsideReturnsApplicationPointOutput": true,
+  "fsOutsideReturnsApplicationPointOutput": true,
+  "fsInsideCallsEntryStorage": false,
+  "fsOutsideCallsEntryStorage": false,
+  "containsOutputNonzeroGate": true
+}
+          ],
+          "classificationReason": "FOR-421 verified that fs_inside/fs_outside return the instrumented application-point helper in the final WGSL and the FOR-419 storage side-channel now observes nonzero source values on the true rendered return path.",
+          "nextStep": "Use the verified storage source values to compare against the scratch color target and isolate the remaining M60 F16 rendered-color mismatch without changing default rendering.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for421_m60_f16_aa_stencil_cover_verified_return_path_diagnostic.py",
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverShaderReturnDiagnostic.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+          ]
+        }
