@@ -42,6 +42,8 @@ public object WebGpuSink {
             SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
         val aaStencilCoverContributionIsolationSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
+        val aaStencilCoverShaderReturnDiagnosticSnapshot:
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
     )
 
     /**
@@ -107,6 +109,8 @@ public object WebGpuSink {
                     device.m60F16AaStencilCoverPredrawDstReadbackSnapshot(),
                 aaStencilCoverContributionIsolationSnapshot =
                     device.m60F16AaStencilCoverContributionIsolationSnapshot(),
+                aaStencilCoverShaderReturnDiagnosticSnapshot =
+                    device.m60F16AaStencilCoverShaderReturnDiagnosticSnapshot(),
             )
         }
     }
