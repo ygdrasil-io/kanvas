@@ -193,6 +193,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16FinalResidualOriginMap.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16FinalResidualOriginMap.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16PassWriteProbe.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16PassWriteProbe.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
