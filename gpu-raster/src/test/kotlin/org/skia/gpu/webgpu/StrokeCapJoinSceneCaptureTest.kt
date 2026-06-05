@@ -192,6 +192,16 @@ class StrokeCapJoinSceneCaptureTest {
             correctedResidualStats = correctedResidualStats,
             adapter = adapter,
         )
+        writeM60F16SourceColorSubzoneAudit(
+            reference = reference,
+            currentGpu = experimentalGpu,
+            probeGpu = correctedExperimentalGpu,
+            uncorrectedResidualStats = residualStats,
+            correctedResidualStats = correctedResidualStats,
+            uncorrectedExperimentalGpuCmp = experimentalGpuCmp,
+            correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
+            adapter = adapter,
+        )
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -972,6 +982,33 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun writeM60F16SourceColorSubzoneAudit(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        probeGpu: SkBitmap,
+        uncorrectedResidualStats: StrokeResidualStats,
+        correctedResidualStats: StrokeResidualStats,
+        uncorrectedExperimentalGpuCmp: BitmapComparison,
+        correctedExperimentalGpuCmp: BitmapComparison,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-color-subzone-audit-for381",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-source-color-subzone-audit-for381.json").writeText(
+            m60F16SourceColorSubzoneAuditJson(
+                reference = reference,
+                currentGpu = currentGpu,
+                probeGpu = probeGpu,
+                uncorrectedResidualStats = uncorrectedResidualStats,
+                correctedResidualStats = correctedResidualStats,
+                uncorrectedExperimentalGpuCmp = uncorrectedExperimentalGpuCmp,
+                correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
+                adapter = adapter,
+            ),
+        )
+    }
+
     private fun m60F16SourceColorCorrectionProbeJson(
         uncorrectedResidualStats: StrokeResidualStats,
         correctedGpu: SkBitmap,
@@ -1111,6 +1148,179 @@ class StrokeCapJoinSceneCaptureTest {
                 "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
                 "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
                 "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for380-pycache python3 -m py_compile scripts/validate_for380_m60_f16_source_color_correction_probe.py",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16SourceColorSubzoneAuditJson(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        probeGpu: SkBitmap,
+        uncorrectedResidualStats: StrokeResidualStats,
+        correctedResidualStats: StrokeResidualStats,
+        uncorrectedExperimentalGpuCmp: BitmapComparison,
+        correctedExperimentalGpuCmp: BitmapComparison,
+        adapter: String,
+    ): String {
+        require(reference.width == currentGpu.width && reference.height == currentGpu.height)
+        require(reference.width == probeGpu.width && reference.height == probeGpu.height)
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val transparentSource = TestUtils.runGmTest(BoundedStrokeCapJoinTransparentSourceGM())
+        val criticalSamples = sourceColorSubzoneCriticalSamples(
+            residualStats = uncorrectedResidualStats,
+            probeGpu = probeGpu,
+            coverageMask = coverageMask,
+            transparentSource = transparentSource,
+        )
+        val criticalCoordinates = criticalSamples.map { it.pixel.x to it.pixel.y }
+        val improved = MutableSubzonePixelSet("improved")
+        val regressed = MutableSubzonePixelSet("regressed")
+        val unchanged = MutableSubzonePixelSet("unchanged")
+        val allAudited = MutableSubzonePixelSet("all-audited-pixels")
+        val improvedSamples = mutableListOf<SubzonePixelAudit>()
+        val regressedSamples = mutableListOf<SubzonePixelAudit>()
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                val pixel = sourceColorSubzonePixelAudit(
+                    x = x,
+                    y = y,
+                    reference = reference.getPixel(x, y),
+                    current = currentGpu.getPixel(x, y),
+                    probe = probeGpu.getPixel(x, y),
+                    criticalCoordinates = criticalCoordinates,
+                )
+                allAudited.add(pixel)
+                when {
+                    pixel.deltaVsCurrent < 0 -> {
+                        improved.add(pixel)
+                        improvedSamples += pixel
+                    }
+                    pixel.deltaVsCurrent > 0 -> {
+                        regressed.add(pixel)
+                        regressedSamples += pixel
+                    }
+                    else -> unchanged.add(pixel)
+                }
+            }
+        }
+        val criticalSet = MutableSubzonePixelSet("for379-critical")
+        criticalSamples.forEach { criticalSet.add(it.pixel) }
+        val bestImproved = improvedSamples
+            .sortedWith(compareBy<SubzonePixelAudit> { it.deltaVsCurrent }.thenBy { it.nearestCriticalManhattanDistance }.thenBy { it.y }.thenBy { it.x })
+            .take(FOR381_SAMPLE_LIMIT)
+        val worstRegressed = regressedSamples
+            .sortedWith(compareByDescending<SubzonePixelAudit> { it.deltaVsCurrent }.thenBy { it.nearestCriticalManhattanDistance }.thenBy { it.y }.thenBy { it.x })
+            .take(FOR381_SAMPLE_LIMIT)
+        val classification = sourceColorSubzoneAuditClassification(
+            improved = improved,
+            regressed = regressed,
+            criticalSet = criticalSet,
+            uncorrectedResidualStats = uncorrectedResidualStats,
+            correctedResidualStats = correctedResidualStats,
+        )
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-381",
+              "sceneId": "m60-f16-source-color-subzone-audit-for381",
+              "sourceSceneId": "m60-f16-source-color-correction-probe-for380",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-caracterisation-sous-zone-apres-regression-for-380",
+              "sourceFinding": "global/kanvas/findings/for-380-refuse-la-correction-source-couleur-m60-f16-au-niveau-draw-entier-car-elle-regresse-la-scene",
+              "requiredFor380Decision": "M60_F16_SOURCE_COLOR_CORRECTION_PROBE_RECORDED",
+              "requiredFor380Classification": "regression-detected",
+              "decision": "M60_F16_SOURCE_COLOR_SUBZONE_AUDIT_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "subzone-predicate-plausible-local-correction-needs-distinct-coverage-composition",
+                "source-color-correction-local-predicate-insufficient",
+                "source-color-correction-subzone-proof-insufficient"
+              ],
+              "auditDoesNotProduceCorrection": true,
+              "auditDoesNotApplyRendererChange": true,
+              "correctionKept": false,
+              "correctionAppliedByDefault": false,
+              "correctionFlag": ${FOR380_CORRECTION_PROPERTY.jsonString()},
+              "comparison": {
+                "reference": "Skia CPU reference",
+                "current": "FOR-380 uncorrected experimental WebGPU targetColorSpaceBlend stroke render",
+                "probe": "FOR-380 flag-enabled render with draw-level source/color correction",
+                "directSourceEvidence": "FOR-379/FOR-378 transparent source recomposition for the 10 critical samples only"
+              },
+              "fullSceneGuard": {
+                "uncorrectedSimilarity": ${String.format(Locale.US, "%.2f", uncorrectedExperimentalGpuCmp.similarity)},
+                "correctedSimilarity": ${String.format(Locale.US, "%.2f", correctedExperimentalGpuCmp.similarity)},
+                "uncorrectedMismatchPixels": ${uncorrectedResidualStats.mismatchPixels},
+                "correctedMismatchPixels": ${correctedResidualStats.mismatchPixels},
+                "uncorrectedGreaterThanEightPixels": ${uncorrectedResidualStats.greaterThanEightPixels},
+                "correctedGreaterThanEightPixels": ${correctedResidualStats.greaterThanEightPixels},
+                "fallbackReasonStable": "coverage.stroke-cap-join-visual-parity-below-threshold",
+                "refusalsChanged": false
+              },
+              "bandInference": {
+                "method": "x-range partition from BoundedStrokeCapJoinGM strokePaintBands",
+                "coverageMembershipProven": false,
+                "note": "Band/cap/join distributions identify the owning fixture lane by x coordinate; they do not prove the pixel belongs to covered stroke geometry."
+              },
+              "sets": {
+                "allAuditedPixels": ${allAudited.toStats().toJson().prependIndent("  ").trimStart()},
+                "improved": ${improved.toStats().toJson().prependIndent("  ").trimStart()},
+                "regressed": ${regressed.toStats().toJson().prependIndent("  ").trimStart()},
+                "unchanged": ${unchanged.toStats().toJson().prependIndent("  ").trimStart()},
+                "for379Critical": ${criticalSet.toStats().toJson().prependIndent("  ").trimStart()}
+              },
+              "criticalFor379Samples": [
+            ${criticalSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "worstRegressedPixels": [
+            ${worstRegressed.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "bestImprovedPixels": [
+            ${bestImproved.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "classificationReason": ${sourceColorSubzoneAuditClassificationReason(classification).jsonString()},
+              "nonGoalsPreserved": {
+                "rendererBehaviorChanged": false,
+                "runtimeBehaviorChanged": false,
+                "gpuOrWgslChanged": false,
+                "geometryProductionChanged": false,
+                "coverageProductionChanged": false,
+                "fallbackChanged": false,
+                "kadreChanged": false,
+                "f16PremulBlendRuntimeChanged": false,
+                "skBitmapGetPixelChanged": false,
+                "scoreIncreased": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "probeEnabledByDefault": false,
+                "correctionPredicateEnabled": false
+              },
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for381_m60_f16_source_color_subzone_audit.py",
+                "rtk python3 scripts/validate_for380_m60_f16_source_color_correction_probe.py",
+                "rtk python3 scripts/validate_for379_m60_f16_effective_source_color_path.py",
+                "rtk python3 scripts/validate_for378_m60_f16_direct_source_color_evidence.py",
+                "rtk python3 scripts/validate_for377_m60_f16_linear_srgb_plausibility_audit.py",
+                "rtk python3 scripts/validate_for376_m60_f16_composition_quantization_candidate.py",
+                "rtk python3 scripts/validate_for375_m60_f16_effective_destination_candidate.py",
+                "rtk python3 scripts/validate_for374_m60_f16_candidate_regression_audit.py",
+                "rtk python3 scripts/validate_for373_m60_f16_candidate_policy_rgba_probe.py",
+                "rtk python3 scripts/validate_for372_m60_f16_effective_coverage_export.py",
+                "rtk python3 scripts/validate_for371_m60_f16_effective_coverage_access_audit.py",
+                "rtk python3 scripts/validate_for370_m60_f16_source_paint_capture_extension.py",
+                "rtk python3 scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+                "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+                "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+                "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+                "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for381-pycache python3 -m py_compile scripts/validate_for381_m60_f16_source_color_subzone_audit.py",
                 "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
                 "rtk git diff --check"
               ]
@@ -1896,6 +2106,114 @@ class StrokeCapJoinSceneCaptureTest {
             }
         """.trimIndent() + "\n"
     }
+
+    private fun sourceColorSubzoneCriticalSamples(
+        residualStats: StrokeResidualStats,
+        probeGpu: SkBitmap,
+        coverageMask: SkBitmap,
+        transparentSource: SkBitmap,
+    ): List<SourceColorSubzoneCriticalSample> {
+        val samples = residualStats.highDeltaSamples.take(FOR379_REQUIRED_SAMPLE_COUNT)
+        val for374Samples = samples.mapIndexed { index, sample ->
+            candidateRegressionSample(candidatePolicySample(index + 1, sample, coverageMask))
+        }
+        val for375Samples = for374Samples.map { effectiveDestinationCandidateSample(it) }
+        val for376Samples = for375Samples.map { compositionQuantizationCandidateSample(it) }
+        val for377Samples = for376Samples.map { linearSrgbPlausibilityAuditSample(it) }
+        val directSamples = for377Samples.map { directSourceColorEvidenceSample(it, transparentSource) }
+        val pathSamples = directSamples.map { effectiveSourceColorPathSample(it) }
+        return pathSamples.map { sample ->
+            val candidate = sample.directSourceSample.for377Sample.for376Sample.for375Sample.for374Sample.candidate
+            val pixel = sourceColorSubzonePixelAudit(
+                x = candidate.x,
+                y = candidate.y,
+                reference = candidate.reference,
+                current = candidate.current,
+                probe = probeGpu.getPixel(candidate.x, candidate.y),
+                criticalCoordinates = samples.map { it.x to it.y },
+            )
+            SourceColorSubzoneCriticalSample(
+                index = candidate.index,
+                pixel = pixel,
+                directRecomposedOnWhiteRgba = sample.directSourceSample.directRecomposedOnWhiteRgba,
+                directRecomposedOnWhiteResidual = sample.directRecomposedOnWhiteResidual,
+                directRecomposedErrorByChannel = sample.directRecomposedErrorByChannel,
+                for379SampleClassification = sample.sampleClassification,
+            )
+        }
+    }
+
+    private fun sourceColorSubzonePixelAudit(
+        x: Int,
+        y: Int,
+        reference: Int,
+        current: Int,
+        probe: Int,
+        criticalCoordinates: List<Pair<Int, Int>>,
+    ): SubzonePixelAudit {
+        val referenceRgba = rgbaArray(reference)
+        val currentRgba = rgbaArray(current)
+        val probeRgba = rgbaArray(probe)
+        val currentError = channelAbsError(referenceRgba, currentRgba)
+        val probeError = channelAbsError(referenceRgba, probeRgba)
+        val deltaError = IntArray(4) { probeError[it] - currentError[it] }
+        val probeMinusCurrent = IntArray(4) { probeRgba[it] - currentRgba[it] }
+        val band = strokePaintBands().first { x in it.xStart until it.xEnd }
+        val nearestDistance = criticalCoordinates.minOfOrNull { (criticalX, criticalY) ->
+            kotlin.math.abs(x - criticalX) + kotlin.math.abs(y - criticalY)
+        } ?: -1
+        return SubzonePixelAudit(
+            x = x,
+            y = y,
+            strokeBand = band.id,
+            cap = band.cap,
+            join = band.join,
+            strokeWidth = band.strokeWidth,
+            reference = reference,
+            current = current,
+            probe = probe,
+            currentResidual = currentError.sum(),
+            probeResidual = probeError.sum(),
+            currentErrorByChannel = currentError,
+            probeErrorByChannel = probeError,
+            probeMinusCurrentErrorByChannel = deltaError,
+            probeMinusCurrentRgba = probeMinusCurrent,
+            nearestCriticalManhattanDistance = nearestDistance,
+        )
+    }
+
+    private fun sourceColorSubzoneAuditClassification(
+        improved: MutableSubzonePixelSet,
+        regressed: MutableSubzonePixelSet,
+        criticalSet: MutableSubzonePixelSet,
+        uncorrectedResidualStats: StrokeResidualStats,
+        correctedResidualStats: StrokeResidualStats,
+    ): String {
+        if (criticalSet.count != FOR379_REQUIRED_SAMPLE_COUNT || criticalSet.afterResidual >= criticalSet.beforeResidual) {
+            return "source-color-correction-subzone-proof-insufficient"
+        }
+        if (
+            regressed.count > improved.count &&
+            regressed.afterResidual - regressed.beforeResidual > improved.beforeResidual - improved.afterResidual &&
+            correctedResidualStats.mismatchPixels > uncorrectedResidualStats.mismatchPixels
+        ) {
+            return "subzone-predicate-plausible-local-correction-needs-distinct-coverage-composition"
+        }
+        if (regressed.count > 0) {
+            return "source-color-correction-local-predicate-insufficient"
+        }
+        return "source-color-correction-subzone-proof-insufficient"
+    }
+
+    private fun sourceColorSubzoneAuditClassificationReason(classification: String): String =
+        when (classification) {
+            "subzone-predicate-plausible-local-correction-needs-distinct-coverage-composition" ->
+                "The FOR-379 critical samples improve under the FOR-380 probe, but scene-wide regressed pixels and residual growth dominate; the local predicate must separate coverage/composition subzones before any renderer correction can be considered."
+            "source-color-correction-local-predicate-insufficient" ->
+                "The probe has both improved and regressed pixels, but the regression shape is not strong enough to define a stable local predicate."
+            else ->
+                "The preserved critical sample proof or scene comparison changed, so the sub-zone audit is insufficient."
+        }
 
     private fun candidatePolicySample(index: Int, sample: ResidualSample, coverageMask: SkBitmap): CandidatePolicySample {
         val band = strokePaintBands().first { sample.x in it.xStart until it.xEnd }
@@ -3626,6 +3944,250 @@ class StrokeCapJoinSceneCaptureTest {
     private fun f16CandidatePolicyId(): String =
         listOf("straight", "srgb", "quantized", "alpha", "src", "over", "white").joinToString("_")
 
+    private class MutableSubzonePixelSet(val id: String) {
+        var count: Int = 0
+        var beforeResidual: Int = 0
+        var afterResidual: Int = 0
+        private val beforeErrorByChannel = IntArray(4)
+        private val afterErrorByChannel = IntArray(4)
+        private val afterMinusBeforeErrorByChannel = IntArray(4)
+        private val probeMinusCurrentRgba = IntArray(4)
+        private val bandStats = linkedMapOf<String, MutableSubzoneBandStats>()
+        private var minX: Int = Int.MAX_VALUE
+        private var minY: Int = Int.MAX_VALUE
+        private var maxX: Int = Int.MIN_VALUE
+        private var maxY: Int = Int.MIN_VALUE
+
+        fun add(pixel: SubzonePixelAudit) {
+            count++
+            beforeResidual += pixel.currentResidual
+            afterResidual += pixel.probeResidual
+            for (index in 0..3) {
+                beforeErrorByChannel[index] += pixel.currentErrorByChannel[index]
+                afterErrorByChannel[index] += pixel.probeErrorByChannel[index]
+                afterMinusBeforeErrorByChannel[index] += pixel.probeMinusCurrentErrorByChannel[index]
+                probeMinusCurrentRgba[index] += pixel.probeMinusCurrentRgba[index]
+            }
+            minX = minOf(minX, pixel.x)
+            minY = minOf(minY, pixel.y)
+            maxX = maxOf(maxX, pixel.x)
+            maxY = maxOf(maxY, pixel.y)
+            bandStats.getOrPut(pixel.strokeBand) {
+                MutableSubzoneBandStats(
+                    strokeBand = pixel.strokeBand,
+                    cap = pixel.cap,
+                    join = pixel.join,
+                    strokeWidth = pixel.strokeWidth,
+                )
+            }.add(pixel)
+        }
+
+        fun toStats(): SubzonePixelSetStats =
+            SubzonePixelSetStats(
+                id = id,
+                count = count,
+                beforeResidual = beforeResidual,
+                afterResidual = afterResidual,
+                beforeErrorByChannel = beforeErrorByChannel.copyOf(),
+                afterErrorByChannel = afterErrorByChannel.copyOf(),
+                afterMinusBeforeErrorByChannel = afterMinusBeforeErrorByChannel.copyOf(),
+                probeMinusCurrentRgba = probeMinusCurrentRgba.copyOf(),
+                bounds = if (count == 0) null else ResidualBounds(minX, minY, maxX, maxY),
+                bandDistribution = bandStats.values.map { it.toStats() },
+            )
+    }
+
+    private class MutableSubzoneBandStats(
+        val strokeBand: String,
+        val cap: String,
+        val join: String,
+        val strokeWidth: Float,
+    ) {
+        var count: Int = 0
+        var beforeResidual: Int = 0
+        var afterResidual: Int = 0
+        private val afterMinusBeforeErrorByChannel = IntArray(4)
+        private var minX: Int = Int.MAX_VALUE
+        private var minY: Int = Int.MAX_VALUE
+        private var maxX: Int = Int.MIN_VALUE
+        private var maxY: Int = Int.MIN_VALUE
+
+        fun add(pixel: SubzonePixelAudit) {
+            count++
+            beforeResidual += pixel.currentResidual
+            afterResidual += pixel.probeResidual
+            for (index in 0..3) {
+                afterMinusBeforeErrorByChannel[index] += pixel.probeMinusCurrentErrorByChannel[index]
+            }
+            minX = minOf(minX, pixel.x)
+            minY = minOf(minY, pixel.y)
+            maxX = maxOf(maxX, pixel.x)
+            maxY = maxOf(maxY, pixel.y)
+        }
+
+        fun toStats(): SubzoneBandStats =
+            SubzoneBandStats(
+                strokeBand = strokeBand,
+                cap = cap,
+                join = join,
+                strokeWidth = strokeWidth,
+                count = count,
+                beforeResidual = beforeResidual,
+                afterResidual = afterResidual,
+                afterMinusBeforeErrorByChannel = afterMinusBeforeErrorByChannel.copyOf(),
+                bounds = if (count == 0) null else ResidualBounds(minX, minY, maxX, maxY),
+            )
+    }
+
+    private data class SubzonePixelSetStats(
+        val id: String,
+        val count: Int,
+        val beforeResidual: Int,
+        val afterResidual: Int,
+        val beforeErrorByChannel: IntArray,
+        val afterErrorByChannel: IntArray,
+        val afterMinusBeforeErrorByChannel: IntArray,
+        val probeMinusCurrentRgba: IntArray,
+        val bounds: ResidualBounds?,
+        val bandDistribution: List<SubzoneBandStats>,
+    ) {
+        fun toJson(): String = """
+            {
+              "id": ${jsonString(id)},
+              "count": $count,
+              "beforeResidual": $beforeResidual,
+              "afterResidual": $afterResidual,
+              "deltaVsCurrent": ${afterResidual - beforeResidual},
+              "gainVsCurrent": ${beforeResidual - afterResidual},
+              "beforeErrorByChannel": ${channelJson(beforeErrorByChannel)},
+              "afterErrorByChannel": ${channelJson(afterErrorByChannel)},
+              "afterMinusBeforeErrorByChannel": ${channelJson(afterMinusBeforeErrorByChannel)},
+              "probeMinusCurrentRgbaTotals": ${channelJson(probeMinusCurrentRgba)},
+              "bounds": ${bounds?.toJson() ?: "null"},
+              "bandDistribution": [
+            ${bandDistribution.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ]
+            }
+        """.trimIndent()
+
+        private fun channelJson(channels: IntArray): String =
+            """{"r": ${channels[0]}, "g": ${channels[1]}, "b": ${channels[2]}, "a": ${channels[3]}}"""
+    }
+
+    private data class SubzoneBandStats(
+        val strokeBand: String,
+        val cap: String,
+        val join: String,
+        val strokeWidth: Float,
+        val count: Int,
+        val beforeResidual: Int,
+        val afterResidual: Int,
+        val afterMinusBeforeErrorByChannel: IntArray,
+        val bounds: ResidualBounds?,
+    ) {
+        fun toJson(): String = """
+            {
+              "strokeBand": ${jsonString(strokeBand)},
+              "cap": ${jsonString(cap)},
+              "join": ${jsonString(join)},
+              "strokeWidth": ${String.format(Locale.US, "%.1f", strokeWidth)},
+              "count": $count,
+              "beforeResidual": $beforeResidual,
+              "afterResidual": $afterResidual,
+              "deltaVsCurrent": ${afterResidual - beforeResidual},
+              "afterMinusBeforeErrorByChannel": ${channelJson(afterMinusBeforeErrorByChannel)},
+              "bounds": ${bounds?.toJson() ?: "null"}
+            }
+        """.trimIndent()
+
+        private fun channelJson(channels: IntArray): String =
+            """{"r": ${channels[0]}, "g": ${channels[1]}, "b": ${channels[2]}, "a": ${channels[3]}}"""
+    }
+
+    private data class SourceColorSubzoneCriticalSample(
+        val index: Int,
+        val pixel: SubzonePixelAudit,
+        val directRecomposedOnWhiteRgba: IntArray,
+        val directRecomposedOnWhiteResidual: Int,
+        val directRecomposedErrorByChannel: IntArray,
+        val for379SampleClassification: String,
+    ) {
+        fun toJson(): String {
+            val base = pixel.toJson(indexOverride = index).trim()
+            val suffix = """
+              "directRecomposedOnWhiteRgba": ${rgbaArrayJson(directRecomposedOnWhiteRgba)},
+              "directRecomposedOnWhiteResidual": $directRecomposedOnWhiteResidual,
+              "directRecomposedErrorByChannel": ${channelJson(directRecomposedErrorByChannel)},
+              "probeDeltaVsDirectRecomposedOnWhite": ${pixel.probeResidual - directRecomposedOnWhiteResidual},
+              "for379SampleClassification": ${jsonString(for379SampleClassification)}
+            """.trimIndent().prependIndent("  ")
+            return base.replace(Regex("\n\\s*}$"), ",\n$suffix\n}")
+        }
+
+        private fun rgbaArrayJson(rgba: IntArray): String = """[${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${rgba[3]}]"""
+
+        private fun channelJson(channels: IntArray): String =
+            """{"r": ${channels[0]}, "g": ${channels[1]}, "b": ${channels[2]}, "a": ${channels[3]}}"""
+    }
+
+    private data class SubzonePixelAudit(
+        val x: Int,
+        val y: Int,
+        val strokeBand: String,
+        val cap: String,
+        val join: String,
+        val strokeWidth: Float,
+        val reference: Int,
+        val current: Int,
+        val probe: Int,
+        val currentResidual: Int,
+        val probeResidual: Int,
+        val currentErrorByChannel: IntArray,
+        val probeErrorByChannel: IntArray,
+        val probeMinusCurrentErrorByChannel: IntArray,
+        val probeMinusCurrentRgba: IntArray,
+        val nearestCriticalManhattanDistance: Int,
+    ) {
+        val deltaVsCurrent: Int = probeResidual - currentResidual
+
+        fun toJson(indexOverride: Int? = null): String {
+            val indexLine = indexOverride?.let { "  \"index\": $it,\n" } ?: ""
+            return """
+                {
+            $indexLine  "x": $x,
+                  "y": $y,
+                  "strokeBand": ${jsonString(strokeBand)},
+                  "cap": ${jsonString(cap)},
+                  "join": ${jsonString(join)},
+                  "strokeWidth": ${String.format(Locale.US, "%.1f", strokeWidth)},
+                  "referenceRgba": ${pixelRgbaJson(reference)},
+                  "currentRgba": ${pixelRgbaJson(current)},
+                  "probeRgba": ${pixelRgbaJson(probe)},
+                  "currentResidual": $currentResidual,
+                  "probeResidual": $probeResidual,
+                  "deltaVsCurrent": $deltaVsCurrent,
+                  "gainVsCurrent": ${currentResidual - probeResidual},
+                  "currentErrorByChannel": ${channelJson(currentErrorByChannel)},
+                  "probeErrorByChannel": ${channelJson(probeErrorByChannel)},
+                  "probeMinusCurrentErrorByChannel": ${channelJson(probeMinusCurrentErrorByChannel)},
+                  "probeMinusCurrentRgba": ${channelJson(probeMinusCurrentRgba)},
+                  "nearestFor379CriticalManhattanDistance": $nearestCriticalManhattanDistance
+                }
+            """.trimIndent()
+        }
+
+        private fun pixelRgbaJson(pixel: Int): String {
+            val r = (pixel ushr 16) and 0xFF
+            val g = (pixel ushr 8) and 0xFF
+            val b = pixel and 0xFF
+            val a = (pixel ushr 24) and 0xFF
+            return """[$r, $g, $b, $a]"""
+        }
+
+        private fun channelJson(channels: IntArray): String =
+            """{"r": ${channels[0]}, "g": ${channels[1]}, "b": ${channels[2]}, "a": ${channels[3]}}"""
+    }
+
     private data class StrokePaintBand(
         val id: String,
         val description: String,
@@ -3717,6 +4279,7 @@ class StrokeCapJoinSceneCaptureTest {
         private const val FOR377_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR378_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR379_REQUIRED_SAMPLE_COUNT = 10
+        private const val FOR381_SAMPLE_LIMIT = 12
         private const val FOR373_CURRENT_RESIDUAL = 856
         private const val FOR373_CANDIDATE_TOTAL_RESIDUAL = 1033
         private const val FOR375_EFFECTIVE_DESTINATION_CANDIDATE_TOTAL_RESIDUAL = 794
