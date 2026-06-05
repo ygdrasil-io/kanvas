@@ -542,6 +542,13 @@ class StrokeCapJoinSceneCaptureTest {
                 storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
                 adapter = adapter,
             )
+            if (System.getProperty(FOR427_SUBSAMPLE_MASK_PROPERTY, "false").toBoolean()) {
+                writeM60F16AaStencilCoverSubsampleMaskFor427(
+                    finalWgslSnapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
+                    storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                    adapter = adapter,
+                )
+            }
         }
         if (aaStencilCoverFinalWgslDiagnosticSnapshot.enabled &&
             aaStencilCoverShaderReturnStorageZeroCauseSnapshot.enabled &&
@@ -1186,6 +1193,7 @@ class StrokeCapJoinSceneCaptureTest {
             }
         }
     }
+
 
     private class BoundedStrokeCapJoinTransparentSourceGM : GM() {
         init {
@@ -4135,6 +4143,298 @@ class StrokeCapJoinSceneCaptureTest {
             "Inspect stencil compare side selection for the inside/outside cover subdraws."
         else ->
             "Add the missing bounded input-stage field before attempting a renderer correction."
+    }
+
+    private fun writeM60F16AaStencilCoverSubsampleMaskFor427(
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-aa-stencil-cover-subsample-mask-for427"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16AaStencilCoverSubsampleMaskFor427Json(
+                sceneId = sceneId,
+                finalWgslSnapshot = finalWgslSnapshot,
+                storageSnapshot = storageSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16AaStencilCoverSubsampleMaskFor427Json(
+        sceneId: String,
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val summaries = finalWgslSnapshot.variants.map { m60F16FinalWgslVariantSummary(it) }
+        val maskInstrumentationPresent = finalWgslSnapshot.variants
+            .filter { it.logicalName == "shader-return-storage-zero-cause" }
+            .all { variant ->
+                variant.source.contains("m60_f16_subsample_mask_4x4") &&
+                    variant.source.contains("m60_f16_covered_subsamples_4x4") &&
+                    variant.source.contains("sample_covered(vec2f(x, y))")
+            }
+        val diagnosticReturnPathVerified = summaries
+            .filter { it.logicalName != "normal-bounded-runtime-correction" }
+            .all { summary ->
+                summary.functions["fs_inside"]?.returnsApplicationPointOutput == true &&
+                    summary.functions["fs_outside"]?.returnsApplicationPointOutput == true
+            }
+        val storageByKey = storageSnapshot.storageEvents
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val records = storageByKey.keys
+            .filter { it.drawIndex == 1 && partialPoints.contains(it.x to it.y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.drawIndex }.thenBy { it.y }.thenBy { it.x })
+            .map { key ->
+                val sourceRecords = storageByKey[key].orEmpty()
+                    .sortedWith(
+                        compareBy<Pair<
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                            >> { it.second.subdrawOrdinal }.thenBy { it.second.subdrawRole },
+                    )
+                val source = sourceRecords
+                    .filter { (_, sample) -> sample.shaderObserved && !sample.captureSynthetic && sample.subdrawRole == "inside" }
+                    .maxByOrNull { (_, sample) -> sample.sourceColorSentToBlend?.getOrNull(3) ?: -1f }
+                val event = source?.first
+                val sample = source?.second
+                val expectedCoverageByte = (coverageMask.getPixel(key.x, key.y) ushr 24) and 0xFF
+                val expectedCpuCoveredSubsamples = m60F16ExpectedCpuCoveredSubsamples4x4(expectedCoverageByte)
+                val wgslMask = sample?.wgslSubsampleMask4x4
+                val classification = m60F16SubsampleMaskClassification(
+                    expectedCoverageByte = expectedCoverageByte,
+                    cpuMask = null,
+                    sample = sample,
+                    wgslMask = wgslMask,
+                    diagnosticReturnPathVerified = diagnosticReturnPathVerified,
+                    maskInstrumentationPresent = maskInstrumentationPresent,
+                )
+                M60F16SubsampleMaskFor427Record(
+                    key = key,
+                    event = event,
+                    sample = sample,
+                    expectedCoverageByte = expectedCoverageByte,
+                    expectedCpuCoveredSubsamples4x4 = expectedCpuCoveredSubsamples,
+                    cpuMask = null,
+                    wgslMask = wgslMask,
+                    classification = classification,
+                )
+            }
+        val classificationOrder = M60_F16_FOR427_ALLOWED_CLASSIFICATIONS
+        val classificationCounts = records.groupingBy { it.classification }.eachCount()
+        val majority = classificationOrder.maxWithOrNull(
+            compareBy<String> { classificationCounts[it] ?: 0 }.thenByDescending { classificationOrder.indexOf(it) },
+        ) ?: "subsample-mask-stage-incomplete"
+        val cpuOnlyTotal = records.mapNotNull { it.cpuOnlySubsamples }.sum().takeIf { records.all { it.cpuOnlySubsamples != null } }
+        val wgslOnlyTotal = records.mapNotNull { it.wgslOnlySubsamples }.sum().takeIf { records.all { it.wgslOnlySubsamples != null } }
+        val matchingTotal = records.mapNotNull { it.matchingSubsamples }.sum().takeIf { records.all { it.matchingSubsamples != null } }
+        val recordsJson = records.joinToString(",\n") { record ->
+            m60F16SubsampleMaskFor427RecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-427",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "m60-f16-aa-stencil-cover-coverage-input-stage-for426",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-427-m60-f16-comparer-les-sous-echantillons-cpu-et-wgsl-sample-covered",
+              "sourceFindingMemory": "global/kanvas/findings/for-426-raw-path-coverage-already-96-before-clip",
+              "sourceArtifacts": {
+                "for426": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-coverage-input-stage-for426/m60-f16-aa-stencil-cover-coverage-input-stage-for426.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${majority.jsonString()},
+              "globalClassification": ${majority.jsonString()},
+              "allowedClassifications": [
+            ${classificationOrder.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "comparisonPolicy": {
+                "scope": "Exactly the 6 FOR-426 partial pixels whose CPU coverage alpha is 160/255 and WGSL rawPathCoverage is 96/255.",
+                "cpuMaskSource": "not-exported: the checked-in CPU reference reports alpha 160/255, which preserves the expected 10-of-16 count but does not expose the internal scanFillPath subsample identities.",
+                "cpuMaskLimitation": "The CPU path does not currently export its internal scanFillPath subsample identity; this artifact refuses cell-by-cell CPU/WGSL comparison with subsample-mask-stage-incomplete instead of using a synthetic representative mask.",
+                "wgslMaskSource": "m60_f16_subsample_mask_4x4 captured from sample_covered in the shader-return-storage-zero-cause diagnostic.",
+                "noRenderingFixApplied": true
+              },
+              "summary": {
+                "diagnosticReturnPathVerified": $diagnosticReturnPathVerified,
+                "subsampleMaskInstrumentationPresent": $maskInstrumentationPresent,
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "expectedCoverage160Count": ${records.count { it.expectedCoverageByte == 160 }},
+                "for426RawPathCoverage96Count": ${records.count { m60F16AlphaByte(it.sample?.rawPathCoverage) == 96 }},
+                "for426CoveredSubsamples6Count": ${records.count { it.sample?.coveredSubsamples4x4 == 6 }},
+                "cpuCoveredSubsamples4x4Total": ${records.mapNotNull { it.cpuCoveredSubsamples4x4 }.sum()},
+                "wgslCoveredSubsamples4x4Total": ${records.sumOf { it.wgslCoveredSubsamples4x4 ?: 0 }},
+                "matchingSubsamplesTotal": ${matchingTotal ?: "null"},
+                "cpuOnlySubsamplesTotal": ${cpuOnlyTotal ?: "null"},
+                "wgslOnlySubsamplesTotal": ${wgslOnlyTotal ?: "null"},
+                "majorityHypothesis": ${m60F16SubsampleMaskMajorityHypothesis(majority).jsonString()},
+                "majorityClassification": ${majority.jsonString()},
+                "majorityClassificationCount": ${classificationCounts[majority] ?: 0},
+                "classificationCounts": ${m60F16ClassificationCountsJson(classificationOrder, classificationCounts).prependIndent("  ").trimStart()}
+              },
+              "partialPixels": [
+            $recordsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "renderingFixApplied": false,
+                "wgsl4kModified": false
+              },
+              "classificationReason": ${m60F16SubsampleMaskReason(majority).jsonString()},
+              "nextStep": "Export the CPU scanFillPath 4x4 subsample identity before comparing cell-by-cell against the captured WGSL sample_covered mask.",
+              "validationCommands": [
+                "rtk python3 scripts/validate_for427_m60_f16_aa_stencil_cover_subsample_mask.py",
+                "rtk python3 scripts/validate_for426_m60_f16_aa_stencil_cover_coverage_input_stage.py",
+                "rtk python3 scripts/validate_for425_m60_f16_aa_stencil_cover_alpha_conversion_stage.py",
+                "rtk python3 scripts/validate_for424_m60_f16_aa_stencil_cover_partial_coverage_alpha.py",
+                "rtk python3 scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+                "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for427-pycache python3 -m py_compile scripts/validate_for427_m60_f16_aa_stencil_cover_subsample_mask.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16SubsampleMaskFor427RecordJson(record: M60F16SubsampleMaskFor427Record): String {
+        val sample = record.sample
+        val entryPoint = when (sample?.subdrawRole) {
+            "inside" -> "fs_inside"
+            "outside" -> "fs_outside"
+            else -> null
+        }
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "subdrawOrdinal": ${sample?.subdrawOrdinal ?: "null"},
+              "subdrawRole": ${sample?.subdrawRole?.jsonString() ?: "null"},
+              "entryPoint": ${entryPoint?.jsonString() ?: "null"},
+              "edgeCount": ${record.event?.edgeCount ?: "null"},
+              "fillType": ${record.event?.fillType?.jsonString() ?: "null"},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16SubsampleMaskReason(record.classification).jsonString()},
+              "expectedCoverageByte": ${record.expectedCoverageByte},
+              "for426RawPathCoverageByte": ${m60F16AlphaByte(sample?.rawPathCoverage) ?: "null"},
+              "for426CoveredSubsamples4x4": ${sample?.coveredSubsamples4x4 ?: "null"},
+              "cpuCoveredSubsamples4x4": ${record.cpuCoveredSubsamples4x4},
+              "wgslCoveredSubsamples4x4": ${record.wgslCoveredSubsamples4x4 ?: "null"},
+              "matchingSubsamples": ${record.matchingSubsamples},
+              "cpuOnlySubsamples": ${record.cpuOnlySubsamples},
+              "wgslOnlySubsamples": ${record.wgslOnlySubsamples},
+              "cpuSubsampleMask4x4": ${record.cpuMask ?: "null"},
+              "wgslSubsampleMask4x4": ${record.wgslMask ?: "null"},
+              "cpuGrid4x4": null,
+              "wgslGrid4x4": ${m60F16WgslSubsampleMaskGridJson(record.key, record.wgslMask).prependIndent("  ").trimStart()}
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16WgslSubsampleMaskGridJson(
+        key: M60F16DrawPixelKey,
+        wgslMask: Int?,
+    ): String {
+        val cells = (0 until 16).joinToString(",\n") { index ->
+            val sx = index % 4
+            val sy = index / 4
+            val wgslCovered = wgslMask?.let { (it and (1 shl index)) != 0 }
+            """
+                {
+                  "subsampleIndex": $index,
+                  "sx": $sx,
+                  "sy": $sy,
+                  "localX": ${String.format(Locale.US, "%.3f", (sx + 0.5f) * 0.25f)},
+                  "localY": ${String.format(Locale.US, "%.3f", (sy + 0.5f) * 0.25f)},
+                  "deviceX": ${String.format(Locale.US, "%.3f", key.x + (sx + 0.5f) * 0.25f)},
+                  "deviceY": ${String.format(Locale.US, "%.3f", key.y + (sy + 0.5f) * 0.25f)},
+                  "wgslCovered": ${wgslCovered ?: "null"}
+                }
+            """.trimIndent()
+        }
+        return """
+            [
+        ${cells.prependIndent("    ")}
+            ]
+        """.trimIndent()
+    }
+
+    private fun m60F16ExpectedCpuCoveredSubsamples4x4(expectedCoverageByte: Int): Int? =
+        if (expectedCoverageByte == 160) 10 else null
+
+    private fun m60F16SubsampleMaskClassification(
+        expectedCoverageByte: Int,
+        cpuMask: Int?,
+        sample: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample?,
+        wgslMask: Int?,
+        diagnosticReturnPathVerified: Boolean,
+        maskInstrumentationPresent: Boolean,
+    ): String {
+        if (!diagnosticReturnPathVerified || !maskInstrumentationPresent || sample == null || wgslMask == null || cpuMask == null) {
+            return "subsample-mask-stage-incomplete"
+        }
+        if (!sample.shaderObserved || sample.captureSynthetic || sample.subdrawRole != "inside") {
+            return "subsample-mask-stage-incomplete"
+        }
+        if (expectedCoverageByte != 160 || cpuMask.countOneBits() != 10 || sample.coveredSubsamples4x4 != 6) {
+            return "subsample-mask-stage-incomplete"
+        }
+        val cpuOnly = (cpuMask and wgslMask.inv()).countOneBits()
+        val wgslOnly = (wgslMask and cpuMask.inv()).countOneBits()
+        return when {
+            cpuOnly > 0 && wgslOnly == 0 -> "wgsl-misses-cpu-covered-subsamples"
+            wgslOnly > 0 && cpuOnly == 0 -> "wgsl-adds-extra-subsamples"
+            cpuOnly == wgslOnly && cpuOnly > 0 -> "sample-grid-coordinate-shift"
+            cpuOnly > wgslOnly -> "edge-evaluation-disagreement"
+            else -> "winding-rule-disagreement"
+        }
+    }
+
+    private fun m60F16ClassificationCountsJson(order: List<String>, counts: Map<String, Int>): String =
+        order.joinToString(prefix = "{\n", separator = ",\n", postfix = "\n}") { key ->
+            "  ${key.jsonString()}: ${counts[key] ?: 0}"
+        }
+
+    private fun m60F16SubsampleMaskMajorityHypothesis(classification: String): String = when (classification) {
+        "sample-grid-coordinate-shift" -> "sample-grid-coordinate-shift"
+        "winding-rule-disagreement" -> "winding-rule-disagreement"
+        "subsample-mask-stage-incomplete" -> "subsample-mask-stage-incomplete"
+        else -> "edge-evaluation-disagreement"
+    }
+
+    private fun m60F16SubsampleMaskReason(classification: String): String = when (classification) {
+        "wgsl-misses-cpu-covered-subsamples" ->
+            "The WGSL sample_covered mask covers fewer subsamples than the CPU 10/16 reference mask at the same pixel-local grid coordinates."
+        "wgsl-adds-extra-subsamples" ->
+            "The WGSL sample_covered mask covers subsamples that are not covered by the CPU 10/16 reference mask."
+        "sample-grid-coordinate-shift" ->
+            "CPU-only and WGSL-only subsamples are balanced, which is most consistent with a sample-grid coordinate shift."
+        "winding-rule-disagreement" ->
+            "The divergent subsample pattern is not a strict miss/add shape and may point at fill-rule evaluation."
+        "edge-evaluation-disagreement" ->
+            "The divergent subsample pattern is dominated by CPU-only samples, but the WGSL mask is not a strict subset of the CPU mask."
+        else ->
+            "The CPU or WGSL subsample grid was not completely captured."
     }
 
     private data class M60F16FinalWgslFunctionSummary(
@@ -7213,6 +7513,26 @@ class StrokeCapJoinSceneCaptureTest {
         val finalCoverageByte: Int?,
         val classification: String,
     )
+
+    private data class M60F16SubsampleMaskFor427Record(
+        val key: M60F16DrawPixelKey,
+        val event: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent?,
+        val sample: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample?,
+        val expectedCoverageByte: Int,
+        val expectedCpuCoveredSubsamples4x4: Int?,
+        val cpuMask: Int?,
+        val wgslMask: Int?,
+        val classification: String,
+    ) {
+        val cpuCoveredSubsamples4x4: Int? = cpuMask?.countOneBits() ?: expectedCpuCoveredSubsamples4x4
+        val wgslCoveredSubsamples4x4: Int? = wgslMask?.countOneBits()
+        val matchingSubsamples: Int? =
+            if (cpuMask != null && wgslMask != null) 16 - (cpuMask xor wgslMask).countOneBits() else null
+        val cpuOnlySubsamples: Int? =
+            if (cpuMask != null && wgslMask != null) (cpuMask and wgslMask.inv()).countOneBits() else null
+        val wgslOnlySubsamples: Int? =
+            if (cpuMask != null && wgslMask != null) (wgslMask and cpuMask.inv()).countOneBits() else null
+    }
 
     private data class M60F16CoverageNeighborhood3x3(
         val samples: List<M60F16CoverageNeighborhoodSample>,
@@ -14138,6 +14458,16 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16AaStencilCoverShaderReturnStorageZeroCause.enabled"
         private const val FOR420_FINAL_WGSL_DIAGNOSTIC_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled"
+        private const val FOR427_SUBSAMPLE_MASK_PROPERTY =
+            "kanvas.webgpu.m60F16AaStencilCoverSubsampleMaskFor427.enabled"
+        private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
+            "wgsl-misses-cpu-covered-subsamples",
+            "wgsl-adds-extra-subsamples",
+            "sample-grid-coordinate-shift",
+            "winding-rule-disagreement",
+            "edge-evaluation-disagreement",
+            "subsample-mask-stage-incomplete",
+        )
         private const val FOR412_MATCH_TOLERANCE = 0.000001f
         private const val FOR417_RECONSTRUCTION_TOLERANCE = 0.0006f
         private const val FOR423_REFERENCE_TOLERANCE = 2f / 255f

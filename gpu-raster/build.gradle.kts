@@ -205,6 +205,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16AaStencilCoverSubsampleMaskFor427.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16AaStencilCoverSubsampleMaskFor427.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
