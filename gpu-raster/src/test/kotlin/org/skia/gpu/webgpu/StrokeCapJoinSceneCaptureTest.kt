@@ -164,6 +164,7 @@ class StrokeCapJoinSceneCaptureTest {
         writeM60F16CandidatePolicyRgbaProbe(residualStats, adapter)
         writeM60F16CandidateRegressionAudit(residualStats, adapter)
         writeM60F16EffectiveDestinationCandidate(residualStats, adapter)
+        writeM60F16CompositionQuantizationCandidate(residualStats, adapter)
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -820,6 +821,18 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun writeM60F16CompositionQuantizationCandidate(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-composition-quantization-candidate-for376",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-composition-quantization-candidate-for376.json").writeText(
+            m60F16CompositionQuantizationCandidateJson(residualStats, adapter),
+        )
+    }
+
     private fun m60F16CandidatePolicyRgbaProbeJson(
         residualStats: StrokeResidualStats,
         adapter: String,
@@ -1114,6 +1127,123 @@ class StrokeCapJoinSceneCaptureTest {
         """.trimIndent() + "\n"
     }
 
+    private fun m60F16CompositionQuantizationCandidateJson(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val samples = residualStats.highDeltaSamples.take(FOR376_REQUIRED_SAMPLE_COUNT)
+        val for374Samples = samples.mapIndexed { index, sample ->
+            candidateRegressionSample(candidatePolicySample(index + 1, sample, coverageMask))
+        }
+        val for375Samples = for374Samples.map { effectiveDestinationCandidateSample(it) }
+        val candidateSamples = for375Samples.map { compositionQuantizationCandidateSample(it) }
+        val currentResidual = candidateSamples.sumOf { it.currentResidual }
+        val for373CandidateTotalResidual = candidateSamples.sumOf { it.for373CandidateResidual }
+        val for375CandidateTotalResidual = candidateSamples.sumOf { it.for375CandidateResidual }
+        val variantDefinitions = compositionQuantizationVariantDefinitions()
+        val variantTotals = variantDefinitions.map { definition ->
+            CompositionQuantizationVariantTotal(
+                definition = definition,
+                totalResidual = candidateSamples.sumOf { sample ->
+                    sample.variants.first { it.variantId == definition.id }.residual
+                },
+                currentResidual = currentResidual,
+                for375CandidateTotalResidual = for375CandidateTotalResidual,
+                for373CandidateTotalResidual = for373CandidateTotalResidual,
+            )
+        }
+        val ranking = variantTotals.sortedWith(compareBy<CompositionQuantizationVariantTotal> { it.totalResidual }.thenBy { it.variantId })
+        val best = ranking.first()
+        val classification = compositionQuantizationCandidateClassification(
+            sampleCount = candidateSamples.size,
+            blockedVariantCount = candidateSamples.sumOf { sample -> sample.variants.count { it.candidateRgba == null } },
+            bestVariantTotalResidual = best.totalResidual,
+            currentResidual = currentResidual,
+            for375CandidateTotalResidual = for375CandidateTotalResidual,
+        )
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-376",
+              "sceneId": "m60-f16-composition-quantization-candidate-for376",
+              "sourceSceneId": "m60-f16-effective-destination-candidate-for375",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-axe-espace-de-composition-et-quantification-apres-for-375",
+              "sourceFinding": "global/kanvas/findings/for-375-reduit-le-residuel-m60-f16-avec-une-candidate-sur-destination-effective-diagnostique",
+              "requiredFor375Decision": "M60_F16_EFFECTIVE_DESTINATION_CANDIDATE_RECORDED",
+              "requiredFor375Classification": "effective-destination-candidate-reduces-residual",
+              "decision": "M60_F16_COMPOSITION_QUANTIZATION_CANDIDATE_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "composition-quantization-candidate-explains-reference",
+                "composition-quantization-candidate-reduces-residual",
+                "composition-quantization-candidate-neutral",
+                "composition-quantization-candidate-regresses",
+                "composition-quantization-candidate-blocked"
+              ],
+              "candidateInputSource": "FOR-375 preserved samples plus inverseDestinationEstimate.rgbClampedToSrgb",
+              "destinationSource": "inverseDestinationEstimate.rgbClampedToSrgb",
+              "destinationReadFromRenderer": false,
+              "destinationReadFromGpuImage": false,
+              "destinationAppliedToRenderer": false,
+              "variantRgbaSource": "calculated-by-diagnostic-policy",
+              "variantReadFromRenderer": false,
+              "variantReadFromGpuImage": false,
+              "variantAppliedToRenderer": false,
+              "variantCount": ${variantTotals.size},
+              "variantDefinitions": [
+            ${variantDefinitions.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "currentResidual": $currentResidual,
+              "requiredCurrentResidual": $FOR373_CURRENT_RESIDUAL,
+              "requiredFor373CandidateTotalResidual": $FOR373_CANDIDATE_TOTAL_RESIDUAL,
+              "for373CandidateTotalResidual": $for373CandidateTotalResidual,
+              "requiredFor375EffectiveDestinationCandidateTotalResidual": $FOR375_EFFECTIVE_DESTINATION_CANDIDATE_TOTAL_RESIDUAL,
+              "for375EffectiveDestinationCandidateTotalResidual": $for375CandidateTotalResidual,
+              "bestVariantId": ${best.variantId.jsonString()},
+              "bestVariantTotalResidual": ${best.totalResidual},
+              "bestVariantTotalDeltaVsCurrent": ${best.totalDeltaVsCurrent},
+              "bestVariantTotalDeltaVsFor375Candidate": ${best.totalDeltaVsFor375Candidate},
+              "bestVariantTotalDeltaVsFor373Candidate": ${best.totalDeltaVsFor373Candidate},
+              "variantRanking": [
+            ${ranking.mapIndexed { index, total -> total.toJson(index + 1).prependIndent("    ") }.joinToString(",\n")}
+              ],
+              "sampleCount": ${candidateSamples.size},
+              "samples": [
+            ${candidateSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "nonGoalsPreserved": {
+                "rendererBehaviorChanged": false,
+                "runtimeBehaviorChanged": false,
+                "gpuOrWgslChanged": false,
+                "geometryProductionChanged": false,
+                "coverageProductionChanged": false,
+                "fallbackChanged": false,
+                "kadreChanged": false,
+                "f16PremulBlendRuntimeChanged": false,
+                "skBitmapGetPixelChanged": false,
+                "scoreIncreased": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "variantAppliedToRenderer": false,
+                "variantReadFromRenderer": false,
+                "variantReadFromGpuImage": false,
+                "destinationAppliedToRenderer": false,
+                "destinationReadFromRenderer": false,
+                "destinationReadFromGpuImage": false,
+                "rendererSceneBranchAdded": false,
+                "rendererCoordinateBranchAdded": false,
+                "rendererSelectedCellBranchAdded": false,
+                "fullGmCropPathAdded": false
+              },
+              "command": "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+        """.trimIndent() + "\n"
+    }
+
     private fun candidatePolicySample(index: Int, sample: ResidualSample, coverageMask: SkBitmap): CandidatePolicySample {
         val band = strokePaintBands().first { sample.x in it.xStart until it.xEnd }
         val currentResidual = sampleResidual(sample.reference, sample.gpu)
@@ -1371,6 +1501,140 @@ class StrokeCapJoinSceneCaptureTest {
         """.trimIndent().prependIndent("  ")
         return base.replace(Regex("\n\\s*}$"), ",\n$suffix\n}")
     }
+
+    private fun compositionQuantizationCandidateSample(
+        sample: EffectiveDestinationCandidateSample,
+    ): CompositionQuantizationCandidateSample {
+        val variants = compositionQuantizationVariantDefinitions().map { definition ->
+            val candidate = definition.calculate(sample)
+            val residual = candidate?.let { sampleResidual(sample.for374Sample.candidate.reference, rgbaToPixel(it)) }
+                ?: sample.currentResidual
+            CompositionQuantizationCandidateVariant(
+                variantId = definition.id,
+                candidateRgba = candidate,
+                residual = residual,
+                deltaVsCurrent = residual - sample.currentResidual,
+                deltaVsFor375Candidate = residual - sample.effectiveDestinationCandidateResidual,
+                deltaVsFor373Candidate = residual - sample.for373CandidateResidual,
+                status = if (candidate == null) {
+                    "blocked-by-missing-effective-destination"
+                } else {
+                    "calculated-from-for375-effective-destination-sample"
+                },
+            )
+        }
+        return CompositionQuantizationCandidateSample(for375Sample = sample, variants = variants)
+    }
+
+    private data class CompositionQuantizationCandidateSample(
+        val for375Sample: EffectiveDestinationCandidateSample,
+        val variants: List<CompositionQuantizationCandidateVariant>,
+    ) {
+        val currentResidual: Int = for375Sample.currentResidual
+        val for373CandidateResidual: Int = for375Sample.for373CandidateResidual
+        val for375CandidateResidual: Int = for375Sample.effectiveDestinationCandidateResidual
+    }
+
+    private fun CompositionQuantizationCandidateSample.toJson(): String {
+        val best = variants.sortedWith(compareBy<CompositionQuantizationCandidateVariant> { it.residual }.thenBy { it.variantId }).first()
+        val base = for375Sample.toJson().trim()
+        val suffix = """
+          "compositionQuantizationBestVariantId": ${best.variantId.jsonString()},
+          "compositionQuantizationBestVariantResidual": ${best.residual},
+          "compositionQuantizationBestVariantDeltaVsCurrent": ${best.deltaVsCurrent},
+          "compositionQuantizationBestVariantDeltaVsFor375Candidate": ${best.deltaVsFor375Candidate},
+          "compositionQuantizationBestVariantDeltaVsFor373Candidate": ${best.deltaVsFor373Candidate},
+          "compositionQuantizationVariants": [
+        ${variants.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+          ]
+        """.trimIndent().prependIndent("  ")
+        return base.replace(Regex("\n\\s*}$"), ",\n$suffix\n}")
+    }
+
+    private data class CompositionQuantizationCandidateVariant(
+        val variantId: String,
+        val candidateRgba: IntArray?,
+        val residual: Int,
+        val deltaVsCurrent: Int,
+        val deltaVsFor375Candidate: Int,
+        val deltaVsFor373Candidate: Int,
+        val status: String,
+    )
+
+    private fun CompositionQuantizationCandidateVariant.toJson(): String = """
+        {
+          "variantId": ${variantId.jsonString()},
+          "candidateRgba": ${candidateRgba?.let { rgbaArrayJson(it) } ?: "null"},
+          "status": ${status.jsonString()},
+          "candidateSource": "calculated-by-diagnostic-policy",
+          "candidateReadFromRenderer": false,
+          "candidateReadFromGpuImage": false,
+          "candidateAppliedToRenderer": false,
+          "residual": $residual,
+          "deltaVsCurrent": $deltaVsCurrent,
+          "deltaVsFor375Candidate": $deltaVsFor375Candidate,
+          "deltaVsFor373Candidate": $deltaVsFor373Candidate,
+          "improvesCurrent": ${deltaVsCurrent < 0},
+          "improvesFor375Candidate": ${deltaVsFor375Candidate < 0},
+          "improvesFor373Candidate": ${deltaVsFor373Candidate < 0}
+        }
+    """.trimIndent()
+
+    private data class CompositionQuantizationVariantDefinition(
+        val id: String,
+        val label: String,
+        val formula: String,
+        val quantizationOrder: String,
+        val compositionSpace: String,
+        val alphaSource: String,
+        val destinationSource: String,
+        val premultipliedDiagnostic: Boolean,
+        val calculate: (EffectiveDestinationCandidateSample) -> IntArray?,
+    )
+
+    private fun CompositionQuantizationVariantDefinition.toJson(): String = """
+        {
+          "variantId": ${id.jsonString()},
+          "label": ${label.jsonString()},
+          "formula": ${formula.jsonString()},
+          "quantizationOrder": ${quantizationOrder.jsonString()},
+          "compositionSpace": ${compositionSpace.jsonString()},
+          "alphaSource": ${alphaSource.jsonString()},
+          "destinationSource": ${destinationSource.jsonString()},
+          "premultipliedDiagnostic": $premultipliedDiagnostic,
+          "candidateSource": "calculated-by-diagnostic-policy",
+          "candidateReadFromRenderer": false,
+          "candidateReadFromGpuImage": false,
+          "candidateAppliedToRenderer": false
+        }
+    """.trimIndent()
+
+    private data class CompositionQuantizationVariantTotal(
+        val definition: CompositionQuantizationVariantDefinition,
+        val totalResidual: Int,
+        val currentResidual: Int,
+        val for375CandidateTotalResidual: Int,
+        val for373CandidateTotalResidual: Int,
+    ) {
+        val variantId: String = definition.id
+        val totalDeltaVsCurrent: Int = totalResidual - currentResidual
+        val totalDeltaVsFor375Candidate: Int = totalResidual - for375CandidateTotalResidual
+        val totalDeltaVsFor373Candidate: Int = totalResidual - for373CandidateTotalResidual
+    }
+
+    private fun CompositionQuantizationVariantTotal.toJson(rank: Int): String = """
+        {
+          "rank": $rank,
+          "variantId": ${variantId.jsonString()},
+          "totalResidual": $totalResidual,
+          "totalDeltaVsCurrent": $totalDeltaVsCurrent,
+          "totalDeltaVsFor375Candidate": $totalDeltaVsFor375Candidate,
+          "totalDeltaVsFor373Candidate": $totalDeltaVsFor373Candidate,
+          "improvesCurrent": ${totalDeltaVsCurrent < 0},
+          "improvesFor375Candidate": ${totalDeltaVsFor375Candidate < 0},
+          "improvesFor373Candidate": ${totalDeltaVsFor373Candidate < 0}
+        }
+    """.trimIndent()
 
     private data class InverseDestinationEstimate(
         val possible: Boolean,
@@ -1816,6 +2080,28 @@ class StrokeCapJoinSceneCaptureTest {
         return "effective-destination-candidate-regresses"
     }
 
+    private fun compositionQuantizationCandidateClassification(
+        sampleCount: Int,
+        blockedVariantCount: Int,
+        bestVariantTotalResidual: Int,
+        currentResidual: Int,
+        for375CandidateTotalResidual: Int,
+    ): String {
+        if (sampleCount != FOR376_REQUIRED_SAMPLE_COUNT || blockedVariantCount > 0) {
+            return "composition-quantization-candidate-blocked"
+        }
+        if (bestVariantTotalResidual <= 64) {
+            return "composition-quantization-candidate-explains-reference"
+        }
+        if (bestVariantTotalResidual < for375CandidateTotalResidual || bestVariantTotalResidual < currentResidual) {
+            return "composition-quantization-candidate-reduces-residual"
+        }
+        if (bestVariantTotalResidual == for375CandidateTotalResidual) {
+            return "composition-quantization-candidate-neutral"
+        }
+        return "composition-quantization-candidate-regresses"
+    }
+
     private fun candidateRegressionReason(classification: String): String =
         when (classification) {
             "candidate-regression-likely-destination-model" ->
@@ -1862,6 +2148,152 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun compositionQuantizationVariantDefinitions(): List<CompositionQuantizationVariantDefinition> =
+        listOf(
+            CompositionQuantizationVariantDefinition(
+                id = "source_over_effective_destination_floor_256",
+                label = "FOR-375 baseline current quantization floor source-over effective destination",
+                formula = "rgb=floor(((sourceSrgb/255.0)*alpha + (destinationSrgb/255.0)*(1.0-alpha))*256.0) clamped to [0,255]; a=255",
+                quantizationOrder = "compose-straight-srgb-then-floor-256",
+                compositionSpace = "straight-srgb",
+                alphaSource = "effectiveSourceAlphaByte/255.0",
+                destinationSource = "inverseDestinationEstimate.rgbClampedToSrgb",
+                premultipliedDiagnostic = false,
+            ) { sample ->
+                val destination = sample.for374Sample.inverseDestinationEstimate.rgbClamped
+                if (destination == null) {
+                    null
+                } else {
+                    sourceOverEffectiveDestinationRgba(
+                        sourceColor = sample.for374Sample.candidate.paintSource,
+                        effectiveAlphaByte = sample.for374Sample.candidate.effectiveSourceAlphaByte,
+                        destinationRgb = destination,
+                    )
+                }
+            },
+            CompositionQuantizationVariantDefinition(
+                id = "straight_srgb_source_over_effective_destination_nearest_255",
+                label = "Straight sRGB source-over effective destination with nearest rounding",
+                formula = "rgb=round(((sourceSrgb/255.0)*alpha + (destinationSrgb/255.0)*(1.0-alpha))*255.0) clamped to [0,255]; a=255",
+                quantizationOrder = "compose-straight-srgb-then-round-nearest-255",
+                compositionSpace = "straight-srgb",
+                alphaSource = "effectiveSourceAlphaByte/255.0",
+                destinationSource = "inverseDestinationEstimate.rgbClampedToSrgb",
+                premultipliedDiagnostic = false,
+            ) { sample ->
+                val destination = sample.for374Sample.inverseDestinationEstimate.rgbClamped
+                if (destination == null) {
+                    null
+                } else {
+                    straightSrgbSourceOverEffectiveDestinationNearestRgba(
+                        sourceColor = sample.for374Sample.candidate.paintSource,
+                        effectiveAlphaByte = sample.for374Sample.candidate.effectiveSourceAlphaByte,
+                        destinationRgb = destination,
+                    )
+                }
+            },
+            CompositionQuantizationVariantDefinition(
+                id = "linear_srgb_source_over_effective_destination_nearest_255",
+                label = "Approximated linear-sRGB source-over effective destination with nearest rounding",
+                formula = "linear=c<=0.04045?c/12.92:((c+0.055)/1.055)^2.4; srgb=l<=0.0031308?12.92*l:1.055*l^(1/2.4)-0.055; rgb=round(srgb(sourceLinear*alpha + destinationLinear*(1.0-alpha))*255.0)",
+                quantizationOrder = "linearize-srgb-compose-convert-to-srgb-round-nearest-255",
+                compositionSpace = "approximated-linear-srgb",
+                alphaSource = "effectiveSourceAlphaByte/255.0",
+                destinationSource = "inverseDestinationEstimate.rgbClampedToSrgb",
+                premultipliedDiagnostic = false,
+            ) { sample ->
+                val destination = sample.for374Sample.inverseDestinationEstimate.rgbClamped
+                if (destination == null) {
+                    null
+                } else {
+                    linearSrgbSourceOverEffectiveDestinationNearestRgba(
+                        sourceColor = sample.for374Sample.candidate.paintSource,
+                        effectiveAlphaByte = sample.for374Sample.candidate.effectiveSourceAlphaByte,
+                        destinationRgb = destination,
+                    )
+                }
+            },
+            CompositionQuantizationVariantDefinition(
+                id = "premultiplied_srgb_terms_floor_256_source_over_effective_destination",
+                label = "Premultiplied diagnostic variant with separated floor-256 terms",
+                formula = "sourceTerm=floor((sourceSrgb/255.0*alpha)*256.0); destinationTerm=floor((destinationSrgb/255.0*(1.0-alpha))*256.0); rgb=clamp(sourceTerm+destinationTerm,0,255); a=255",
+                quantizationOrder = "premultiply-source-and-destination-terms-floor-256-before-sum",
+                compositionSpace = "premultiplied-srgb-diagnostic",
+                alphaSource = "effectiveSourceAlphaByte/255.0",
+                destinationSource = "inverseDestinationEstimate.rgbClampedToSrgb",
+                premultipliedDiagnostic = true,
+            ) { sample ->
+                val destination = sample.for374Sample.inverseDestinationEstimate.rgbClamped
+                if (destination == null) {
+                    null
+                } else {
+                    premultipliedSrgbTermsFloorSourceOverEffectiveDestinationRgba(
+                        sourceColor = sample.for374Sample.candidate.paintSource,
+                        effectiveAlphaByte = sample.for374Sample.candidate.effectiveSourceAlphaByte,
+                        destinationRgb = destination,
+                    )
+                }
+            },
+        )
+
+    private fun straightSrgbSourceOverEffectiveDestinationNearestRgba(
+        sourceColor: Int,
+        effectiveAlphaByte: Int,
+        destinationRgb: IntArray,
+    ): IntArray {
+        val alpha = effectiveAlphaByte / 255.0
+        return intArrayOf(
+            quantizeNearest255((((sourceColor ushr 16) and 0xFF) / 255.0) * alpha + (destinationRgb[0] / 255.0) * (1.0 - alpha)),
+            quantizeNearest255((((sourceColor ushr 8) and 0xFF) / 255.0) * alpha + (destinationRgb[1] / 255.0) * (1.0 - alpha)),
+            quantizeNearest255(((sourceColor and 0xFF) / 255.0) * alpha + (destinationRgb[2] / 255.0) * (1.0 - alpha)),
+            255,
+        )
+    }
+
+    private fun linearSrgbSourceOverEffectiveDestinationNearestRgba(
+        sourceColor: Int,
+        effectiveAlphaByte: Int,
+        destinationRgb: IntArray,
+    ): IntArray {
+        val alpha = effectiveAlphaByte / 255.0
+        return intArrayOf(
+            quantizeNearest255(srgbFromLinear(linearFromSrgbByte((sourceColor ushr 16) and 0xFF) * alpha + linearFromSrgbByte(destinationRgb[0]) * (1.0 - alpha))),
+            quantizeNearest255(srgbFromLinear(linearFromSrgbByte((sourceColor ushr 8) and 0xFF) * alpha + linearFromSrgbByte(destinationRgb[1]) * (1.0 - alpha))),
+            quantizeNearest255(srgbFromLinear(linearFromSrgbByte(sourceColor and 0xFF) * alpha + linearFromSrgbByte(destinationRgb[2]) * (1.0 - alpha))),
+            255,
+        )
+    }
+
+    private fun premultipliedSrgbTermsFloorSourceOverEffectiveDestinationRgba(
+        sourceColor: Int,
+        effectiveAlphaByte: Int,
+        destinationRgb: IntArray,
+    ): IntArray {
+        val alpha = effectiveAlphaByte / 255.0
+        return intArrayOf(
+            (quantize256((((sourceColor ushr 16) and 0xFF) / 255.0) * alpha) + quantize256((destinationRgb[0] / 255.0) * (1.0 - alpha))).coerceIn(0, 255),
+            (quantize256((((sourceColor ushr 8) and 0xFF) / 255.0) * alpha) + quantize256((destinationRgb[1] / 255.0) * (1.0 - alpha))).coerceIn(0, 255),
+            (quantize256(((sourceColor and 0xFF) / 255.0) * alpha) + quantize256((destinationRgb[2] / 255.0) * (1.0 - alpha))).coerceIn(0, 255),
+            255,
+        )
+    }
+
+    private fun linearFromSrgbByte(value: Int): Double {
+        val srgb = value / 255.0
+        return if (srgb <= 0.04045) {
+            srgb / 12.92
+        } else {
+            Math.pow((srgb + 0.055) / 1.055, 2.4)
+        }
+    }
+
+    private fun srgbFromLinear(value: Double): Double =
+        if (value <= 0.0031308) {
+            12.92 * value
+        } else {
+            1.055 * Math.pow(value, 1.0 / 2.4) - 0.055
+        }
+
     private fun quantizeAlphaRound(value: Double): Int =
         if (value.isNaN()) {
             0
@@ -1874,6 +2306,13 @@ class StrokeCapJoinSceneCaptureTest {
             0
         } else {
             (value * 256.0).toInt().coerceIn(0, 255)
+        }
+
+    private fun quantizeNearest255(value: Double): Int =
+        if (value.isNaN()) {
+            0
+        } else {
+            ((value * 255.0) + 0.5).toInt().coerceIn(0, 255)
         }
 
     private fun rgbaToPixel(rgba: IntArray): Int =
@@ -1993,8 +2432,10 @@ class StrokeCapJoinSceneCaptureTest {
         private const val FOR373_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR374_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR375_REQUIRED_SAMPLE_COUNT = 10
+        private const val FOR376_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR373_CURRENT_RESIDUAL = 856
         private const val FOR373_CANDIDATE_TOTAL_RESIDUAL = 1033
+        private const val FOR375_EFFECTIVE_DESTINATION_CANDIDATE_TOTAL_RESIDUAL = 794
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
         private const val EXPERIMENTAL_RENDER_PROPERTY = "kanvas.webgpu.strokeCapJoin.experimentalRender"
 
