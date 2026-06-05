@@ -1,0 +1,227 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-398",
+          "sceneId": "m60-f16-bounded-runtime-correction-probe-for398",
+          "sourceSceneId": "m60-f16-fragment-lane-runtime-snapshot-export-for397",
+          "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-fragment-lane-runtime-snapshot-export-for397/m60-f16-fragment-lane-runtime-snapshot-export-for397.json",
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "producerMode": "-Dkanvas.sceneEvidence.write=true",
+          "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-correction-experimentale-opt-in-bornee-aux-8-pixels-apres-for-397",
+          "sourceFinding": "global/kanvas/findings/for-397-exporte-le-snapshot-runtime-du-canal-fragment-m60-f16-et-prouve-8-pixels-exacts",
+          "decision": "M60_F16_BOUNDED_RUNTIME_CORRECTION_PROBE_RECORDED",
+          "classification": "bounded-correction-refused",
+          "allowedClassifications": [
+            "bounded-correction-reduces-residual",
+            "bounded-correction-regresses",
+            "bounded-correction-refused"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "correctionAppliedByDefault": false,
+          "correctionGuard": "kanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled",
+          "boundedRendererPoint": "SkWebGpuDevice M60 F16 derived AA stencil-cover shader; fs_inside/fs_outside skip targetColorSpaceBlend only when m60_f16_candidate_lane(frag.xy) is true",
+          "requiredFor397Classification": "fragment-lane-runtime-snapshot-exported",
+          "requiredFor396Decision": "M60_F16_AA_STENCIL_COVER_FRAGMENT_LANE_DIAGNOSTIC_CHANNEL_INSTALLED",
+          "requiredFor394Decision": "M60_F16_AA_STENCIL_COVER_BAND_METADATA_TRANSPORT_RECORDED",
+          "guards": {
+            "experimentalStrokeRenderer": {
+              "guardId": "kanvas.webgpu.strokeCapJoin.experimentalRender",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "bandMetadataTransport": {
+              "guardId": "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "fragmentLaneDiagnostic": {
+              "guardId": "kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "boundedRuntimeCorrection": {
+              "guardId": "kanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            }
+          },
+          "residualComparison": {
+            "currentTotalResidual": 62748,
+            "correctedTotalResidual": 62748,
+            "deltaCorrectedMinusCurrent": 0,
+            "gainVsCurrent": 0,
+            "currentSimilarity": 93.428548,
+            "correctedSimilarity": 93.428548,
+            "currentMismatchPixels": 1615,
+            "correctedMismatchPixels": 1615,
+            "fullSceneImprovedPixels": 0,
+            "fullSceneRegressedPixels": 0,
+            "fullSceneUnchangedPixels": 24576
+          },
+          "predicateProof": {
+            "api": "SkWebGpuDevice.m60F16FragmentLaneDiagnosticSnapshot()",
+            "propertyName": "kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled",
+            "enabled": true,
+            "exactMatchProvenByRuntimeReadback": true,
+            "expectedPixelCount": 8,
+            "observedPixelCount": 8,
+            "falsePositiveCount": 0,
+            "falseNegativeCount": 0,
+            "expectedPixels": [
+            {"x": 93, "y": 74},
+{"x": 92, "y": 75},
+{"x": 91, "y": 76},
+{"x": 17, "y": 77},
+{"x": 90, "y": 77},
+{"x": 89, "y": 78},
+{"x": 88, "y": 79},
+{"x": 87, "y": 80}
+            ],
+            "observedPixels": [
+            {"x": 93, "y": 74},
+{"x": 92, "y": 75},
+{"x": 91, "y": 76},
+{"x": 17, "y": 77},
+{"x": 90, "y": 77},
+{"x": 89, "y": 78},
+{"x": 88, "y": 79},
+{"x": 87, "y": 80}
+            ],
+            "falsePositives": [
+        
+            ],
+            "falseNegatives": [
+        
+            ]
+          },
+          "boundedMutationCheck": {
+            "changedPixelCount": 0,
+            "changedPixelsWithinExpectedPredicate": true,
+            "outsideExpectedChangedPixelCount": 0,
+            "changedPixelsFirst64": [
+        
+            ],
+            "outsideExpectedChangedPixelsFirst64": [
+        
+            ]
+          },
+          "predicateResidualComparison": {
+            "currentPredicateResidual": 730,
+            "correctedPredicateResidual": 730,
+            "deltaCorrectedMinusCurrent": 0,
+            "improvedPixels": 0,
+            "regressedPixels": 0,
+            "unchangedPixels": 8,
+            "pixels": [
+            {
+  "x": 93,
+  "y": 74,
+  "referenceRgba": [182, 192, 231, 255],
+  "currentRgba": [206, 213, 238, 255],
+  "correctedRgba": [206, 213, 238, 255],
+  "currentResidual": 52,
+  "correctedResidual": 52,
+  "deltaCorrectedMinusCurrent": 0,
+  "gainVsCurrent": 0
+},
+{
+  "x": 92,
+  "y": 75,
+  "referenceRgba": [133, 150, 214, 255],
+  "currentRgba": [181, 191, 230, 255],
+  "correctedRgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "correctedResidual": 105,
+  "deltaCorrectedMinusCurrent": 0,
+  "gainVsCurrent": 0
+},
+{
+  "x": 91,
+  "y": 76,
+  "referenceRgba": [133, 150, 214, 255],
+  "currentRgba": [181, 191, 230, 255],
+  "correctedRgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "correctedResidual": 105,
+  "deltaCorrectedMinusCurrent": 0,
+  "gainVsCurrent": 0
+},
+{
+  "x": 17,
+  "y": 77,
+  "referenceRgba": [133, 150, 214, 255],
+  "currentRgba": [128, 178, 229, 255],
+  "correctedRgba": [128, 178, 229, 255],
+  "currentResidual": 48,
+  "correctedResidual": 48,
+  "deltaCorrectedMinusCurrent": 0,
+  "gainVsCurrent": 0
+},
+{
+  "x": 90,
+  "y": 77,
+  "referenceRgba": [133, 150, 214, 255],
+  "currentRgba": [181, 191, 230, 255],
+  "correctedRgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "correctedResidual": 105,
+  "deltaCorrectedMinusCurrent": 0,
+  "gainVsCurrent": 0
+},
+{
+  "x": 89,
+  "y": 78,
+  "referenceRgba": [133, 150, 214, 255],
+  "currentRgba": [181, 191, 230, 255],
+  "correctedRgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "correctedResidual": 105,
+  "deltaCorrectedMinusCurrent": 0,
+  "gainVsCurrent": 0
+},
+{
+  "x": 88,
+  "y": 79,
+  "referenceRgba": [133, 150, 214, 255],
+  "currentRgba": [181, 191, 230, 255],
+  "correctedRgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "correctedResidual": 105,
+  "deltaCorrectedMinusCurrent": 0,
+  "gainVsCurrent": 0
+},
+{
+  "x": 87,
+  "y": 80,
+  "referenceRgba": [133, 150, 214, 255],
+  "currentRgba": [181, 191, 230, 255],
+  "correctedRgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "correctedResidual": 105,
+  "deltaCorrectedMinusCurrent": 0,
+  "gainVsCurrent": 0
+}
+            ]
+          },
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "productionRuntimeConnected": false,
+            "generalizedOutsideM60F16": false,
+            "for380BroadCorrectionReintroduced": false
+          },
+          "classificationReason": "The FOR-398 correction did not reduce total residual; correction remains refused.",
+          "nextStep": "Keep FOR-398 disabled and preserve FOR-397 as diagnostic evidence until the bounded predicate and correction formula are both safe.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for398_m60_f16_bounded_runtime_correction_probe.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for398-pycache-parent python3 -m py_compile scripts/validate_for398_m60_f16_bounded_runtime_correction_probe.py",
+            "rtk git diff --check",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true -Dkanvas.webgpu.m60F16BoundedRuntimeCorrectionProbe.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+          ]
+        }
