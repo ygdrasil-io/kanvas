@@ -1,0 +1,159 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-397",
+          "sceneId": "m60-f16-fragment-lane-runtime-snapshot-export-for397",
+          "sourceSceneId": "m60-bounded-stroke-cap-join",
+          "decision": "M60_F16_FRAGMENT_LANE_RUNTIME_SNAPSHOT_EXPORTED",
+          "classification": "fragment-lane-runtime-snapshot-exported",
+          "allowedClassifications": [
+            "fragment-lane-runtime-snapshot-exported",
+            "fragment-lane-runtime-snapshot-mismatch",
+            "fragment-lane-runtime-snapshot-empty"
+          ],
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "producerMethod": "writeM60F16FragmentLaneRuntimeSnapshotExport",
+          "sourceFinding": "global/kanvas/findings/for-396-installe-un-canal-diagnostique-fragment-aa-stencil-cover-m60-f16-sans-preuve-exact-match-runtime-exportee",
+          "requiredFor396Decision": "M60_F16_AA_STENCIL_COVER_FRAGMENT_LANE_DIAGNOSTIC_CHANNEL_INSTALLED",
+          "requiredFor394Decision": "M60_F16_AA_STENCIL_COVER_BAND_METADATA_TRANSPORT_RECORDED",
+          "requiredFor391Decision": "M60_F16_SOURCE_FACING_LOCAL_BAND_LANE_METADATA_RECORDED",
+          "supportClaim": false,
+          "promoted": false,
+          "runtimeSnapshot": {
+            "api": "SkWebGpuDevice.m60F16FragmentLaneDiagnosticSnapshot()",
+            "propertyName": "kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled",
+            "enabled": true,
+            "diagnosticShader": "diagnostic in-memory variant of shaders/aa_stencil_cover.wgsl",
+            "pipelineLayout": "diagnostic-only render layout: binding0 AA uniform, binding1 fragment storage buffer",
+            "sampleCount": 8,
+            "samples": [
+            {
+  "x": 17,
+  "y": 77,
+  "observedCandidateLane": true,
+  "coverageSide": "inside",
+  "validExpectedSlot": true
+},
+{
+  "x": 93,
+  "y": 74,
+  "observedCandidateLane": true,
+  "coverageSide": "inside",
+  "validExpectedSlot": true
+},
+{
+  "x": 92,
+  "y": 75,
+  "observedCandidateLane": true,
+  "coverageSide": "inside",
+  "validExpectedSlot": true
+},
+{
+  "x": 91,
+  "y": 76,
+  "observedCandidateLane": true,
+  "coverageSide": "outside",
+  "validExpectedSlot": true
+},
+{
+  "x": 90,
+  "y": 77,
+  "observedCandidateLane": true,
+  "coverageSide": "inside",
+  "validExpectedSlot": true
+},
+{
+  "x": 89,
+  "y": 78,
+  "observedCandidateLane": true,
+  "coverageSide": "inside",
+  "validExpectedSlot": true
+},
+{
+  "x": 88,
+  "y": 79,
+  "observedCandidateLane": true,
+  "coverageSide": "inside",
+  "validExpectedSlot": true
+},
+{
+  "x": 87,
+  "y": 80,
+  "observedCandidateLane": true,
+  "coverageSide": "inside",
+  "validExpectedSlot": true
+}
+            ]
+          },
+          "guards": {
+            "bandMetadataTransport": {
+              "guardId": "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "fragmentLaneDiagnostic": {
+              "guardId": "kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            }
+          },
+          "pixelComparison": {
+            "comparisonStatus": "fragment-lane-runtime-snapshot-exported",
+            "measurementScope": "FOR-396 diagnostic slots exported by m60F16FragmentLaneDiagnosticSnapshot()",
+            "expectedUsefulPixels": [
+            {"x": 93, "y": 74},
+{"x": 92, "y": 75},
+{"x": 91, "y": 76},
+{"x": 17, "y": 77},
+{"x": 90, "y": 77},
+{"x": 89, "y": 78},
+{"x": 88, "y": 79},
+{"x": 87, "y": 80}
+            ],
+            "expectedUsefulPixelCount": 8,
+            "shaderObservedPixels": [
+            {"x": 93, "y": 74},
+{"x": 92, "y": 75},
+{"x": 91, "y": 76},
+{"x": 17, "y": 77},
+{"x": 90, "y": 77},
+{"x": 89, "y": 78},
+{"x": 88, "y": 79},
+{"x": 87, "y": 80}
+            ],
+            "shaderObservedPixelCount": 8,
+            "falsePositives": [
+        
+            ],
+            "falsePositiveCount": 0,
+            "falseNegatives": [
+        
+            ],
+            "falseNegativeCount": 0,
+            "falsePositiveFalseNegativeMeasured": true,
+            "runtimeReadbackArtifactCaptured": true,
+            "exactMatchProvenByRuntimeReadback": true
+          },
+          "nonGoalsPreserved": {
+            "m60F16CorrectionEnabled": false,
+            "runtimePredicateActivated": false,
+            "finalColorChanged": false,
+            "coverageChanged": false,
+            "fallbackChanged": false,
+            "scoringChanged": false,
+            "thresholdChanged": false,
+            "promotionChanged": false,
+            "for380ProbeRouteUsed": false,
+            "generalizedOutsideM60F16": false
+          },
+          "classificationReason": "The opt-in fragment diagnostic snapshot exported the 8 FOR-391 expected lane pixels.",
+          "nextStep": "Use the exported predicate evidence only as diagnostic input; FOR-397 does not enable correction or promotion.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for397_m60_f16_fragment_lane_runtime_snapshot_export.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for397-pycache-parent python3 -m py_compile scripts/validate_for397_m60_f16_fragment_lane_runtime_snapshot_export.py",
+            "rtk git diff --check",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon pipelineSceneDashboardGate"
+          ]
+        }

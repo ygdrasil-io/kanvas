@@ -28,6 +28,10 @@ import org.skia.tests.GM
  * until a translucent-source GM enters the ratchet.
  */
 public object WebGpuSink {
+    public data class DrawWithM60F16FragmentLaneDiagnosticSnapshotResult(
+        val bitmap: SkBitmap,
+        val snapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
+    )
 
     /**
      * Render [gm] through an [SkWebGpuDevice] backed by [context], then
@@ -56,6 +60,32 @@ public object WebGpuSink {
             gm.draw(canvas)
             val rgba = device.flush()
             return rgbaBytesToBitmap(rgba, w, h)
+        }
+    }
+
+    public fun drawWithM60F16FragmentLaneDiagnosticSnapshot(
+        context: WebGpuContext,
+        gm: GM,
+        targetColorSpaceBlend: Boolean = false,
+    ): DrawWithM60F16FragmentLaneDiagnosticSnapshotResult {
+        val size = gm.size()
+        val w = size.width
+        val h = size.height
+        SkWebGpuDevice(
+            context,
+            w,
+            h,
+            applyColorspaceTransform = true,
+            targetColorSpaceBlend = targetColorSpaceBlend,
+        ).use { device ->
+            device.setBackground(gm.bgColor())
+            val canvas = SkCanvas(device)
+            gm.draw(canvas)
+            val rgba = device.flush()
+            return DrawWithM60F16FragmentLaneDiagnosticSnapshotResult(
+                bitmap = rgbaBytesToBitmap(rgba, w, h),
+                snapshot = device.m60F16FragmentLaneDiagnosticSnapshot(),
+            )
         }
     }
 
