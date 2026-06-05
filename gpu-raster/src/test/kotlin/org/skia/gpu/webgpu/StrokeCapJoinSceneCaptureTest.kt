@@ -167,6 +167,7 @@ class StrokeCapJoinSceneCaptureTest {
         writeM60F16CompositionQuantizationCandidate(residualStats, adapter)
         writeM60F16LinearSrgbPlausibilityAudit(residualStats, adapter)
         writeM60F16DirectSourceColorEvidence(residualStats, adapter)
+        writeM60F16EffectiveSourceColorPath(residualStats, adapter)
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -897,6 +898,18 @@ class StrokeCapJoinSceneCaptureTest {
         )
     }
 
+    private fun writeM60F16EffectiveSourceColorPath(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-effective-source-color-path-for379",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-effective-source-color-path-for379.json").writeText(
+            m60F16EffectiveSourceColorPathJson(residualStats, adapter),
+        )
+    }
+
     private fun m60F16CandidatePolicyRgbaProbeJson(
         residualStats: StrokeResidualStats,
         adapter: String,
@@ -1535,6 +1548,118 @@ class StrokeCapJoinSceneCaptureTest {
               "classificationReason": ${directSourceColorClassificationReason(classification).jsonString()},
               "samples": [
             ${directSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "nonGoalsPreserved": {
+                "rendererBehaviorChanged": false,
+                "runtimeBehaviorChanged": false,
+                "gpuOrWgslChanged": false,
+                "geometryProductionChanged": false,
+                "coverageProductionChanged": false,
+                "fallbackChanged": false,
+                "kadreChanged": false,
+                "f16PremulBlendRuntimeChanged": false,
+                "skBitmapGetPixelChanged": false,
+                "scoreIncreased": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "directSourceAppliedToRenderer": false,
+                "directSourceReadFromRenderer": false,
+                "directSourceReadFromGpuImage": false,
+                "inverseDestinationEstimateUsedAsPrimaryEvidence": false,
+                "inverseDestinationEstimateAppliedAsCorrection": false,
+                "rendererSceneBranchAdded": false,
+                "rendererCoordinateBranchAdded": false,
+                "rendererSelectedCellBranchAdded": false,
+                "fullGmCropPathAdded": false
+              },
+              "command": "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest"
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16EffectiveSourceColorPathJson(
+        residualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val transparentSource = TestUtils.runGmTest(BoundedStrokeCapJoinTransparentSourceGM())
+        val samples = residualStats.highDeltaSamples.take(FOR379_REQUIRED_SAMPLE_COUNT)
+        val for374Samples = samples.mapIndexed { index, sample ->
+            candidateRegressionSample(candidatePolicySample(index + 1, sample, coverageMask))
+        }
+        val for375Samples = for374Samples.map { effectiveDestinationCandidateSample(it) }
+        val for376Samples = for375Samples.map { compositionQuantizationCandidateSample(it) }
+        val for377Samples = for376Samples.map { linearSrgbPlausibilityAuditSample(it) }
+        val directSamples = for377Samples.map { directSourceColorEvidenceSample(it, transparentSource) }
+        val pathSamples = directSamples.map { effectiveSourceColorPathSample(it) }
+        val currentResidual = pathSamples.sumOf { it.currentResidual }
+        val directRecomposedTotalResidual = pathSamples.sumOf { it.directRecomposedOnWhiteResidual }
+        val currentVsDirectDistanceTotal = pathSamples.sumOf { it.currentVsDirectRecomposedRgbaDistance }
+        val currentErrorTotals = IntArray(4)
+        val directErrorTotals = IntArray(4)
+        val improvementTotals = IntArray(4)
+        for (sample in pathSamples) {
+            for (index in 0..3) {
+                currentErrorTotals[index] += sample.currentErrorByChannel[index]
+                directErrorTotals[index] += sample.directRecomposedErrorByChannel[index]
+                improvementTotals[index] += sample.directRecomposedImprovementByChannel[index]
+            }
+        }
+        val readySampleCount = pathSamples.count { it.sampleClassification == "source-color-ready-for-correction" }
+        val ambiguousSampleCount = pathSamples.count { it.sampleClassification == "composition-color-ambiguous" }
+        val insufficientSampleCount = pathSamples.count { it.sampleClassification == "evidence-insufficient" }
+        val classification = effectiveSourceColorPathClassification(
+            sampleCount = pathSamples.size,
+            directRecomposedTotalResidual = directRecomposedTotalResidual,
+            currentResidual = currentResidual,
+            readySampleCount = readySampleCount,
+            insufficientSampleCount = insufficientSampleCount,
+        )
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-379",
+              "sceneId": "m60-f16-effective-source-color-path-for379",
+              "sourceSceneId": "m60-f16-direct-source-color-evidence-for378",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-chemin-couleur-source-effectif-apres-for-378",
+              "sourceFinding": "global/kanvas/findings/for-378-confirme-la-preuve-source-directe-m60-f16-avec-residuel-19-sans-destination-clampee",
+              "requiredFor378Decision": "M60_F16_DIRECT_SOURCE_COLOR_EVIDENCE_RECORDED",
+              "requiredFor378Classification": "direct-source-color-confirms-linear-axis",
+              "decision": "M60_F16_EFFECTIVE_SOURCE_COLOR_PATH_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "source-color-path-ready-for-correction",
+                "composition-color-still-ambiguous",
+                "evidence-insufficient"
+              ],
+              "primaryEvidenceSource": "FOR-378 transparent CPU diagnostic source readback",
+              "primaryComparison": "current-rgba-vs-transparent-source-direct-recomposed-on-white",
+              "additionalComparisonIsolates": "effective-source-color-path",
+              "additionalComparisonFormula": "currentMinusDirectRecomposed=currentRgba-directRecomposedOnWhiteRgba; improvement=currentErrorByChannel-directRecomposedErrorByChannel",
+              "inverseDestinationEstimateUsedAsPrimaryEvidence": false,
+              "inverseDestinationEstimateAppliedAsCorrection": false,
+              "auditDoesNotProduceCorrection": true,
+              "auditDoesNotApplyRendererChange": true,
+              "currentResidual": $currentResidual,
+              "requiredCurrentResidual": $FOR373_CURRENT_RESIDUAL,
+              "directRecomposedOnWhiteTotalResidual": $directRecomposedTotalResidual,
+              "requiredDirectRecomposedOnWhiteTotalResidual": 19,
+              "directRecomposedOnWhiteGainVsCurrent": ${currentResidual - directRecomposedTotalResidual},
+              "directRecomposedOnWhiteDeltaVsCurrent": ${directRecomposedTotalResidual - currentResidual},
+              "currentVsDirectRecomposedRgbaDistanceTotal": $currentVsDirectDistanceTotal,
+              "currentErrorTotalsByChannel": ${channelErrorJson(currentErrorTotals)},
+              "directRecomposedErrorTotalsByChannel": ${channelErrorJson(directErrorTotals)},
+              "directRecomposedImprovementTotalsByChannel": ${channelErrorJson(improvementTotals)},
+              "sampleCount": ${pathSamples.size},
+              "sourceColorReadyForCorrectionSampleCount": $readySampleCount,
+              "compositionColorAmbiguousSampleCount": $ambiguousSampleCount,
+              "evidenceInsufficientSampleCount": $insufficientSampleCount,
+              "classificationReason": ${effectiveSourceColorPathClassificationReason(classification).jsonString()},
+              "samples": [
+            ${pathSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
               ],
               "nonGoalsPreserved": {
                 "rendererBehaviorChanged": false,
@@ -2273,6 +2398,87 @@ class StrokeCapJoinSceneCaptureTest {
         return base.replace(Regex("\n\\s*}$"), ",\n$suffix\n}")
     }
 
+    private fun effectiveSourceColorPathSample(
+        sample: DirectSourceColorEvidenceSample,
+    ): EffectiveSourceColorPathSample {
+        val candidate = sample.for377Sample.for376Sample.for375Sample.for374Sample.candidate
+        val reference = rgbaArray(candidate.reference)
+        val current = rgbaArray(candidate.current)
+        val direct = sample.directRecomposedOnWhiteRgba
+        val currentError = channelAbsError(reference, current)
+        val directError = channelAbsError(reference, direct)
+        val improvement = IntArray(4) { currentError[it] - directError[it] }
+        val currentMinusDirect = IntArray(4) { current[it] - direct[it] }
+        val currentVsDirectDistance = currentMinusDirect.sumOf { kotlin.math.abs(it) }
+        val dominantIndex = dominantRegressionChannel(IntArray(4) { kotlin.math.abs(currentMinusDirect[it]) })
+        val directPremulChannelsValid = sample.directPremultipliedRgb.all { it <= sample.directSourceAlphaByte }
+        val classification = effectiveSourceColorPathSampleClassification(
+            directRecomposedOnWhiteResidual = sample.directRecomposedOnWhiteResidual,
+            directRecomposedOnWhiteDeltaVsCurrent = sample.directRecomposedOnWhiteDeltaVsCurrent,
+            sourceCoverageAlphaDeltaAbs = sample.sourceCoverageAlphaDeltaAbs,
+            directUnpremultipliedRgbPossible = sample.directUnpremultipliedRgb != null,
+            directPremulChannelsValid = directPremulChannelsValid,
+        )
+        return EffectiveSourceColorPathSample(
+            directSourceSample = sample,
+            currentMinusDirectRecomposedRgba = currentMinusDirect,
+            currentVsDirectRecomposedRgbaDistance = currentVsDirectDistance,
+            currentErrorByChannel = currentError,
+            directRecomposedErrorByChannel = directError,
+            directRecomposedImprovementByChannel = improvement,
+            dominantCurrentMinusDirectRecomposedChannel = channelName(dominantIndex),
+            directPremultipliedChannelsWithinAlpha = directPremulChannelsValid,
+            sampleClassification = classification,
+        )
+    }
+
+    private data class EffectiveSourceColorPathSample(
+        val directSourceSample: DirectSourceColorEvidenceSample,
+        val currentMinusDirectRecomposedRgba: IntArray,
+        val currentVsDirectRecomposedRgbaDistance: Int,
+        val currentErrorByChannel: IntArray,
+        val directRecomposedErrorByChannel: IntArray,
+        val directRecomposedImprovementByChannel: IntArray,
+        val dominantCurrentMinusDirectRecomposedChannel: String,
+        val directPremultipliedChannelsWithinAlpha: Boolean,
+        val sampleClassification: String,
+    ) {
+        val currentResidual: Int = directSourceSample.currentResidual
+        val directRecomposedOnWhiteResidual: Int = directSourceSample.directRecomposedOnWhiteResidual
+    }
+
+    private fun EffectiveSourceColorPathSample.toJson(): String {
+        val base = directSourceSample.toJson().trim()
+        val suffix = """
+          "effectiveSourceColorPath": {
+            "comparisonId": "current-vs-direct-source-recomposed-on-white",
+            "comparisonUsesInverseDestinationEstimate": false,
+            "referenceRgba": ${rgbaJson(directSourceSample.for377Sample.for376Sample.for375Sample.for374Sample.candidate.reference)},
+            "currentRgba": ${rgbaJson(directSourceSample.for377Sample.for376Sample.for375Sample.for374Sample.candidate.current)},
+            "directSourceTransparentUnpremultipliedRgba": ${rgbaArrayJson(directSourceSample.directSourceRgba)},
+            "directSourceTransparentPremultipliedRgb": ${rgbArrayJson(directSourceSample.directPremultipliedRgb)},
+            "directSourceAlphaByte": ${directSourceSample.directSourceAlphaByte},
+            "sourceCoverageByte": ${directSourceSample.for377Sample.for376Sample.for375Sample.for374Sample.candidate.sourceCoverageByte},
+            "sourceCoverageAlphaDelta": ${directSourceSample.sourceCoverageAlphaDelta},
+            "sourceCoverageAlphaDeltaAbs": ${directSourceSample.sourceCoverageAlphaDeltaAbs},
+            "directRecomposedOnWhiteRgba": ${rgbaArrayJson(directSourceSample.directRecomposedOnWhiteRgba)},
+            "currentResidual": $currentResidual,
+            "directRecomposedOnWhiteResidual": $directRecomposedOnWhiteResidual,
+            "directRecomposedOnWhiteDeltaVsCurrent": ${directSourceSample.directRecomposedOnWhiteDeltaVsCurrent},
+            "directRecomposedOnWhiteGainVsCurrent": ${currentResidual - directRecomposedOnWhiteResidual},
+            "currentMinusDirectRecomposedRgba": ${channelErrorJson(currentMinusDirectRecomposedRgba)},
+            "currentVsDirectRecomposedRgbaDistance": $currentVsDirectRecomposedRgbaDistance,
+            "currentErrorByChannel": ${channelErrorJson(currentErrorByChannel)},
+            "directRecomposedErrorByChannel": ${channelErrorJson(directRecomposedErrorByChannel)},
+            "directRecomposedImprovementByChannel": ${channelErrorJson(directRecomposedImprovementByChannel)},
+            "dominantCurrentMinusDirectRecomposedChannel": ${dominantCurrentMinusDirectRecomposedChannel.jsonString()},
+            "directPremultipliedChannelsWithinAlpha": $directPremultipliedChannelsWithinAlpha,
+            "classification": ${sampleClassification.jsonString()}
+          }
+        """.trimIndent().prependIndent("  ")
+        return base.replace(Regex("\n\\s*}$"), ",\n$suffix\n}")
+    }
+
     private fun m60F16EffectiveCoverageExportJson(
         residualStats: StrokeResidualStats,
         adapter: String,
@@ -2783,6 +2989,58 @@ class StrokeCapJoinSceneCaptureTest {
                 "The FOR-377 invariant or transparent-source capture changed, so the direct source color audit cannot make a stable decision."
         }
 
+    private fun effectiveSourceColorPathSampleClassification(
+        directRecomposedOnWhiteResidual: Int,
+        directRecomposedOnWhiteDeltaVsCurrent: Int,
+        sourceCoverageAlphaDeltaAbs: Int,
+        directUnpremultipliedRgbPossible: Boolean,
+        directPremulChannelsValid: Boolean,
+    ): String {
+        if (!directUnpremultipliedRgbPossible || !directPremulChannelsValid || sourceCoverageAlphaDeltaAbs > 1) {
+            return "evidence-insufficient"
+        }
+        if (directRecomposedOnWhiteResidual <= 4 && directRecomposedOnWhiteDeltaVsCurrent < 0) {
+            return "source-color-ready-for-correction"
+        }
+        if (directRecomposedOnWhiteDeltaVsCurrent < 0) {
+            return "composition-color-ambiguous"
+        }
+        return "evidence-insufficient"
+    }
+
+    private fun effectiveSourceColorPathClassification(
+        sampleCount: Int,
+        directRecomposedTotalResidual: Int,
+        currentResidual: Int,
+        readySampleCount: Int,
+        insufficientSampleCount: Int,
+    ): String {
+        if (sampleCount != FOR379_REQUIRED_SAMPLE_COUNT || insufficientSampleCount > 0) {
+            return "evidence-insufficient"
+        }
+        if (
+            readySampleCount == sampleCount &&
+            directRecomposedTotalResidual == 19 &&
+            currentResidual == FOR373_CURRENT_RESIDUAL
+        ) {
+            return "source-color-path-ready-for-correction"
+        }
+        if (directRecomposedTotalResidual < currentResidual) {
+            return "composition-color-still-ambiguous"
+        }
+        return "evidence-insufficient"
+    }
+
+    private fun effectiveSourceColorPathClassificationReason(classification: String): String =
+        when (classification) {
+            "source-color-path-ready-for-correction" ->
+                "All ten FOR-378 samples have exact coverage/alpha agreement, valid premultiplied source channels, and direct source recomposition residuals at or below 4; the total residual falls from 856 to 19."
+            "composition-color-still-ambiguous" ->
+                "The direct source recomposition improves the current residual, but at least one sample still needs composition or color-space separation before a correction can be specified."
+            else ->
+                "The sample count, alpha/premultiplied invariants, or FOR-378 residual gate changed, so the evidence is insufficient for a correction-ready source/color path."
+        }
+
     private fun linearSrgbSampleCoherence(deltaVsCurrent: Int, deltaVsFor375Candidate: Int): String =
         when {
             deltaVsCurrent < 0 && deltaVsFor375Candidate < 0 -> "improves-current-and-for375"
@@ -3169,6 +3427,7 @@ class StrokeCapJoinSceneCaptureTest {
         private const val FOR376_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR377_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR378_REQUIRED_SAMPLE_COUNT = 10
+        private const val FOR379_REQUIRED_SAMPLE_COUNT = 10
         private const val FOR373_CURRENT_RESIDUAL = 856
         private const val FOR373_CANDIDATE_TOTAL_RESIDUAL = 1033
         private const val FOR375_EFFECTIVE_DESTINATION_CANDIDATE_TOTAL_RESIDUAL = 794
