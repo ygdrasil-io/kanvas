@@ -188,6 +188,8 @@ private const val WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG: String =
     "kanvas.webgpu.strokeCapJoin.experimentalRender"
 private const val WEBGPU_M60_F16_SOURCE_COLOR_CORRECTION_PROBE_FLAG: String =
     "kanvas.webgpu.m60F16SourceColorCorrectionProbe.enabled"
+private const val WEBGPU_M60_F16_SOURCE_FACING_LANE_RUNTIME_CANDIDATE_FLAG: String =
+    "kanvas.webgpu.m60F16SourceFacingLaneRuntimeCandidate.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -8665,8 +8667,14 @@ public class SkWebGpuDevice(
     private var activeDashIntervalCountForPathAaDiagnostics: Int? = null
     private var activeStrokeStyleForPathAaDiagnostics: StrokeStyleDiagnostics? = null
 
+    private fun m60F16SourceFacingLaneRuntimeCandidateRequested(): Boolean =
+        System.getProperty(WEBGPU_M60_F16_SOURCE_FACING_LANE_RUNTIME_CANDIDATE_FLAG, "false").toBoolean()
+
     private fun m60F16SourceColorCorrectionProbeEnabled(paint: SkPaint): Boolean {
         val style = activeStrokeStyleForPathAaDiagnostics ?: return false
+        // FOR-392 recognizes the source-facing lane candidate guard but
+        // refuses to route it through the older draw-wide FOR-380 probe.
+        if (m60F16SourceFacingLaneRuntimeCandidateRequested()) return false
         if (!targetColorSpaceBlend) return false
         if (intermediateFormat != GPUTextureFormat.RGBA16Float) return false
         if (!System.getProperty(WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG, "false").toBoolean()) return false
