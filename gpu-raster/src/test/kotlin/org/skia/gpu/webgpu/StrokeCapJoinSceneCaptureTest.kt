@@ -98,11 +98,19 @@ class StrokeCapJoinSceneCaptureTest {
             val experimentalGpu = withExperimentalStrokeCapJoinRender {
                 WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
             }
+            val correctedExperimentalGpu = withExperimentalStrokeCapJoinRender {
+                withM60F16SourceColorCorrectionProbe(true) {
+                    WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
+                }
+            }
             val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = 0)
             val experimentalGpuCmp = TestUtils.compareBitmapsDetailed(experimentalGpu, reference, tolerance = 0)
+            val correctedExperimentalGpuCmp =
+                TestUtils.compareBitmapsDetailed(correctedExperimentalGpu, reference, tolerance = 0)
             val experimentalGpuToleranceProfile = toleranceProfile(experimentalGpu, reference)
             val regionStats = strokeRegionStats(experimentalGpu, reference)
             val residualStats = strokeResidualStats(experimentalGpu, reference)
+            val correctedResidualStats = strokeResidualStats(correctedExperimentalGpu, reference)
             val adapter = ctx.adapterInfo ?: "unknown-adapter"
 
             println(
@@ -116,11 +124,14 @@ class StrokeCapJoinSceneCaptureTest {
                     cpuBitmap = cpuBitmap,
                     reference = reference,
                     experimentalGpu = experimentalGpu,
+                    correctedExperimentalGpu = correctedExperimentalGpu,
                     cpuCmp = cpuCmp,
                     experimentalGpuCmp = experimentalGpuCmp,
+                    correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
                     experimentalGpuToleranceProfile = experimentalGpuToleranceProfile,
                     regionStats = regionStats,
                     residualStats = residualStats,
+                    correctedResidualStats = correctedResidualStats,
                     adapter = adapter,
                 )
             }
@@ -130,6 +141,8 @@ class StrokeCapJoinSceneCaptureTest {
             assertTrue(experimentalGpuCmp.similarity < GPU_SUPPORT_THRESHOLD)
             assertEquals(experimentalGpuCmp.totalPixels - experimentalGpuCmp.matchingPixels, residualStats.mismatchPixels)
             assertTrue(residualStats.oneUnitMismatchPixels > residualStats.greaterThanEightPixels)
+            assertTrue(correctedResidualStats.mismatchPixels > residualStats.mismatchPixels)
+            assertTrue(correctedResidualStats.greaterThanEightPixels > correctedResidualStats.oneUnitMismatchPixels)
             assertTrue(
                 gpuError.message!!.contains("coverage.stroke-cap-join-visual-parity-below-threshold"),
                 "expected stable stroke cap/join blocker diagnostic, got ${gpuError.message}",
@@ -141,11 +154,14 @@ class StrokeCapJoinSceneCaptureTest {
         cpuBitmap: SkBitmap,
         reference: SkBitmap,
         experimentalGpu: SkBitmap,
+        correctedExperimentalGpu: SkBitmap,
         cpuCmp: BitmapComparison,
         experimentalGpuCmp: BitmapComparison,
+        correctedExperimentalGpuCmp: BitmapComparison,
         experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
         residualStats: StrokeResidualStats,
+        correctedResidualStats: StrokeResidualStats,
         adapter: String,
     ) {
         val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join").apply { mkdirs() }
@@ -168,6 +184,14 @@ class StrokeCapJoinSceneCaptureTest {
         writeM60F16LinearSrgbPlausibilityAudit(residualStats, adapter)
         writeM60F16DirectSourceColorEvidence(residualStats, adapter)
         writeM60F16EffectiveSourceColorPath(residualStats, adapter)
+        writeM60F16SourceColorCorrectionProbe(
+            uncorrectedResidualStats = residualStats,
+            correctedGpu = correctedExperimentalGpu,
+            uncorrectedExperimentalGpuCmp = experimentalGpuCmp,
+            correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
+            correctedResidualStats = correctedResidualStats,
+            adapter = adapter,
+        )
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -503,6 +527,20 @@ class StrokeCapJoinSceneCaptureTest {
                 System.clearProperty(EXPERIMENTAL_RENDER_PROPERTY)
             } else {
                 System.setProperty(EXPERIMENTAL_RENDER_PROPERTY, previous)
+            }
+        }
+    }
+
+    private fun <T> withM60F16SourceColorCorrectionProbe(enabled: Boolean, block: () -> T): T {
+        val previous = System.getProperty(FOR380_CORRECTION_PROPERTY)
+        System.setProperty(FOR380_CORRECTION_PROPERTY, enabled.toString())
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FOR380_CORRECTION_PROPERTY)
+            } else {
+                System.setProperty(FOR380_CORRECTION_PROPERTY, previous)
             }
         }
     }
@@ -908,6 +946,176 @@ class StrokeCapJoinSceneCaptureTest {
         File(dir, "m60-f16-effective-source-color-path-for379.json").writeText(
             m60F16EffectiveSourceColorPathJson(residualStats, adapter),
         )
+    }
+
+    private fun writeM60F16SourceColorCorrectionProbe(
+        uncorrectedResidualStats: StrokeResidualStats,
+        correctedGpu: SkBitmap,
+        uncorrectedExperimentalGpuCmp: BitmapComparison,
+        correctedExperimentalGpuCmp: BitmapComparison,
+        correctedResidualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-source-color-correction-probe-for380",
+        ).apply { mkdirs() }
+        writePng(File(dir, "corrected-gpu.png"), correctedGpu)
+        File(dir, "m60-f16-source-color-correction-probe-for380.json").writeText(
+            m60F16SourceColorCorrectionProbeJson(
+                uncorrectedResidualStats = uncorrectedResidualStats,
+                correctedGpu = correctedGpu,
+                uncorrectedExperimentalGpuCmp = uncorrectedExperimentalGpuCmp,
+                correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
+                correctedResidualStats = correctedResidualStats,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16SourceColorCorrectionProbeJson(
+        uncorrectedResidualStats: StrokeResidualStats,
+        correctedGpu: SkBitmap,
+        uncorrectedExperimentalGpuCmp: BitmapComparison,
+        correctedExperimentalGpuCmp: BitmapComparison,
+        correctedResidualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val transparentSource = TestUtils.runGmTest(BoundedStrokeCapJoinTransparentSourceGM())
+        val samples = uncorrectedResidualStats.highDeltaSamples.take(FOR379_REQUIRED_SAMPLE_COUNT)
+        val for374Samples = samples.mapIndexed { index, sample ->
+            candidateRegressionSample(candidatePolicySample(index + 1, sample, coverageMask))
+        }
+        val for375Samples = for374Samples.map { effectiveDestinationCandidateSample(it) }
+        val for376Samples = for375Samples.map { compositionQuantizationCandidateSample(it) }
+        val for377Samples = for376Samples.map { linearSrgbPlausibilityAuditSample(it) }
+        val directSamples = for377Samples.map { directSourceColorEvidenceSample(it, transparentSource) }
+        val pathSamples = directSamples.map { effectiveSourceColorPathSample(it) }
+        val correctionSamples = pathSamples.map { sample ->
+            val candidate = sample.directSourceSample.for377Sample.for376Sample.for375Sample.for374Sample.candidate
+            sourceColorCorrectionProbeSample(sample, rgbaArray(correctedGpu.getPixel(candidate.x, candidate.y)))
+        }
+        val currentResidual = correctionSamples.sumOf { it.currentResidual }
+        val directResidual = correctionSamples.sumOf { it.directRecomposedOnWhiteResidual }
+        val correctedResidual = correctionSamples.sumOf { it.correctedResidual }
+        val currentToCorrectedDistance = correctionSamples.sumOf { it.correctedVsCurrentRgbaDistance }
+        val correctedToDirectDistance = correctionSamples.sumOf { it.correctedVsDirectRecomposedRgbaDistance }
+        val currentErrors = IntArray(4)
+        val directErrors = IntArray(4)
+        val correctedErrors = IntArray(4)
+        val correctedDeltaVsCurrent = IntArray(4)
+        val correctedDeltaVsDirect = IntArray(4)
+        for (sample in correctionSamples) {
+            for (index in 0..3) {
+                currentErrors[index] += sample.effectiveSourceSample.currentErrorByChannel[index]
+                directErrors[index] += sample.effectiveSourceSample.directRecomposedErrorByChannel[index]
+                correctedErrors[index] += sample.correctedErrorByChannel[index]
+                correctedDeltaVsCurrent[index] += sample.correctedMinusCurrentErrorByChannel[index]
+                correctedDeltaVsDirect[index] += sample.correctedMinusDirectRecomposedErrorByChannel[index]
+            }
+        }
+        val sampleClassification = when {
+            correctedResidual > currentResidual -> "regression-detected"
+            correctedResidual == directResidual -> "correction-reduces-toward-direct-source-proof"
+            correctedResidual < currentResidual -> "partial-correction"
+            else -> "correction-refused-reversed"
+        }
+        val fullSceneRegression = correctedResidualStats.mismatchPixels > uncorrectedResidualStats.mismatchPixels ||
+            correctedExperimentalGpuCmp.similarity < uncorrectedExperimentalGpuCmp.similarity
+        val classification = if (fullSceneRegression) {
+            "regression-detected"
+        } else {
+            sampleClassification
+        }
+        val correctionKept = false
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-380",
+              "sceneId": "m60-f16-source-color-correction-probe-for380",
+              "sourceSceneId": "m60-f16-effective-source-color-path-for379",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-correction-experimentale-bornee-chemin-source-couleur-apres-for-379",
+              "sourceFinding": "global/kanvas/findings/for-379-isole-le-chemin-couleur-source-m60-f16-comme-pret-pour-correction",
+              "decision": "M60_F16_SOURCE_COLOR_CORRECTION_PROBE_RECORDED",
+              "classification": ${classification.jsonString()},
+              "sampleClassificationBeforeFullSceneGuard": ${sampleClassification.jsonString()},
+              "allowedClassifications": [
+                "correction-reduces-toward-direct-source-proof",
+                "partial-correction",
+                "correction-refused-reversed",
+                "regression-detected"
+              ],
+              "correctionKept": $correctionKept,
+              "correctionAppliedByDefault": false,
+              "correctionFlag": ${FOR380_CORRECTION_PROPERTY.jsonString()},
+              "boundedRendererPoint": "SkWebGpuDevice.buildStencilCoverAaDrawResources colorFilterKindMode.z targetColorSpaceBlend payload",
+              "minimalDivergencePoint": "StencilCoverAaPolygonDraw solid-color M60 F16 stroke cap/join applies targetColorSpaceBlend to source colour before coverage; FOR-379 proved the selected samples match direct transparent source recomposed on white.",
+              "correctionDescription": "Probe disables targetColorSpaceBlend only for bounded StencilCoverAaPolygonDraw solid-color stroke cap/join draws when the experimental stroke renderer and FOR-380 flag are enabled.",
+              "requiredFor379Decision": "M60_F16_EFFECTIVE_SOURCE_COLOR_PATH_RECORDED",
+              "requiredFor379Classification": "source-color-path-ready-for-correction",
+              "preservedFor379": {
+                "currentResidual": $FOR373_CURRENT_RESIDUAL,
+                "directRecomposedOnWhiteTotalResidual": 19,
+                "directRecomposedOnWhiteGainVsCurrent": ${FOR373_CURRENT_RESIDUAL - 19},
+                "sampleCount": $FOR379_REQUIRED_SAMPLE_COUNT,
+                "sampleCoordinatesPreserved": true
+              },
+              "currentResidual": $currentResidual,
+              "directRecomposedOnWhiteTotalResidual": $directResidual,
+              "correctedResidual": $correctedResidual,
+              "correctedDeltaVsCurrent": ${correctedResidual - currentResidual},
+              "correctedGainVsCurrent": ${currentResidual - correctedResidual},
+              "correctedDeltaVsDirectRecomposedOnWhite": ${correctedResidual - directResidual},
+              "correctedVsCurrentRgbaDistanceTotal": $currentToCorrectedDistance,
+              "correctedVsDirectRecomposedRgbaDistanceTotal": $correctedToDirectDistance,
+              "currentErrorTotalsByChannel": ${channelErrorJson(currentErrors)},
+              "directRecomposedErrorTotalsByChannel": ${channelErrorJson(directErrors)},
+              "correctedErrorTotalsByChannel": ${channelErrorJson(correctedErrors)},
+              "correctedMinusCurrentErrorTotalsByChannel": ${channelErrorJson(correctedDeltaVsCurrent)},
+              "correctedMinusDirectRecomposedErrorTotalsByChannel": ${channelErrorJson(correctedDeltaVsDirect)},
+              "sampleCount": ${correctionSamples.size},
+              "fullSceneGuard": {
+                "uncorrectedSimilarity": ${String.format(Locale.US, "%.2f", uncorrectedExperimentalGpuCmp.similarity)},
+                "correctedSimilarity": ${String.format(Locale.US, "%.2f", correctedExperimentalGpuCmp.similarity)},
+                "uncorrectedMismatchPixels": ${uncorrectedResidualStats.mismatchPixels},
+                "correctedMismatchPixels": ${correctedResidualStats.mismatchPixels},
+                "uncorrectedGreaterThanEightPixels": ${uncorrectedResidualStats.greaterThanEightPixels},
+                "correctedGreaterThanEightPixels": ${correctedResidualStats.greaterThanEightPixels},
+                "regressionDetected": $fullSceneRegression,
+                "fallbackReasonStable": "coverage.stroke-cap-join-visual-parity-below-threshold",
+                "refusalsChanged": false
+              },
+              "samples": [
+            ${correctionSamples.joinToString(",\n") { it.toJson().prependIndent("    ") }}
+              ],
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for380_m60_f16_source_color_correction_probe.py",
+                "rtk python3 scripts/validate_for379_m60_f16_effective_source_color_path.py",
+                "rtk python3 scripts/validate_for378_m60_f16_direct_source_color_evidence.py",
+                "rtk python3 scripts/validate_for377_m60_f16_linear_srgb_plausibility_audit.py",
+                "rtk python3 scripts/validate_for376_m60_f16_composition_quantization_candidate.py",
+                "rtk python3 scripts/validate_for375_m60_f16_effective_destination_candidate.py",
+                "rtk python3 scripts/validate_for374_m60_f16_candidate_regression_audit.py",
+                "rtk python3 scripts/validate_for373_m60_f16_candidate_policy_rgba_probe.py",
+                "rtk python3 scripts/validate_for372_m60_f16_effective_coverage_export.py",
+                "rtk python3 scripts/validate_for371_m60_f16_effective_coverage_access_audit.py",
+                "rtk python3 scripts/validate_for370_m60_f16_source_paint_capture_extension.py",
+                "rtk python3 scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+                "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+                "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+                "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+                "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for380-pycache python3 -m py_compile scripts/validate_for380_m60_f16_source_color_correction_probe.py",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
     }
 
     private fun m60F16CandidatePolicyRgbaProbeJson(
@@ -2447,6 +2655,87 @@ class StrokeCapJoinSceneCaptureTest {
         val directRecomposedOnWhiteResidual: Int = directSourceSample.directRecomposedOnWhiteResidual
     }
 
+    private fun sourceColorCorrectionProbeSample(
+        sample: EffectiveSourceColorPathSample,
+        correctedRgba: IntArray,
+    ): SourceColorCorrectionProbeSample {
+        val candidate = sample.directSourceSample.for377Sample.for376Sample.for375Sample.for374Sample.candidate
+        val reference = rgbaArray(candidate.reference)
+        val current = rgbaArray(candidate.current)
+        val direct = sample.directSourceSample.directRecomposedOnWhiteRgba
+        val correctedError = channelAbsError(reference, correctedRgba)
+        val correctedMinusCurrentError =
+            IntArray(4) { correctedError[it] - sample.currentErrorByChannel[it] }
+        val correctedMinusDirectError =
+            IntArray(4) { correctedError[it] - sample.directRecomposedErrorByChannel[it] }
+        val correctedMinusCurrentRgba = IntArray(4) { correctedRgba[it] - current[it] }
+        val correctedMinusDirectRgba = IntArray(4) { correctedRgba[it] - direct[it] }
+        return SourceColorCorrectionProbeSample(
+            effectiveSourceSample = sample,
+            correctedRgba = correctedRgba,
+            correctedResidual = correctedError.sum(),
+            correctedErrorByChannel = correctedError,
+            correctedMinusCurrentErrorByChannel = correctedMinusCurrentError,
+            correctedMinusDirectRecomposedErrorByChannel = correctedMinusDirectError,
+            correctedMinusCurrentRgba = correctedMinusCurrentRgba,
+            correctedMinusDirectRecomposedRgba = correctedMinusDirectRgba,
+            correctedVsCurrentRgbaDistance = correctedMinusCurrentRgba.sumOf { kotlin.math.abs(it) },
+            correctedVsDirectRecomposedRgbaDistance = correctedMinusDirectRgba.sumOf { kotlin.math.abs(it) },
+        )
+    }
+
+    private data class SourceColorCorrectionProbeSample(
+        val effectiveSourceSample: EffectiveSourceColorPathSample,
+        val correctedRgba: IntArray,
+        val correctedResidual: Int,
+        val correctedErrorByChannel: IntArray,
+        val correctedMinusCurrentErrorByChannel: IntArray,
+        val correctedMinusDirectRecomposedErrorByChannel: IntArray,
+        val correctedMinusCurrentRgba: IntArray,
+        val correctedMinusDirectRecomposedRgba: IntArray,
+        val correctedVsCurrentRgbaDistance: Int,
+        val correctedVsDirectRecomposedRgbaDistance: Int,
+    ) {
+        val currentResidual: Int = effectiveSourceSample.currentResidual
+        val directRecomposedOnWhiteResidual: Int = effectiveSourceSample.directRecomposedOnWhiteResidual
+    }
+
+    private fun SourceColorCorrectionProbeSample.toJson(): String {
+        val candidate =
+            effectiveSourceSample.directSourceSample.for377Sample.for376Sample.for375Sample.for374Sample.candidate
+        return """
+            {
+              "index": ${candidate.index},
+              "x": ${candidate.x},
+              "y": ${candidate.y},
+              "strokeBand": ${candidate.strokeBand.jsonString()},
+              "cap": ${candidate.cap.jsonString()},
+              "join": ${candidate.join.jsonString()},
+              "strokeWidth": ${String.format(Locale.US, "%.1f", candidate.strokeWidth)},
+              "referenceRgba": ${rgbaJson(candidate.reference)},
+              "currentRgba": ${rgbaJson(candidate.current)},
+              "directRecomposedOnWhiteRgba": ${rgbaArrayJson(effectiveSourceSample.directSourceSample.directRecomposedOnWhiteRgba)},
+              "correctedRgba": ${rgbaArrayJson(correctedRgba)},
+              "currentResidual": $currentResidual,
+              "directRecomposedOnWhiteResidual": $directRecomposedOnWhiteResidual,
+              "correctedResidual": $correctedResidual,
+              "correctedDeltaVsCurrent": ${correctedResidual - currentResidual},
+              "correctedGainVsCurrent": ${currentResidual - correctedResidual},
+              "correctedDeltaVsDirectRecomposedOnWhite": ${correctedResidual - directRecomposedOnWhiteResidual},
+              "currentErrorByChannel": ${channelErrorJson(effectiveSourceSample.currentErrorByChannel)},
+              "directRecomposedErrorByChannel": ${channelErrorJson(effectiveSourceSample.directRecomposedErrorByChannel)},
+              "correctedErrorByChannel": ${channelErrorJson(correctedErrorByChannel)},
+              "correctedMinusCurrentErrorByChannel": ${channelErrorJson(correctedMinusCurrentErrorByChannel)},
+              "correctedMinusDirectRecomposedErrorByChannel": ${channelErrorJson(correctedMinusDirectRecomposedErrorByChannel)},
+              "correctedMinusCurrentRgba": ${channelErrorJson(correctedMinusCurrentRgba)},
+              "correctedMinusDirectRecomposedRgba": ${channelErrorJson(correctedMinusDirectRecomposedRgba)},
+              "correctedVsCurrentRgbaDistance": $correctedVsCurrentRgbaDistance,
+              "correctedVsDirectRecomposedRgbaDistance": $correctedVsDirectRecomposedRgbaDistance,
+              "for379SampleClassification": ${effectiveSourceSample.sampleClassification.jsonString()}
+            }
+        """.trimIndent()
+    }
+
     private fun EffectiveSourceColorPathSample.toJson(): String {
         val base = directSourceSample.toJson().trim()
         val suffix = """
@@ -3435,6 +3724,7 @@ class StrokeCapJoinSceneCaptureTest {
             "linear_srgb_source_over_effective_destination_nearest_255"
         private const val WRITE_EVIDENCE_PROPERTY = "kanvas.sceneEvidence.write"
         private const val EXPERIMENTAL_RENDER_PROPERTY = "kanvas.webgpu.strokeCapJoin.experimentalRender"
+        private const val FOR380_CORRECTION_PROPERTY = "kanvas.webgpu.m60F16SourceColorCorrectionProbe.enabled"
 
         private fun jsonString(value: String): String = buildString {
             append('"')
