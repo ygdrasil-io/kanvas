@@ -1,0 +1,1882 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-410",
+          "sceneId": "m60-f16-aa-stencil-cover-predraw-dst-readback-for410",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-410-m60-f16-capturer-letat-destination-avant-aa-stencil-cover-pour-le-replay-source-over",
+          "sourceFinding": "global/kanvas/findings/for-409-confirme-que-le-replay-source-over-m60-f16-manque-encore-letat-initial-destination",
+          "sourceArtifacts": {
+            "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+            "for405": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-post-pass-readback-for405/m60-f16-aa-stencil-cover-post-pass-readback-for405.json",
+            "for408": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-per-subdraw-hook-for408/m60-f16-aa-stencil-cover-per-subdraw-hook-for408.json",
+            "for409": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "decision": "M60_F16_AA_STENCIL_COVER_PREDRAW_DST_READBACK_RECORDED",
+          "classification": "predraw-dst-captured",
+          "globalClassification": "predraw-dst-captured",
+          "allowedClassifications": [
+            "predraw-dst-captured",
+            "predraw-dst-partial",
+            "predraw-dst-unavailable"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "correctionAppliedByDefault": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "guards": {
+            "experimentalStrokeRenderer": {"guardId": "kanvas.webgpu.strokeCapJoin.experimentalRender", "enabledForEvidenceRun": true, "enabledByDefault": false},
+            "bandMetadataTransport": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false},
+            "predrawDstReadback": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverPredrawDstReadback.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false},
+            "contributionIsolation": {"guardId": "kanvas.webgpu.m60F16AaStencilCoverContributionIsolation.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false},
+            "postPassReadback": {"guardId": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled", "enabledForEvidenceRun": true, "enabledByDefault": false}
+          },
+          "runtimeSnapshot": {
+            "api": "SkWebGpuDevice.m60F16AaStencilCoverPredrawDstReadbackSnapshot()",
+            "propertyName": "kanvas.webgpu.m60F16AaStencilCoverPredrawDstReadback.enabled",
+            "enabled": true,
+            "requestedBoundary": "immediately before each selected M60 F16 StencilCoverAaPolygonDraw",
+            "observedBoundary": "compute textureLoad from intermediate RGBA16Float before StencilCoverAaPolygonDraw render pass",
+            "diagnosticShader": "shaders/m60_f16_aa_stencil_cover_post_pass_readback_for405_diagnostic_only.wgsl",
+            "pipelineLayout": "diagnostic-only compute layout: binding0 intermediate RGBA16Float texture, binding1 16-sample storage buffer",
+            "intermediateFormat": "RGBA16Float",
+            "sampleLimit": 16,
+            "eventCount": 3
+          },
+          "scope": {
+            "scene": "M60 F16 bounded stroke cap/join target-colorspace blend",
+            "pixelSet": "FOR-401 selected residual coordinates",
+            "selectedPixelCount": 16,
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "blendMode": "kSrcOver",
+            "generalizedOutsideM60F16": false
+          },
+          "predrawSummary": {
+            "selectedPixelCount": 16,
+            "capturedPixelCount": 16,
+            "unavailablePixelCount": 0,
+            "inspectedDrawCount": 3,
+            "for408ObservedReplayInputSubdrawCount": 44,
+            "for409ReplayPossiblePixelCount": 16,
+            "postPassObservedPixelCount": 16
+          },
+          "selectedPixels": [
+                {
+      "x": 92,
+      "y": 75,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 4,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 91,
+      "y": 76,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 4,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 90,
+      "y": 77,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 4,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 89,
+      "y": 78,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 4,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 88,
+      "y": 79,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 4,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 87,
+      "y": 80,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 4,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+  "dstBeforeRgba8": [181, 191, 230, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 101,
+      "y": 37,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 2,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "dstBeforeRgba8": [0, 138, 76, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 102,
+      "y": 37,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 2,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "dstBeforeRgba8": [0, 138, 76, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 99,
+      "y": 38,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 2,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "dstBeforeRgba8": [0, 138, 76, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 100,
+      "y": 38,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 2,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "dstBeforeRgba8": [0, 138, 76, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 101,
+      "y": 38,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 2,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "dstBeforeRgba8": [0, 138, 76, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 102,
+      "y": 38,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 2,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "dstBeforeRgba8": [0, 138, 76, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 103,
+      "y": 38,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 2,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "dstBeforeRgba8": [0, 138, 76, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 104,
+      "y": 38,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 2,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "dstBeforeRgba8": [0, 138, 76, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 98,
+      "y": 39,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 2,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.500000000, 0.500000000, 0.500000000, 1.000000000],
+  "dstBeforeRgba8": [128, 128, 128, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "dstBeforeRgba8": [0, 138, 76, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    },
+    {
+      "x": 99,
+      "y": 39,
+      "classification": "predraw-dst-captured",
+      "drawIndexInspected": [1, 3, 5],
+      "predrawStatus": "predraw-dst-captured",
+      "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+      "dstBeforeRgba8": [255, 255, 255, 255],
+      "dstBeforeSource": "FOR-410 drawIndex 1 predraw compute readback",
+      "firstCapturedDrawIndex": 1,
+      "for408Relation": {
+        "observedReplayInputSubdrawCount": 2,
+        "subdraws": [
+            {
+  "drawIndex": 1,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 1,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 3,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": true,
+  "sourceColorPremulRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "coverageOrAaAlpha": 0.000000000,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 0,
+  "subdrawRole": "inside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+},
+{
+  "drawIndex": 5,
+  "subdrawOrdinal": 1,
+  "subdrawRole": "outside",
+  "shaderObserved": false,
+  "sourceColorPremulRgbaFloat": null,
+  "coverageOrAaAlpha": null,
+  "blendMode": "kSrcOver"
+}
+        ]
+      },
+      "for409Replay": {
+        "becomesPossible": true,
+        "requiredInput": "dstBeforeRgbaFloat before first observed source-over subdraw",
+        "sourceOverReplayArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-source-over-replay-for409/m60-f16-aa-stencil-cover-source-over-replay-for409.json",
+        "postPassObservedRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000]
+      },
+      "predrawSamples": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+  "dstBeforeRgba8": [255, 255, 255, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "dstBeforeRgbaFloat": [0.000000000, 0.541015625, 0.297851563, 1.000000000],
+  "dstBeforeRgba8": [0, 138, 76, 255],
+  "classification": "predraw-dst-observed",
+  "reason": "FOR-410 compute diagnostic sampled the intermediate texture immediately before this StencilCoverAaPolygonDraw render pass."
+}
+      ],
+      "classificationReason": "A non-synthetic predraw destination sample was captured before the first inspected StencilCoverAaPolygonDraw targeting this coordinate."
+    }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "correctionApplied": false,
+            "generalizedOutsideM60F16": false,
+            "syntheticDstBeforeUsed": false
+          },
+          "classificationReason": "FOR-410 records only destination state read from the WebGPU intermediate immediately before bounded M60 F16 StencilCoverAaPolygonDraw render passes. Null dstBefore values are preserved as unavailable and are not synthesized.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for410_m60_f16_aa_stencil_cover_predraw_dst_readback.py",
+            "rtk python3 scripts/validate_for409_m60_f16_aa_stencil_cover_source_over_replay.py",
+            "rtk python3 scripts/validate_for408_m60_f16_aa_stencil_cover_per_subdraw_hook.py",
+            "rtk python3 scripts/validate_for405_m60_f16_aa_stencil_cover_post_pass_readback.py",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16AaStencilCoverPredrawDstReadback.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverSourceOverReplay.enabled=true -Dkanvas.webgpu.m60F16DirectPassWriteHook.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverContributionIsolation.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+            "rtk git diff --check"
+          ]
+        }
