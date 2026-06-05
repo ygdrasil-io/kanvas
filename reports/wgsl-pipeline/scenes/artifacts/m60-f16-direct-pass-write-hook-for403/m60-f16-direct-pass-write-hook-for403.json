@@ -1,0 +1,480 @@
+{
+  "schemaVersion": 1,
+  "linear": "FOR-403",
+  "sceneId": "m60-f16-direct-pass-write-hook-for403",
+  "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+  "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-pass-write-probe-for402/m60-f16-pass-write-probe-for402.json",
+  "sourceArtifacts": {
+    "for400": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-coverage-stencil-contribution-map-for400/m60-f16-coverage-stencil-contribution-map-for400.json",
+    "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+    "for402": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-pass-write-probe-for402/m60-f16-pass-write-probe-for402.json"
+  },
+  "sourceMemory": "global/kanvas/findings/for-402-refuse-le-pass-write-probe-m60-f16-tant-que-le-hook-direct-manque",
+  "producer": "reports/wgsl-pipeline/2026-06-05-for-403-m60-f16-direct-pass-write-hook.md",
+  "decision": "M60_F16_DIRECT_PASS_WRITE_HOOK_REFUSED",
+  "classification": "direct-pass-write-hook-inconclusive",
+  "allowedClassifications": [
+    "m60-aa-stencil-cover-write-observed",
+    "other-draw-write-observed",
+    "post-draw-pre-readback-boundary-required",
+    "direct-pass-write-hook-inconclusive"
+  ],
+  "directWriteClassifications": [
+    "m60-aa-stencil-cover-write-observed",
+    "other-draw-write-observed"
+  ],
+  "supportClaim": false,
+  "promoted": false,
+  "correctionAppliedByDefault": false,
+  "defaultRenderingChanged": false,
+  "guards": {
+    "directPassWriteHook": {
+      "guardId": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled",
+      "enabledForEvidenceRun": false,
+      "enabledByDefault": false,
+      "registeredInRuntime": false,
+      "reason": "The requested post-draw/pre-readback sampling boundary is not exposed as a runtime hook without a broader SkWebGpuDevice draw/pass instrumentation change."
+    },
+    "passWriteProbe": {
+      "guardId": "kanvas.webgpu.m60F16PassWriteProbe.enabled",
+      "enabledForEvidenceRun": true,
+      "enabledByDefault": false
+    },
+    "finalResidualOriginMap": {
+      "guardId": "kanvas.webgpu.m60F16FinalResidualOriginMap.enabled",
+      "enabledForEvidenceRun": true,
+      "enabledByDefault": false
+    },
+    "coverageStencilContributionMap": {
+      "guardId": "kanvas.webgpu.m60F16CoverageStencilContributionMap.enabled",
+      "enabledForEvidenceRun": true,
+      "enabledByDefault": false,
+      "evidencePolicy": "context-only-not-direct-write-proof"
+    }
+  },
+  "directPassWriteHook": {
+    "directPassWriteInstrumentationAvailable": false,
+    "requestedObservationBoundary": "post-draw/pre-readback or draw/render-pass submission boundary",
+    "evaluatedOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+    "evaluatedFunctions": [
+      "encodePendingDrawsToIntermediate",
+      "flush",
+      "flushDrawsOnly"
+    ],
+    "availableBoundary": "final flush readback after present pass plus FOR-400 diagnostic storage samples",
+    "missingBoundary": "per draw/render-pass framebuffer sample before final present/readback, carrying draw id and pipeline family per sampled coordinate",
+    "refusalReason": "SkWebGpuDevice currently encodes many draw families into render passes and only exposes final readback plus FOR-400 contribution diagnostics. Adding direct attribution would require a broader diagnostic boundary that can sample the intermediate texture after each relevant draw/pass or write per-draw storage records across draw families.",
+    "for400ContributionEvidencePolicy": "FOR-400 contribution evidence remains contextual only and is never promoted to direct pass-write proof."
+  },
+  "sourceContext": {
+    "for400Classification": "predicate-window-zero-contribution",
+    "for400EffectiveContributionCount": 0,
+    "for401Classification": "residual-visible-only-at-final-readback",
+    "for401CurrentTotalResidual": 62748,
+    "for401CurrentMismatchPixels": 1615,
+    "for401SelectedResidualTotal": 1560,
+    "for401WrittenByM60AaStencilCover": 0,
+    "for401WrittenByOtherPath": 0,
+    "for401ReadbackOnlyUnknown": 16,
+    "for402Classification": "pass-write-probe-inconclusive",
+    "for402DirectPassWriteInstrumentationAvailable": false,
+    "for402M60WritesClaimed": 0,
+    "for402OtherDrawWritesClaimed": 0
+  },
+  "passWriteSummary": {
+    "currentTotalResidual": 62748,
+    "currentMismatchPixels": 1615,
+    "selectedPixelCount": 16,
+    "selectedResidualTotal": 1560,
+    "m60AaStencilCoverWriteObservedCount": 0,
+    "otherDrawWriteObservedCount": 0,
+    "postDrawPreReadbackBoundaryRequiredCount": 16,
+    "directPassWriteHookInconclusiveCount": 16,
+    "for400EffectiveSelectedContributionCount": 0
+  },
+  "selectedPixels": [
+    {
+      "x": 92,
+      "y": 75,
+      "currentGpuRgba": [181, 191, 230, 255],
+      "referenceRgba": [133, 150, 214, 255],
+      "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+      "residualTotal": 105,
+      "belongsToFor397Predicate": true,
+      "belongsToFor400Window": true,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 91,
+      "y": 76,
+      "currentGpuRgba": [181, 191, 230, 255],
+      "referenceRgba": [133, 150, 214, 255],
+      "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+      "residualTotal": 105,
+      "belongsToFor397Predicate": true,
+      "belongsToFor400Window": true,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 90,
+      "y": 77,
+      "currentGpuRgba": [181, 191, 230, 255],
+      "referenceRgba": [133, 150, 214, 255],
+      "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+      "residualTotal": 105,
+      "belongsToFor397Predicate": true,
+      "belongsToFor400Window": true,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 89,
+      "y": 78,
+      "currentGpuRgba": [181, 191, 230, 255],
+      "referenceRgba": [133, 150, 214, 255],
+      "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+      "residualTotal": 105,
+      "belongsToFor397Predicate": true,
+      "belongsToFor400Window": true,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 88,
+      "y": 79,
+      "currentGpuRgba": [181, 191, 230, 255],
+      "referenceRgba": [133, 150, 214, 255],
+      "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+      "residualTotal": 105,
+      "belongsToFor397Predicate": true,
+      "belongsToFor400Window": true,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 87,
+      "y": 80,
+      "currentGpuRgba": [181, 191, 230, 255],
+      "referenceRgba": [133, 150, 214, 255],
+      "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+      "residualTotal": 105,
+      "belongsToFor397Predicate": true,
+      "belongsToFor400Window": true,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 101,
+      "y": 37,
+      "currentGpuRgba": [0, 138, 76, 255],
+      "referenceRgba": [68, 121, 68, 255],
+      "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+      "residualTotal": 93,
+      "belongsToFor397Predicate": false,
+      "belongsToFor400Window": false,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 102,
+      "y": 37,
+      "currentGpuRgba": [0, 138, 76, 255],
+      "referenceRgba": [68, 121, 68, 255],
+      "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+      "residualTotal": 93,
+      "belongsToFor397Predicate": false,
+      "belongsToFor400Window": false,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 99,
+      "y": 38,
+      "currentGpuRgba": [0, 138, 76, 255],
+      "referenceRgba": [68, 121, 68, 255],
+      "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+      "residualTotal": 93,
+      "belongsToFor397Predicate": false,
+      "belongsToFor400Window": false,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 100,
+      "y": 38,
+      "currentGpuRgba": [0, 138, 76, 255],
+      "referenceRgba": [68, 121, 68, 255],
+      "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+      "residualTotal": 93,
+      "belongsToFor397Predicate": false,
+      "belongsToFor400Window": false,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 101,
+      "y": 38,
+      "currentGpuRgba": [0, 138, 76, 255],
+      "referenceRgba": [68, 121, 68, 255],
+      "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+      "residualTotal": 93,
+      "belongsToFor397Predicate": false,
+      "belongsToFor400Window": false,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 102,
+      "y": 38,
+      "currentGpuRgba": [0, 138, 76, 255],
+      "referenceRgba": [68, 121, 68, 255],
+      "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+      "residualTotal": 93,
+      "belongsToFor397Predicate": false,
+      "belongsToFor400Window": false,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 103,
+      "y": 38,
+      "currentGpuRgba": [0, 138, 76, 255],
+      "referenceRgba": [68, 121, 68, 255],
+      "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+      "residualTotal": 93,
+      "belongsToFor397Predicate": false,
+      "belongsToFor400Window": false,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 104,
+      "y": 38,
+      "currentGpuRgba": [0, 138, 76, 255],
+      "referenceRgba": [68, 121, 68, 255],
+      "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+      "residualTotal": 93,
+      "belongsToFor397Predicate": false,
+      "belongsToFor400Window": false,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 98,
+      "y": 39,
+      "currentGpuRgba": [0, 138, 76, 255],
+      "referenceRgba": [68, 121, 68, 255],
+      "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+      "residualTotal": 93,
+      "belongsToFor397Predicate": false,
+      "belongsToFor400Window": false,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    },
+    {
+      "x": 99,
+      "y": 39,
+      "currentGpuRgba": [0, 138, 76, 255],
+      "referenceRgba": [68, 121, 68, 255],
+      "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+      "residualTotal": 93,
+      "belongsToFor397Predicate": false,
+      "belongsToFor400Window": false,
+      "for401AttributionCandidate": "readbackOnlyUnknown",
+      "classification": "post-draw-pre-readback-boundary-required",
+      "directWrite": {
+        "observed": false,
+        "available": false,
+        "drawId": null,
+        "pipelineFamily": null,
+        "observationMoment": null,
+        "beforeRgba": null,
+        "afterRgba": null,
+        "for400ContributionEvidenceUsedAsProof": false,
+        "reason": "Direct draw/pass framebuffer observation is unavailable; FOR-400 context cannot identify a writer."
+      }
+    }
+  ],
+  "nonGoalsPreserved": {
+    "defaultRenderingChanged": false,
+    "supportClaimRaised": false,
+    "promoted": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "correctionApplied": false,
+    "for380BroadCorrectionReintroduced": false,
+    "generalizedOutsideM60F16": false
+  },
+  "validationCommands": [
+    "rtk python3 scripts/validate_for403_m60_f16_direct_pass_write_hook.py",
+    "rtk python3 scripts/validate_for402_m60_f16_pass_write_probe.py",
+    "rtk git diff --check"
+  ]
+}
