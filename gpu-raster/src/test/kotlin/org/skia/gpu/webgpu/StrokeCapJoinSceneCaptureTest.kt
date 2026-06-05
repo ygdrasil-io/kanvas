@@ -569,6 +569,11 @@ class StrokeCapJoinSceneCaptureTest {
                 storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
                 adapter = adapter,
             )
+            writeM60F16AaStencilCoverAlphaConversionStage(
+                finalWgslSnapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
+                storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                adapter = adapter,
+            )
         }
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
@@ -3507,6 +3512,320 @@ class StrokeCapJoinSceneCaptureTest {
             "Instrument stencil/sample coordinates and coverage sample index selection before changing coverage math."
         else ->
             "Add the missing bounded renderer-owned measurement before attempting a renderer correction."
+    }
+
+    private fun writeM60F16AaStencilCoverAlphaConversionStage(
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-aa-stencil-cover-alpha-conversion-stage-for425"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16AaStencilCoverAlphaConversionStageJson(
+                sceneId = sceneId,
+                finalWgslSnapshot = finalWgslSnapshot,
+                storageSnapshot = storageSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16AaStencilCoverAlphaConversionStageJson(
+        sceneId: String,
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val diagnosticReturnPathVerified = finalWgslSnapshot.variants
+            .map { m60F16FinalWgslVariantSummary(it) }
+            .filter { it.logicalName != "normal-bounded-runtime-correction" }
+            .all { summary ->
+                summary.functions["fs_inside"]?.returnsApplicationPointOutput == true &&
+                    summary.functions["fs_outside"]?.returnsApplicationPointOutput == true
+            }
+        val storageByKey = storageSnapshot.storageEvents
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val records = storageByKey.keys
+            .filter { it.drawIndex == 1 && partialPoints.contains(it.x to it.y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.drawIndex }.thenBy { it.y }.thenBy { it.x })
+            .map { key ->
+                val sourceRecords = storageByKey[key].orEmpty()
+                    .sortedWith(
+                        compareBy<Pair<
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                            >> { it.second.subdrawOrdinal }.thenBy { it.second.subdrawRole },
+                    )
+                val verifiedSources = sourceRecords.filter { (_, sample) ->
+                    sample.shaderObserved && !sample.captureSynthetic && sample.sourceColorSentToBlend != null
+                }
+                val bestSource = verifiedSources.maxByOrNull { (_, sample) -> sample.sourceColorSentToBlend?.getOrNull(3) ?: -1f }
+                val expectedCoverageByte = (coverageMask.getPixel(key.x, key.y) ushr 24) and 0xFF
+                val expectedCoverage = expectedCoverageByte / 255f
+                val observedAlphaByte = m60F16AlphaByte(bestSource?.second?.sourceColorSentToBlend?.getOrNull(3))
+                val classification = m60F16AlphaConversionStageClassification(
+                    sample = bestSource?.second,
+                    expectedCoverageByte = expectedCoverageByte,
+                    observedAlphaByte = observedAlphaByte,
+                    diagnosticReturnPathVerified = diagnosticReturnPathVerified,
+                )
+                M60F16AlphaConversionStageRecord(
+                    key = key,
+                    band = strokePaintBands().firstOrNull { key.x in it.xStart until it.xEnd },
+                    source = bestSource,
+                    expectedCoverageByte = expectedCoverageByte,
+                    expectedCoverage = expectedCoverage,
+                    observedAlphaByte = observedAlphaByte,
+                    classification = classification,
+                )
+            }
+        val classificationOrder = listOf(
+            "alpha-drop-before-shader-return",
+            "alpha-drop-at-source-alpha-application",
+            "alpha-drop-at-quantization",
+            "alpha-drop-after-source-field",
+            "alpha-conversion-stage-incomplete",
+        )
+        val classificationCounts = records.groupingBy { it.classification }.eachCount()
+        val majorityStage = classificationOrder.maxWithOrNull(
+            compareBy<String> { classificationCounts[it] ?: 0 }.thenByDescending { classificationOrder.indexOf(it) },
+        ) ?: "alpha-conversion-stage-incomplete"
+        val recordsJson = records.joinToString(",\n") { record ->
+            m60F16AlphaConversionStageRecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-425",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-425-m60-f16-localiser-conversion-alpha-aa-stencil-cover",
+              "sourceArtifacts": {
+                "for424": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-partial-coverage-alpha-for424/m60-f16-aa-stencil-cover-partial-coverage-alpha-for424.json",
+                "for423": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-reference-source-coverage-for423/m60-f16-aa-stencil-cover-reference-source-coverage-for423.json",
+                "for422": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-verified-source-comparison-for422/m60-f16-aa-stencil-cover-verified-source-comparison-for422.json",
+                "for412": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412.json",
+                "for419": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419/m60-f16-aa-stencil-cover-shader-return-storage-zero-cause-for419.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${majorityStage.jsonString()},
+              "globalClassification": ${majorityStage.jsonString()},
+              "allowedClassifications": [
+                "alpha-drop-before-shader-return",
+                "alpha-drop-at-source-alpha-application",
+                "alpha-drop-at-quantization",
+                "alpha-drop-after-source-field",
+                "alpha-conversion-stage-incomplete"
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "comparisonPolicy": {
+                "scope": "Exactly the 6 FOR-424 partial pixels whose CPU coverage alpha is 160/255 and observed source alpha is 96/255.",
+                "stageOrder": [
+                  "coverageOrAaAlpha",
+                  "sourceAlphaAfterCoverage",
+                  "sourceColorBeforeQuantization.alpha",
+                  "quantizedAlphaSentToBlend",
+                  "sourceColorSentToBlend.alpha"
+                ],
+                "classificationMeaning": "The first available stage whose alpha byte equals 96 while an earlier stage remains 160 names the conversion point.",
+                "noRenderingFixApplied": true
+              },
+              "structuralSummary": {
+                "diagnosticReturnPathVerified": $diagnosticReturnPathVerified,
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "expectedCoverage160Count": ${records.count { it.expectedCoverageByte == 160 }},
+                "observedSourceAlpha96Count": ${records.count { it.observedAlphaByte == 96 }},
+                "localizedPixelCount": ${records.count { it.classification != "alpha-conversion-stage-incomplete" }},
+                "majorityStage": ${majorityStage.jsonString()},
+                "majorityStageCount": ${classificationCounts[majorityStage] ?: 0},
+                "classificationCounts": {
+                  "alpha-drop-before-shader-return": ${classificationCounts["alpha-drop-before-shader-return"] ?: 0},
+                  "alpha-drop-at-source-alpha-application": ${classificationCounts["alpha-drop-at-source-alpha-application"] ?: 0},
+                  "alpha-drop-at-quantization": ${classificationCounts["alpha-drop-at-quantization"] ?: 0},
+                  "alpha-drop-after-source-field": ${classificationCounts["alpha-drop-after-source-field"] ?: 0},
+                  "alpha-conversion-stage-incomplete": ${classificationCounts["alpha-conversion-stage-incomplete"] ?: 0}
+                }
+              },
+              "partialPixels": [
+            $recordsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "renderingFixApplied": false,
+                "wgsl4kModified": false,
+                "fullWgslDumpStored": false
+              },
+              "classificationReason": ${m60F16AlphaConversionStageGlobalReason(majorityStage).jsonString()},
+              "nextStep": ${m60F16AlphaConversionStageNextStep(majorityStage).jsonString()},
+              "validationCommands": [
+                "rtk python3 scripts/validate_for425_m60_f16_aa_stencil_cover_alpha_conversion_stage.py",
+                "rtk python3 scripts/validate_for424_m60_f16_aa_stencil_cover_partial_coverage_alpha.py",
+                "rtk python3 scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+                "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for425-pycache python3 -m py_compile scripts/validate_for425_m60_f16_aa_stencil_cover_alpha_conversion_stage.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16AlphaConversionStageRecordJson(record: M60F16AlphaConversionStageRecord): String {
+        val sample = record.source?.second
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "subdrawOrdinal": ${sample?.subdrawOrdinal ?: "null"},
+              "subdrawRole": ${sample?.subdrawRole?.jsonString() ?: "null"},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16AlphaConversionStageLocalReason(record.classification).jsonString()},
+              "referenceCoverage": {
+                "strokeBand": ${record.band?.id?.jsonString() ?: "null"},
+                "cap": ${record.band?.cap?.jsonString() ?: "null"},
+                "join": ${record.band?.join?.jsonString() ?: "null"},
+                "coverageExpectedByte": ${record.expectedCoverageByte},
+                "coverageExpectedAlpha": ${String.format(Locale.US, "%.9f", record.expectedCoverage)}
+              },
+              "observedSource": {
+                "available": ${sample?.sourceColorSentToBlend != null},
+                "shaderObserved": ${sample?.shaderObserved ?: false},
+                "captureSynthetic": ${sample?.captureSynthetic ?: false},
+                "sourceColorSentToBlend": ${sample?.sourceColorSentToBlend.floatArrayOrNullJson()},
+                "sourceAlpha": ${sample?.sourceColorSentToBlend?.getOrNull(3)?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "sourceAlphaByte": ${record.observedAlphaByte ?: "null"}
+              },
+              "stages": {
+                "coverageOrAaAlpha": ${m60F16AlphaStageJson(sample?.coverageOrAaAlpha, record.expectedCoverageByte, record.observedAlphaByte).prependIndent("        ").trimStart()},
+                "sourceAlphaAfterCoverage": ${m60F16AlphaStageJson(sample?.sourceAlphaAfterCoverage, record.expectedCoverageByte, record.observedAlphaByte).prependIndent("        ").trimStart()},
+                "sourceColorBeforeQuantization": {
+                  "rgbaFloat": ${sample?.sourceColorBeforeQuantization.floatArrayOrNullJson()},
+                  "alpha": ${sample?.sourceColorBeforeQuantization?.getOrNull(3)?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                  "alphaByte": ${m60F16AlphaByte(sample?.sourceColorBeforeQuantization?.getOrNull(3)) ?: "null"}
+                },
+                "quantizedAlphaSentToBlend": ${m60F16AlphaStageJson(sample?.quantizedAlphaSentToBlend, record.expectedCoverageByte, record.observedAlphaByte).prependIndent("        ").trimStart()},
+                "sourceColorSentToBlend": {
+                  "rgbaFloat": ${sample?.sourceColorSentToBlend.floatArrayOrNullJson()},
+                  "alpha": ${sample?.sourceColorSentToBlend?.getOrNull(3)?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                  "alphaByte": ${m60F16AlphaByte(sample?.sourceColorSentToBlend?.getOrNull(3)) ?: "null"}
+                },
+                "sourceFieldUsedByFOR408Replay": ${sample?.sourceFieldUsedByFOR408Replay.floatArrayOrNullJson()}
+              },
+              "stageDeltas": {
+                "coverageOrAaAlphaMinusExpectedByte": ${m60F16ByteDelta(sample?.coverageOrAaAlpha, record.expectedCoverageByte) ?: "null"},
+                "sourceAlphaAfterCoverageMinusExpectedByte": ${m60F16ByteDelta(sample?.sourceAlphaAfterCoverage, record.expectedCoverageByte) ?: "null"},
+                "quantizedAlphaSentToBlendMinusExpectedByte": ${m60F16ByteDelta(sample?.quantizedAlphaSentToBlend, record.expectedCoverageByte) ?: "null"},
+                "sourceColorSentToBlendMinusExpectedByte": ${m60F16ByteDelta(sample?.sourceColorSentToBlend?.getOrNull(3), record.expectedCoverageByte) ?: "null"}
+              }
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16AlphaConversionStageClassification(
+        sample: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample?,
+        expectedCoverageByte: Int,
+        observedAlphaByte: Int?,
+        diagnosticReturnPathVerified: Boolean,
+    ): String {
+        if (!diagnosticReturnPathVerified || sample == null || observedAlphaByte == null) {
+            return "alpha-conversion-stage-incomplete"
+        }
+        if (!sample.shaderObserved || sample.captureSynthetic || sample.sourceColorSentToBlend == null) {
+            return "alpha-conversion-stage-incomplete"
+        }
+        if (expectedCoverageByte != 160 || observedAlphaByte != 96) {
+            return "alpha-conversion-stage-incomplete"
+        }
+        val coverageByte = m60F16AlphaByte(sample.coverageOrAaAlpha)
+        val sourceAfterCoverageByte = m60F16AlphaByte(sample.sourceAlphaAfterCoverage)
+        val beforeQuantizationByte = m60F16AlphaByte(sample.sourceColorBeforeQuantization?.getOrNull(3))
+        val quantizedByte = m60F16AlphaByte(sample.quantizedAlphaSentToBlend)
+        val sentByte = m60F16AlphaByte(sample.sourceColorSentToBlend.getOrNull(3))
+        return when {
+            coverageByte == observedAlphaByte -> "alpha-drop-before-shader-return"
+            coverageByte == expectedCoverageByte && sourceAfterCoverageByte == observedAlphaByte ->
+                "alpha-drop-at-source-alpha-application"
+            sourceAfterCoverageByte == expectedCoverageByte && beforeQuantizationByte == expectedCoverageByte &&
+                quantizedByte == observedAlphaByte -> "alpha-drop-at-quantization"
+            (quantizedByte == expectedCoverageByte || beforeQuantizationByte == expectedCoverageByte) &&
+                sentByte == observedAlphaByte -> "alpha-drop-after-source-field"
+            else -> "alpha-conversion-stage-incomplete"
+        }
+    }
+
+    private fun m60F16AlphaStageJson(alpha: Float?, expectedByte: Int, observedByte: Int?): String {
+        val byte = m60F16AlphaByte(alpha)
+        return """
+            {
+              "available": ${alpha != null},
+              "alpha": ${alpha?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+              "alphaByte": ${byte ?: "null"},
+              "deltaFromExpectedByte": ${byte?.let { it - expectedByte } ?: "null"},
+              "deltaFromObservedByte": ${if (byte != null && observedByte != null) byte - observedByte else "null"}
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16AlphaByte(alpha: Float?): Int? =
+        alpha?.let { kotlin.math.round(it * 255f).toInt().coerceIn(0, 255) }
+
+    private fun m60F16ByteDelta(alpha: Float?, expectedByte: Int): Int? =
+        m60F16AlphaByte(alpha)?.let { it - expectedByte }
+
+    private fun m60F16AlphaConversionStageLocalReason(classification: String): String = when (classification) {
+        "alpha-drop-before-shader-return" ->
+            "The first captured alpha stage already equals 96/255, so the drop happened before the shader return diagnostic stage."
+        "alpha-drop-at-source-alpha-application" ->
+            "coverageOrAaAlpha still equals the expected 160/255, but sourceAlphaAfterCoverage and the returned source alpha equal 96/255."
+        "alpha-drop-at-quantization" ->
+            "The pre-quantization alpha remains at the expected 160/255 and the quantized alpha sent to blend drops to 96/255."
+        "alpha-drop-after-source-field" ->
+            "The available source field remains at the expected 160/255 before the final returned source alpha drops to 96/255."
+        else ->
+            "The available stage fields are insufficient or contradictory for a stable conversion-stage classification."
+    }
+
+    private fun m60F16AlphaConversionStageGlobalReason(classification: String): String = when (classification) {
+        "alpha-drop-before-shader-return" ->
+            "The majority of FOR-424 partial pixels already expose 96/255 at coverageOrAaAlpha."
+        "alpha-drop-at-source-alpha-application" ->
+            "The majority of FOR-424 partial pixels keep coverageOrAaAlpha at 160/255 and drop to 96/255 at sourceAlphaAfterCoverage."
+        "alpha-drop-at-quantization" ->
+            "The majority of FOR-424 partial pixels drop from 160/255 to 96/255 at quantizedAlphaSentToBlend."
+        "alpha-drop-after-source-field" ->
+            "The majority of FOR-424 partial pixels drop from 160/255 to 96/255 after the source field stage."
+        else ->
+            "The FOR-425 stage data is not complete enough to localize the 160/255 to 96/255 conversion."
+    }
+
+    private fun m60F16AlphaConversionStageNextStep(classification: String): String = when (classification) {
+        "alpha-drop-at-source-alpha-application" ->
+            "Inspect the AA stencil-cover source alpha application path before applying any rendering correction."
+        "alpha-drop-at-quantization" ->
+            "Inspect the quantization path for the AA stencil-cover source alpha before applying any rendering correction."
+        "alpha-drop-before-shader-return" ->
+            "Inspect the pre-return coverage derivation path before applying any rendering correction."
+        "alpha-drop-after-source-field" ->
+            "Inspect the final source field handoff to the blend return path before applying any rendering correction."
+        else ->
+            "Add the missing bounded stage field before attempting a renderer correction."
     }
 
     private data class M60F16FinalWgslFunctionSummary(
@@ -6556,6 +6875,19 @@ class StrokeCapJoinSceneCaptureTest {
         val observedToExpectedRatio: Float?,
         val coverageDelta: Float?,
         val neighborhood: M60F16CoverageNeighborhood3x3,
+        val classification: String,
+    )
+
+    private data class M60F16AlphaConversionStageRecord(
+        val key: M60F16DrawPixelKey,
+        val band: StrokePaintBand?,
+        val source: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val expectedCoverageByte: Int,
+        val expectedCoverage: Float,
+        val observedAlphaByte: Int?,
         val classification: String,
     )
 
