@@ -202,6 +202,8 @@ private const val WEBGPU_M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_FLAG: Stri
     "kanvas.webgpu.m60F16BoundedCorrectionApplicationPointDiagnostic.enabled"
 private const val WEBGPU_M60_F16_COVERAGE_STENCIL_CONTRIBUTION_MAP_FLAG: String =
     "kanvas.webgpu.m60F16CoverageStencilContributionMap.enabled"
+private const val WEBGPU_M60_F16_DIRECT_PASS_WRITE_HOOK_FLAG: String =
+    "kanvas.webgpu.m60F16DirectPassWriteHook.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -464,6 +466,35 @@ public class SkWebGpuDevice(
         val valid: Boolean,
     )
 
+    public data class M60F16AaStencilCoverPostPassRuntimeHookSnapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val requestedBoundary: String,
+        val observedBoundary: String,
+        val sampleLimit: Int,
+        val events: List<M60F16AaStencilCoverPostPassRuntimeHookEvent>,
+    )
+
+    public data class M60F16AaStencilCoverPostPassRuntimeHookEvent(
+        val drawIndex: Int,
+        val pipelineFamily: String,
+        val fillType: String,
+        val blendMode: String,
+        val scissor: IntArray,
+        val edgeCount: Int,
+        val coverVertexCount: Int,
+        val samples: List<M60F16AaStencilCoverPostPassRuntimeHookSample>,
+    )
+
+    public data class M60F16AaStencilCoverPostPassRuntimeHookSample(
+        val x: Int,
+        val y: Int,
+        val targetWithinScissor: Boolean,
+        val postPassReadbackAvailable: Boolean,
+        val classification: String,
+        val reason: String,
+    )
+
     public data class RawRectUniformColorWrite(
         val route: String,
         val drawIndex: Int,
@@ -581,6 +612,8 @@ public class SkWebGpuDevice(
             WEBGPU_M60_F16_COVERAGE_STENCIL_CONTRIBUTION_MAP_FLAG,
             "false",
         ).toBoolean()
+    private val m60F16DirectPassWriteHookEnabled: Boolean =
+        System.getProperty(WEBGPU_M60_F16_DIRECT_PASS_WRITE_HOOK_FLAG, "false").toBoolean()
     private val rawRectUniformColorWrites: MutableList<RawRectUniformColorWrite> = mutableListOf()
     private val rawRgba8TextureUploads: MutableList<RawRgba8TextureUpload> = mutableListOf()
     private val outputReadbackBoundarySamples: MutableList<OutputReadbackSample> = mutableListOf()
@@ -591,6 +624,8 @@ public class SkWebGpuDevice(
         MutableList<M60F16BoundedCorrectionApplicationPointSample> = mutableListOf()
     private val m60F16CoverageStencilContributionMapSamples:
         MutableList<M60F16CoverageStencilContributionMapSample> = mutableListOf()
+    private val m60F16AaStencilCoverPostPassRuntimeHookEvents:
+        MutableList<M60F16AaStencilCoverPostPassRuntimeHookEvent> = mutableListOf()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
         PipelineKeyedCache("generated shader modules")
@@ -685,6 +720,17 @@ public class SkWebGpuDevice(
             windowRadius = M60_F16_COVERAGE_STENCIL_CONTRIBUTION_MAP_WINDOW_RADIUS,
             sampleLimit = M60_F16_COVERAGE_STENCIL_CONTRIBUTION_MAP_SAMPLE_LIMIT,
             samples = m60F16CoverageStencilContributionMapSamples.toList(),
+        )
+
+    public fun m60F16AaStencilCoverPostPassRuntimeHookSnapshot():
+        M60F16AaStencilCoverPostPassRuntimeHookSnapshot =
+        M60F16AaStencilCoverPostPassRuntimeHookSnapshot(
+            propertyName = WEBGPU_M60_F16_DIRECT_PASS_WRITE_HOOK_FLAG,
+            enabled = m60F16DirectPassWriteHookEnabled,
+            requestedBoundary = "after StencilCoverAaPolygonDraw cover sub-draws before final present/readback",
+            observedBoundary = "StencilCoverAaPolygonDraw runtime branch after inside/outside cover draw encoding",
+            sampleLimit = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.size,
+            events = m60F16AaStencilCoverPostPassRuntimeHookEvents.toList(),
         )
 
     public fun buildPipelineKeyIdentityForDiagnostics(axes: Map<String, String>): PipelineKey =
@@ -1140,6 +1186,50 @@ public class SkWebGpuDevice(
     }
 
     private fun targetColorSpaceBlendFlag(): Float = if (targetColorSpaceBlend) 1f else 0f
+
+    private fun recordM60F16AaStencilCoverPostPassRuntimeHook(
+        drawIndex: Int,
+        d: StencilCoverAaPolygonDraw,
+    ) {
+        if (!m60F16DirectPassWriteHookEnabled || d.m60F16BandMetadata == null) {
+            return
+        }
+        val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
+            val targetWithinScissor =
+                x >= d.scissor[0] &&
+                    y >= d.scissor[1] &&
+                    x < d.scissor[0] + d.scissor[2] &&
+                    y < d.scissor[1] + d.scissor[3]
+            val classification = if (targetWithinScissor) {
+                "aa-stencil-cover-post-pass-readback-blocked"
+            } else {
+                "aa-stencil-cover-pass-not-targeting-coordinate"
+            }
+            M60F16AaStencilCoverPostPassRuntimeHookSample(
+                x = x,
+                y = y,
+                targetWithinScissor = targetWithinScissor,
+                postPassReadbackAvailable = false,
+                classification = classification,
+                reason = if (targetWithinScissor) {
+                    "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+                } else {
+                    "The coordinate is outside this StencilCoverAaPolygonDraw scissor, so this pass cannot be used as the writer boundary for the coordinate."
+                },
+            )
+        }
+        m60F16AaStencilCoverPostPassRuntimeHookEvents +=
+            M60F16AaStencilCoverPostPassRuntimeHookEvent(
+                drawIndex = drawIndex,
+                pipelineFamily = "StencilCoverAaPolygonDraw",
+                fillType = d.fillType.name,
+                blendMode = d.mode.name,
+                scissor = d.scissor.copyOf(),
+                edgeCount = d.edgeCount,
+                coverVertexCount = d.coverVerts.size / 2,
+                samples = samples,
+            )
+    }
 
     private fun srgbToRec2020Encoded(r: Double, g: Double, b: Double): Triple<Double, Double, Double> {
         val lr = srgbToLinear(r)
@@ -13370,6 +13460,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         encoder: io.ygdrasil.webgpu.GPUCommandEncoder,
     ): List<DrawResources> {
         val colorView = intermediateView
+        if (m60F16DirectPassWriteHookEnabled) {
+            m60F16AaStencilCoverPostPassRuntimeHookEvents.clear()
+        }
 
         // G-suivi (round 17 follow-up) -- drop pending draws whose vertex
         // arrays would produce a zero-size GPU buffer. WebGPU panics in
@@ -13650,6 +13743,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                     draw((d.coverVerts.size / 2).toUInt())
                     end()
                 }
+                recordM60F16AaStencilCoverPostPassRuntimeHook(i, d)
                 if (res.m60F16FragmentLaneDiagnosticStorage != null &&
                     res.m60F16FragmentLaneDiagnosticStaging != null
                 ) {
@@ -17540,6 +17634,24 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         val M60_F16_COVERAGE_STENCIL_CONTRIBUTION_MAP_BUFFER_SIZE: ULong =
             (M60_F16_BOUNDED_CORRECTION_APPLICATION_POINT_SAMPLE_STRIDE_BYTES *
                 M60_F16_COVERAGE_STENCIL_CONTRIBUTION_MAP_SAMPLE_LIMIT).toULong()
+        val M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS: List<Pair<Int, Int>> = listOf(
+            92 to 75,
+            91 to 76,
+            90 to 77,
+            89 to 78,
+            88 to 79,
+            87 to 80,
+            101 to 37,
+            102 to 37,
+            99 to 38,
+            100 to 38,
+            101 to 38,
+            102 to 38,
+            103 to 38,
+            104 to 38,
+            98 to 39,
+            99 to 39,
+        )
         val OUTPUT_READBACK_SENTINEL_POINTS: List<Pair<Int, Int>> = listOf(
             0 to 0,
             8 to 24,

@@ -1,0 +1,1228 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-404",
+          "sceneId": "m60-f16-aa-stencil-cover-runtime-hook-for404",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-direct-pass-write-hook-for403/m60-f16-direct-pass-write-hook-for403.json",
+          "sourceArtifacts": {
+            "for401": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-final-residual-origin-map-for401/m60-f16-final-residual-origin-map-for401.json",
+            "for402": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-pass-write-probe-for402/m60-f16-pass-write-probe-for402.json",
+            "for403": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-direct-pass-write-hook-for403/m60-f16-direct-pass-write-hook-for403.json"
+          },
+          "sourceMemory": "global/kanvas/findings/for-403-refuse-le-hook-direct-pass-write-m60-f16-sans-frontiere-post-draw-pre-readback",
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "producerMethod": "writeM60F16AaStencilCoverRuntimeHook",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "decision": "M60_F16_AA_STENCIL_COVER_RUNTIME_HOOK_RECORDED",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "allowedClassifications": [
+            "aa-stencil-cover-post-pass-observed",
+            "aa-stencil-cover-post-pass-readback-blocked",
+            "aa-stencil-cover-pass-not-targeting-coordinate",
+            "aa-stencil-cover-runtime-hook-inconclusive"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "correctionAppliedByDefault": false,
+          "defaultRenderingChanged": false,
+          "guards": {
+            "experimentalStrokeRenderer": {
+              "guardId": "kanvas.webgpu.strokeCapJoin.experimentalRender",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "bandMetadataTransport": {
+              "guardId": "kanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "fragmentLaneDiagnostic": {
+              "guardId": "kanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "coverageStencilContributionMap": {
+              "guardId": "kanvas.webgpu.m60F16CoverageStencilContributionMap.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false,
+              "evidencePolicy": "context-only-not-direct-write-proof"
+            },
+            "finalResidualOriginMap": {
+              "guardId": "kanvas.webgpu.m60F16FinalResidualOriginMap.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "passWriteProbe": {
+              "guardId": "kanvas.webgpu.m60F16PassWriteProbe.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            },
+            "aaStencilCoverPostPassRuntimeHook": {
+              "guardId": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled",
+              "enabledForEvidenceRun": true,
+              "enabledByDefault": false
+            }
+          },
+          "sourceContext": {
+            "for403Classification": "direct-pass-write-hook-inconclusive",
+            "for403Finding": "global/kanvas/findings/for-403-refuse-le-hook-direct-pass-write-m60-f16-sans-frontiere-post-draw-pre-readback",
+            "for400EvidencePolicy": "context-only-not-direct-write-proof",
+            "for401Classification": "residual-visible-only-at-final-readback",
+            "for401CurrentTotalResidual": 62748,
+            "for401SelectedResidualTotal": 1560,
+            "for401SelectedPixelCount": 16,
+            "for402Classification": "pass-write-probe-inconclusive"
+          },
+          "runtimeHook": {
+            "api": "SkWebGpuDevice.m60F16AaStencilCoverPostPassRuntimeHookSnapshot()",
+            "propertyName": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled",
+            "enabled": true,
+            "requestedBoundary": "after StencilCoverAaPolygonDraw cover sub-draws before final present/readback",
+            "observedBoundary": "StencilCoverAaPolygonDraw runtime branch after inside/outside cover draw encoding",
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "sampleLimit": 16,
+            "eventCount": 3,
+            "postPassReadbackAvailable": false,
+            "events": [
+                    {
+          "drawIndex": 1,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "fillType": "kWinding",
+          "blendMode": "kSrcOver",
+          "scissor": [0, 0, 192, 128],
+          "edgeCount": 8,
+          "coverVertexCount": 6,
+          "samples": [
+            {
+  "x": 92,
+  "y": 75,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 91,
+  "y": 76,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 90,
+  "y": 77,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 89,
+  "y": 78,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 88,
+  "y": 79,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 87,
+  "y": 80,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 101,
+  "y": 37,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 102,
+  "y": 37,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 99,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 100,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 101,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 102,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 103,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 104,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 98,
+  "y": 39,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 99,
+  "y": 39,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+}
+          ]
+        },
+        {
+          "drawIndex": 3,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "fillType": "kWinding",
+          "blendMode": "kSrcOver",
+          "scissor": [0, 0, 192, 128],
+          "edgeCount": 39,
+          "coverVertexCount": 6,
+          "samples": [
+            {
+  "x": 92,
+  "y": 75,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 91,
+  "y": 76,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 90,
+  "y": 77,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 89,
+  "y": 78,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 88,
+  "y": 79,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 87,
+  "y": 80,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 101,
+  "y": 37,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 102,
+  "y": 37,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 99,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 100,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 101,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 102,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 103,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 104,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 98,
+  "y": 39,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 99,
+  "y": 39,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+}
+          ]
+        },
+        {
+          "drawIndex": 5,
+          "pipelineFamily": "StencilCoverAaPolygonDraw",
+          "fillType": "kWinding",
+          "blendMode": "kSrcOver",
+          "scissor": [0, 0, 192, 128],
+          "edgeCount": 12,
+          "coverVertexCount": 6,
+          "samples": [
+            {
+  "x": 92,
+  "y": 75,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 91,
+  "y": 76,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 90,
+  "y": 77,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 89,
+  "y": 78,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 88,
+  "y": 79,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 87,
+  "y": 80,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 101,
+  "y": 37,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 102,
+  "y": 37,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 99,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 100,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 101,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 102,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 103,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 104,
+  "y": 38,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 98,
+  "y": 39,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+},
+{
+  "x": 99,
+  "y": 39,
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked",
+  "reason": "StencilCoverAaPolygonDraw targeted the coordinate, but the runtime does not expose a texture readback between the AA stencil-cover pass and final present/readback."
+}
+          ]
+        }
+            ]
+          },
+          "postPassSummary": {
+            "currentTotalResidual": 62748,
+            "currentMismatchPixels": 1615,
+            "selectedPixelCount": 16,
+            "selectedResidualTotal": 1560,
+            "postPassObservedCount": 0,
+            "postPassReadbackBlockedCount": 16,
+            "passNotTargetingCoordinateCount": 0,
+            "runtimeHookInconclusiveCount": 0
+          },
+          "selectedPixels": [
+                    {
+          "x": 92,
+          "y": 75,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 91,
+          "y": 76,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 90,
+          "y": 77,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 89,
+          "y": 78,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 88,
+          "y": 79,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 87,
+          "y": 80,
+          "currentGpuRgba": [181, 191, 230, 255],
+          "referenceRgba": [133, 150, 214, 255],
+          "residualByChannel": {"r": 48, "g": 41, "b": 16, "a": 0},
+          "residualTotal": 105,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 101,
+          "y": 37,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 102,
+          "y": 37,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 99,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 100,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 101,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 102,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 103,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 104,
+          "y": 38,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 98,
+          "y": 39,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        },
+        {
+          "x": 99,
+          "y": 39,
+          "currentGpuRgba": [0, 138, 76, 255],
+          "referenceRgba": [68, 121, 68, 255],
+          "residualByChannel": {"r": 68, "g": 17, "b": 8, "a": 0},
+          "residualTotal": 93,
+          "for401AttributionCandidate": "readbackOnlyUnknown",
+          "classification": "aa-stencil-cover-post-pass-readback-blocked",
+          "postPass": {
+            "observed": false,
+            "readbackAvailable": false,
+            "targetingStencilCoverAaDrawCount": 3,
+            "inspectedStencilCoverAaDrawCount": 3,
+            "drawIds": [1, 3, 5],
+            "pipelineFamily": "StencilCoverAaPolygonDraw",
+            "for400ContributionEvidenceUsedAsProof": false,
+            "reason": "FOR-404 inspected the StencilCoverAaPolygonDraw post-cover runtime boundary; no color readback exists at that boundary, so FOR-400 remains contextual only.",
+            "inspectedEvents": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "targetWithinScissor": true,
+  "postPassReadbackAvailable": false,
+  "classification": "aa-stencil-cover-post-pass-readback-blocked"
+}
+            ]
+          }
+        }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "correctionApplied": false,
+            "for380BroadCorrectionReintroduced": false,
+            "for400UsedAsDirectProof": false,
+            "generalizedOutsideM60F16": false
+          },
+          "classificationReason": "The opt-in runtime hook reached the StencilCoverAaPolygonDraw post-cover boundary for the FOR-401 coordinates, but no post-pass texture readback is available before final present/readback.",
+          "nextStep": "A real post-pass color sample still requires a WebGPU-safe texture copy/readback boundary between the AA stencil-cover render pass and final present/readback.",
+          "validationCommands": [
+            "rtk python3 scripts/validate_for404_m60_f16_aa_stencil_cover_runtime_hook.py",
+            "rtk python3 scripts/validate_for403_m60_f16_direct_pass_write_hook.py",
+            "rtk python3 scripts/validate_for402_m60_f16_pass_write_probe.py",
+            "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16DirectPassWriteHook.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverBandMetadataTransport.enabled=true -Dkanvas.webgpu.m60F16AaStencilCoverFragmentLaneDiagnostic.enabled=true -Dkanvas.webgpu.m60F16CoverageStencilContributionMap.enabled=true -Dkanvas.webgpu.m60F16FinalResidualOriginMap.enabled=true -Dkanvas.webgpu.m60F16PassWriteProbe.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk git diff --check"
+          ]
+        }
