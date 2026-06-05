@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
+import org.skia.core.SkScanFillPathSubsampleTrace
 import org.skia.encode.SkPngEncoder
 import org.skia.foundation.SkBitmap
 import org.skia.foundation.SkLinearGradient
@@ -544,6 +545,13 @@ class StrokeCapJoinSceneCaptureTest {
             )
             if (System.getProperty(FOR427_SUBSAMPLE_MASK_PROPERTY, "false").toBoolean()) {
                 writeM60F16AaStencilCoverSubsampleMaskFor427(
+                    finalWgslSnapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
+                    storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                    adapter = adapter,
+                )
+            }
+            if (System.getProperty(FOR428_CPU_SCANFILL_SUBSAMPLE_MASK_PROPERTY, "false").toBoolean()) {
+                writeM60F16CpuScanFillSubsampleMaskFor428(
                     finalWgslSnapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
                     storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
                     adapter = adapter,
@@ -4410,6 +4418,42 @@ class StrokeCapJoinSceneCaptureTest {
         }
     }
 
+    private fun m60F16CpuScanFillSubsampleMaskFor428Classification(
+        expectedCoverageByte: Int,
+        cpuTrace: SkScanFillPathSubsampleTrace.PixelMask?,
+        cpuMask: Int?,
+        sample: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample?,
+        wgslMask: Int?,
+        diagnosticReturnPathVerified: Boolean,
+        maskInstrumentationPresent: Boolean,
+    ): String {
+        if (cpuTrace == null || cpuMask == null) {
+            return "cpu-scanfill-subsample-mask-unavailable"
+        }
+        if (!diagnosticReturnPathVerified || !maskInstrumentationPresent || sample == null || wgslMask == null) {
+            return "subsample-mask-stage-incomplete"
+        }
+        if (!sample.shaderObserved || sample.captureSynthetic || sample.subdrawRole != "inside") {
+            return "subsample-mask-stage-incomplete"
+        }
+        if (expectedCoverageByte == 160 &&
+            cpuTrace.scanFillPathSamples == 10 &&
+            cpuMask.countOneBits() == 6 &&
+            sample.coveredSubsamples4x4 == 6 &&
+            cpuMask == wgslMask
+        ) {
+            return "scanfill-span-count-exceeds-center-mask"
+        }
+        return m60F16SubsampleMaskClassification(
+            expectedCoverageByte = expectedCoverageByte,
+            cpuMask = cpuMask,
+            sample = sample,
+            wgslMask = wgslMask,
+            diagnosticReturnPathVerified = diagnosticReturnPathVerified,
+            maskInstrumentationPresent = maskInstrumentationPresent,
+        )
+    }
+
     private fun m60F16ClassificationCountsJson(order: List<String>, counts: Map<String, Int>): String =
         order.joinToString(prefix = "{\n", separator = ",\n", postfix = "\n}") { key ->
             "  ${key.jsonString()}: ${counts[key] ?: 0}"
@@ -4418,6 +4462,8 @@ class StrokeCapJoinSceneCaptureTest {
     private fun m60F16SubsampleMaskMajorityHypothesis(classification: String): String = when (classification) {
         "sample-grid-coordinate-shift" -> "sample-grid-coordinate-shift"
         "winding-rule-disagreement" -> "winding-rule-disagreement"
+        "scanfill-span-count-exceeds-center-mask" -> "scanfill-span-quantization-disagreement"
+        "cpu-scanfill-subsample-mask-unavailable" -> "cpu-scanfill-subsample-mask-unavailable"
         "subsample-mask-stage-incomplete" -> "subsample-mask-stage-incomplete"
         else -> "edge-evaluation-disagreement"
     }
@@ -4433,8 +4479,273 @@ class StrokeCapJoinSceneCaptureTest {
             "The divergent subsample pattern is not a strict miss/add shape and may point at fill-rule evaluation."
         "edge-evaluation-disagreement" ->
             "The divergent subsample pattern is dominated by CPU-only samples, but the WGSL mask is not a strict subset of the CPU mask."
+        "scanfill-span-count-exceeds-center-mask" ->
+            "The CPU scanFillPath span counter reports 10/16 coverage, but the traced 4x4 center mask matches the WGSL 6/16 mask."
+        "cpu-scanfill-subsample-mask-unavailable" ->
+            "The CPU scanFillPath subsample mask was not captured for this pixel."
         else ->
             "The CPU or WGSL subsample grid was not completely captured."
+    }
+
+    private fun writeM60F16CpuScanFillSubsampleMaskFor428(
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-cpu-scanfill-subsample-mask-for428"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16CpuScanFillSubsampleMaskFor428Json(
+                sceneId = sceneId,
+                finalWgslSnapshot = finalWgslSnapshot,
+                storageSnapshot = storageSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16CpuScanFillSubsampleMaskFor428Json(
+        sceneId: String,
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ): String {
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val cpuTargets = partialPoints.map { (x, y) -> SkScanFillPathSubsampleTrace.Target(x, y) }.toSet()
+        SkScanFillPathSubsampleTrace.configureForTargets(cpuTargets, supers = 4)
+        val coverageMask = try {
+            TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        } finally {
+            SkScanFillPathSubsampleTrace.reset()
+        }
+        val cpuMasksByPoint = SkScanFillPathSubsampleTrace.snapshot()
+            .associateBy { mask -> mask.x to mask.y }
+        val summaries = finalWgslSnapshot.variants.map { m60F16FinalWgslVariantSummary(it) }
+        val maskInstrumentationPresent = finalWgslSnapshot.variants
+            .filter { it.logicalName == "shader-return-storage-zero-cause" }
+            .all { variant ->
+                variant.source.contains("m60_f16_subsample_mask_4x4") &&
+                    variant.source.contains("m60_f16_covered_subsamples_4x4") &&
+                    variant.source.contains("sample_covered(vec2f(x, y))")
+            }
+        val diagnosticReturnPathVerified = summaries
+            .filter { it.logicalName != "normal-bounded-runtime-correction" }
+            .all { summary ->
+                summary.functions["fs_inside"]?.returnsApplicationPointOutput == true &&
+                    summary.functions["fs_outside"]?.returnsApplicationPointOutput == true
+            }
+        val storageByKey = storageSnapshot.storageEvents
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val records = storageByKey.keys
+            .filter { it.drawIndex == 1 && partialPoints.contains(it.x to it.y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.drawIndex }.thenBy { it.y }.thenBy { it.x })
+            .map { key ->
+                val sourceRecords = storageByKey[key].orEmpty()
+                    .sortedWith(
+                        compareBy<Pair<
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                            >> { it.second.subdrawOrdinal }.thenBy { it.second.subdrawRole },
+                    )
+                val source = sourceRecords
+                    .filter { (_, sample) -> sample.shaderObserved && !sample.captureSynthetic && sample.subdrawRole == "inside" }
+                    .maxByOrNull { (_, sample) -> sample.sourceColorSentToBlend?.getOrNull(3) ?: -1f }
+                val event = source?.first
+                val sample = source?.second
+                val expectedCoverageByte = (coverageMask.getPixel(key.x, key.y) ushr 24) and 0xFF
+                val cpuTrace = cpuMasksByPoint[key.x to key.y]
+                val cpuMask = cpuTrace?.mask4x4
+                val wgslMask = sample?.wgslSubsampleMask4x4
+                M60F16CpuScanFillSubsampleMaskFor428Record(
+                    key = key,
+                    event = event,
+                    sample = sample,
+                    expectedCoverageByte = expectedCoverageByte,
+                    cpuTrace = cpuTrace,
+                    cpuMask = cpuMask,
+                    wgslMask = wgslMask,
+                    classification = m60F16CpuScanFillSubsampleMaskFor428Classification(
+                        expectedCoverageByte = expectedCoverageByte,
+                        cpuTrace = cpuTrace,
+                        cpuMask = cpuMask,
+                        sample = sample,
+                        wgslMask = wgslMask,
+                        diagnosticReturnPathVerified = diagnosticReturnPathVerified,
+                        maskInstrumentationPresent = maskInstrumentationPresent,
+                    ),
+                )
+            }
+        val classificationOrder = M60_F16_FOR428_ALLOWED_CLASSIFICATIONS
+        val classificationCounts = records.groupingBy { it.classification }.eachCount()
+        val majority = classificationOrder.maxWithOrNull(
+            compareBy<String> { classificationCounts[it] ?: 0 }.thenByDescending { classificationOrder.indexOf(it) },
+        ) ?: "cpu-scanfill-subsample-mask-unavailable"
+        val cpuOnlyTotal = records.sumOf { it.cpuOnlySubsamples ?: 0 }
+        val wgslOnlyTotal = records.sumOf { it.wgslOnlySubsamples ?: 0 }
+        val matchingTotal = records.sumOf { it.matchingSubsamples ?: 0 }
+        val recordsJson = records.joinToString(",\n") { record ->
+            m60F16CpuScanFillSubsampleMaskFor428RecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-428",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "m60-f16-aa-stencil-cover-subsample-mask-for427",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-428-m60-f16-exporter-le-masque-4x4-cpu-scan-fill-path-pour-comparaison-subsample",
+              "sourceFindingMemory": "global/kanvas/findings/for-427-subsample-mask-stage-incomplete-because-cpu-scan-fill-path-identity-is-not-exported",
+              "previousFindingMemory": "global/kanvas/findings/for-426-raw-path-coverage-already-96-before-clip",
+              "sourceArtifacts": {
+                "for427": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-subsample-mask-for427/m60-f16-aa-stencil-cover-subsample-mask-for427.json",
+                "for426": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-coverage-input-stage-for426/m60-f16-aa-stencil-cover-coverage-input-stage-for426.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "cpuRuntimeOwner": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+              "gpuRuntimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${majority.jsonString()},
+              "globalClassification": ${majority.jsonString()},
+              "allowedClassifications": [
+            ${classificationOrder.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "comparisonPolicy": {
+                "scope": "Exactly the 6 FOR-426 partial pixels whose CPU coverage alpha is 160/255 and WGSL rawPathCoverage is 96/255.",
+                "cpuMaskSource": "real scanFillPath execution: SkScanFillPathSubsampleTrace records selected pixels inside SkBitmapDevice.scanFillPath.addSpanCoverage while BoundedStrokeCapJoinCoverageMaskGM renders.",
+                "cpuMaskSamplingRule": "For each traced addSpanCoverage call, the trace marks the 4x4 subsample cells whose x-center lies inside the clipped CPU span for that subrow.",
+                "cpuMaskLimitation": null,
+                "wgslMaskSource": "m60_f16_subsample_mask_4x4 captured from sample_covered in the shader-return-storage-zero-cause diagnostic.",
+                "noSyntheticCpuMask": true,
+                "noRenderingFixApplied": true
+              },
+              "summary": {
+                "diagnosticReturnPathVerified": $diagnosticReturnPathVerified,
+                "subsampleMaskInstrumentationPresent": $maskInstrumentationPresent,
+                "cpuScanFillTraceTargetCount": ${cpuTargets.size},
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "expectedCoverage160Count": ${records.count { it.expectedCoverageByte == 160 }},
+                "for426RawPathCoverage96Count": ${records.count { m60F16AlphaByte(it.sample?.rawPathCoverage) == 96 }},
+                "for426CoveredSubsamples6Count": ${records.count { it.sample?.coveredSubsamples4x4 == 6 }},
+                "cpuCoveredSubsamples4x4Total": ${records.sumOf { it.cpuCoveredSubsamples4x4 ?: 0 }},
+                "cpuScanFillPathSamplesTotal": ${records.sumOf { it.cpuTrace?.scanFillPathSamples ?: 0 }},
+                "wgslCoveredSubsamples4x4Total": ${records.sumOf { it.wgslCoveredSubsamples4x4 ?: 0 }},
+                "matchingSubsamplesTotal": $matchingTotal,
+                "cpuOnlySubsamplesTotal": $cpuOnlyTotal,
+                "wgslOnlySubsamplesTotal": $wgslOnlyTotal,
+                "majorityHypothesis": ${m60F16SubsampleMaskMajorityHypothesis(majority).jsonString()},
+                "majorityClassification": ${majority.jsonString()},
+                "majorityClassificationCount": ${classificationCounts[majority] ?: 0},
+                "classificationCounts": ${m60F16ClassificationCountsJson(classificationOrder, classificationCounts).prependIndent("  ").trimStart()}
+              },
+              "partialPixels": [
+            $recordsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "renderingFixApplied": false,
+                "wgsl4kModified": false
+              },
+              "classificationReason": ${m60F16SubsampleMaskReason(majority).jsonString()},
+              "nextStep": "Use the real CPU/WGSL cell comparison to decide whether the renderer fix belongs in sample grid mapping, edge evaluation, or fill-rule evaluation.",
+              "validationCommands": [
+                "rtk python3 scripts/validate_for428_m60_f16_cpu_scanfill_subsample_mask.py",
+                "rtk python3 scripts/validate_for427_m60_f16_aa_stencil_cover_subsample_mask.py",
+                "rtk python3 scripts/validate_for426_m60_f16_aa_stencil_cover_coverage_input_stage.py",
+                "rtk python3 scripts/validate_for425_m60_f16_aa_stencil_cover_alpha_conversion_stage.py",
+                "rtk python3 scripts/validate_for424_m60_f16_aa_stencil_cover_partial_coverage_alpha.py",
+                "rtk python3 scripts/validate_for423_m60_f16_aa_stencil_cover_reference_source_coverage.py",
+                "rtk python3 scripts/validate_for422_m60_f16_aa_stencil_cover_verified_source_comparison.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for428-pycache python3 -m py_compile scripts/validate_for428_m60_f16_cpu_scanfill_subsample_mask.py",
+                "rtk git diff --check",
+                "rtk ./gradlew --no-daemon :kanvas-skia:compileKotlin :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16CpuScanFillSubsampleMaskFor428RecordJson(
+        record: M60F16CpuScanFillSubsampleMaskFor428Record,
+    ): String {
+        val sample = record.sample
+        val entryPoint = when (sample?.subdrawRole) {
+            "inside" -> "fs_inside"
+            "outside" -> "fs_outside"
+            else -> null
+        }
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "subdrawOrdinal": ${sample?.subdrawOrdinal ?: "null"},
+              "subdrawRole": ${sample?.subdrawRole?.jsonString() ?: "null"},
+              "entryPoint": ${entryPoint?.jsonString() ?: "null"},
+              "edgeCount": ${record.event?.edgeCount ?: "null"},
+              "fillType": ${record.event?.fillType?.jsonString() ?: "null"},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16SubsampleMaskReason(record.classification).jsonString()},
+              "expectedCoverageByte": ${record.expectedCoverageByte},
+              "for426RawPathCoverageByte": ${m60F16AlphaByte(sample?.rawPathCoverage) ?: "null"},
+              "for426CoveredSubsamples4x4": ${sample?.coveredSubsamples4x4 ?: "null"},
+              "cpuCoveredSubsamples4x4": ${record.cpuCoveredSubsamples4x4 ?: "null"},
+              "cpuScanFillPathSamples": ${record.cpuTrace?.scanFillPathSamples ?: "null"},
+              "cpuTraceSource": ${record.cpuTrace?.source?.jsonString() ?: "null"},
+              "cpuTraceSpanCount": ${record.cpuTrace?.tracedSpanCount ?: "null"},
+              "wgslCoveredSubsamples4x4": ${record.wgslCoveredSubsamples4x4 ?: "null"},
+              "matchingSubsamples": ${record.matchingSubsamples ?: "null"},
+              "cpuOnlySubsamples": ${record.cpuOnlySubsamples ?: "null"},
+              "wgslOnlySubsamples": ${record.wgslOnlySubsamples ?: "null"},
+              "cpuSubsampleMask4x4": ${record.cpuMask ?: "null"},
+              "wgslSubsampleMask4x4": ${record.wgslMask ?: "null"},
+              "cpuGrid4x4": ${m60F16SubsampleComparisonGridJson(record.key, record.cpuMask, record.wgslMask).prependIndent("  ").trimStart()},
+              "wgslGrid4x4": ${m60F16SubsampleComparisonGridJson(record.key, record.cpuMask, record.wgslMask).prependIndent("  ").trimStart()}
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16SubsampleComparisonGridJson(
+        key: M60F16DrawPixelKey,
+        cpuMask: Int?,
+        wgslMask: Int?,
+    ): String {
+        val cells = (0 until 16).joinToString(",\n") { index ->
+            val sx = index % 4
+            val sy = index / 4
+            val cpuCovered = cpuMask?.let { (it and (1 shl index)) != 0 }
+            val wgslCovered = wgslMask?.let { (it and (1 shl index)) != 0 }
+            val divergent = if (cpuCovered != null && wgslCovered != null) cpuCovered != wgslCovered else null
+            """
+                {
+                  "subsampleIndex": $index,
+                  "sx": $sx,
+                  "sy": $sy,
+                  "localX": ${String.format(Locale.US, "%.3f", (sx + 0.5f) * 0.25f)},
+                  "localY": ${String.format(Locale.US, "%.3f", (sy + 0.5f) * 0.25f)},
+                  "deviceX": ${String.format(Locale.US, "%.3f", key.x + (sx + 0.5f) * 0.25f)},
+                  "deviceY": ${String.format(Locale.US, "%.3f", key.y + (sy + 0.5f) * 0.25f)},
+                  "cpuCovered": ${cpuCovered ?: "null"},
+                  "wgslCovered": ${wgslCovered ?: "null"},
+                  "divergent": ${divergent ?: "null"}
+                }
+            """.trimIndent()
+        }
+        return """
+            [
+        ${cells.prependIndent("    ")}
+            ]
+        """.trimIndent()
     }
 
     private data class M60F16FinalWgslFunctionSummary(
@@ -7525,6 +7836,26 @@ class StrokeCapJoinSceneCaptureTest {
         val classification: String,
     ) {
         val cpuCoveredSubsamples4x4: Int? = cpuMask?.countOneBits() ?: expectedCpuCoveredSubsamples4x4
+        val wgslCoveredSubsamples4x4: Int? = wgslMask?.countOneBits()
+        val matchingSubsamples: Int? =
+            if (cpuMask != null && wgslMask != null) 16 - (cpuMask xor wgslMask).countOneBits() else null
+        val cpuOnlySubsamples: Int? =
+            if (cpuMask != null && wgslMask != null) (cpuMask and wgslMask.inv()).countOneBits() else null
+        val wgslOnlySubsamples: Int? =
+            if (cpuMask != null && wgslMask != null) (wgslMask and cpuMask.inv()).countOneBits() else null
+    }
+
+    private data class M60F16CpuScanFillSubsampleMaskFor428Record(
+        val key: M60F16DrawPixelKey,
+        val event: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent?,
+        val sample: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample?,
+        val expectedCoverageByte: Int,
+        val cpuTrace: SkScanFillPathSubsampleTrace.PixelMask?,
+        val cpuMask: Int?,
+        val wgslMask: Int?,
+        val classification: String,
+    ) {
+        val cpuCoveredSubsamples4x4: Int? = cpuMask?.countOneBits()
         val wgslCoveredSubsamples4x4: Int? = wgslMask?.countOneBits()
         val matchingSubsamples: Int? =
             if (cpuMask != null && wgslMask != null) 16 - (cpuMask xor wgslMask).countOneBits() else null
@@ -14460,12 +14791,24 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled"
         private const val FOR427_SUBSAMPLE_MASK_PROPERTY =
             "kanvas.webgpu.m60F16AaStencilCoverSubsampleMaskFor427.enabled"
+        private const val FOR428_CPU_SCANFILL_SUBSAMPLE_MASK_PROPERTY =
+            "kanvas.cpu.m60F16ScanFillSubsampleMaskFor428.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
             "sample-grid-coordinate-shift",
             "winding-rule-disagreement",
             "edge-evaluation-disagreement",
+            "subsample-mask-stage-incomplete",
+        )
+        private val M60_F16_FOR428_ALLOWED_CLASSIFICATIONS = listOf(
+            "wgsl-misses-cpu-covered-subsamples",
+            "wgsl-adds-extra-subsamples",
+            "sample-grid-coordinate-shift",
+            "winding-rule-disagreement",
+            "edge-evaluation-disagreement",
+            "scanfill-span-count-exceeds-center-mask",
+            "cpu-scanfill-subsample-mask-unavailable",
             "subsample-mask-stage-incomplete",
         )
         private const val FOR412_MATCH_TOLERANCE = 0.000001f

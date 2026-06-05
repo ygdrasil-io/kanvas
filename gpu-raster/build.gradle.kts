@@ -208,6 +208,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16AaStencilCoverSubsampleMaskFor427.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16AaStencilCoverSubsampleMaskFor427.enabled", it)
     }
+    System.getProperty("kanvas.cpu.m60F16ScanFillSubsampleMaskFor428.enabled")?.let {
+        systemProperty("kanvas.cpu.m60F16ScanFillSubsampleMaskFor428.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
