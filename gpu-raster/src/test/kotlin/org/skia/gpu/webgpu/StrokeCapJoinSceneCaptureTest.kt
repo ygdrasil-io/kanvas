@@ -242,6 +242,16 @@ class StrokeCapJoinSceneCaptureTest {
             correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
             adapter = adapter,
         )
+        writeM60F16CoverageRegressionDiscriminatorAudit(
+            reference = reference,
+            currentGpu = experimentalGpu,
+            probeGpu = correctedExperimentalGpu,
+            uncorrectedResidualStats = residualStats,
+            correctedResidualStats = correctedResidualStats,
+            uncorrectedExperimentalGpuCmp = experimentalGpuCmp,
+            correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
+            adapter = adapter,
+        )
         File(dir, "experimental-gpu-diagnostic.json").writeText(
             experimentalGpuDiagnosticJson(experimentalGpuCmp, experimentalGpuToleranceProfile, regionStats, residualStats, adapter),
         )
@@ -1145,6 +1155,33 @@ class StrokeCapJoinSceneCaptureTest {
         ).apply { mkdirs() }
         File(dir, "m60-f16-generalized-coverage-metadata-predicate-audit-for385.json").writeText(
             m60F16GeneralizedCoverageMetadataPredicateAuditJson(
+                reference = reference,
+                currentGpu = currentGpu,
+                probeGpu = probeGpu,
+                uncorrectedResidualStats = uncorrectedResidualStats,
+                correctedResidualStats = correctedResidualStats,
+                uncorrectedExperimentalGpuCmp = uncorrectedExperimentalGpuCmp,
+                correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun writeM60F16CoverageRegressionDiscriminatorAudit(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        probeGpu: SkBitmap,
+        uncorrectedResidualStats: StrokeResidualStats,
+        correctedResidualStats: StrokeResidualStats,
+        uncorrectedExperimentalGpuCmp: BitmapComparison,
+        correctedExperimentalGpuCmp: BitmapComparison,
+        adapter: String,
+    ) {
+        val dir = repoFile(
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-coverage-regression-discriminator-audit-for386",
+        ).apply { mkdirs() }
+        File(dir, "m60-f16-coverage-regression-discriminator-audit-for386.json").writeText(
+            m60F16CoverageRegressionDiscriminatorAuditJson(
                 reference = reference,
                 currentGpu = currentGpu,
                 probeGpu = probeGpu,
@@ -2386,6 +2423,255 @@ class StrokeCapJoinSceneCaptureTest {
                 "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
                 "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
                 "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for385-pycache python3 -m py_compile scripts/validate_for385_m60_f16_generalized_coverage_metadata_predicate_audit.py",
+                "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16CoverageRegressionDiscriminatorAuditJson(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        probeGpu: SkBitmap,
+        uncorrectedResidualStats: StrokeResidualStats,
+        correctedResidualStats: StrokeResidualStats,
+        uncorrectedExperimentalGpuCmp: BitmapComparison,
+        correctedExperimentalGpuCmp: BitmapComparison,
+        adapter: String,
+    ): String {
+        val coverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        val transparentSource = TestUtils.runGmTest(BoundedStrokeCapJoinTransparentSourceGM())
+        val criticalSamples = sourceColorSubzoneCriticalSamples(
+            residualStats = uncorrectedResidualStats,
+            probeGpu = probeGpu,
+            coverageMask = coverageMask,
+            transparentSource = transparentSource,
+        )
+        val criticalCoordinates = criticalSamples.map { it.pixel.x to it.pixel.y }
+        val allAudited = MutableMembershipPixelSet("all-audited")
+        val for385Selected = MutableMembershipPixelSet("for385-partial-coverage-alpha-at-least-96")
+        val selectedSourceLocal = MutableMembershipPixelSet("for385-selected-source-local")
+        val selectedRegressed = MutableMembershipPixelSet("for385-selected-regressed")
+        val selectedNonRegressed = MutableMembershipPixelSet("for385-selected-non-regressed")
+        val sourceLocal = MutableMembershipPixelSet("source-locale-plausible")
+        val coverageComposition = MutableMembershipPixelSet("coverage-composition-plausible")
+        val mixed = MutableMembershipPixelSet("mixed")
+        val insufficient = MutableMembershipPixelSet("insufficient")
+        val regressionBreakdown = MutableCoverageRegressionMetadataBreakdown()
+        val candidateStats = coverageRegressionDiscriminatorCandidates().associate { candidate ->
+            candidate.id to MutableCoverageRegressionDiscriminatorCandidateStats(candidate)
+        }
+        val for385Predicate = generalizedCoverageMetadataCandidates().first { it.id == "partial-coverage-alpha-at-least-96" }
+        var generalizedScopePixels = 0
+
+        for (y in 0 until reference.height) {
+            for (x in 0 until reference.width) {
+                val pixel = sourceColorSubzonePixelAudit(
+                    x = x,
+                    y = y,
+                    reference = reference.getPixel(x, y),
+                    current = currentGpu.getPixel(x, y),
+                    probe = probeGpu.getPixel(x, y),
+                    criticalCoordinates = criticalCoordinates,
+                )
+                val membership = coverageCompositionMembershipPixelAudit(
+                    pixel = pixel,
+                    coverageMask = coverageMask.getPixel(x, y),
+                    transparentSource = transparentSource.getPixel(x, y),
+                )
+                val audit = preCorrectionGeometryCoveragePixelAudit(
+                    membership = membership,
+                    coverageMask = coverageMask,
+                )
+                allAudited.add(membership)
+                when (membership.category) {
+                    sourceLocal.id -> sourceLocal.add(membership)
+                    coverageComposition.id -> coverageComposition.add(membership)
+                    mixed.id -> mixed.add(membership)
+                    else -> insufficient.add(membership)
+                }
+                if (
+                    membership.coverageAlphaByte > 0 &&
+                    membership.transparentSourceAlphaByte > 0
+                ) {
+                    generalizedScopePixels++
+                    if (for385Predicate.select(audit)) {
+                        for385Selected.add(membership)
+                        if (membership.category == sourceLocal.id) {
+                            selectedSourceLocal.add(membership)
+                        }
+                        if (pixel.deltaVsCurrent > 0) {
+                            selectedRegressed.add(membership)
+                            regressionBreakdown.add(audit)
+                        } else {
+                            selectedNonRegressed.add(membership)
+                        }
+                        for ((_, stats) in candidateStats) {
+                            if (stats.candidate.select(audit)) {
+                                stats.add(audit)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        val candidates = candidateStats.values.toList()
+        val sourceLocalTruth = selectedSourceLocal.count
+        val regressionTruth = selectedRegressed.count
+        val bestCandidate = candidates.sortedWith(
+            compareByDescending<MutableCoverageRegressionDiscriminatorCandidateStats> { it.sourceLocalRecovered }
+                .thenBy { it.regressedIncluded }
+                .thenByDescending { it.precision }
+                .thenBy { it.count },
+        ).firstOrNull()
+        val classification = coverageRegressionDiscriminatorClassification(
+            bestCandidate = bestCandidate,
+            sourceLocalTruth = sourceLocalTruth,
+        )
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-386",
+              "sceneId": "m60-f16-coverage-regression-discriminator-audit-for386",
+              "sourceSceneId": "m60-f16-generalized-coverage-metadata-predicate-audit-for385",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "producerMode": "-Dkanvas.sceneEvidence.write=true",
+              "sourceMemory": "global/kanvas/ticket-drafts/draft-prochain-ticket-m60-f16-discriminer-les-428-regressions-du-predicate-couverture-apres-for-385",
+              "sourceFinding": "global/kanvas/findings/for-385-montre-que-le-predicate-couverture-m60-f16-generalise-reste-trop-large-hors-filtre-for-383",
+              "requiredFor385Decision": "M60_F16_GENERALIZED_COVERAGE_METADATA_PREDICATE_AUDIT_RECORDED",
+              "requiredFor385Classification": "generalized-predicate-too-broad",
+              "requiredFor384Decision": "M60_F16_PRE_CORRECTION_GEOMETRY_COVERAGE_METADATA_AUDIT_RECORDED",
+              "requiredFor384Classification": "metadata-candidate-defendable-runtime-proof-still-blocked",
+              "requiredFor383Decision": "M60_F16_PRE_PROBE_PREDICATE_AUDIT_RECORDED",
+              "requiredFor383Classification": "pre-probe-predicate-too-broad",
+              "requiredFor382Decision": "M60_F16_COVERAGE_COMPOSITION_MEMBERSHIP_AUDIT_RECORDED",
+              "requiredFor382Classification": "local-source-category-separates-improved-from-regressed-but-renderer-predicate-still-needs-coverage-proof",
+              "decision": "M60_F16_COVERAGE_REGRESSION_DISCRIMINATOR_AUDIT_RECORDED",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+                "discriminator-candidate-defendable",
+                "discriminator-candidate-too-broad",
+                "discriminator-candidate-insufficient",
+                "metadata-insufficient"
+              ],
+              "auditDoesNotProduceCorrection": true,
+              "auditDoesNotApplyRendererChange": true,
+              "correctionKept": false,
+              "correctionAppliedByDefault": false,
+              "correctionFlag": ${FOR380_CORRECTION_PROPERTY.jsonString()},
+              "inspectedFor385Selection": {
+                "sourceCandidateId": "partial-coverage-alpha-at-least-96",
+                "scopeDescription": "The 436 pixels selected by the best FOR-385 metadata predicate, analyzed only as diagnostic input.",
+                "sourceScopeFromFor385": true,
+                "usesFor385SelectionAsAuditInput": true,
+                "candidateSelectionUsesFor385AsPrimaryPredicate": false,
+                "usesSkiaReferenceForScope": false,
+                "usesProbeOutcomeForScope": false,
+                "usesProbeResidualForScope": false,
+                "usesDeltaVsCurrentForScope": false,
+                "usesFor379MembershipAsPrimaryScope": false,
+                "usesFor383PredicateAsPrimaryScope": false,
+                "usesFor384PredicateAsPrimaryScope": false,
+                "generalizedScopePixels": $generalizedScopePixels,
+                "inspectedPixels": ${for385Selected.count},
+                "sourceLocalTruthPixels": $sourceLocalTruth,
+                "regressedTruthPixels": $regressionTruth,
+                "nonRegressedTruthPixels": ${selectedNonRegressed.count},
+                "probeOutcomeUsedOnlyAsEvaluationTruth": true,
+                "for382CategoryUsedOnlyAsEvaluationTruth": true
+              },
+              "preCorrectionMetadataSignals": {
+                "strokeBandCapJoinAvailable": true,
+                "bandLocalXAvailable": true,
+                "bandEdgeDistanceAvailable": true,
+                "coverageAlphaByteAvailable": true,
+                "transparentSourceAlphaByteAvailable": true,
+                "coverageOrthogonalNeighborhoodAvailable": true,
+                "referenceRequiredForCandidateSelection": false,
+                "probeRequiredForCandidateSelection": false,
+                "currentResidualRequiredForCandidateSelection": false,
+                "deltaVsCurrentRequiredForCandidateSelection": false,
+                "for379RequiredForCandidateSelection": false,
+                "for383RequiredForCandidateSelection": false,
+                "for384RequiredForCandidateSelection": false,
+                "for385RequiredForCandidateSelection": false,
+                "rendererRuntimePredicateReady": false
+              },
+              "fullSceneGuard": {
+                "uncorrectedSimilarity": ${String.format(Locale.US, "%.2f", uncorrectedExperimentalGpuCmp.similarity)},
+                "correctedSimilarity": ${String.format(Locale.US, "%.2f", correctedExperimentalGpuCmp.similarity)},
+                "uncorrectedMismatchPixels": ${uncorrectedResidualStats.mismatchPixels},
+                "correctedMismatchPixels": ${correctedResidualStats.mismatchPixels},
+                "uncorrectedGreaterThanEightPixels": ${uncorrectedResidualStats.greaterThanEightPixels},
+                "correctedGreaterThanEightPixels": ${correctedResidualStats.greaterThanEightPixels},
+                "fallbackReasonStable": "coverage.stroke-cap-join-visual-parity-below-threshold",
+                "refusalsChanged": false
+              },
+              "truthSetsForEvaluationOnly": {
+                "allAuditedPixels": ${allAudited.toStats().toJson().prependIndent("  ").trimStart()},
+                "for385Selected": ${for385Selected.toStats().toJson().prependIndent("  ").trimStart()},
+                "selectedSourceLocal": ${selectedSourceLocal.toStats().toJson().prependIndent("  ").trimStart()},
+                "selectedRegressed": ${selectedRegressed.toStats().toJson().prependIndent("  ").trimStart()},
+                "selectedNonRegressed": ${selectedNonRegressed.toStats().toJson().prependIndent("  ").trimStart()}
+              },
+              "for382CategoriesForEvaluationOnly": {
+                "source-locale-plausible": ${sourceLocal.toStats().toJson().prependIndent("  ").trimStart()},
+                "coverage-composition-plausible": ${coverageComposition.toStats().toJson().prependIndent("  ").trimStart()},
+                "mixed": ${mixed.toStats().toJson().prependIndent("  ").trimStart()},
+                "insufficient": ${insufficient.toStats().toJson().prependIndent("  ").trimStart()}
+              },
+              "regressedMetadataBreakdown": ${regressionBreakdown.toJson().prependIndent("  ").trimStart()},
+              "discriminatorCandidates": [
+            ${candidates.joinToString(",\n") { it.toStatsJson(sourceLocalTruth = sourceLocalTruth).prependIndent("    ") }}
+              ],
+              "bestDiscriminatorCandidate": ${bestCandidate?.toSummaryJson(sourceLocalTruth = sourceLocalTruth)?.prependIndent("  ")?.trimStart() ?: "null"},
+              "classificationReason": ${coverageRegressionDiscriminatorClassificationReason(classification).jsonString()},
+              "nextMove": ${coverageRegressionDiscriminatorNextMove(classification, bestCandidate).jsonString()},
+              "nonGoalsPreserved": {
+                "rendererBehaviorChanged": false,
+                "runtimeBehaviorChanged": false,
+                "gpuOrWgslChanged": false,
+                "geometryProductionChanged": false,
+                "coverageProductionChanged": false,
+                "fallbackChanged": false,
+                "kadreChanged": false,
+                "f16PremulBlendRuntimeChanged": false,
+                "skBitmapGetPixelChanged": false,
+                "scoreIncreased": false,
+                "thresholdChanged": false,
+                "promotionChanged": false,
+                "probeEnabledByDefault": false,
+                "correctionPredicateEnabled": false
+              },
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for386_m60_f16_coverage_regression_discriminator_audit.py",
+                "rtk python3 scripts/validate_for385_m60_f16_generalized_coverage_metadata_predicate_audit.py",
+                "rtk python3 scripts/validate_for384_m60_f16_pre_correction_geometry_coverage_metadata_audit.py",
+                "rtk python3 scripts/validate_for383_m60_f16_pre_probe_predicate_audit.py",
+                "rtk python3 scripts/validate_for382_m60_f16_coverage_composition_membership_audit.py",
+                "rtk python3 scripts/validate_for381_m60_f16_source_color_subzone_audit.py",
+                "rtk python3 scripts/validate_for380_m60_f16_source_color_correction_probe.py",
+                "rtk python3 scripts/validate_for379_m60_f16_effective_source_color_path.py",
+                "rtk python3 scripts/validate_for378_m60_f16_direct_source_color_evidence.py",
+                "rtk python3 scripts/validate_for377_m60_f16_linear_srgb_plausibility_audit.py",
+                "rtk python3 scripts/validate_for376_m60_f16_composition_quantization_candidate.py",
+                "rtk python3 scripts/validate_for375_m60_f16_effective_destination_candidate.py",
+                "rtk python3 scripts/validate_for374_m60_f16_candidate_regression_audit.py",
+                "rtk python3 scripts/validate_for373_m60_f16_candidate_policy_rgba_probe.py",
+                "rtk python3 scripts/validate_for372_m60_f16_effective_coverage_export.py",
+                "rtk python3 scripts/validate_for371_m60_f16_effective_coverage_access_audit.py",
+                "rtk python3 scripts/validate_for370_m60_f16_source_paint_capture_extension.py",
+                "rtk python3 scripts/validate_for369_m60_f16_source_candidate_coordinate_probe.py",
+                "rtk python3 scripts/validate_for368_m60_f16_candidate_metadata_capture.py",
+                "rtk python3 scripts/validate_for367_m60_bounded_stroke_cap_join_comparable_f16_evidence.py",
+                "rtk python3 scripts/validate_for366_f16_positive_residual_target_inventory.py",
+                "rtk python3 scripts/validate_for365_f16_constrained_candidate_evaluation.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for386-pycache python3 -m py_compile scripts/validate_for386_m60_f16_coverage_regression_discriminator_audit.py",
                 "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
                 "rtk git diff --check"
               ]
@@ -3658,6 +3944,110 @@ class StrokeCapJoinSceneCaptureTest {
                 "Do not enable the correction. Preserve the generalized scope and test an additional renderer-owned discriminant that recovers the missing source-local pixels."
             else ->
                 "Do not enable the correction. Capture the missing renderer metadata before another predicate attempt."
+        } + (bestCandidate?.let { " Best candidate: ${it.candidate.id}." } ?: "")
+
+    private fun coverageRegressionDiscriminatorCandidates(): List<CoverageRegressionDiscriminatorCandidate> =
+        listOf(
+            CoverageRegressionDiscriminatorCandidate(
+                id = "source-fringe-band-local-window",
+                description = "Keeps the two observed useful local fringe zones using stroke band coordinates and partial coverage lanes.",
+                selectionMethod = "(round-round && bandLocalX in 39..45 && coverageAlphaByte >= 96) || (butt-bevel && bandLocalX <= 18 && coverageAlphaByte >= 96)",
+            ) { pixel ->
+                (
+                    pixel.membership.pixel.strokeBand == "round-round" &&
+                        pixel.bandLocalX in 39..45 &&
+                        pixel.membership.coverageAlphaByte >= 96
+                    ) ||
+                    (
+                        pixel.membership.pixel.strokeBand == "butt-bevel" &&
+                            pixel.bandLocalX <= 18 &&
+                            pixel.membership.coverageAlphaByte >= 96
+                        )
+            },
+            CoverageRegressionDiscriminatorCandidate(
+                id = "round-cap-high-alpha-lane",
+                description = "Tests whether the useful round-cap lane is separable by cap metadata and the higher alpha lane.",
+                selectionMethod = "cap == round && coverageAlphaByte >= 160 && transparentSourceAlphaByte >= 160",
+            ) { pixel ->
+                pixel.membership.pixel.cap == "round" &&
+                    pixel.membership.coverageAlphaByte >= 160 &&
+                    pixel.membership.transparentSourceAlphaByte >= 160
+            },
+            CoverageRegressionDiscriminatorCandidate(
+                id = "butt-or-round-low-edge-distance",
+                description = "Uses only band edge distance plus the FOR-385 partial alpha lane.",
+                selectionMethod = "bandEdgeDistance <= 18 && coverageAlphaByte >= 96 && transparentSourceAlphaByte >= 96",
+            ) { pixel ->
+                pixel.bandEdgeDistance <= 18 &&
+                    pixel.membership.coverageAlphaByte >= 96 &&
+                    pixel.membership.transparentSourceAlphaByte >= 96
+            },
+            CoverageRegressionDiscriminatorCandidate(
+                id = "alpha-160-quiet-neighborhood",
+                description = "Requires the high alpha lane with no partial orthogonal coverage neighbors.",
+                selectionMethod = "coverageAlphaByte >= 160 && transparentSourceAlphaByte >= 160 && coverageOrthogonalNeighborhood.orthogonalPartialCount == 0",
+            ) { pixel ->
+                pixel.membership.coverageAlphaByte >= 160 &&
+                    pixel.membership.transparentSourceAlphaByte >= 160 &&
+                    pixel.coverageNeighborhood.orthogonalPartialCount == 0
+            },
+            CoverageRegressionDiscriminatorCandidate(
+                id = "round-cap-local-fringe-window",
+                description = "Checks whether round-cap metadata and local fringe position are enough without the butt-bevel lane.",
+                selectionMethod = "cap == round && bandLocalX in 39..45 && coverageAlphaByte >= 96",
+            ) { pixel ->
+                pixel.membership.pixel.cap == "round" &&
+                    pixel.bandLocalX in 39..45 &&
+                    pixel.membership.coverageAlphaByte >= 96
+            },
+            CoverageRegressionDiscriminatorCandidate(
+                id = "coverage-neighborhood-sparse-edge",
+                description = "Looks for isolated edge pixels by combining partial alpha with sparse orthogonal coverage.",
+                selectionMethod = "coverageAlphaByte >= 96 && coverageOrthogonalNeighborhood.orthogonalNonZeroCount <= 2",
+            ) { pixel ->
+                pixel.membership.coverageAlphaByte >= 96 &&
+                    pixel.coverageNeighborhood.orthogonalNonZeroCount <= 2
+            },
+        )
+
+    private fun coverageRegressionDiscriminatorClassification(
+        bestCandidate: MutableCoverageRegressionDiscriminatorCandidateStats?,
+        sourceLocalTruth: Int,
+    ): String =
+        when {
+            bestCandidate == null || sourceLocalTruth == 0 -> "metadata-insufficient"
+            bestCandidate.sourceLocalRecovered == sourceLocalTruth &&
+                bestCandidate.regressedIncluded == 0 -> "discriminator-candidate-defendable"
+            bestCandidate.sourceLocalRecovered == sourceLocalTruth -> "discriminator-candidate-too-broad"
+            bestCandidate.sourceLocalRecovered > 0 -> "discriminator-candidate-insufficient"
+            else -> "metadata-insufficient"
+        }
+
+    private fun coverageRegressionDiscriminatorClassificationReason(classification: String): String =
+        when (classification) {
+            "discriminator-candidate-defendable" ->
+                "A pre-correction metadata candidate separates all 8 source-local pixels from the 428 FOR-385 regressions inside the diagnostic selection. It remains disabled until a separate correction ticket proves full-scene safety."
+            "discriminator-candidate-too-broad" ->
+                "The best discriminator keeps all 8 useful pixels but still includes regressed pixels from the FOR-385 selection."
+            "discriminator-candidate-insufficient" ->
+                "The tested metadata can reduce the 428 regressions only by dropping at least one useful source-local pixel."
+            else ->
+                "The current pre-correction metadata does not provide a useful discriminator for the FOR-385 selection."
+        }
+
+    private fun coverageRegressionDiscriminatorNextMove(
+        classification: String,
+        bestCandidate: MutableCoverageRegressionDiscriminatorCandidateStats?,
+    ): String =
+        when (classification) {
+            "discriminator-candidate-defendable" ->
+                "Keep FOR-386 diagnostic-only. Create a separate bounded opt-in correction ticket that applies the candidate behind a guard and proves full-scene score, fallback, and refusal stability."
+            "discriminator-candidate-too-broad" ->
+                "Do not enable the correction. Add or export a narrower renderer metadata signal that explains the remaining selected regressions."
+            "discriminator-candidate-insufficient" ->
+                "Do not enable the correction. Preserve this audit and test additional renderer-owned metadata capable of recovering the dropped source-local pixels."
+            else ->
+                "Do not enable the correction. The next step is to expose more renderer-owned coverage/composition metadata before another predicate attempt."
         } + (bestCandidate?.let { " Best candidate: ${it.candidate.id}." } ?: "")
 
     private fun candidatePolicySample(index: Int, sample: ResidualSample, coverageMask: SkBitmap): CandidatePolicySample {
@@ -5698,6 +6088,115 @@ class StrokeCapJoinSceneCaptureTest {
         val select: (PreCorrectionGeometryCoveragePixelAudit) -> Boolean,
     )
 
+    private class CoverageRegressionDiscriminatorCandidate(
+        val id: String,
+        val description: String,
+        val selectionMethod: String,
+        val select: (PreCorrectionGeometryCoveragePixelAudit) -> Boolean,
+    )
+
+    private class MutableCoverageRegressionDiscriminatorCandidateStats(
+        val candidate: CoverageRegressionDiscriminatorCandidate,
+    ) {
+        private val pixels = MutableMembershipPixelSet(candidate.id)
+        var count: Int = 0
+        var sourceLocalRecovered: Int = 0
+        var regressedIncluded: Int = 0
+        var coverageCompositionIncluded: Int = 0
+        var mixedIncluded: Int = 0
+        var insufficientIncluded: Int = 0
+
+        val precision: Double
+            get() = if (count == 0) 0.0 else sourceLocalRecovered.toDouble() / count.toDouble()
+
+        fun add(pixel: PreCorrectionGeometryCoveragePixelAudit) {
+            pixels.add(pixel.membership)
+            count++
+            if (pixel.membership.category == "source-locale-plausible") {
+                sourceLocalRecovered++
+            }
+            if (pixel.membership.pixel.deltaVsCurrent > 0) {
+                regressedIncluded++
+            }
+            when (pixel.membership.category) {
+                "coverage-composition-plausible" -> coverageCompositionIncluded++
+                "mixed" -> mixedIncluded++
+                "insufficient" -> insufficientIncluded++
+            }
+        }
+
+        fun recall(sourceLocalTruth: Int): Double =
+            if (sourceLocalTruth == 0) 0.0 else sourceLocalRecovered.toDouble() / sourceLocalTruth.toDouble()
+
+        fun candidateClass(sourceLocalTruth: Int): String =
+            when {
+                sourceLocalRecovered == sourceLocalTruth && regressedIncluded == 0 ->
+                    "discriminator-candidate-defendable"
+                sourceLocalRecovered == sourceLocalTruth && regressedIncluded > 0 ->
+                    "discriminator-candidate-too-broad"
+                sourceLocalRecovered in 1 until sourceLocalTruth ->
+                    "discriminator-candidate-insufficient"
+                else ->
+                    "metadata-insufficient"
+            }
+
+        fun toStatsJson(sourceLocalTruth: Int): String {
+            val stats = pixels.toStats()
+            return """
+                {
+                  "id": ${jsonString(candidate.id)},
+                  "description": ${jsonString(candidate.description)},
+                  "selectionMethod": ${jsonString(candidate.selectionMethod)},
+                  "scope": "for385-partial-coverage-alpha-at-least-96-selected-pixels",
+                  "usesSkiaReferenceForSelection": false,
+                  "usesProbeOutcomeForSelection": false,
+                  "usesProbeResidualForSelection": false,
+                  "usesDeltaVsCurrentForSelection": false,
+                  "usesFor379MembershipAsPrimary": false,
+                  "usesFor383PredicateAsPrimary": false,
+                  "usesFor384PredicateAsPrimary": false,
+                  "usesFor385PredicateAsPrimary": false,
+                  "usesCurrentResidualForSelection": false,
+                  "usesCurrentChannelErrorShapeForSelection": false,
+                  "selectedPixels": $count,
+                  "sourceLocalRecovered": $sourceLocalRecovered,
+                  "sourceLocalTruth": $sourceLocalTruth,
+                  "regressedPixelsIncluded": $regressedIncluded,
+                  "coverageCompositionPixelsIncluded": $coverageCompositionIncluded,
+                  "mixedPixelsIncluded": $mixedIncluded,
+                  "insufficientPixelsIncluded": $insufficientIncluded,
+                  "precision": ${String.format(Locale.US, "%.4f", precision)},
+                  "recall": ${String.format(Locale.US, "%.4f", recall(sourceLocalTruth))},
+                  "candidateClass": ${jsonString(candidateClass(sourceLocalTruth))},
+                  "diagnosticDecision": ${if (candidateClass(sourceLocalTruth) == "discriminator-candidate-defendable") "\"candidate-diagnostic-only\"" else "\"reject\""},
+                  "sceneImpactIfApplied": {
+                    "baseUncorrectedFullSceneResidualUnaffected": true,
+                    "selectedBeforeResidual": ${stats.base.beforeResidual},
+                    "selectedAfterResidual": ${stats.base.afterResidual},
+                    "selectedDeltaVsCurrent": ${stats.base.afterResidual - stats.base.beforeResidual}
+                  },
+                  "diagnosticSelectionResidual": ${stats.toJson().prependIndent("  ").trimStart()}
+                }
+            """.trimIndent()
+        }
+
+        fun toSummaryJson(sourceLocalTruth: Int): String =
+            """
+                {
+                  "id": ${jsonString(candidate.id)},
+                  "selectedPixels": $count,
+                  "sourceLocalRecovered": $sourceLocalRecovered,
+                  "regressedPixelsIncluded": $regressedIncluded,
+                  "precision": ${String.format(Locale.US, "%.4f", precision)},
+                  "recall": ${String.format(Locale.US, "%.4f", recall(sourceLocalTruth))},
+                  "candidateClass": ${jsonString(candidateClass(sourceLocalTruth))},
+                  "runtimePredicateReady": false,
+                  "correctionAppliedByDefault": false,
+                  "runtimeBlocker": "FOR-386 is diagnostic-only; a separate correction ticket must prove the candidate outside this audit and keep full-scene/fallback stability."
+                }
+            """.trimIndent()
+    }
+
     private class MutableGeneralizedCoverageMetadataCandidateStats(
         val candidate: GeneralizedCoverageMetadataCandidate,
     ) {
@@ -5887,6 +6386,97 @@ class StrokeCapJoinSceneCaptureTest {
                   "runtimeBlocker": "The metadata split is clean only inside the 9-pixel FOR-383 diagnostic scope; a renderer correction still needs metadata that can form the full predicate without reference/current-error-shape filtering."
                 }
             """.trimIndent()
+    }
+
+    private class MutableCoverageRegressionMetadataBreakdown {
+        private val bandCapJoin = linkedMapOf<String, Int>()
+        private val bandLocalXBucket = linkedMapOf<String, Int>()
+        private val bandEdgeDistanceBucket = linkedMapOf<String, Int>()
+        private val coverageAlphaLane = linkedMapOf<String, Int>()
+        private val transparentSourceAlphaLane = linkedMapOf<String, Int>()
+        private val orthogonalCoverageShape = linkedMapOf<String, Int>()
+        private var count: Int = 0
+
+        fun add(pixel: PreCorrectionGeometryCoveragePixelAudit) {
+            count++
+            increment(
+                bandCapJoin,
+                "${pixel.membership.pixel.strokeBand}|cap=${pixel.membership.pixel.cap}|join=${pixel.membership.pixel.join}",
+            )
+            increment(
+                bandLocalXBucket,
+                "${pixel.membership.pixel.strokeBand}|${bucket16(pixel.bandLocalX)}",
+            )
+            increment(bandEdgeDistanceBucket, edgeDistanceBucket(pixel.bandEdgeDistance))
+            increment(coverageAlphaLane, alphaLane(pixel.membership.coverageAlphaByte))
+            increment(transparentSourceAlphaLane, alphaLane(pixel.membership.transparentSourceAlphaByte))
+            increment(
+                orthogonalCoverageShape,
+                "center=${pixel.coverageNeighborhood.center}|nz=${pixel.coverageNeighborhood.orthogonalNonZeroCount}|partial=${pixel.coverageNeighborhood.orthogonalPartialCount}",
+            )
+        }
+
+        fun toJson(): String =
+            """
+                {
+                  "regressedPixels": $count,
+                  "bandCapJoin": ${mapJson(bandCapJoin).prependIndent("  ").trimStart()},
+                  "bandLocalXBucket": ${mapJson(bandLocalXBucket).prependIndent("  ").trimStart()},
+                  "bandEdgeDistanceBucket": ${mapJson(bandEdgeDistanceBucket).prependIndent("  ").trimStart()},
+                  "coverageAlphaLane": ${mapJson(coverageAlphaLane).prependIndent("  ").trimStart()},
+                  "transparentSourceAlphaLane": ${mapJson(transparentSourceAlphaLane).prependIndent("  ").trimStart()},
+                  "orthogonalCoverageShape": ${mapJson(orthogonalCoverageShape).prependIndent("  ").trimStart()}
+                }
+            """.trimIndent()
+
+        private fun increment(map: MutableMap<String, Int>, key: String) {
+            map[key] = (map[key] ?: 0) + 1
+        }
+
+        private fun bucket16(value: Int): String {
+            val start = (value / 16) * 16
+            val end = start + 15
+            return "$start-$end"
+        }
+
+        private fun edgeDistanceBucket(value: Int): String =
+            when {
+                value <= 1 -> "0-1"
+                value <= 4 -> "2-4"
+                value <= 8 -> "5-8"
+                value <= 16 -> "9-16"
+                value <= 32 -> "17-32"
+                else -> "33+"
+            }
+
+        private fun alphaLane(value: Int): String =
+            when {
+                value < 96 -> "lt-96"
+                value < 128 -> "96-127"
+                value < 160 -> "128-159"
+                value < 192 -> "160-191"
+                value < 224 -> "192-223"
+                value < 255 -> "224-254"
+                else -> "255"
+            }
+
+        private fun mapJson(map: Map<String, Int>): String {
+            val entries = map.entries
+                .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                .joinToString(",\n") { entry ->
+                    """
+                        {
+                          "id": ${jsonString(entry.key)},
+                          "count": ${entry.value}
+                        }
+                    """.trimIndent()
+                }
+            return """
+                [
+            ${entries.prependIndent("    ")}
+                ]
+            """.trimIndent()
+        }
     }
 
     private data class SubzonePixelSetStats(
