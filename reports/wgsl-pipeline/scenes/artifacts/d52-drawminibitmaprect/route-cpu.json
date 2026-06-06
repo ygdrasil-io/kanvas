@@ -8,10 +8,10 @@
   "referenceKind": "skia-upstream-png",
   "referencePath": "skia-integration-tests/src/test/resources/original-888/drawminibitmaprect.png",
   "fallbackReason": "none",
-  "similarity": 93.9580,
+  "similarity": 99.0140,
   "threshold": 40.0,
   "tolerance": 1,
-  "matchingPixels": 985221,
+  "matchingPixels": 1038237,
   "totalPixels": 1048576,
   "maxChannelDelta": 242,
   "test": "org.skia.gpu.webgpu.DrawMiniBitmapRectSceneCaptureTest#drawminibitmaprect captures row specific reference cpu and webgpu evidence"

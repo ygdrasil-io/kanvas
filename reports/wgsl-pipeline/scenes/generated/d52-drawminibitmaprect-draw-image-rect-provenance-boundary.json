@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-06-06",
+  "ticket": "D52-4",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d52-4-preservation-provenance-draw-image-rect-pour-draw-mini-bitmap-rect",
+  "sourceFindingMemory": "global/kanvas/findings/d52-3-drawminibitmaprect-web-gpu-root-cause-provenance-draw-image-rect-perdue",
+  "classification": "drawImageRect-boundary-source-image-intersection-correction",
+  "inventoryId": "skia-gm-drawminibitmaprect",
+  "sceneId": "d52-drawminibitmaprect",
+  "architectureDecision": {
+    "decision": "clip-drawImageRect-source-to-image-at-SkCanvas-boundary",
+    "reason": "The boundary has both drawImageRect provenance and the requested source/destination rectangles. Clipping there transports the source-image intersection contract to CPU and WebGPU without reclassifying user SkBitmapShader(kClamp).",
+    "pipelineKeyChanged": false,
+    "wgslChanged": false,
+    "webgpuHeuristicAdded": false,
+    "userKClampShaderChanged": false
+  },
+  "measurements": {
+    "before": {
+      "backend": "WebGPU",
+      "status": "expected-unsupported",
+      "similarity": 94.9305,
+      "threshold": 99.95,
+      "fallbackReason": "bitmap.drawminibitmaprect.rotated-fast-src-rect-webgpu-artifacts-required",
+      "matchingPixels": 995418,
+      "totalPixels": 1048576,
+      "maxChannelDelta": 242
+    },
+    "after": {
+      "backend": "WebGPU",
+      "status": "pass",
+      "similarity": 99.9864,
+      "threshold": 99.95,
+      "fallbackReason": "none",
+      "matchingPixels": 1048433,
+      "totalPixels": 1048576,
+      "maxChannelDelta": 242
+    },
+    "similarityDelta": 5.0559,
+    "matchingPixelDelta": 53015,
+    "localSupportClaim": true,
+    "globalScoreFilesChanged": false
+  },
+  "artifacts": {
+    "stats": "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect/stats.json",
+    "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect/route-gpu.json",
+    "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect/route-cpu.json",
+    "gpu": "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect/gpu.png",
+    "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect/gpu-diff.png",
+    "cpu": "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect/cpu.png",
+    "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect/cpu-diff.png"
+  },
+  "userKClampProof": {
+    "rasterTest": "org.skia.core.SkCanvasInternalsTest#drawImageRect clips source outside image without changing user kClamp shader",
+    "webGpuTest": "org.skia.gpu.webgpu.BitmapShaderPaintRectTest#drawImageRect source outside image clips but user kClamp shader extends edge",
+    "assertion": "drawImageRect clips the destination for source pixels outside the image; user SkBitmapShader(kClamp) still extends edge texels."
+  },
+  "nonClaims": {
+    "resultsJsonChanged": false,
+    "scenesJsonChanged": false,
+    "d50ManifestChanged": false,
+    "d51EvidenceChanged": false,
+    "d52_1EvidenceChanged": false,
+    "d52_2EvidenceChanged": false,
+    "d52_3EvidenceChanged": false,
+    "thresholdChanged": false,
+    "fallbackPolicyChanged": false,
+    "ganeshOrGraphitePorted": false,
+    "skslCompilerIrVmRebuilt": false
+  },
+  "validationCommands": [
+    "rtk ./gradlew --no-daemon --rerun-tasks :kanvas-skia:test --tests org.skia.core.SkCanvasInternalsTest",
+    "rtk ./gradlew --no-daemon --rerun-tasks :gpu-raster:test --tests org.skia.gpu.webgpu.BitmapShaderPaintRectTest",
+    "rtk ./gradlew --no-daemon --rerun-tasks :gpu-raster:test --tests org.skia.gpu.webgpu.DrawMiniBitmapRectSceneCaptureTest",
+    "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.DrawMiniBitmapRectSceneCaptureTest",
+    "rtk python3 scripts/validate_d52_drawminibitmaprect_provenance_boundary.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d52-drawminibitmaprect-draw-image-rect-provenance-boundary.json",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-d52-4-pycache python3 -m py_compile scripts/validate_d52_drawminibitmaprect_provenance_boundary.py",
+    "rtk git diff --check"
+  ]
+}
