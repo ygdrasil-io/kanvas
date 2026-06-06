@@ -1,0 +1,254 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-451",
+          "sceneId": "m60-f16-stencil-render-pass-split-boundary-for451",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-exposer-la-frontiere-apres-stencil-via-split-de-render-pass-opt-in",
+          "sourceFindingMemory": "global/kanvas/findings/for-450-boundary-audit-m60-f16-exige-un-split-de-render-pass-pour-preuve-stencil-directe",
+          "sourceArtifacts": {
+            "for450": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-boundary-audit-for450/m60-f16-stencil-boundary-audit-for450.json",
+            "for449": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/m60-f16-stencil-write-subpass-trace-for449.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "optInFlag": "kanvas.webgpu.m60F16StencilRenderPassSplitFor451.enabled",
+          "classification": "stencil-render-pass-split-color-boundary-only",
+          "allowedClassifications": [
+            "stencil-render-pass-split-direct-readback-available",
+"stencil-render-pass-split-color-boundary-only",
+"stencil-render-pass-split-backend-extension-required",
+"stencil-render-pass-split-unsafe-for-production-ordering",
+"stencil-render-pass-split-inconclusive"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "productionWgslChanged": false,
+          "wgsl4kModified": false,
+          "renderingFixAppliedByDefault": false,
+          "for442UsedAsDecisionSource": false,
+          "sourceAudit": {
+            "splitRenderPassAppliedOnlyWhenOptIn": true,
+            "depthStencilFormat": "Depth24PlusStencil8",
+            "depthStencilUsage": "GPUTextureUsage.RenderAttachment",
+            "depthStencilUsageHasCopySrc": false,
+            "depthStencilUsageHasTextureBinding": false,
+            "depthStencilStoreOpBeforeSplit": "Store",
+            "depthStencilLoadOpAfterSplit": "Load",
+            "directStencilReadbackAvailable": false,
+            "productionWgslChanged": false
+          },
+          "boundarySummary": {
+            "zeroMaskPixelCount": 6,
+            "currentSimilarity": 95.914714,
+            "currentMismatchPixels": 1004,
+            "predrawColorBoundaryObservedTargetCount": 6,
+            "afterStencilBeforeCoverColorBoundaryObservedTargetCount": 6,
+            "postCoverColorBoundaryObservedTargetCount": 6,
+            "afterStencilBeforeCoverBoundaryAvailable": true,
+            "directStencilReadbackAvailable": false,
+            "requiresBackendApiExtensionForDirectStencil": true,
+            "for442DecisionSourceUsedCount": 0
+          },
+          "partialPixels": [
+            {
+  "x": 92,
+  "y": 75,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": true,
+    "kind": "color-only-split-render-pass-textureLoad",
+    "drawIndex": 1,
+    "splitRenderPassApplied": true,
+    "directStencilReadbackAvailable": false,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 91,
+  "y": 76,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": true,
+    "kind": "color-only-split-render-pass-textureLoad",
+    "drawIndex": 1,
+    "splitRenderPassApplied": true,
+    "directStencilReadbackAvailable": false,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 90,
+  "y": 77,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": true,
+    "kind": "color-only-split-render-pass-textureLoad",
+    "drawIndex": 1,
+    "splitRenderPassApplied": true,
+    "directStencilReadbackAvailable": false,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 89,
+  "y": 78,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": true,
+    "kind": "color-only-split-render-pass-textureLoad",
+    "drawIndex": 1,
+    "splitRenderPassApplied": true,
+    "directStencilReadbackAvailable": false,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 88,
+  "y": 79,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": true,
+    "kind": "color-only-split-render-pass-textureLoad",
+    "drawIndex": 1,
+    "splitRenderPassApplied": true,
+    "directStencilReadbackAvailable": false,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 87,
+  "y": 80,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": true,
+    "kind": "color-only-split-render-pass-textureLoad",
+    "drawIndex": 1,
+    "splitRenderPassApplied": true,
+    "directStencilReadbackAvailable": false,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+}
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "activationByDefault": false,
+            "for442UsedAsDecisionSource": false,
+            "for447Promoted": false,
+            "renderingFixAppliedByDefault": false
+          },
+          "classificationReason": "FOR-451 creates an opt-in split render pass boundary and observes color after stencil before cover for the six M60 F16 pixels. The depth/stencil texture remains render-attachment-only, so direct stencil readback is still unavailable.",
+          "nextAction": "Use the color boundary to prove ordering only. If direct stencil contents are still required, open a backend extension ticket for a copyable or shader-readable diagnostic stencil path; do not apply a stencil correction from this evidence alone.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16StencilRenderPassSplitFor451.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for451_m60_f16_stencil_render_pass_split_boundary.py",
+            "rtk python3 scripts/validate_for450_m60_f16_stencil_boundary_audit.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for451-pycache python3 -m py_compile scripts/validate_for451_m60_f16_stencil_render_pass_split_boundary.py scripts/validate_for450_m60_f16_stencil_boundary_audit.py",
+            "rtk git diff --check"
+          ]
+        }
