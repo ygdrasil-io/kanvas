@@ -292,6 +292,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16CoverSourceAttributionFor454.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16CoverSourceAttributionFor454.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16ZeroStencilCoverEmissionAuditFor455.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16ZeroStencilCoverEmissionAuditFor455.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
