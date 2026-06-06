@@ -50,7 +50,17 @@ ALLOWED_LOCAL_DIFFS = {
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
     "scripts/validate_for447_m60_f16_zero_mask_opt_in_correction.py",
     "scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
+    "scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py",
     "reports/wgsl-pipeline/2026-06-06-for-448-m60-f16-zero-mask-neutral-path-trace.md",
+    "reports/wgsl-pipeline/2026-06-06-for-449-m60-f16-stencil-write-subpass-trace.md",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/m60-f16-stencil-write-subpass-trace-for449.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/reference-cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/current-webgpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/current-webgpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/inside-webgpu-for447.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/outside-webgpu-for448.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/both-webgpu-for448.png",
     *ARTIFACT_FILES,
 }
 FORBIDDEN_DIFF_PREFIXES = (
