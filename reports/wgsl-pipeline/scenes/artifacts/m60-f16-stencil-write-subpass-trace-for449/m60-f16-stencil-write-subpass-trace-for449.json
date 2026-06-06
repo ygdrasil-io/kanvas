@@ -1,0 +1,783 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-449",
+          "sceneId": "m60-f16-stencil-write-subpass-trace-for449",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-tracer-directement-stencil-write-et-ecritures-fragmentaires-apres-for-448",
+          "sourceFindingMemory": "global/kanvas/findings/for-448-zero-mask-neutral-path-trace-reste-inconclusive",
+          "sourceArtifacts": {
+            "for448": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/m60-f16-zero-mask-neutral-path-trace-for448.json",
+            "for447": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-opt-in-correction-for447/m60-f16-zero-mask-opt-in-correction-for447.json",
+            "referenceCpuPng": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/reference-cpu.png",
+            "currentWebGpuPng": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/current-webgpu.png",
+            "insideFor447Png": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/inside-webgpu-for447.png",
+            "outsideFor448Png": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/outside-webgpu-for448.png",
+            "bothFor448Png": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/both-webgpu-for448.png"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "optInFlag": "kanvas.webgpu.m60F16StencilWriteSubpassTraceFor449.enabled",
+          "classification": "direct-stencil-subpass-trace-inconclusive",
+          "allowedClassifications": [
+            "stencil-write-excludes-zero-mask-targets",
+"fragment-subpass-not-invoked-for-zero-mask-targets",
+"fragment-invoked-but-fixed-blend-neutral",
+"later-write-overwrites-subpass-effect",
+"direct-stencil-subpass-trace-inconclusive"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "productionWgslChanged": false,
+          "wgsl4kModified": false,
+          "renderingFixAppliedByDefault": false,
+          "for442UsedAsDecisionSource": false,
+          "comparisonPolicy": {
+            "pixelSet": "exactly the six FOR-447/FOR-448 zero-mask pixels",
+            "for448TraceUsedAsContext": true,
+            "directStencilReadbackRequiredForCorrectionCandidate": true,
+            "for442EvidencePolicy": "excluded as unreliable decision source",
+            "defaultRender": "captured with kanvas.webgpu.m60F16StencilWriteSubpassTraceFor449.enabled=false",
+            "productionShaderChanged": false
+          },
+          "summary": {
+            "zeroMaskPixelCount": 6,
+            "currentSimilarity": 95.914714,
+            "insideSimilarity": 95.914714,
+            "outsideSimilarity": 95.914714,
+            "bothSimilarity": 95.914714,
+            "currentTotalResidual": 2014,
+            "insideTotalResidual": 2014,
+            "outsideTotalResidual": 2014,
+            "bothTotalResidual": 2014,
+            "insideChangedPixels": 0,
+            "outsideChangedPixels": 0,
+            "bothChangedPixels": 0,
+            "insideChangedTargetPixels": 0,
+            "outsideChangedTargetPixels": 0,
+            "bothChangedTargetPixels": 0,
+            "currentGreaterThanEightPixels": 10,
+            "insideGreaterThanEightPixels": 10,
+            "outsideGreaterThanEightPixels": 10,
+            "bothGreaterThanEightPixels": 10,
+            "shaderReturnObservedTargetCount": 6,
+            "insideFragmentObservedTargetCount": 6,
+            "outsideFragmentObservedTargetCount": 6,
+            "predrawDstObservedTargetCount": 6,
+            "postPassObservedTargetCount": 6,
+            "stencilWriteDirectReadbackAvailable": false,
+            "for442DecisionSourceUsedCount": 0
+          },
+          "stencilWriteTrace": {
+            "available": false,
+            "readAttempted": false,
+            "status": "stencil-buffer-direct-readback-unavailable",
+            "missingReason": "No safe WebGPU stencil-buffer readback boundary is exposed for this pass in Kanvas; FOR-449 refuses to infer stencil writes from color traces.",
+            "fallbackClassification": "direct-stencil-subpass-trace-inconclusive"
+          },
+          "traceCompleteness": {
+            "stencilWriteTraceComplete": false,
+            "fragmentInvocationTraceComplete": true,
+            "sourceCoverageTraceComplete": true,
+            "destinationBeforeAfterTraceComplete": true,
+            "finalImageTraceComplete": true,
+            "incompleteTracePolicy": "classify direct-stencil-subpass-trace-inconclusive and refuse to name a correction candidate"
+          },
+          "runtimeSnapshots": {
+            "predraw": {"propertyName": "kanvas.webgpu.m60F16AaStencilCoverPredrawDstReadback.enabled", "enabled": true, "eventCount": 3},
+            "contributionIsolation": {"propertyName": "kanvas.webgpu.m60F16AaStencilCoverContributionIsolation.enabled", "enabled": true, "eventCount": 3},
+            "shaderReturn": {"propertyName": "kanvas.webgpu.m60F16AaStencilCoverShaderReturnDiagnostic.enabled", "enabled": true, "eventCount": 3},
+            "postPass": {"propertyName": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled", "enabled": true, "eventCount": 3}
+          },
+          "partialPixels": [
+                    {
+          "x": 92,
+          "y": 75,
+          "classification": "direct-stencil-subpass-trace-inconclusive",
+          "referenceCpuRgba": [133, 150, 214, 255],
+          "currentWebGpuRgba": [181, 191, 230, 255],
+          "insideDiscardFor447Rgba": [181, 191, 230, 255],
+          "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+          "bothDiscardFor448Rgba": [181, 191, 230, 255],
+          "currentResidual": 105,
+          "insideResidual": 105,
+          "outsideResidual": 105,
+          "bothResidual": 105,
+          "variantChangedPixels": {
+            "inside": false,
+            "outside": false,
+            "both": false
+          },
+          "stencilWriteTrace": {
+            "available": false,
+            "readAttempted": false,
+            "observableEffect": null,
+            "status": "stencil-buffer-direct-readback-unavailable",
+            "missingReason": "Kanvas does not expose a safe WebGPU stencil-buffer readback boundary for this pass; FOR-449 records this refusal instead of inferring stencil writes from color output."
+          },
+          "shaderReturnSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+}
+          ],
+          "contributionSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+}
+          ],
+          "destinationBeforeTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+            "selectedRgba8": [255, 255, 255, 255]
+          },
+          "destinationAfterTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "selectedRgba8": [181, 191, 230, 255]
+          }
+        },
+        {
+          "x": 91,
+          "y": 76,
+          "classification": "direct-stencil-subpass-trace-inconclusive",
+          "referenceCpuRgba": [133, 150, 214, 255],
+          "currentWebGpuRgba": [181, 191, 230, 255],
+          "insideDiscardFor447Rgba": [181, 191, 230, 255],
+          "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+          "bothDiscardFor448Rgba": [181, 191, 230, 255],
+          "currentResidual": 105,
+          "insideResidual": 105,
+          "outsideResidual": 105,
+          "bothResidual": 105,
+          "variantChangedPixels": {
+            "inside": false,
+            "outside": false,
+            "both": false
+          },
+          "stencilWriteTrace": {
+            "available": false,
+            "readAttempted": false,
+            "observableEffect": null,
+            "status": "stencil-buffer-direct-readback-unavailable",
+            "missingReason": "Kanvas does not expose a safe WebGPU stencil-buffer readback boundary for this pass; FOR-449 records this refusal instead of inferring stencil writes from color output."
+          },
+          "shaderReturnSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+}
+          ],
+          "contributionSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+}
+          ],
+          "destinationBeforeTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+            "selectedRgba8": [255, 255, 255, 255]
+          },
+          "destinationAfterTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "selectedRgba8": [181, 191, 230, 255]
+          }
+        },
+        {
+          "x": 90,
+          "y": 77,
+          "classification": "direct-stencil-subpass-trace-inconclusive",
+          "referenceCpuRgba": [133, 150, 214, 255],
+          "currentWebGpuRgba": [181, 191, 230, 255],
+          "insideDiscardFor447Rgba": [181, 191, 230, 255],
+          "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+          "bothDiscardFor448Rgba": [181, 191, 230, 255],
+          "currentResidual": 105,
+          "insideResidual": 105,
+          "outsideResidual": 105,
+          "bothResidual": 105,
+          "variantChangedPixels": {
+            "inside": false,
+            "outside": false,
+            "both": false
+          },
+          "stencilWriteTrace": {
+            "available": false,
+            "readAttempted": false,
+            "observableEffect": null,
+            "status": "stencil-buffer-direct-readback-unavailable",
+            "missingReason": "Kanvas does not expose a safe WebGPU stencil-buffer readback boundary for this pass; FOR-449 records this refusal instead of inferring stencil writes from color output."
+          },
+          "shaderReturnSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+}
+          ],
+          "contributionSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+}
+          ],
+          "destinationBeforeTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+            "selectedRgba8": [255, 255, 255, 255]
+          },
+          "destinationAfterTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "selectedRgba8": [181, 191, 230, 255]
+          }
+        },
+        {
+          "x": 89,
+          "y": 78,
+          "classification": "direct-stencil-subpass-trace-inconclusive",
+          "referenceCpuRgba": [133, 150, 214, 255],
+          "currentWebGpuRgba": [181, 191, 230, 255],
+          "insideDiscardFor447Rgba": [181, 191, 230, 255],
+          "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+          "bothDiscardFor448Rgba": [181, 191, 230, 255],
+          "currentResidual": 105,
+          "insideResidual": 105,
+          "outsideResidual": 105,
+          "bothResidual": 105,
+          "variantChangedPixels": {
+            "inside": false,
+            "outside": false,
+            "both": false
+          },
+          "stencilWriteTrace": {
+            "available": false,
+            "readAttempted": false,
+            "observableEffect": null,
+            "status": "stencil-buffer-direct-readback-unavailable",
+            "missingReason": "Kanvas does not expose a safe WebGPU stencil-buffer readback boundary for this pass; FOR-449 records this refusal instead of inferring stencil writes from color output."
+          },
+          "shaderReturnSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+}
+          ],
+          "contributionSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+}
+          ],
+          "destinationBeforeTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+            "selectedRgba8": [255, 255, 255, 255]
+          },
+          "destinationAfterTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "selectedRgba8": [181, 191, 230, 255]
+          }
+        },
+        {
+          "x": 88,
+          "y": 79,
+          "classification": "direct-stencil-subpass-trace-inconclusive",
+          "referenceCpuRgba": [133, 150, 214, 255],
+          "currentWebGpuRgba": [181, 191, 230, 255],
+          "insideDiscardFor447Rgba": [181, 191, 230, 255],
+          "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+          "bothDiscardFor448Rgba": [181, 191, 230, 255],
+          "currentResidual": 105,
+          "insideResidual": 105,
+          "outsideResidual": 105,
+          "bothResidual": 105,
+          "variantChangedPixels": {
+            "inside": false,
+            "outside": false,
+            "both": false
+          },
+          "stencilWriteTrace": {
+            "available": false,
+            "readAttempted": false,
+            "observableEffect": null,
+            "status": "stencil-buffer-direct-readback-unavailable",
+            "missingReason": "Kanvas does not expose a safe WebGPU stencil-buffer readback boundary for this pass; FOR-449 records this refusal instead of inferring stencil writes from color output."
+          },
+          "shaderReturnSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+}
+          ],
+          "contributionSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+}
+          ],
+          "destinationBeforeTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+            "selectedRgba8": [255, 255, 255, 255]
+          },
+          "destinationAfterTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "selectedRgba8": [181, 191, 230, 255]
+          }
+        },
+        {
+          "x": 87,
+          "y": 80,
+          "classification": "direct-stencil-subpass-trace-inconclusive",
+          "referenceCpuRgba": [133, 150, 214, 255],
+          "currentWebGpuRgba": [181, 191, 230, 255],
+          "insideDiscardFor447Rgba": [181, 191, 230, 255],
+          "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+          "bothDiscardFor448Rgba": [181, 191, 230, 255],
+          "currentResidual": 105,
+          "insideResidual": 105,
+          "outsideResidual": 105,
+          "bothResidual": 105,
+          "variantChangedPixels": {
+            "inside": false,
+            "outside": false,
+            "both": false
+          },
+          "stencilWriteTrace": {
+            "available": false,
+            "readAttempted": false,
+            "observableEffect": null,
+            "status": "stencil-buffer-direct-readback-unavailable",
+            "missingReason": "Kanvas does not expose a safe WebGPU stencil-buffer readback boundary for this pass; FOR-449 records this refusal instead of inferring stencil writes from color output."
+          },
+          "shaderReturnSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "candidateBranchReached": false,
+  "coverageOrAaAlpha": 0.375000000,
+  "rawPathCoverage": 0.375000000,
+  "clipCoverage": 1.000000000,
+  "finalCoverage": 0.375000000,
+  "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+  "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+  "quantizedAlphaSentToBlend": 0.376470625,
+  "wgslSubsampleMask4x4": null,
+  "coveredSubsamples4x4": 6,
+  "classification": "shader-return-captured",
+  "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+}
+          ],
+          "contributionSubpassTrace": [
+            {
+  "role": "inside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+},
+            {
+  "role": "outside",
+  "fragmentInvoked": true,
+  "sampleCount": 3,
+  "observedCount": 2,
+  "drawIndex": 1,
+  "sourceColorPremulRgbaFloat": [0.232790515, 0.338159621, 0.742399454, 1.000000000],
+  "coverageOrAaAlpha": 0.375000000,
+  "dstBeforeRgbaFloat": null,
+  "expectedSourceOverRgbaFloat": null,
+  "dstAfterRgbaFloat": null,
+  "missingFields": ["dstBeforeRgbaFloat", "expectedSourceOverRgbaFloat", "dstAfterRgbaFloat"],
+  "classification": "per-subdraw-framebuffer-state-unavailable"
+}
+          ],
+          "destinationBeforeTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+            "selectedRgba8": [255, 255, 255, 255]
+          },
+          "destinationAfterTrace": {
+            "observed": true,
+            "sampleCount": 3,
+            "selectedDrawIndex": 1,
+            "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+            "selectedRgba8": [181, 191, 230, 255]
+          }
+        }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "activationByDefault": false,
+            "for442UsedAsDecisionSource": false,
+            "for447Promoted": false
+          },
+          "classificationReason": "FOR-449 observes shader-return and contribution subpass data for the six zero-mask pixels, plus destination before/after and final image variants. It still cannot read the stencil buffer directly, so it refuses to convert the trace into a correction candidate.",
+          "nextCorrectionCandidate": "Refuse to name a correction candidate until a safe direct stencil-write observation exists or the renderer exposes a narrower stencil/pass boundary.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16StencilWriteSubpassTraceFor449.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py",
+            "rtk python3 scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for449-pycache python3 -m py_compile scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
+            "rtk git diff --check"
+          ]
+        }

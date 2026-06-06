@@ -133,8 +133,11 @@ class StrokeCapJoinSceneCaptureTest {
                     WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
                 }
             }
+            val stencilWriteSubpassTraceFor449Enabled =
+                System.getProperty(FOR449_STENCIL_WRITE_SUBPASS_TRACE_PROPERTY, "false").toBoolean()
             val zeroMaskNeutralPathTraceFor448Enabled =
-                System.getProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY, "false").toBoolean()
+                System.getProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY, "false").toBoolean() ||
+                    stencilWriteSubpassTraceFor449Enabled
             val zeroMaskNeutralPathTraceFor448OutsideGpu =
                 if (zeroMaskNeutralPathTraceFor448Enabled) {
                     withExperimentalStrokeCapJoinRender {
@@ -621,6 +624,28 @@ class StrokeCapJoinSceneCaptureTest {
                 outsideResidualStats = requireNotNull(zeroMaskNeutralPathTraceFor448OutsideResidualStats),
                 bothResidualStats = requireNotNull(zeroMaskNeutralPathTraceFor448BothResidualStats),
                 predrawSnapshot = aaStencilCoverPredrawDstReadbackSnapshot,
+                postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
+                adapter = adapter,
+            )
+        }
+        if (System.getProperty(FOR449_STENCIL_WRITE_SUBPASS_TRACE_PROPERTY, "false").toBoolean()) {
+            writeM60F16StencilWriteSubpassTraceFor449(
+                reference = reference,
+                currentGpu = experimentalGpu,
+                insideGpu = zeroMaskCorrectionFor447Gpu,
+                outsideGpu = requireNotNull(zeroMaskNeutralPathTraceFor448OutsideGpu),
+                bothGpu = requireNotNull(zeroMaskNeutralPathTraceFor448BothGpu),
+                currentGpuCmp = experimentalGpuCmp,
+                insideGpuCmp = zeroMaskCorrectionFor447GpuCmp,
+                outsideGpuCmp = requireNotNull(zeroMaskNeutralPathTraceFor448OutsideGpuCmp),
+                bothGpuCmp = requireNotNull(zeroMaskNeutralPathTraceFor448BothGpuCmp),
+                currentResidualStats = residualStats,
+                insideResidualStats = zeroMaskCorrectionFor447ResidualStats,
+                outsideResidualStats = requireNotNull(zeroMaskNeutralPathTraceFor448OutsideResidualStats),
+                bothResidualStats = requireNotNull(zeroMaskNeutralPathTraceFor448BothResidualStats),
+                predrawSnapshot = aaStencilCoverPredrawDstReadbackSnapshot,
+                contributionSnapshot = aaStencilCoverContributionIsolationSnapshot,
+                shaderReturnSnapshot = aaStencilCoverShaderReturnDiagnosticSnapshot,
                 postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
                 adapter = adapter,
             )
@@ -6743,6 +6768,372 @@ class StrokeCapJoinSceneCaptureTest {
             else ->
                 "Refuse to name a correction candidate: the trace is incomplete or all tested discard variants are neutral."
         }
+
+    private fun writeM60F16StencilWriteSubpassTraceFor449(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        insideGpu: SkBitmap,
+        outsideGpu: SkBitmap,
+        bothGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        insideGpuCmp: BitmapComparison,
+        outsideGpuCmp: BitmapComparison,
+        bothGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        insideResidualStats: StrokeResidualStats,
+        outsideResidualStats: StrokeResidualStats,
+        bothResidualStats: StrokeResidualStats,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        contributionSnapshot: SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-stencil-write-subpass-trace-for449"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        writePng(File(dir, "reference-cpu.png"), reference)
+        writePng(File(dir, "current-webgpu.png"), currentGpu)
+        writePng(File(dir, "current-webgpu-diff.png"), CrossBackendHarness.pixelDiff(reference, currentGpu))
+        writePng(File(dir, "inside-webgpu-for447.png"), insideGpu)
+        writePng(File(dir, "outside-webgpu-for448.png"), outsideGpu)
+        writePng(File(dir, "both-webgpu-for448.png"), bothGpu)
+        File(dir, "$sceneId.json").writeText(
+            m60F16StencilWriteSubpassTraceFor449Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                insideGpu = insideGpu,
+                outsideGpu = outsideGpu,
+                bothGpu = bothGpu,
+                currentGpuCmp = currentGpuCmp,
+                insideGpuCmp = insideGpuCmp,
+                outsideGpuCmp = outsideGpuCmp,
+                bothGpuCmp = bothGpuCmp,
+                currentResidualStats = currentResidualStats,
+                insideResidualStats = insideResidualStats,
+                outsideResidualStats = outsideResidualStats,
+                bothResidualStats = bothResidualStats,
+                predrawSnapshot = predrawSnapshot,
+                contributionSnapshot = contributionSnapshot,
+                shaderReturnSnapshot = shaderReturnSnapshot,
+                postPassSnapshot = postPassSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16StencilWriteSubpassTraceFor449Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        insideGpu: SkBitmap,
+        outsideGpu: SkBitmap,
+        bothGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        insideGpuCmp: BitmapComparison,
+        outsideGpuCmp: BitmapComparison,
+        bothGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        insideResidualStats: StrokeResidualStats,
+        outsideResidualStats: StrokeResidualStats,
+        bothResidualStats: StrokeResidualStats,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        contributionSnapshot: SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ): String {
+        val targetPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6)
+        val targetSet = targetPoints.toSet()
+        val shaderByPixel = shaderReturnSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val contributionByPixel = contributionSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val predrawByPixel = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val postPassByPixel = postPassSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val insideChanged = changedPixels(currentGpu, insideGpu)
+        val outsideChanged = changedPixels(currentGpu, outsideGpu)
+        val bothChanged = changedPixels(currentGpu, bothGpu)
+        val currentResidual = imageResidual(currentGpu, reference)
+        val insideResidual = imageResidual(insideGpu, reference)
+        val outsideResidual = imageResidual(outsideGpu, reference)
+        val bothResidual = imageResidual(bothGpu, reference)
+        val observedShaderTargetCount = targetPoints.count { point ->
+            shaderByPixel[point].orEmpty().any { it.second.shaderObserved && !it.second.captureSynthetic }
+        }
+        val observedInsideTargetCount = targetPoints.count { point ->
+            shaderByPixel[point].orEmpty().any {
+                it.second.subdrawRole == "inside" && it.second.shaderObserved && !it.second.captureSynthetic
+            }
+        }
+        val observedOutsideTargetCount = targetPoints.count { point ->
+            shaderByPixel[point].orEmpty().any {
+                it.second.subdrawRole == "outside" && it.second.shaderObserved && !it.second.captureSynthetic
+            }
+        }
+        val observedPredrawTargets = targetPoints.count { point ->
+            predrawByPixel[point].orEmpty().any { it.second.readbackAvailable && it.second.dstBeforeRgbaFloat != null }
+        }
+        val observedPostPassTargets = targetPoints.count { point ->
+            postPassByPixel[point].orEmpty().any { it.second.readbackAvailable && it.second.observedRgbaFloat != null }
+        }
+        val classification = "direct-stencil-subpass-trace-inconclusive"
+        val partialJson = targetPoints.joinToString(",\n") { (x, y) ->
+            val point = x to y
+            val shaderSamples = shaderByPixel[point].orEmpty().sortedWith(
+                compareBy<Pair<
+                    SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                    SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                    >> { it.first.drawIndex }.thenBy { it.second.subdrawOrdinal },
+            )
+            val contributionSamples = contributionByPixel[point].orEmpty().sortedWith(
+                compareBy<Pair<
+                    SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationEvent,
+                    SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSample,
+                    >> { it.first.drawIndex }.thenBy { it.second.subdrawOrdinal },
+            )
+            val predrawSamples = predrawByPixel[point].orEmpty()
+            val postPassSamples = postPassByPixel[point].orEmpty()
+            val selectedPredraw = predrawSamples.firstOrNull {
+                it.second.targetWithinScissor && it.second.readbackAvailable && it.second.dstBeforeRgbaFloat != null
+            }
+            val selectedPostPass = postPassSamples.firstOrNull {
+                it.second.targetWithinScissor && it.second.readbackAvailable && it.second.observedRgbaFloat != null
+            }
+            fun shaderSubpassJson(role: String): String {
+                val roleSamples = shaderSamples.filter { it.second.subdrawRole == role }
+                val observed = roleSamples.filter { it.second.shaderObserved && !it.second.captureSynthetic }
+                val sample = observed.firstOrNull()?.second
+                val event = observed.firstOrNull()?.first
+                return """
+                    {
+                      "role": ${role.jsonString()},
+                      "fragmentInvoked": ${observed.isNotEmpty()},
+                      "sampleCount": ${roleSamples.size},
+                      "observedCount": ${observed.size},
+                      "drawIndex": ${event?.drawIndex ?: "null"},
+                      "candidateBranchReached": ${sample?.candidateBranchReached ?: "null"},
+                      "coverageOrAaAlpha": ${sample?.coverageOrAaAlpha?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                      "rawPathCoverage": ${sample?.rawPathCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                      "clipCoverage": ${sample?.clipCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                      "finalCoverage": ${sample?.finalCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                      "sourceColorSentToBlend": ${sample?.sourceColorSentToBlend.floatArrayOrNullJson()},
+                      "sourceColorBeforeQuantization": ${sample?.sourceColorBeforeQuantization.floatArrayOrNullJson()},
+                      "quantizedAlphaSentToBlend": ${sample?.quantizedAlphaSentToBlend?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                      "wgslSubsampleMask4x4": ${sample?.wgslSubsampleMask4x4 ?: "null"},
+                      "coveredSubsamples4x4": ${sample?.coveredSubsamples4x4 ?: "null"},
+                      "classification": ${(sample?.classification ?: "shader-return-unavailable").jsonString()},
+                      "reason": ${(sample?.reason ?: "No non-synthetic shader-return sample was observed for this coordinate and subpass.").jsonString()}
+                    }
+                """.trimIndent()
+            }
+            fun contributionSubpassJson(role: String): String {
+                val roleSamples = contributionSamples.filter { it.second.subdrawRole == role }
+                val observed = roleSamples.filter { it.second.shaderObserved }
+                val sample = observed.firstOrNull()?.second
+                val event = observed.firstOrNull()?.first
+                return """
+                    {
+                      "role": ${role.jsonString()},
+                      "fragmentInvoked": ${observed.isNotEmpty()},
+                      "sampleCount": ${roleSamples.size},
+                      "observedCount": ${observed.size},
+                      "drawIndex": ${event?.drawIndex ?: "null"},
+                      "sourceColorPremulRgbaFloat": ${sample?.sourceColorPremulRgbaFloat.floatArrayOrNullJson()},
+                      "coverageOrAaAlpha": ${sample?.coverageOrAaAlpha?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                      "dstBeforeRgbaFloat": ${sample?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                      "expectedSourceOverRgbaFloat": ${sample?.expectedSourceOverRgbaFloat.floatArrayOrNullJson()},
+                      "dstAfterRgbaFloat": ${sample?.dstAfterRgbaFloat.floatArrayOrNullJson()},
+                      "missingFields": [${sample?.missingFields.orEmpty().joinToString(", ") { it.jsonString() }}],
+                      "classification": ${(sample?.classification ?: "per-subdraw-sample-not-observed").jsonString()}
+                    }
+                """.trimIndent()
+            }
+            val referencePixel = reference.getPixel(x, y)
+            val currentPixel = currentGpu.getPixel(x, y)
+            val insidePixel = insideGpu.getPixel(x, y)
+            val outsidePixel = outsideGpu.getPixel(x, y)
+            val bothPixel = bothGpu.getPixel(x, y)
+            """
+                {
+                  "x": $x,
+                  "y": $y,
+                  "classification": "direct-stencil-subpass-trace-inconclusive",
+                  "referenceCpuRgba": ${rgbaArrayJson(rgbaArray(referencePixel))},
+                  "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentPixel))},
+                  "insideDiscardFor447Rgba": ${rgbaArrayJson(rgbaArray(insidePixel))},
+                  "outsideDiscardFor448Rgba": ${rgbaArrayJson(rgbaArray(outsidePixel))},
+                  "bothDiscardFor448Rgba": ${rgbaArrayJson(rgbaArray(bothPixel))},
+                  "currentResidual": ${sampleResidual(referencePixel, currentPixel)},
+                  "insideResidual": ${sampleResidual(referencePixel, insidePixel)},
+                  "outsideResidual": ${sampleResidual(referencePixel, outsidePixel)},
+                  "bothResidual": ${sampleResidual(referencePixel, bothPixel)},
+                  "variantChangedPixels": {
+                    "inside": ${currentPixel != insidePixel},
+                    "outside": ${currentPixel != outsidePixel},
+                    "both": ${currentPixel != bothPixel}
+                  },
+                  "stencilWriteTrace": {
+                    "available": false,
+                    "readAttempted": false,
+                    "observableEffect": null,
+                    "status": "stencil-buffer-direct-readback-unavailable",
+                    "missingReason": "Kanvas does not expose a safe WebGPU stencil-buffer readback boundary for this pass; FOR-449 records this refusal instead of inferring stencil writes from color output."
+                  },
+                  "shaderReturnSubpassTrace": [
+                    ${shaderSubpassJson("inside").prependIndent("        ").trimStart()},
+                    ${shaderSubpassJson("outside").prependIndent("        ").trimStart()}
+                  ],
+                  "contributionSubpassTrace": [
+                    ${contributionSubpassJson("inside").prependIndent("        ").trimStart()},
+                    ${contributionSubpassJson("outside").prependIndent("        ").trimStart()}
+                  ],
+                  "destinationBeforeTrace": {
+                    "observed": ${selectedPredraw != null},
+                    "sampleCount": ${predrawSamples.size},
+                    "selectedDrawIndex": ${selectedPredraw?.first?.drawIndex ?: "null"},
+                    "selectedRgbaFloat": ${selectedPredraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                    "selectedRgba8": ${selectedPredraw?.second?.dstBeforeRgba8.intArrayOrNullJson()}
+                  },
+                  "destinationAfterTrace": {
+                    "observed": ${selectedPostPass != null},
+                    "sampleCount": ${postPassSamples.size},
+                    "selectedDrawIndex": ${selectedPostPass?.first?.drawIndex ?: "null"},
+                    "selectedRgbaFloat": ${selectedPostPass?.second?.observedRgbaFloat.floatArrayOrNullJson()},
+                    "selectedRgba8": ${selectedPostPass?.second?.observedRgba8.intArrayOrNullJson()}
+                  }
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-449",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-tracer-directement-stencil-write-et-ecritures-fragmentaires-apres-for-448",
+              "sourceFindingMemory": "global/kanvas/findings/for-448-zero-mask-neutral-path-trace-reste-inconclusive",
+              "sourceArtifacts": {
+                "for448": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/m60-f16-zero-mask-neutral-path-trace-for448.json",
+                "for447": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-opt-in-correction-for447/m60-f16-zero-mask-opt-in-correction-for447.json",
+                "referenceCpuPng": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/reference-cpu.png",
+                "currentWebGpuPng": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/current-webgpu.png",
+                "insideFor447Png": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/inside-webgpu-for447.png",
+                "outsideFor448Png": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/outside-webgpu-for448.png",
+                "bothFor448Png": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/both-webgpu-for448.png"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "optInFlag": ${FOR449_STENCIL_WRITE_SUBPASS_TRACE_PROPERTY.jsonString()},
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR449_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixAppliedByDefault": false,
+              "for442UsedAsDecisionSource": false,
+              "comparisonPolicy": {
+                "pixelSet": "exactly the six FOR-447/FOR-448 zero-mask pixels",
+                "for448TraceUsedAsContext": true,
+                "directStencilReadbackRequiredForCorrectionCandidate": true,
+                "for442EvidencePolicy": "excluded as unreliable decision source",
+                "defaultRender": "captured with ${FOR449_STENCIL_WRITE_SUBPASS_TRACE_PROPERTY}=false",
+                "productionShaderChanged": false
+              },
+              "summary": {
+                "zeroMaskPixelCount": ${targetPoints.size},
+                "currentSimilarity": ${String.format(Locale.US, "%.6f", currentGpuCmp.similarity)},
+                "insideSimilarity": ${String.format(Locale.US, "%.6f", insideGpuCmp.similarity)},
+                "outsideSimilarity": ${String.format(Locale.US, "%.6f", outsideGpuCmp.similarity)},
+                "bothSimilarity": ${String.format(Locale.US, "%.6f", bothGpuCmp.similarity)},
+                "currentTotalResidual": $currentResidual,
+                "insideTotalResidual": $insideResidual,
+                "outsideTotalResidual": $outsideResidual,
+                "bothTotalResidual": $bothResidual,
+                "insideChangedPixels": ${insideChanged.size},
+                "outsideChangedPixels": ${outsideChanged.size},
+                "bothChangedPixels": ${bothChanged.size},
+                "insideChangedTargetPixels": ${insideChanged.count { it in targetSet }},
+                "outsideChangedTargetPixels": ${outsideChanged.count { it in targetSet }},
+                "bothChangedTargetPixels": ${bothChanged.count { it in targetSet }},
+                "currentGreaterThanEightPixels": ${currentResidualStats.greaterThanEightPixels},
+                "insideGreaterThanEightPixels": ${insideResidualStats.greaterThanEightPixels},
+                "outsideGreaterThanEightPixels": ${outsideResidualStats.greaterThanEightPixels},
+                "bothGreaterThanEightPixels": ${bothResidualStats.greaterThanEightPixels},
+                "shaderReturnObservedTargetCount": $observedShaderTargetCount,
+                "insideFragmentObservedTargetCount": $observedInsideTargetCount,
+                "outsideFragmentObservedTargetCount": $observedOutsideTargetCount,
+                "predrawDstObservedTargetCount": $observedPredrawTargets,
+                "postPassObservedTargetCount": $observedPostPassTargets,
+                "stencilWriteDirectReadbackAvailable": false,
+                "for442DecisionSourceUsedCount": 0
+              },
+              "stencilWriteTrace": {
+                "available": false,
+                "readAttempted": false,
+                "status": "stencil-buffer-direct-readback-unavailable",
+                "missingReason": "No safe WebGPU stencil-buffer readback boundary is exposed for this pass in Kanvas; FOR-449 refuses to infer stencil writes from color traces.",
+                "fallbackClassification": "direct-stencil-subpass-trace-inconclusive"
+              },
+              "traceCompleteness": {
+                "stencilWriteTraceComplete": false,
+                "fragmentInvocationTraceComplete": ${observedInsideTargetCount == targetPoints.size && observedOutsideTargetCount == targetPoints.size},
+                "sourceCoverageTraceComplete": ${observedShaderTargetCount == targetPoints.size},
+                "destinationBeforeAfterTraceComplete": ${observedPredrawTargets == targetPoints.size && observedPostPassTargets == targetPoints.size},
+                "finalImageTraceComplete": true,
+                "incompleteTracePolicy": "classify direct-stencil-subpass-trace-inconclusive and refuse to name a correction candidate"
+              },
+              "runtimeSnapshots": {
+                "predraw": {"propertyName": ${predrawSnapshot.propertyName.jsonString()}, "enabled": ${predrawSnapshot.enabled}, "eventCount": ${predrawSnapshot.events.size}},
+                "contributionIsolation": {"propertyName": ${contributionSnapshot.propertyName.jsonString()}, "enabled": ${contributionSnapshot.enabled}, "eventCount": ${contributionSnapshot.events.size}},
+                "shaderReturn": {"propertyName": ${shaderReturnSnapshot.propertyName.jsonString()}, "enabled": ${shaderReturnSnapshot.enabled}, "eventCount": ${shaderReturnSnapshot.events.size}},
+                "postPass": {"propertyName": ${postPassSnapshot.propertyName.jsonString()}, "enabled": ${postPassSnapshot.enabled}, "eventCount": ${postPassSnapshot.events.size}}
+              },
+              "partialPixels": [
+            $partialJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "activationByDefault": false,
+                "for442UsedAsDecisionSource": false,
+                "for447Promoted": false
+              },
+              "classificationReason": "FOR-449 observes shader-return and contribution subpass data for the six zero-mask pixels, plus destination before/after and final image variants. It still cannot read the stencil buffer directly, so it refuses to convert the trace into a correction candidate.",
+              "nextCorrectionCandidate": "Refuse to name a correction candidate until a safe direct stencil-write observation exists or the renderer exposes a narrower stencil/pass boundary.",
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16StencilWriteSubpassTraceFor449.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py",
+                "rtk python3 scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for449-pycache python3 -m py_compile scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
 
     private fun m60F16ZeroMaskOptInCorrectionFor447Reason(classification: String): String =
         when (classification) {
@@ -23374,6 +23765,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled"
         private const val FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_MODE_PROPERTY =
             "kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.mode"
+        private const val FOR449_STENCIL_WRITE_SUBPASS_TRACE_PROPERTY =
+            "kanvas.webgpu.m60F16StencilWriteSubpassTraceFor449.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -23537,6 +23930,13 @@ class StrokeCapJoinSceneCaptureTest {
             "zero-mask-neutral-caused-by-preexisting-destination",
             "zero-mask-neutral-caused-by-stencil-selection",
             "zero-mask-neutral-path-trace-inconclusive",
+        )
+        private val M60_F16_FOR449_ALLOWED_CLASSIFICATIONS = listOf(
+            "stencil-write-excludes-zero-mask-targets",
+            "fragment-subpass-not-invoked-for-zero-mask-targets",
+            "fragment-invoked-but-fixed-blend-neutral",
+            "later-write-overwrites-subpass-effect",
+            "direct-stencil-subpass-trace-inconclusive",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
