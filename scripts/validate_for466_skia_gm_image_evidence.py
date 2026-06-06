@@ -27,15 +27,18 @@ EXPECTED_FILES = {
     "reports/wgsl-pipeline/2026-06-06-for-465-drawminibitmaprect-evidence.md",
     "reports/wgsl-pipeline/2026-06-06-for-466-skia-gm-image-evidence.md",
     "reports/wgsl-pipeline/2026-06-06-for-467-skia-gm-imagesource-evidence.md",
+    "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
     "reports/wgsl-pipeline/scenes/generated/d50-lot1-dashboard-integration-for462.json",
     "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
     "reports/wgsl-pipeline/scenes/generated/for465-drawminibitmaprect-evidence.json",
     "reports/wgsl-pipeline/scenes/generated/for466-skia-gm-image-evidence.json",
     "reports/wgsl-pipeline/scenes/generated/for467-skia-gm-imagesource-evidence.json",
+    "reports/wgsl-pipeline/scenes/generated/for468-skia-gm-offsetimagefilter-evidence.json",
     "scripts/validate_for462_d50_lot1_dashboard_integration.py",
     "scripts/validate_for465_drawminibitmaprect_evidence.py",
     "scripts/validate_for466_skia_gm_image_evidence.py",
     "scripts/validate_for467_skia_gm_imagesource_evidence.py",
+    "scripts/validate_for468_skia_gm_offsetimagefilter_evidence.py",
 }
 FORBIDDEN_PATHS = {
     "reports/wgsl-pipeline/scenes/data/scenes.json",
@@ -118,7 +121,7 @@ def require_scope() -> None:
 
 def require_manifest() -> None:
     manifest = load_json(LOT1_MANIFEST)
-    require(manifest["statusCounts"] == {"diagnostic-only": 2, "expected-unsupported": 3, "supported": 7}, "manifest status counts mismatch")
+    require(manifest["statusCounts"] == {"diagnostic-only": 1, "expected-unsupported": 4, "supported": 7}, "manifest status counts mismatch")
     rows = manifest.get("rows")
     require(isinstance(rows, list), "manifest rows must be a list")
     require([row.get("inventoryId") for row in rows if isinstance(row, dict)] == [
@@ -165,6 +168,10 @@ def require_row_evidence() -> None:
     evidence = load_json(ROW_EVIDENCE)
     require(evidence.get("linear") == LINEAR, "row evidence linear mismatch")
     require(evidence.get("classification") == "row-specific-expected-unsupported-no-support-claim", "row evidence classification mismatch")
+    require(
+        evidence.get("statusCountsAfterFor466") == {"diagnostic-only": 3, "expected-unsupported": 2, "supported": 7},
+        "FOR-466 snapshot status counts mismatch",
+    )
     row = evidence.get("row")
     require(isinstance(row, dict), "row evidence must contain row object")
     require(row.get("inventoryId") == ROW_ID, "row evidence inventory mismatch")
@@ -183,6 +190,7 @@ def require_row_evidence() -> None:
     require(provenance.get("kotlinSource") == "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt", "Kotlin source provenance mismatch")
     require(provenance.get("upstreamSource") == "gm/image.cpp", "upstream source provenance mismatch")
     require(row.get("nonClaims", {}).get("historicalImageEvidenceInherited") is False, "historical image evidence must not be inherited")
+    require(not any("For467" in key or "For468" in key for key in row.get("nonClaims", {})), "FOR-466 evidence must not include future-ticket non-claims")
     for key in FEATURE_NON_CLAIMS:
         require(row.get("nonClaims", {}).get(key) is False, f"{key} must remain false")
     require(evidence.get("scoreImpact", {}).get("supportScoreIncreased") is False, "support score must not increase")
