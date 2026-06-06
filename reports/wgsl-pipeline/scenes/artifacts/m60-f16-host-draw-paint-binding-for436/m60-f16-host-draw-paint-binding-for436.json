@@ -1,0 +1,261 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-436",
+          "sceneId": "m60-f16-host-draw-paint-binding-for436",
+          "sourceSceneId": "m60-f16-paint-stroke-input-trace-for435",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-lier-draw-hote-et-paint-selectionne-pour-aa-stencil-cover-draw-index-3",
+          "sourceFindingMemory": "global/kanvas/findings/for-435-web-gpu-paint-stroke-input-trace-identifies-host-paint-input-mismatch",
+          "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-paint-stroke-input-trace-for435/m60-f16-paint-stroke-input-trace-for435.json",
+          "sourceReport": "reports/wgsl-pipeline/2026-06-06-for-435-m60-f16-paint-stroke-input-trace.md",
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "classification": "cpu-reference-source-expects-different-draw",
+          "allowedClassifications": [
+            "host-draw-paint-binding-mismatch",
+"cpu-reference-source-expects-different-draw",
+"draw-index-remap-mismatch",
+"fixture-expectation-mismatch",
+"trace-incomplete",
+"paint-binding-origin-unresolved"
+          ],
+          "diagnosticFlag": "kanvas.webgpu.m60F16HostDrawPaintBindingFor436.enabled",
+          "sourceFor435DiagnosticFlag": "kanvas.webgpu.m60F16PaintStrokeInputTraceFor435.enabled",
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "productionWgslChanged": false,
+          "wgsl4kModified": false,
+          "renderingFixApplied": false,
+          "comparisonPolicy": {
+            "scope": "Exactly the six FOR-435 residual pixels, linked to the CPU-side host binding for effective drawIndex 3.",
+            "hostSnapshotProperty": "kanvas.webgpu.m60F16HostDrawPaintBindingFor436.enabled",
+            "hostSnapshotEnabled": true,
+            "requestedBoundary": "host draw-to-paint binding for M60 F16 StencilCoverAaPolygonDraw at effective drawIndex 3",
+            "observedBoundary": "SkWebGpuDevice CPU-side StencilCoverAaPolygonDraw dispatch before inside/outside cover subdraws",
+            "noRenderingFixApplied": true,
+            "boundedToSixPixels": true
+          },
+          "summary": {
+            "partialPixelCount": 6,
+            "expectedPartialPixelCount": 6,
+            "hostBindingEventCount": 3,
+            "selectedHostDrawIndex": 3,
+            "selectedPaintHexArgb": "0xFF008A4C",
+            "selectedStrokeWidth": 10.000000,
+            "selectedStrokeCap": "round",
+            "selectedStrokeJoin": "round",
+            "selectedBandXStart": 48.000000,
+            "selectedBandXEnd": 96.000000,
+            "traceComplete": true
+          },
+          "hostDrawBindings": [
+            {
+  "drawIndex": 1,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "route": "solid-color-aa-stencil-cover",
+  "fillType": "kWinding",
+  "blendMode": "kSrcOver",
+  "scissor": [0, 0, 192, 128],
+  "edgeCount": 8,
+  "coverVertexCount": 6,
+  "sourcePaintRgbaFloat": [0.000000000, 0.400000006, 0.800000012, 1.000000000],
+  "sourcePaintRgba8": [0, 102, 204, 255],
+  "sourcePaintHexArgb": "0xFF0066CC",
+  "stroke": {
+    "width": 10.000000,
+    "cap": "butt",
+    "join": "bevel"
+  },
+  "bandMetadata": {
+    "bandXStart": 0.000000,
+    "bandXEnd": 48.000000,
+    "strokeBandId": 1.000000,
+    "capId": 1.000000,
+    "joinId": 1.000000,
+    "sourceFacingLeftMaxLocalX": 17.000000,
+    "sourceFacingRightMinLocalX": 39.000000
+  },
+  "runtime": {
+    "targetColorSpaceBlend": true,
+    "intermediateFormat": "RGBA16Float",
+    "sourceColorCorrectionProbe": false,
+    "boundedRuntimeCorrectionProbe": false,
+    "widthQuantizedRenderFixFor431": true,
+    "coverSubdrawRoles": ["inside", "outside"]
+  },
+  "classification": "paint-binding-origin-unresolved",
+  "reason": "FOR-436 captured a host paint binding, but it does not match the known M60 F16 drawIndex 3 round/round stroke identity."
+},
+{
+  "drawIndex": 3,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "route": "solid-color-aa-stencil-cover",
+  "fillType": "kWinding",
+  "blendMode": "kSrcOver",
+  "scissor": [0, 0, 192, 128],
+  "edgeCount": 39,
+  "coverVertexCount": 6,
+  "sourcePaintRgbaFloat": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+  "sourcePaintRgba8": [0, 138, 76, 255],
+  "sourcePaintHexArgb": "0xFF008A4C",
+  "stroke": {
+    "width": 10.000000,
+    "cap": "round",
+    "join": "round"
+  },
+  "bandMetadata": {
+    "bandXStart": 48.000000,
+    "bandXEnd": 96.000000,
+    "strokeBandId": 2.000000,
+    "capId": 2.000000,
+    "joinId": 2.000000,
+    "sourceFacingLeftMaxLocalX": 17.000000,
+    "sourceFacingRightMinLocalX": 39.000000
+  },
+  "runtime": {
+    "targetColorSpaceBlend": true,
+    "intermediateFormat": "RGBA16Float",
+    "sourceColorCorrectionProbe": false,
+    "boundedRuntimeCorrectionProbe": false,
+    "widthQuantizedRenderFixFor431": true,
+    "coverSubdrawRoles": ["inside", "outside"]
+  },
+  "classification": "cpu-reference-source-expects-different-draw",
+  "reason": "The effective drawIndex 3 host binding is internally consistent: it selects the M60 F16 round/round stroke paint 0xFF008A4C for band 48..96. FOR-435 shows the CPU reference would need a much bluer payload for the six pixels, so the next correction must inspect whether the CPU reference samples a different draw/source expectation before changing this binding."
+},
+{
+  "drawIndex": 5,
+  "pipelineFamily": "StencilCoverAaPolygonDraw",
+  "route": "solid-color-aa-stencil-cover",
+  "fillType": "kWinding",
+  "blendMode": "kSrcOver",
+  "scissor": [0, 0, 192, 128],
+  "edgeCount": 12,
+  "coverVertexCount": 6,
+  "sourcePaintRgbaFloat": [0.701960802, 0.235294119, 0.000000000, 1.000000000],
+  "sourcePaintRgba8": [179, 60, 0, 255],
+  "sourcePaintHexArgb": "0xFFB33C00",
+  "stroke": {
+    "width": 10.000000,
+    "cap": "square",
+    "join": "bevel"
+  },
+  "bandMetadata": {
+    "bandXStart": 96.000000,
+    "bandXEnd": 192.000000,
+    "strokeBandId": 3.000000,
+    "capId": 3.000000,
+    "joinId": 1.000000,
+    "sourceFacingLeftMaxLocalX": 17.000000,
+    "sourceFacingRightMinLocalX": 39.000000
+  },
+  "runtime": {
+    "targetColorSpaceBlend": true,
+    "intermediateFormat": "RGBA16Float",
+    "sourceColorCorrectionProbe": false,
+    "boundedRuntimeCorrectionProbe": false,
+    "widthQuantizedRenderFixFor431": true,
+    "coverSubdrawRoles": ["inside", "outside"]
+  },
+  "classification": "paint-binding-origin-unresolved",
+  "reason": "FOR-436 captured a host paint binding, but it does not match the known M60 F16 drawIndex 3 round/round stroke identity."
+}
+          ],
+          "partialPixels": [
+            {
+  "x": 92,
+  "y": 75,
+  "expectedEffectiveDrawIndex": 3,
+  "linkedHostDrawIndex": 3,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "optInFor431Rgba": [111, 147, 129, 255],
+  "classification": "cpu-reference-source-expects-different-draw",
+  "reason": "The host binding for effective drawIndex 3 is internally consistent: it selects the green M60 F16 round/round stroke paint 0xFF008A4C for band 48..96. FOR-435 showed the CPU reference needs a much bluer payload for the same six pixels, so the next correction should inspect CPU/source expectation or draw/source mapping before changing this binding."
+},
+{
+  "x": 91,
+  "y": 76,
+  "expectedEffectiveDrawIndex": 3,
+  "linkedHostDrawIndex": 3,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "optInFor431Rgba": [111, 147, 129, 255],
+  "classification": "cpu-reference-source-expects-different-draw",
+  "reason": "The host binding for effective drawIndex 3 is internally consistent: it selects the green M60 F16 round/round stroke paint 0xFF008A4C for band 48..96. FOR-435 showed the CPU reference needs a much bluer payload for the same six pixels, so the next correction should inspect CPU/source expectation or draw/source mapping before changing this binding."
+},
+{
+  "x": 90,
+  "y": 77,
+  "expectedEffectiveDrawIndex": 3,
+  "linkedHostDrawIndex": 3,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "optInFor431Rgba": [111, 147, 129, 255],
+  "classification": "cpu-reference-source-expects-different-draw",
+  "reason": "The host binding for effective drawIndex 3 is internally consistent: it selects the green M60 F16 round/round stroke paint 0xFF008A4C for band 48..96. FOR-435 showed the CPU reference needs a much bluer payload for the same six pixels, so the next correction should inspect CPU/source expectation or draw/source mapping before changing this binding."
+},
+{
+  "x": 89,
+  "y": 78,
+  "expectedEffectiveDrawIndex": 3,
+  "linkedHostDrawIndex": 3,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "optInFor431Rgba": [111, 147, 129, 255],
+  "classification": "cpu-reference-source-expects-different-draw",
+  "reason": "The host binding for effective drawIndex 3 is internally consistent: it selects the green M60 F16 round/round stroke paint 0xFF008A4C for band 48..96. FOR-435 showed the CPU reference needs a much bluer payload for the same six pixels, so the next correction should inspect CPU/source expectation or draw/source mapping before changing this binding."
+},
+{
+  "x": 88,
+  "y": 79,
+  "expectedEffectiveDrawIndex": 3,
+  "linkedHostDrawIndex": 3,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "optInFor431Rgba": [111, 147, 129, 255],
+  "classification": "cpu-reference-source-expects-different-draw",
+  "reason": "The host binding for effective drawIndex 3 is internally consistent: it selects the green M60 F16 round/round stroke paint 0xFF008A4C for band 48..96. FOR-435 showed the CPU reference needs a much bluer payload for the same six pixels, so the next correction should inspect CPU/source expectation or draw/source mapping before changing this binding."
+},
+{
+  "x": 87,
+  "y": 80,
+  "expectedEffectiveDrawIndex": 3,
+  "linkedHostDrawIndex": 3,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "optInFor431Rgba": [111, 147, 129, 255],
+  "classification": "cpu-reference-source-expects-different-draw",
+  "reason": "The host binding for effective drawIndex 3 is internally consistent: it selects the green M60 F16 round/round stroke paint 0xFF008A4C for band 48..96. FOR-435 showed the CPU reference needs a much bluer payload for the same six pixels, so the next correction should inspect CPU/source expectation or draw/source mapping before changing this binding."
+}
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "for431ActivatedByDefault": false,
+            "renderingFixApplied": false
+          },
+          "classificationReason": "The host binding for effective drawIndex 3 is internally consistent: it selects the green M60 F16 round/round stroke paint 0xFF008A4C for band 48..96. FOR-435 showed the CPU reference needs a much bluer payload for the same six pixels, so the next correction should inspect CPU/source expectation or draw/source mapping before changing this binding.",
+          "nextStep": "Inspect the CPU/reference source expectation for these six pixels and the draw/source mapping before changing WebGPU paint binding, coverage, quantization, target colorspace, thresholds, or FOR-431 promotion.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16HostDrawPaintBindingFor436.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for436_m60_f16_host_draw_paint_binding.py",
+            "rtk python3 scripts/validate_for435_m60_f16_paint_stroke_input_trace.py",
+            "rtk python3 scripts/validate_for434_m60_f16_stencil_source_payload_trace.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for436-pycache python3 -m py_compile scripts/validate_for436_m60_f16_host_draw_paint_binding.py",
+            "rtk git diff --check"
+          ]
+        }

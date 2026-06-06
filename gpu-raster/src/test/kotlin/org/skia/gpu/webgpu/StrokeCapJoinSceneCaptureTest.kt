@@ -215,7 +215,8 @@ class StrokeCapJoinSceneCaptureTest {
                     System.getProperty(FOR432_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_PROPERTY, "false").toBoolean() ||
                         System.getProperty(FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY, "false").toBoolean() ||
                         System.getProperty(FOR434_STENCIL_SOURCE_PAYLOAD_TRACE_PROPERTY, "false").toBoolean() ||
-                        System.getProperty(FOR435_PAINT_STROKE_INPUT_TRACE_PROPERTY, "false").toBoolean()
+                        System.getProperty(FOR435_PAINT_STROKE_INPUT_TRACE_PROPERTY, "false").toBoolean() ||
+                        System.getProperty(FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY, "false").toBoolean()
                 val widthQuantizedColorReconstructionFor432Result =
                     if (widthQuantizedColorReconstructionRequested) {
                         withExperimentalStrokeCapJoinRender {
@@ -427,6 +428,15 @@ class StrokeCapJoinSceneCaptureTest {
                     optInGpu = widthQuantizedRenderFixFor431Gpu,
                     shaderReturnSnapshot = result.aaStencilCoverShaderReturnDiagnosticSnapshot,
                     predrawSnapshot = result.aaStencilCoverPredrawDstReadbackSnapshot,
+                    adapter = adapter,
+                )
+            }
+            if (System.getProperty(FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY, "false").toBoolean()) {
+                writeM60F16HostDrawPaintBindingFor436(
+                    reference = reference,
+                    currentGpu = experimentalGpu,
+                    optInGpu = widthQuantizedRenderFixFor431Gpu,
+                    hostSnapshot = result.hostDrawPaintBindingFor436Snapshot,
                     adapter = adapter,
                 )
             }
@@ -7527,6 +7537,219 @@ class StrokeCapJoinSceneCaptureTest {
                 "Add the exact missing field named in partialPixels[].missingFields before deriving a correction."
             else ->
                 "Add a narrower trace around the host draw paint binding and the target colorspace conversion input."
+        }
+
+    private fun writeM60F16HostDrawPaintBindingFor436(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        hostSnapshot: SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-host-draw-paint-binding-for436"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16HostDrawPaintBindingFor436Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                optInGpu = optInGpu,
+                hostSnapshot = hostSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16HostDrawPaintBindingFor436Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        hostSnapshot: SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        adapter: String,
+    ): String {
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val selected = hostSnapshot.events.firstOrNull { it.drawIndex == 3 }
+            ?: hostSnapshot.events.firstOrNull()
+        val traceComplete = selected != null && selected.drawIndex == 3
+        val globalClassification = when {
+            !hostSnapshot.enabled || !traceComplete -> "trace-incomplete"
+            selected.classification in M60_F16_FOR436_ALLOWED_CLASSIFICATIONS -> selected.classification
+            else -> "paint-binding-origin-unresolved"
+        }
+        val pixelJson = partialPoints
+            .sortedWith(compareBy<Pair<Int, Int>> { it.second }.thenBy { it.first })
+            .joinToString(",\n") { (x, y) ->
+                """
+                    {
+                      "x": $x,
+                      "y": $y,
+                      "expectedEffectiveDrawIndex": 3,
+                      "linkedHostDrawIndex": ${selected?.drawIndex ?: "null"},
+                      "referenceCpuRgba": ${rgbaArrayJson(rgbaArray(reference.getPixel(x, y)))},
+                      "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentGpu.getPixel(x, y)))},
+                      "optInFor431Rgba": ${rgbaArrayJson(rgbaArray(optInGpu.getPixel(x, y)))},
+                      "classification": ${globalClassification.jsonString()},
+                      "reason": ${m60F16HostDrawPaintBindingFor436GlobalReason(globalClassification).jsonString()}
+                    }
+                """.trimIndent().prependIndent("    ")
+            }
+        val bindingJson = hostSnapshot.events.joinToString(",\n") { event ->
+            """
+                {
+                  "drawIndex": ${event.drawIndex},
+                  "pipelineFamily": ${event.pipelineFamily.jsonString()},
+                  "route": ${event.route.jsonString()},
+                  "fillType": ${event.fillType.jsonString()},
+                  "blendMode": ${event.blendMode.jsonString()},
+                  "scissor": ${intArrayJson(event.scissor)},
+                  "edgeCount": ${event.edgeCount},
+                  "coverVertexCount": ${event.coverVertexCount},
+                  "sourcePaintRgbaFloat": ${event.sourcePaintRgbaFloat.floatArrayOrNullJson()},
+                  "sourcePaintRgba8": ${intArrayJson(event.sourcePaintRgba8)},
+                  "sourcePaintHexArgb": ${event.sourcePaintHexArgb.jsonString()},
+                  "stroke": {
+                    "width": ${event.strokeWidth?.let { m60F16JsonFloat(it) } ?: "null"},
+                    "cap": ${event.strokeCap?.jsonString() ?: "null"},
+                    "join": ${event.strokeJoin?.jsonString() ?: "null"}
+                  },
+                  "bandMetadata": {
+                    "bandXStart": ${m60F16JsonFloat(event.bandXStart)},
+                    "bandXEnd": ${m60F16JsonFloat(event.bandXEnd)},
+                    "strokeBandId": ${m60F16JsonFloat(event.strokeBandId)},
+                    "capId": ${m60F16JsonFloat(event.capId)},
+                    "joinId": ${m60F16JsonFloat(event.joinId)},
+                    "sourceFacingLeftMaxLocalX": ${m60F16JsonFloat(event.sourceFacingLeftMaxLocalX)},
+                    "sourceFacingRightMinLocalX": ${m60F16JsonFloat(event.sourceFacingRightMinLocalX)}
+                  },
+                  "runtime": {
+                    "targetColorSpaceBlend": ${event.targetColorSpaceBlend},
+                    "intermediateFormat": ${event.intermediateFormat.jsonString()},
+                    "sourceColorCorrectionProbe": ${event.sourceColorCorrectionProbe},
+                    "boundedRuntimeCorrectionProbe": ${event.boundedRuntimeCorrectionProbe},
+                    "widthQuantizedRenderFixFor431": ${event.widthQuantizedRenderFixFor431},
+                    "coverSubdrawRoles": [${event.coverSubdrawRoles.joinToString(", ") { it.jsonString() }}]
+                  },
+                  "classification": ${event.classification.jsonString()},
+                  "reason": ${event.reason.jsonString()}
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-436",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "m60-f16-paint-stroke-input-trace-for435",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-lier-draw-hote-et-paint-selectionne-pour-aa-stencil-cover-draw-index-3",
+              "sourceFindingMemory": "global/kanvas/findings/for-435-web-gpu-paint-stroke-input-trace-identifies-host-paint-input-mismatch",
+              "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-paint-stroke-input-trace-for435/m60-f16-paint-stroke-input-trace-for435.json",
+              "sourceReport": "reports/wgsl-pipeline/2026-06-06-for-435-m60-f16-paint-stroke-input-trace.md",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${globalClassification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR436_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "diagnosticFlag": ${FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY.jsonString()},
+              "sourceFor435DiagnosticFlag": ${FOR435_PAINT_STROKE_INPUT_TRACE_PROPERTY.jsonString()},
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixApplied": false,
+              "comparisonPolicy": {
+                "scope": "Exactly the six FOR-435 residual pixels, linked to the CPU-side host binding for effective drawIndex 3.",
+                "hostSnapshotProperty": ${hostSnapshot.propertyName.jsonString()},
+                "hostSnapshotEnabled": ${hostSnapshot.enabled},
+                "requestedBoundary": ${hostSnapshot.requestedBoundary.jsonString()},
+                "observedBoundary": ${hostSnapshot.observedBoundary.jsonString()},
+                "noRenderingFixApplied": true,
+                "boundedToSixPixels": true
+              },
+              "summary": {
+                "partialPixelCount": ${partialPoints.size},
+                "expectedPartialPixelCount": 6,
+                "hostBindingEventCount": ${hostSnapshot.events.size},
+                "selectedHostDrawIndex": ${selected?.drawIndex ?: "null"},
+                "selectedPaintHexArgb": ${selected?.sourcePaintHexArgb?.jsonString() ?: "null"},
+                "selectedStrokeWidth": ${selected?.strokeWidth?.let { m60F16JsonFloat(it) } ?: "null"},
+                "selectedStrokeCap": ${selected?.strokeCap?.jsonString() ?: "null"},
+                "selectedStrokeJoin": ${selected?.strokeJoin?.jsonString() ?: "null"},
+                "selectedBandXStart": ${selected?.let { m60F16JsonFloat(it.bandXStart) } ?: "null"},
+                "selectedBandXEnd": ${selected?.let { m60F16JsonFloat(it.bandXEnd) } ?: "null"},
+                "traceComplete": $traceComplete
+              },
+              "hostDrawBindings": [
+            $bindingJson
+              ],
+              "partialPixels": [
+            $pixelJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "for431ActivatedByDefault": false,
+                "renderingFixApplied": false
+              },
+              "classificationReason": ${m60F16HostDrawPaintBindingFor436GlobalReason(globalClassification).jsonString()},
+              "nextStep": ${m60F16HostDrawPaintBindingFor436NextStep(globalClassification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16HostDrawPaintBindingFor436.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for436_m60_f16_host_draw_paint_binding.py",
+                "rtk python3 scripts/validate_for435_m60_f16_paint_stroke_input_trace.py",
+                "rtk python3 scripts/validate_for434_m60_f16_stencil_source_payload_trace.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for436-pycache python3 -m py_compile scripts/validate_for436_m60_f16_host_draw_paint_binding.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16HostDrawPaintBindingFor436GlobalReason(classification: String): String =
+        when (classification) {
+            "cpu-reference-source-expects-different-draw" ->
+                "The host binding for effective drawIndex 3 is internally consistent: it selects the green M60 F16 round/round stroke paint 0xFF008A4C for band 48..96. FOR-435 showed the CPU reference needs a much bluer payload for the same six pixels, so the next correction should inspect CPU/source expectation or draw/source mapping before changing this binding."
+            "host-draw-paint-binding-mismatch" ->
+                "The host binding does not match the expected draw/paint identity for effective drawIndex 3."
+            "draw-index-remap-mismatch" ->
+                "The host binding exists, but the effective drawIndex does not map to the expected stencil-cover draw."
+            "fixture-expectation-mismatch" ->
+                "The fixture metadata does not match the expected M60 F16 stroke identity."
+            "trace-incomplete" ->
+                "The host draw-to-paint binding trace did not capture a complete drawIndex 3 event."
+            else ->
+                "The host draw-to-paint binding trace is complete but does not isolate a correction target."
+        }
+
+    private fun m60F16HostDrawPaintBindingFor436NextStep(classification: String): String =
+        when (classification) {
+            "cpu-reference-source-expects-different-draw" ->
+                "Inspect the CPU/reference source expectation for these six pixels and the draw/source mapping before changing WebGPU paint binding, coverage, quantization, target colorspace, thresholds, or FOR-431 promotion."
+            "host-draw-paint-binding-mismatch" ->
+                "Correct the host draw-to-paint binding only after reducing the mismatch to the exact source draw."
+            "draw-index-remap-mismatch" ->
+                "Trace the pending-draw index remap before changing paint payload math."
+            "fixture-expectation-mismatch" ->
+                "Re-audit the M60 F16 fixture expectation before changing renderer logic."
+            "trace-incomplete" ->
+                "Add the exact missing host binding field before deriving a correction."
+            else ->
+                "Add a narrower trace around CPU/source expectation and host draw mapping."
         }
 
     private fun m60F16SubsampleComparisonGridJson(
@@ -17797,6 +18020,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16StencilSourcePayloadTraceFor434.enabled"
         private const val FOR435_PAINT_STROKE_INPUT_TRACE_PROPERTY =
             "kanvas.webgpu.m60F16PaintStrokeInputTraceFor435.enabled"
+        private const val FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY =
+            "kanvas.webgpu.m60F16HostDrawPaintBindingFor436.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -17856,6 +18081,14 @@ class StrokeCapJoinSceneCaptureTest {
             "wrong-draw-paint-selected",
             "trace-incomplete",
             "paint-input-origin-unresolved",
+        )
+        private val M60_F16_FOR436_ALLOWED_CLASSIFICATIONS = listOf(
+            "host-draw-paint-binding-mismatch",
+            "cpu-reference-source-expects-different-draw",
+            "draw-index-remap-mismatch",
+            "fixture-expectation-mismatch",
+            "trace-incomplete",
+            "paint-binding-origin-unresolved",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",

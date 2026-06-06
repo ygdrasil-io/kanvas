@@ -224,6 +224,8 @@ private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_RENDER_FIX_FOR431_FLAG: String 
     "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_FOR432_FLAG: String =
     "kanvas.webgpu.m60F16WidthQuantizedColorReconstructionFor432.enabled"
+private const val WEBGPU_M60_F16_HOST_DRAW_PAINT_BINDING_FOR436_FLAG: String =
+    "kanvas.webgpu.m60F16HostDrawPaintBindingFor436.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -764,6 +766,47 @@ public class SkWebGpuDevice(
         val reason: String,
     )
 
+    public data class M60F16HostDrawPaintBindingFor436Snapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val requestedBoundary: String,
+        val observedBoundary: String,
+        val sourceFindingMemory: String,
+        val events: List<M60F16HostDrawPaintBindingFor436Event>,
+    )
+
+    public data class M60F16HostDrawPaintBindingFor436Event(
+        val drawIndex: Int,
+        val pipelineFamily: String,
+        val route: String,
+        val fillType: String,
+        val blendMode: String,
+        val scissor: IntArray,
+        val edgeCount: Int,
+        val coverVertexCount: Int,
+        val sourcePaintRgbaFloat: FloatArray,
+        val sourcePaintRgba8: IntArray,
+        val sourcePaintHexArgb: String,
+        val strokeWidth: Float?,
+        val strokeCap: String?,
+        val strokeJoin: String?,
+        val bandXStart: Float,
+        val bandXEnd: Float,
+        val strokeBandId: Float,
+        val capId: Float,
+        val joinId: Float,
+        val sourceFacingLeftMaxLocalX: Float,
+        val sourceFacingRightMinLocalX: Float,
+        val targetColorSpaceBlend: Boolean,
+        val intermediateFormat: String,
+        val sourceColorCorrectionProbe: Boolean,
+        val boundedRuntimeCorrectionProbe: Boolean,
+        val widthQuantizedRenderFixFor431: Boolean,
+        val coverSubdrawRoles: List<String>,
+        val classification: String,
+        val reason: String,
+    )
+
     public data class RawRectUniformColorWrite(
         val route: String,
         val drawIndex: Int,
@@ -933,6 +976,11 @@ public class SkWebGpuDevice(
             WEBGPU_M60_F16_AA_STENCIL_COVER_SUBSAMPLE_MASK_FOR427_FLAG,
             "false",
         ).toBoolean()
+    private val m60F16HostDrawPaintBindingFor436DiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_HOST_DRAW_PAINT_BINDING_FOR436_FLAG,
+            "false",
+        ).toBoolean()
     private val rawRectUniformColorWrites: MutableList<RawRectUniformColorWrite> = mutableListOf()
     private val rawRgba8TextureUploads: MutableList<RawRgba8TextureUpload> = mutableListOf()
     private val outputReadbackBoundarySamples: MutableList<OutputReadbackSample> = mutableListOf()
@@ -972,6 +1020,8 @@ public class SkWebGpuDevice(
     private val m60F16AaStencilCoverShaderReturnStorageZeroCauseColorEvents:
         MutableList<M60F16AaStencilCoverIsolatedColorTargetEvent> = mutableListOf()
     private val m60F16AaStencilCoverFinalWgslSources: MutableMap<String, String> = linkedMapOf()
+    private val m60F16HostDrawPaintBindingFor436Events:
+        MutableList<M60F16HostDrawPaintBindingFor436Event> = mutableListOf()
     private val shaderModuleCache: MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val generatedShaderModuleCache: PipelineKeyedCache<GPUShaderModule> =
         PipelineKeyedCache("generated shader modules")
@@ -1133,6 +1183,20 @@ public class SkWebGpuDevice(
             pipelineLayout = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_LAYOUT,
             sampleLimit = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.size,
             events = m60F16AaStencilCoverShaderReturnDiagnosticEvents.toList(),
+        )
+
+    public fun m60F16HostDrawPaintBindingFor436Snapshot():
+        M60F16HostDrawPaintBindingFor436Snapshot =
+        M60F16HostDrawPaintBindingFor436Snapshot(
+            propertyName = WEBGPU_M60_F16_HOST_DRAW_PAINT_BINDING_FOR436_FLAG,
+            enabled = m60F16HostDrawPaintBindingFor436DiagnosticsEnabled,
+            requestedBoundary =
+                "host draw-to-paint binding for M60 F16 StencilCoverAaPolygonDraw at effective drawIndex 3",
+            observedBoundary =
+                "SkWebGpuDevice CPU-side StencilCoverAaPolygonDraw dispatch before inside/outside cover subdraws",
+            sourceFindingMemory =
+                "global/kanvas/findings/for-435-web-gpu-paint-stroke-input-trace-identifies-host-paint-input-mismatch",
+            events = m60F16HostDrawPaintBindingFor436Events.toList(),
         )
 
     public fun m60F16AaStencilCoverIsolatedColorTargetSnapshot():
@@ -2682,6 +2746,91 @@ public class SkWebGpuDevice(
                 edgeCount = d.edgeCount,
                 coverVertexCount = d.coverVerts.size / 2,
                 samples = samples,
+            )
+    }
+
+    private fun recordM60F16HostDrawPaintBindingFor436(
+        drawIndex: Int,
+        d: StencilCoverAaPolygonDraw,
+    ) {
+        val metadata = d.m60F16BandMetadata
+        if (!m60F16HostDrawPaintBindingFor436DiagnosticsEnabled || metadata == null) {
+            return
+        }
+        val sourcePaint = floatArrayOf(d.r, d.g, d.b, d.a)
+        val sourcePaintRgba8 = IntArray(4) { channel ->
+            ((sourcePaint[channel] * 255f) + 0.5f).toInt().coerceIn(0, 255)
+        }
+        val sourcePaintHexArgb = "0x%02X%02X%02X%02X".format(
+            sourcePaintRgba8[3],
+            sourcePaintRgba8[0],
+            sourcePaintRgba8[1],
+            sourcePaintRgba8[2],
+        )
+        val strokeWidth = when (metadata.strokeBandId) {
+            1f, 2f, 3f -> 10f
+            else -> activeStrokeStyleForPathAaDiagnostics?.strokeWidth
+        }
+        val strokeCap = when (metadata.capId) {
+            1f -> "butt"
+            2f -> "round"
+            3f -> "square"
+            else -> activeStrokeStyleForPathAaDiagnostics?.cap
+        }
+        val strokeJoin = when (metadata.joinId) {
+            1f -> "bevel"
+            2f -> "round"
+            3f -> "miter"
+            else -> activeStrokeStyleForPathAaDiagnostics?.join
+        }
+        val classification = if (
+            drawIndex == 3 &&
+            metadata.strokeBandId == 2f &&
+            sourcePaintHexArgb == "0xFF008A4C" &&
+            strokeWidth?.let { kotlin.math.abs(it - 10f) <= 0.001f } == true &&
+            strokeCap == "round" &&
+            strokeJoin == "round"
+        ) {
+            "cpu-reference-source-expects-different-draw"
+        } else {
+            "paint-binding-origin-unresolved"
+        }
+        m60F16HostDrawPaintBindingFor436Events +=
+            M60F16HostDrawPaintBindingFor436Event(
+                drawIndex = drawIndex,
+                pipelineFamily = "StencilCoverAaPolygonDraw",
+                route = "solid-color-aa-stencil-cover",
+                fillType = d.fillType.name,
+                blendMode = d.mode.name,
+                scissor = d.scissor.copyOf(),
+                edgeCount = d.edgeCount,
+                coverVertexCount = d.coverVerts.size / 2,
+                sourcePaintRgbaFloat = sourcePaint,
+                sourcePaintRgba8 = sourcePaintRgba8,
+                sourcePaintHexArgb = sourcePaintHexArgb,
+                strokeWidth = strokeWidth,
+                strokeCap = strokeCap,
+                strokeJoin = strokeJoin,
+                bandXStart = metadata.bandXStart,
+                bandXEnd = metadata.bandXEnd,
+                strokeBandId = metadata.strokeBandId,
+                capId = metadata.capId,
+                joinId = metadata.joinId,
+                sourceFacingLeftMaxLocalX = metadata.sourceFacingLeftMaxLocalX,
+                sourceFacingRightMinLocalX = metadata.sourceFacingRightMinLocalX,
+                targetColorSpaceBlend = targetColorSpaceBlend,
+                intermediateFormat = intermediateFormat.name,
+                sourceColorCorrectionProbe = d.m60F16SourceColorCorrectionProbe,
+                boundedRuntimeCorrectionProbe = d.m60F16BoundedRuntimeCorrectionProbe,
+                widthQuantizedRenderFixFor431 = d.m60F16WidthQuantizedRenderFixFor431,
+                coverSubdrawRoles = listOf("inside", "outside"),
+                classification = classification,
+                reason = when (classification) {
+                    "cpu-reference-source-expects-different-draw" ->
+                        "The effective drawIndex 3 host binding is internally consistent: it selects the M60 F16 round/round stroke paint 0xFF008A4C for band 48..96. FOR-435 shows the CPU reference would need a much bluer payload for the six pixels, so the next correction must inspect whether the CPU reference samples a different draw/source expectation before changing this binding."
+                    else ->
+                        "FOR-436 captured a host paint binding, but it does not match the known M60 F16 drawIndex 3 round/round stroke identity."
+                },
             )
     }
 
@@ -16242,6 +16391,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                     }
                 }
                 recordM60F16AaStencilCoverPostPassRuntimeHook(i, d)
+                recordM60F16HostDrawPaintBindingFor436(i, d)
                 if (intermediateFormat != GPUTextureFormat.RGBA16Float) {
                     recordM60F16AaStencilCoverPostPassFormatUnsupported(i, d)
                 } else if (res.m60F16AaStencilCoverPostPassReadbackBindGroup != null) {
