@@ -241,6 +241,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16CpuVsWebGpuGreenDrawCoverageFor438.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16CpuVsWebGpuGreenDrawCoverageFor438.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16StencilCoverGeometryVsCpuGreenMaskFor439.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16StencilCoverGeometryVsCpuGreenMaskFor439.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
