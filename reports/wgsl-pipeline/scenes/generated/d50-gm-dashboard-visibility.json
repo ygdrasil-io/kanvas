@@ -5,7 +5,7 @@
   "artifactSourceRoot": "reports/wgsl-pipeline/scenes/artifacts",
   "sourceReport": "reports/wgsl-pipeline/2026-06-06-d50-gm-dashboard-lot1.md",
   "selectedReport": "reports/wgsl-pipeline/2026-06-06-for-462-d50-lot1-dashboard-integration-gate.md",
-  "selectedCandidateCount": 9,
+  "selectedCandidateCount": 12,
   "outputEvidenceDir": "wgsl-pipeline-d50-lot1-generated",
   "outputDescription": "D50 policy-only dashboard rows materialized for unsupported GM visibility.",
   "outputManifest": "data/d50-gm-dashboard-generated-scenes.json",
@@ -217,6 +217,114 @@
       "nonClaim": "Dashboard visibility only. This row does not claim shaped text, complex text transforms, glyph atlas, color glyph, or broad font support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
       "tags": ["source.generated", "source.inventory", "feature.font", "feature.text", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+    },
+    {
+      "id": "skia-gm-runtimeimagefilter",
+      "inventoryId": "skia-gm-runtimeimagefilter",
+      "title": "D50 RuntimeImageFilter GM row-specific refusal",
+      "family": "Runtime effects",
+      "status": "expected-unsupported",
+      "linearIssue": "FOR-461",
+      "baseArtifactScene": "skia-gm-runtimeimagefilter",
+      "allowArtifactOnlyBase": true,
+      "policyOnlyArtifacts": true,
+      "sourceTask": "pipelineD50Lot1DashboardVisibilityPack",
+      "sourceTest": "policy-only-dashboard-visibility",
+      "sourceReport": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
+      "referenceKind": "skia-upstream",
+      "cpuRoute": "cpu.runtime-effect.runtimeimagefilter.expected-unsupported",
+      "gpuRoute": "webgpu.runtime-effect.runtimeimagefilter.expected-unsupported",
+      "pipelineKey": "runtimeEffect=imageFilter source=RuntimeImageFilterGM milestone=D50 visibility=policy-only",
+      "fallbackReason": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
+      "visibilityStatusRemap": {
+        "fromInventoryClassification": "excluded",
+        "fromExclusionReason": "Runtime image filters need registered descriptors before promotion; arbitrary SkSL/runtime image-filter input remains refused.",
+        "toDashboardStatus": "expected-unsupported",
+        "reason": "Dashboard visibility row only from D50 exclusion metadata; readiness and fidelity support counters do not move."
+      },
+      "gpuRouteDetails": {
+        "visibilityStatusRemap": {
+          "fromInventoryClassification": "excluded",
+          "fromExclusionReason": "Runtime image filters need registered descriptors before promotion; arbitrary SkSL/runtime image-filter input remains refused.",
+          "toDashboardStatus": "expected-unsupported",
+          "reason": "Dashboard visibility row only from D50 exclusion metadata; readiness and fidelity support counters do not move."
+        }
+      },
+      "nonClaim": "Dashboard visibility only. This row does not claim RuntimeImageFilterGM, arbitrary SkSL, dynamic runtime-effect compilation, or runtime image-filter descriptor support.",
+      "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
+      "tags": ["source.generated", "source.inventory", "feature.runtime-effect", "feature.image-filter", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+    },
+    {
+      "id": "skia-gm-shadertext3",
+      "inventoryId": "skia-gm-shadertext3",
+      "title": "D50 ShaderText3 GM row-specific refusal",
+      "family": "Text/font",
+      "status": "expected-unsupported",
+      "linearIssue": "FOR-461",
+      "baseArtifactScene": "skia-gm-shadertext3",
+      "allowArtifactOnlyBase": true,
+      "policyOnlyArtifacts": true,
+      "sourceTask": "pipelineD50Lot1DashboardVisibilityPack",
+      "sourceTest": "policy-only-dashboard-visibility",
+      "sourceReport": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
+      "referenceKind": "skia-upstream",
+      "cpuRoute": "cpu.font.shadertext3.expected-unsupported",
+      "gpuRoute": "webgpu.font.shadertext3.expected-unsupported",
+      "pipelineKey": "text shaderText3=true source=ShaderText3GM milestone=D50 visibility=policy-only",
+      "fallbackReason": "font.shadertext3.row-specific-artifacts-required",
+      "visibilityStatusRemap": {
+        "fromInventoryClassification": "excluded",
+        "fromExclusionReason": "Combines text/glyph dependency and runtime shader behavior; not a clean D50 dashboard-expansion candidate.",
+        "toDashboardStatus": "expected-unsupported",
+        "reason": "Dashboard visibility row only from D50 exclusion metadata; readiness and fidelity support counters do not move."
+      },
+      "gpuRouteDetails": {
+        "visibilityStatusRemap": {
+          "fromInventoryClassification": "excluded",
+          "fromExclusionReason": "Combines text/glyph dependency and runtime shader behavior; not a clean D50 dashboard-expansion candidate.",
+          "toDashboardStatus": "expected-unsupported",
+          "reason": "Dashboard visibility row only from D50 exclusion metadata; readiness and fidelity support counters do not move."
+        }
+      },
+      "nonClaim": "Dashboard visibility only. This row does not claim ShaderText3GM, shaped text, glyph atlas, text shader behavior, or broad font support.",
+      "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
+      "tags": ["source.generated", "source.inventory", "feature.font", "feature.text", "feature.runtime-effect", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+    },
+    {
+      "id": "skia-gm-gradients2ptconical",
+      "inventoryId": "skia-gm-gradients2ptconical",
+      "title": "D50 Gradients2ptConical GM row-specific refusal",
+      "family": "Gradients",
+      "status": "expected-unsupported",
+      "linearIssue": "FOR-461",
+      "baseArtifactScene": "skia-gm-gradients2ptconical",
+      "allowArtifactOnlyBase": true,
+      "policyOnlyArtifacts": true,
+      "sourceTask": "pipelineD50Lot1DashboardVisibilityPack",
+      "sourceTest": "policy-only-dashboard-visibility",
+      "sourceReport": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
+      "referenceKind": "skia-upstream",
+      "cpuRoute": "cpu.gradient.2ptconical.expected-unsupported",
+      "gpuRoute": "webgpu.gradient.2ptconical.expected-unsupported",
+      "pipelineKey": "gradient=twoPointConical source=Gradients2ptConicalGM milestone=D50 visibility=policy-only",
+      "fallbackReason": "gradient.2ptconical.row-specific-artifacts-required",
+      "visibilityStatusRemap": {
+        "fromInventoryClassification": "excluded",
+        "fromExclusionReason": "Two-point conical gradients remain outside the existing bounded linear/sweep gradient support envelope.",
+        "toDashboardStatus": "expected-unsupported",
+        "reason": "Dashboard visibility row only from D50 exclusion metadata; readiness and fidelity support counters do not move."
+      },
+      "gpuRouteDetails": {
+        "visibilityStatusRemap": {
+          "fromInventoryClassification": "excluded",
+          "fromExclusionReason": "Two-point conical gradients remain outside the existing bounded linear/sweep gradient support envelope.",
+          "toDashboardStatus": "expected-unsupported",
+          "reason": "Dashboard visibility row only from D50 exclusion metadata; readiness and fidelity support counters do not move."
+        }
+      },
+      "nonClaim": "Dashboard visibility only. This row does not claim Gradients2ptConicalGM, two-point conical gradients, or broader gradient-envelope support.",
+      "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
+      "tags": ["source.generated", "source.inventory", "feature.gradient", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
     }
   ]
 }

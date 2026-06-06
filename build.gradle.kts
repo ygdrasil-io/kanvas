@@ -3060,6 +3060,9 @@ tasks.register("pipelineSceneDashboardGate") {
             "skia-gm-imagemakewithfilter" to "image-filter.imagemakewithfilter.row-specific-artifacts-required",
             "skia-gm-runtimeintrinsics" to "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
             "skia-gm-textblobtransforms" to "font.textblobtransforms.row-specific-artifacts-required",
+            "skia-gm-runtimeimagefilter" to "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
+            "skia-gm-shadertext3" to "font.shadertext3.row-specific-artifacts-required",
+            "skia-gm-gradients2ptconical" to "gradient.2ptconical.row-specific-artifacts-required",
         )
         val staticPathAaSentinels = mapOf(
             "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",

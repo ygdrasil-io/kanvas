@@ -28,16 +28,27 @@ EXPECTED_ROWS = {
     "skia-gm-imagemakewithfilter": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
     "skia-gm-runtimeintrinsics": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
     "skia-gm-textblobtransforms": "font.textblobtransforms.row-specific-artifacts-required",
+    "skia-gm-runtimeimagefilter": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
+    "skia-gm-shadertext3": "font.shadertext3.row-specific-artifacts-required",
+    "skia-gm-gradients2ptconical": "gradient.2ptconical.row-specific-artifacts-required",
 }
 EXPECTED_PROJECTED = {
-    "total": 102,
+    "total": 105,
     "pass": 70,
-    "expected-unsupported": 32,
-    "inventoryDerived": 54,
+    "expected-unsupported": 35,
+    "inventoryDerived": 57,
 }
 EXPECTED_REMAPS = {
     "skia-gm-runtimeintrinsics": "diagnostic-only",
     "skia-gm-textblobtransforms": "diagnostic-only",
+    "skia-gm-runtimeimagefilter": "excluded",
+    "skia-gm-shadertext3": "excluded",
+    "skia-gm-gradients2ptconical": "excluded",
+}
+EXPECTED_EXCLUSION_REASONS = {
+    "skia-gm-runtimeimagefilter": "Runtime image filters need registered descriptors before promotion; arbitrary SkSL/runtime image-filter input remains refused.",
+    "skia-gm-shadertext3": "Combines text/glyph dependency and runtime shader behavior; not a clean D50 dashboard-expansion candidate.",
+    "skia-gm-gradients2ptconical": "Two-point conical gradients remain outside the existing bounded linear/sweep gradient support envelope.",
 }
 
 
@@ -80,6 +91,9 @@ def validate_gradle_wiring() -> None:
         "skia-gm-imagemakewithfilter\" to \"image-filter.imagemakewithfilter.row-specific-artifacts-required",
         "skia-gm-runtimeintrinsics\" to \"runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
         "skia-gm-textblobtransforms\" to \"font.textblobtransforms.row-specific-artifacts-required",
+        "skia-gm-runtimeimagefilter\" to \"runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
+        "skia-gm-shadertext3\" to \"font.shadertext3.row-specific-artifacts-required",
+        "skia-gm-gradients2ptconical\" to \"gradient.2ptconical.row-specific-artifacts-required",
     ]
     for marker in markers:
         require(marker in text, f"build.gradle.kts missing marker: {marker}")
@@ -110,6 +124,17 @@ def validate_contract() -> None:
             require(remap.get("fromInventoryClassification") == EXPECTED_REMAPS[scene_id], f"{scene_id}: remap source mismatch")
             require(remap.get("toDashboardStatus") == "expected-unsupported", f"{scene_id}: remap target mismatch")
             require("counters do not move" in remap.get("reason", ""), f"{scene_id}: remap reason must protect support counters")
+            if scene_id in EXPECTED_EXCLUSION_REASONS:
+                require(
+                    remap.get("fromExclusionReason") == EXPECTED_EXCLUSION_REASONS[scene_id],
+                    f"{scene_id}: remap exclusion reason mismatch",
+                )
+                gpu_details = scene.get("gpuRouteDetails")
+                require(isinstance(gpu_details, dict), f"{scene_id}: gpuRouteDetails required for excluded remap")
+                require(
+                    gpu_details.get("visibilityStatusRemap") == remap,
+                    f"{scene_id}: gpuRouteDetails.visibilityStatusRemap must mirror contract remap",
+                )
         else:
             require(remap is None, f"{scene_id}: unexpected visibilityStatusRemap")
 
@@ -125,6 +150,13 @@ def validate_generated_projection() -> None:
         require(scene.get("gpu", {}).get("route", {}).get("fallbackReason") == fallback, f"{scene_id}: generated fallback mismatch")
         require(scene.get("policyArtifact") == f"artifacts/{scene_id}/policy-artifact.json", f"{scene_id}: missing policy artifact")
         require(scene.get("generation", {}).get("derivationTask") == "pipelineD50Lot1DashboardVisibilityPack", f"{scene_id}: derivation task mismatch")
+        if scene_id in EXPECTED_EXCLUSION_REASONS:
+            gpu_route_path = GENERATED.parents[1] / "artifacts" / scene_id / "route-gpu.json"
+            gpu_route = load_json(gpu_route_path)
+            remap = gpu_route.get("visibilityStatusRemap")
+            require(isinstance(remap, dict), f"{scene_id}: generated GPU route remap required")
+            require(remap.get("fromInventoryClassification") == "excluded", f"{scene_id}: generated remap source mismatch")
+            require(remap.get("fromExclusionReason") == EXPECTED_EXCLUSION_REASONS[scene_id], f"{scene_id}: generated exclusion reason mismatch")
 
     dashboard = scenes_from(DASHBOARD)
     dashboard_ids = {scene["id"] for scene in dashboard}
