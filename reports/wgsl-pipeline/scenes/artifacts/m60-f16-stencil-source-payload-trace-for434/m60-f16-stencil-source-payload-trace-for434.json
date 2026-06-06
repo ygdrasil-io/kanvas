@@ -1,0 +1,903 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-434",
+          "sceneId": "m60-f16-stencil-source-payload-trace-for434",
+          "sourceSceneId": "m60-f16-stencil-subdraw-source-color-for433",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-tracer-le-payload-couleur-source-aa-stencil-cover",
+          "sourceFindingMemory": "global/kanvas/findings/for-433-web-gpu-stencil-subdraw-source-payload-mismatch-explains-m60-f16-regression",
+          "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-subdraw-source-color-for433/m60-f16-stencil-subdraw-source-color-for433.json",
+          "sourceReport": "reports/wgsl-pipeline/2026-06-06-for-433-m60-f16-stencil-subdraw-source-color.md",
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "classification": "paint-payload-mismatch",
+          "allowedClassifications": [
+            "paint-payload-mismatch",
+"draw-selection-mismatch",
+"coverage-modulation-stage-mismatch",
+"quantization-only-mismatch",
+"trace-incomplete",
+"source-payload-origin-unresolved"
+          ],
+          "diagnosticFlag": "kanvas.webgpu.m60F16StencilSourcePayloadTraceFor434.enabled",
+          "sourceFor433DiagnosticFlag": "kanvas.webgpu.m60F16StencilSubdrawSourceColorFor433.enabled",
+          "sourceFor432DiagnosticFlag": "kanvas.webgpu.m60F16WidthQuantizedColorReconstructionFor432.enabled",
+          "sourceFor431OptInFlag": "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled",
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "productionWgslChanged": false,
+          "wgsl4kModified": false,
+          "renderingFixApplied": false,
+          "comparisonPolicy": {
+            "scope": "Exactly the six FOR-433 source-payload mismatch pixels.",
+            "source": "FOR-412/FOR-432 shader-return diagnostic fields for the effective drawIndex 3 stencil subdraws.",
+            "paintPayloadMath": "requiredPaintPayload.rgb = requiredPremulSource.rgb / (10/16), alpha = 1.",
+            "coverageMath": "sourceColorBeforeQuantization = correctedColorBeforeCoverage.rgb * correctedColorBeforeCoverage.a * coverage, alpha = correctedColorBeforeCoverage.a * coverage.",
+            "quantizationMath": "sourceColorSentToBlend = quantize_rgba8_if_target_blend(sourceColorBeforeQuantization).",
+            "coverageAlpha": 0.625000,
+            "noRenderingFixApplied": true,
+            "boundedToSixPixels": true
+          },
+          "summary": {
+            "partialPixelCount": 6,
+            "expectedPartialPixelCount": 6,
+            "paintPayloadMismatchCount": 6,
+            "drawSelectionMismatchCount": 0,
+            "coverageModulationStageMismatchCount": 0,
+            "quantizationOnlyMismatchCount": 0,
+            "traceIncompletePixelCount": 0,
+            "sourcePayloadOriginUnresolvedCount": 0,
+            "maxPaintPayloadVsRequiredChannelDelta": 0.534400821,
+            "maxBeforeQuantizationVsRequiredSourceDelta": 0.334000528,
+            "maxSentSourceVsRequiredSourceDelta": 0.332392454,
+            "maxQuantizationChannelDelta": 0.001929730,
+            "maxCoverageStageChannelDelta": 0.000000000
+          },
+          "partialPixels": [
+                        {
+              "x": 92,
+              "y": 75,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "paint-payload-mismatch",
+              "classificationReason": "The selected draw and coverage stage reproduce the captured source before quantization, and quantization is byte-sized, but the paint payload before coverage is far from the payload required by the CPU reference.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "sourcePayloadComponents": {
+                "colorAfterColorFilter": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "colorAfterTargetColorspaceIfNeeded": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "correctedColorBeforeCoverage": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "effectivePayloadBeforeCoverage": [0.266716361, 0.473101228, 0.267230958, 1.000000000],
+                "sourceFieldUsedByFOR408Replay": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "effectivePayloadVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142109901, -0.018954188, -0.534400821, 0.000000000],
+  "absoluteRgbaFloat": [0.142109901, 0.018954188, 0.534400821, 0.000000000],
+  "absoluteTotalFloat": 0.695464909,
+  "maxChannelFloat": 0.534400821,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+                "recordedCorrectedVsEffectivePayloadDelta": {
+  "signedRgbaFloat": [-0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteRgbaFloat": [0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteTotalFloat": 0.365599900,
+  "maxChannelFloat": 0.266716361,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "coverageModulation": {
+                "rawPathCoverage": 0.000000000,
+                "clipCoverage": 1.000000000,
+                "finalCoverage": 0.625000000,
+                "coverageOrAaAlpha": 0.625000000,
+                "sourceAlphaAfterCoverage": 0.625000000,
+                "coveredSubsamples4x4": 0,
+                "wgslSubsampleMask4x4": null,
+                "computedFromCorrectedColor": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "coverageAppliedVsCapturedBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "beforeQuantizationVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.088818684, -0.011846364, -0.334000528, 0.000000000],
+  "absoluteRgbaFloat": [0.088818684, 0.011846364, 0.334000528, 0.000000000],
+  "absoluteTotalFloat": 0.434665561,
+  "maxChannelFloat": 0.334000528,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "quantization": {
+                "sourceBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "quantizedAlphaSentToBlend": 0.623529434,
+                "sentMinusBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.001929730, -0.001570612, 0.001608104, -0.001470566],
+  "absoluteRgbaFloat": [0.001929730, 0.001570612, 0.001608104, 0.001470566],
+  "absoluteTotalFloat": 0.006579012,
+  "maxChannelFloat": 0.001929730,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "sentSourceVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        }
+              ],
+              "shaderReturn": {
+                "classification": "shader-return-captured",
+                "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+              },
+              "missingFields": []
+            },
+            {
+              "x": 91,
+              "y": 76,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "paint-payload-mismatch",
+              "classificationReason": "The selected draw and coverage stage reproduce the captured source before quantization, and quantization is byte-sized, but the paint payload before coverage is far from the payload required by the CPU reference.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "sourcePayloadComponents": {
+                "colorAfterColorFilter": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "colorAfterTargetColorspaceIfNeeded": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "correctedColorBeforeCoverage": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "effectivePayloadBeforeCoverage": [0.266716361, 0.473101228, 0.267230958, 1.000000000],
+                "sourceFieldUsedByFOR408Replay": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "effectivePayloadVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142109901, -0.018954188, -0.534400821, 0.000000000],
+  "absoluteRgbaFloat": [0.142109901, 0.018954188, 0.534400821, 0.000000000],
+  "absoluteTotalFloat": 0.695464909,
+  "maxChannelFloat": 0.534400821,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+                "recordedCorrectedVsEffectivePayloadDelta": {
+  "signedRgbaFloat": [-0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteRgbaFloat": [0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteTotalFloat": 0.365599900,
+  "maxChannelFloat": 0.266716361,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "coverageModulation": {
+                "rawPathCoverage": 0.000000000,
+                "clipCoverage": 1.000000000,
+                "finalCoverage": 0.625000000,
+                "coverageOrAaAlpha": 0.625000000,
+                "sourceAlphaAfterCoverage": 0.625000000,
+                "coveredSubsamples4x4": 0,
+                "wgslSubsampleMask4x4": null,
+                "computedFromCorrectedColor": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "coverageAppliedVsCapturedBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "beforeQuantizationVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.088818684, -0.011846364, -0.334000528, 0.000000000],
+  "absoluteRgbaFloat": [0.088818684, 0.011846364, 0.334000528, 0.000000000],
+  "absoluteTotalFloat": 0.434665561,
+  "maxChannelFloat": 0.334000528,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "quantization": {
+                "sourceBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "quantizedAlphaSentToBlend": 0.623529434,
+                "sentMinusBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.001929730, -0.001570612, 0.001608104, -0.001470566],
+  "absoluteRgbaFloat": [0.001929730, 0.001570612, 0.001608104, 0.001470566],
+  "absoluteTotalFloat": 0.006579012,
+  "maxChannelFloat": 0.001929730,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "sentSourceVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        }
+              ],
+              "shaderReturn": {
+                "classification": "shader-return-captured",
+                "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+              },
+              "missingFields": []
+            },
+            {
+              "x": 90,
+              "y": 77,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "paint-payload-mismatch",
+              "classificationReason": "The selected draw and coverage stage reproduce the captured source before quantization, and quantization is byte-sized, but the paint payload before coverage is far from the payload required by the CPU reference.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "sourcePayloadComponents": {
+                "colorAfterColorFilter": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "colorAfterTargetColorspaceIfNeeded": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "correctedColorBeforeCoverage": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "effectivePayloadBeforeCoverage": [0.266716361, 0.473101228, 0.267230958, 1.000000000],
+                "sourceFieldUsedByFOR408Replay": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "effectivePayloadVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142109901, -0.018954188, -0.534400821, 0.000000000],
+  "absoluteRgbaFloat": [0.142109901, 0.018954188, 0.534400821, 0.000000000],
+  "absoluteTotalFloat": 0.695464909,
+  "maxChannelFloat": 0.534400821,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+                "recordedCorrectedVsEffectivePayloadDelta": {
+  "signedRgbaFloat": [-0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteRgbaFloat": [0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteTotalFloat": 0.365599900,
+  "maxChannelFloat": 0.266716361,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "coverageModulation": {
+                "rawPathCoverage": 0.000000000,
+                "clipCoverage": 1.000000000,
+                "finalCoverage": 0.625000000,
+                "coverageOrAaAlpha": 0.625000000,
+                "sourceAlphaAfterCoverage": 0.625000000,
+                "coveredSubsamples4x4": 0,
+                "wgslSubsampleMask4x4": null,
+                "computedFromCorrectedColor": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "coverageAppliedVsCapturedBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "beforeQuantizationVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.088818684, -0.011846364, -0.334000528, 0.000000000],
+  "absoluteRgbaFloat": [0.088818684, 0.011846364, 0.334000528, 0.000000000],
+  "absoluteTotalFloat": 0.434665561,
+  "maxChannelFloat": 0.334000528,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "quantization": {
+                "sourceBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "quantizedAlphaSentToBlend": 0.623529434,
+                "sentMinusBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.001929730, -0.001570612, 0.001608104, -0.001470566],
+  "absoluteRgbaFloat": [0.001929730, 0.001570612, 0.001608104, 0.001470566],
+  "absoluteTotalFloat": 0.006579012,
+  "maxChannelFloat": 0.001929730,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "sentSourceVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        }
+              ],
+              "shaderReturn": {
+                "classification": "shader-return-captured",
+                "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+              },
+              "missingFields": []
+            },
+            {
+              "x": 89,
+              "y": 78,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "paint-payload-mismatch",
+              "classificationReason": "The selected draw and coverage stage reproduce the captured source before quantization, and quantization is byte-sized, but the paint payload before coverage is far from the payload required by the CPU reference.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "sourcePayloadComponents": {
+                "colorAfterColorFilter": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "colorAfterTargetColorspaceIfNeeded": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "correctedColorBeforeCoverage": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "effectivePayloadBeforeCoverage": [0.266716361, 0.473101228, 0.267230958, 1.000000000],
+                "sourceFieldUsedByFOR408Replay": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "effectivePayloadVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142109901, -0.018954188, -0.534400821, 0.000000000],
+  "absoluteRgbaFloat": [0.142109901, 0.018954188, 0.534400821, 0.000000000],
+  "absoluteTotalFloat": 0.695464909,
+  "maxChannelFloat": 0.534400821,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+                "recordedCorrectedVsEffectivePayloadDelta": {
+  "signedRgbaFloat": [-0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteRgbaFloat": [0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteTotalFloat": 0.365599900,
+  "maxChannelFloat": 0.266716361,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "coverageModulation": {
+                "rawPathCoverage": 0.000000000,
+                "clipCoverage": 1.000000000,
+                "finalCoverage": 0.625000000,
+                "coverageOrAaAlpha": 0.625000000,
+                "sourceAlphaAfterCoverage": 0.625000000,
+                "coveredSubsamples4x4": 0,
+                "wgslSubsampleMask4x4": null,
+                "computedFromCorrectedColor": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "coverageAppliedVsCapturedBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "beforeQuantizationVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.088818684, -0.011846364, -0.334000528, 0.000000000],
+  "absoluteRgbaFloat": [0.088818684, 0.011846364, 0.334000528, 0.000000000],
+  "absoluteTotalFloat": 0.434665561,
+  "maxChannelFloat": 0.334000528,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "quantization": {
+                "sourceBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "quantizedAlphaSentToBlend": 0.623529434,
+                "sentMinusBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.001929730, -0.001570612, 0.001608104, -0.001470566],
+  "absoluteRgbaFloat": [0.001929730, 0.001570612, 0.001608104, 0.001470566],
+  "absoluteTotalFloat": 0.006579012,
+  "maxChannelFloat": 0.001929730,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "sentSourceVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        }
+              ],
+              "shaderReturn": {
+                "classification": "shader-return-captured",
+                "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+              },
+              "missingFields": []
+            },
+            {
+              "x": 88,
+              "y": 79,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "paint-payload-mismatch",
+              "classificationReason": "The selected draw and coverage stage reproduce the captured source before quantization, and quantization is byte-sized, but the paint payload before coverage is far from the payload required by the CPU reference.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "sourcePayloadComponents": {
+                "colorAfterColorFilter": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "colorAfterTargetColorspaceIfNeeded": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "correctedColorBeforeCoverage": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "effectivePayloadBeforeCoverage": [0.266716361, 0.473101228, 0.267230958, 1.000000000],
+                "sourceFieldUsedByFOR408Replay": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "effectivePayloadVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142109901, -0.018954188, -0.534400821, 0.000000000],
+  "absoluteRgbaFloat": [0.142109901, 0.018954188, 0.534400821, 0.000000000],
+  "absoluteTotalFloat": 0.695464909,
+  "maxChannelFloat": 0.534400821,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+                "recordedCorrectedVsEffectivePayloadDelta": {
+  "signedRgbaFloat": [-0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteRgbaFloat": [0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteTotalFloat": 0.365599900,
+  "maxChannelFloat": 0.266716361,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "coverageModulation": {
+                "rawPathCoverage": 0.000000000,
+                "clipCoverage": 1.000000000,
+                "finalCoverage": 0.625000000,
+                "coverageOrAaAlpha": 0.625000000,
+                "sourceAlphaAfterCoverage": 0.625000000,
+                "coveredSubsamples4x4": 0,
+                "wgslSubsampleMask4x4": null,
+                "computedFromCorrectedColor": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "coverageAppliedVsCapturedBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "beforeQuantizationVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.088818684, -0.011846364, -0.334000528, 0.000000000],
+  "absoluteRgbaFloat": [0.088818684, 0.011846364, 0.334000528, 0.000000000],
+  "absoluteTotalFloat": 0.434665561,
+  "maxChannelFloat": 0.334000528,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "quantization": {
+                "sourceBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "quantizedAlphaSentToBlend": 0.623529434,
+                "sentMinusBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.001929730, -0.001570612, 0.001608104, -0.001470566],
+  "absoluteRgbaFloat": [0.001929730, 0.001570612, 0.001608104, 0.001470566],
+  "absoluteTotalFloat": 0.006579012,
+  "maxChannelFloat": 0.001929730,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "sentSourceVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        }
+              ],
+              "shaderReturn": {
+                "classification": "shader-return-captured",
+                "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+              },
+              "missingFields": []
+            },
+            {
+              "x": 87,
+              "y": 80,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "paint-payload-mismatch",
+              "classificationReason": "The selected draw and coverage stage reproduce the captured source before quantization, and quantization is byte-sized, but the paint payload before coverage is far from the payload required by the CPU reference.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "sourcePayloadComponents": {
+                "colorAfterColorFilter": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "colorAfterTargetColorspaceIfNeeded": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "correctedColorBeforeCoverage": [0.000000000, 0.541176498, 0.298039228, 1.000000000],
+                "effectivePayloadBeforeCoverage": [0.266716361, 0.473101228, 0.267230958, 1.000000000],
+                "sourceFieldUsedByFOR408Replay": [0.266716361, 0.473101258, 0.267230958, 1.000000000],
+                "effectivePayloadVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142109901, -0.018954188, -0.534400821, 0.000000000],
+  "absoluteRgbaFloat": [0.142109901, 0.018954188, 0.534400821, 0.000000000],
+  "absoluteTotalFloat": 0.695464909,
+  "maxChannelFloat": 0.534400821,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+                "recordedCorrectedVsEffectivePayloadDelta": {
+  "signedRgbaFloat": [-0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteRgbaFloat": [0.266716361, 0.068075269, 0.030808270, 0.000000000],
+  "absoluteTotalFloat": 0.365599900,
+  "maxChannelFloat": 0.266716361,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "coverageModulation": {
+                "rawPathCoverage": 0.000000000,
+                "clipCoverage": 1.000000000,
+                "finalCoverage": 0.625000000,
+                "coverageOrAaAlpha": 0.625000000,
+                "sourceAlphaAfterCoverage": 0.625000000,
+                "coveredSubsamples4x4": 0,
+                "wgslSubsampleMask4x4": null,
+                "computedFromCorrectedColor": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "coverageAppliedVsCapturedBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "beforeQuantizationVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.088818684, -0.011846364, -0.334000528, 0.000000000],
+  "absoluteRgbaFloat": [0.088818684, 0.011846364, 0.334000528, 0.000000000],
+  "absoluteTotalFloat": 0.434665561,
+  "maxChannelFloat": 0.334000528,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "quantization": {
+                "sourceBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "quantizedAlphaSentToBlend": 0.623529434,
+                "sentMinusBeforeQuantizationDelta": {
+  "signedRgbaFloat": [0.001929730, -0.001570612, 0.001608104, -0.001470566],
+  "absoluteRgbaFloat": [0.001929730, 0.001570612, 0.001608104, 0.001470566],
+  "absoluteTotalFloat": 0.006579012,
+  "maxChannelFloat": 0.001929730,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+                "sentSourceVsRequiredSourceDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+}
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "shaderObserved": true,
+          "candidateBranchReached": true,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "sourceEqualsSelected": true,
+          "shaderReturnClassification": "shader-return-captured"
+        }
+              ],
+              "shaderReturn": {
+                "classification": "shader-return-captured",
+                "reason": "FOR-412 captured the vec4f returned by m60_f16_application_point_output immediately before the fragment shader returns @location(0) to fixed-function blend."
+              },
+              "missingFields": []
+            }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "for431ActivatedByDefault": false,
+            "renderingFixApplied": false
+          },
+          "classificationReason": "All six pixels keep the FOR-433 draw selection and 10/16 coverage. The captured source is already wrong before quantization because correctedColorBeforeCoverage is too green and far too low in blue compared with the paint payload required by the CPU reference.",
+          "nextStep": "Inspect the M60 F16 AA stencil-cover paint color input for effective drawIndex 3 before coverage modulation; the next correction should target the paint/source payload feeding correctedColorBeforeCoverage.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16StencilSourcePayloadTraceFor434.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for434_m60_f16_stencil_source_payload_trace.py",
+            "rtk python3 scripts/validate_for433_m60_f16_stencil_subdraw_source_color.py",
+            "rtk python3 scripts/validate_for432_m60_f16_width_quantized_color_reconstruction.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for434-pycache python3 -m py_compile scripts/validate_for434_m60_f16_stencil_source_payload_trace.py",
+            "rtk git diff --check"
+          ]
+        }
