@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-06-06",
+  "classification": "pm-closeout-no-new-rendering-support",
+  "epic": "FOR-460",
+  "branch": "codex/d50-9-pm-lot1-closeout",
+  "baseCommit": "fd3a54e89b319768311a03ffdbcce8e714a214c6",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-9-produire-le-rapport-pm-de-cloture-lot-1",
+  "sourceManifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+  "pmReport": "reports/wgsl-pipeline/2026-06-06-d50-lot1-pm-closeout.md",
+  "lot1": {
+    "totalRows": 12,
+    "supportedRows": 7,
+    "expectedUnsupportedRows": 5,
+    "diagnosticOnlyRows": 0,
+    "supportedPercent": 58.3,
+    "expectedUnsupportedPercent": 41.7,
+    "diagnosticOnlyPercent": 0.0,
+    "supportScoreIncreasedByFor465ToFor469": false,
+    "explanationFr": "FOR-465 a FOR-469 reduisent l'ambiguite et evitent les faux supports; ils ne prouvent pas de nouveau rendu."
+  },
+  "dashboardCounters": {
+    "total": 93,
+    "pass": 70,
+    "expectedUnsupported": 23,
+    "trackedGap": 0,
+    "fail": 0,
+    "unchangedByD50_9": true
+  },
+  "tickets": [
+    {
+      "linear": "FOR-461",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1553",
+      "mergeCommit": "e5a9be67ee72592c5c0611ea865b712256fa0535",
+      "role": "Inventaire candidat D50 GM dashboard."
+    },
+    {
+      "linear": "FOR-462",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1554",
+      "mergeCommit": "48094aa1a90489f4d6b245ea95aed93157903777",
+      "role": "Integration du lot 1 dans la porte dashboard."
+    },
+    {
+      "linear": "FOR-464",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1555",
+      "mergeCommit": "c34246afc367588c4c621d6b5d86baf205d2055e",
+      "role": "Manifeste strict du lot 1."
+    },
+    {
+      "linear": "FOR-465",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1556",
+      "mergeCommit": "9079020cef4e93f28d07c633aa8182860e375ee9",
+      "role": "Refus stable skia-gm-drawminibitmaprect."
+    },
+    {
+      "linear": "FOR-466",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1557",
+      "mergeCommit": "dcf7deba8e7b5004a90d0ed62578fe620a83e0ea",
+      "role": "Refus stable skia-gm-image."
+    },
+    {
+      "linear": "FOR-467",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1558",
+      "mergeCommit": "9f754d8c50d1fd570cb4ab03db856960282464cf",
+      "role": "Refus stable skia-gm-imagesource."
+    },
+    {
+      "linear": "FOR-468",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1559",
+      "mergeCommit": "6d2f49cb7f8c77a710940cee48b80c14f126857f",
+      "role": "Refus stable skia-gm-offsetimagefilter."
+    },
+    {
+      "linear": "FOR-469",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1560",
+      "mergeCommit": "fd3a54e89b319768311a03ffdbcce8e714a214c6",
+      "role": "Refus stable skia-gm-pathfill."
+    }
+  ],
+  "stableRefusals": [
+    {
+      "inventoryId": "skia-gm-drawminibitmaprect",
+      "fallbackReason": "bitmap.drawminibitmaprect.row-specific-artifacts-required"
+    },
+    {
+      "inventoryId": "skia-gm-image",
+      "fallbackReason": "image.imagegm.row-specific-artifacts-required"
+    },
+    {
+      "inventoryId": "skia-gm-imagesource",
+      "fallbackReason": "image.imagesource.row-specific-artifacts-required"
+    },
+    {
+      "inventoryId": "skia-gm-offsetimagefilter",
+      "fallbackReason": "image-filter.offset.row-specific-artifacts-required"
+    },
+    {
+      "inventoryId": "skia-gm-pathfill",
+      "fallbackReason": "path-aa.fill.row-specific-artifacts-required"
+    }
+  ],
+  "sourceFindings": [
+    "global/kanvas/findings/for-465-formalise-le-refus-drawminibitmaprect-d50-lot-1",
+    "global/kanvas/findings/for-466-formalise-le-refus-skia-gm-image-d50-lot-1",
+    "global/kanvas/findings/for-467-formalise-le-refus-skia-gm-imagesource-d50-lot-1",
+    "global/kanvas/findings/for-468-formalise-le-refus-skia-gm-offsetimagefilter-d50-lot-1",
+    "global/kanvas/findings/for-469-formalise-le-refus-skia-gm-pathfill-d50-lot-1"
+  ],
+  "nonClaims": {
+    "newRenderingSupportAddedByD50_9": false,
+    "dashboardRowsAddedByD50_9": 0,
+    "dashboardActiveRowsChangedByD50_9": false,
+    "skiaComparableClaimAddedByD50_9": false,
+    "supportClaimsAddedByFor465ToFor469": 0,
+    "visualSupportAbove50PercentIncreaseClaim": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "productionCodeChanged": false,
+    "wgslProductionChanged": false,
+    "upstreamSourceChanged": false,
+    "broadSkiaGmParityClaim": false,
+    "broadImageSupportClaim": false,
+    "broadImageFilterDagSupportClaim": false,
+    "broadPathAaSupportClaim": false
+  },
+  "expectedChangedFiles": [
+    "reports/wgsl-pipeline/2026-06-06-d50-gm-dashboard-lot1.md",
+    "reports/wgsl-pipeline/2026-06-06-d50-lot1-pm-closeout.md",
+    "reports/wgsl-pipeline/2026-06-06-for-462-d50-lot1-dashboard-integration-gate.md",
+    "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+    "reports/wgsl-pipeline/scenes/generated/d50-lot1-dashboard-integration-for462.json",
+    "reports/wgsl-pipeline/scenes/generated/d50-lot1-pm-closeout.json",
+    "scripts/validate_for462_d50_lot1_dashboard_integration.py",
+    "scripts/validate_for465_drawminibitmaprect_evidence.py",
+    "scripts/validate_for466_skia_gm_image_evidence.py",
+    "scripts/validate_for467_skia_gm_imagesource_evidence.py",
+    "scripts/validate_for468_skia_gm_offsetimagefilter_evidence.py",
+    "scripts/validate_for469_skia_gm_pathfill_evidence.py",
+    "scripts/validate_d50_lot1_pm_closeout.py"
+  ],
+  "validationCommands": [
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk python3 scripts/validate_for462_d50_lot1_dashboard_integration.py",
+    "rtk python3 scripts/validate_for465_drawminibitmaprect_evidence.py",
+    "rtk python3 scripts/validate_for466_skia_gm_image_evidence.py",
+    "rtk python3 scripts/validate_for467_skia_gm_imagesource_evidence.py",
+    "rtk python3 scripts/validate_for468_skia_gm_offsetimagefilter_evidence.py",
+    "rtk python3 scripts/validate_for469_skia_gm_pathfill_evidence.py",
+    "rtk python3 scripts/validate_d50_lot1_pm_closeout.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d50-lot1-pm-closeout.json",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-d50-pm-closeout-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py scripts/validate_for465_drawminibitmaprect_evidence.py scripts/validate_for466_skia_gm_image_evidence.py scripts/validate_for467_skia_gm_imagesource_evidence.py scripts/validate_for468_skia_gm_offsetimagefilter_evidence.py scripts/validate_for469_skia_gm_pathfill_evidence.py scripts/validate_d50_lot1_pm_closeout.py",
+    "rtk git diff --check"
+  ]
+}

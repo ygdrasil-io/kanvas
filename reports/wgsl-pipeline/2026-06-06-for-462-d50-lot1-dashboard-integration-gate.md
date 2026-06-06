@@ -4,9 +4,9 @@
 
 Classification : `lot1-row-specific-refusals-no-new-support-claims`
 
-FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere est deja vert avec 0 `tracked-gap` et 0 `fail`, mais seuls 7 des 12 candidats du lot 1 ont actuellement une ligne materialisee avec preuves existantes. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect`; FOR-466 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-image`; FOR-467 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-imagesource`; FOR-468 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-offsetimagefilter`; FOR-469 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-pathfill`. Aucun de ces refus n'est compte comme support.
+FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere reste vert avec 0 `tracked-gap` et 0 `fail`; les 12 candidats du lot 1 sont maintenant classes dans le manifeste strict: 7 lignes `pass` existantes et 5 refus `expected-unsupported` documentes hors dashboard actif. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect`; FOR-466 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-image`; FOR-467 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-imagesource`; FOR-468 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-offsetimagefilter`; FOR-469 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-pathfill`. Aucun de ces refus n'est compte comme support.
 
-Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat reel et les cinq candidats sans preuves ligne par ligne sont maintenant des refus visibles.
+D50 n'ajoute aucune ligne dashboard active. Le nombre de lignes `pass` reste inchange, et les cinq refus restent des decisions de manifeste strict.
 
 ## Compteurs
 
@@ -17,6 +17,7 @@ Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat re
 | Candidats expected-unsupported row-specific | 5 |
 | Candidats sans preuve suffisante | 0 |
 | Lignes ajoutees par FOR-462 | 0 |
+| Lignes dashboard ajoutees par D50 | 0 |
 | Claims support ajoutes par FOR-462 | 0 |
 | Claims Skia-comparable ajoutes par FOR-462 | 0 |
 | Dashboard total | 93 |
@@ -56,6 +57,7 @@ Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat re
 
 - FOR-462 ne change pas les statuts dashboard actifs.
 - FOR-462 n'ajoute aucun claim de support.
+- D50 n'ajoute aucune ligne dashboard active.
 - FOR-462 n'ajoute aucun claim de fidelite Skia-comparable.
 - FOR-462 ne modifie pas les seuils, le scoring, la politique de fallback, `PipelineKey`, le code de production ou les sources upstream.
 - FOR-462 ne revendique pas broad Skia GM parity.
