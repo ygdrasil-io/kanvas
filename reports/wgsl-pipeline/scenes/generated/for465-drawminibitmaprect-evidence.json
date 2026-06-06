@@ -1,0 +1,113 @@
+{
+  "classification": "row-specific-expected-unsupported-no-support-claim",
+  "dashboardCountersUnchanged": {
+    "inventoryDerived": 45,
+    "status.expected-unsupported": 23,
+    "status.fail": 0,
+    "status.pass": 70,
+    "status.tracked-gap": 0,
+    "total": 93
+  },
+  "date": "2026-06-06",
+  "linear": "FOR-465",
+  "nonClaims": {
+    "dashboardRowAddedByFor465": false,
+    "dashboardStatusChangedByFor465": false,
+    "drawbitmaprectEvidenceInherited": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "productionCodeChanged": false,
+    "scoringChanged": false,
+    "skiaComparableClaimAddedByFor465": false,
+    "supportClaimAddedByFor465": false,
+    "thresholdChanged": false,
+    "upstreamSourceChanged": false,
+    "wgslProductionChanged": false
+  },
+  "row": {
+    "cpu": {
+      "artifact": "not-generated",
+      "expectation": "CPU bitmap oracle for bounded source/destination rect sampling.",
+      "refusalReason": "row-specific CPU bitmap oracle artifact is missing",
+      "required": true,
+      "route": "cpu.image-rect.drawminibitmaprect.expected-unsupported",
+      "status": "expected-unsupported"
+    },
+    "diffStats": {
+      "reason": "diff/stat payload cannot be computed without row-specific reference, CPU, and GPU artifacts",
+      "required": true,
+      "status": "not-computed"
+    },
+    "displayName": "Draw Mini Bitmap Rect",
+    "fallbackReason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
+    "family": "bitmap/image",
+    "gpu": {
+      "artifact": "not-generated",
+      "expectation": "WebGPU texture sampling route with nearest/linear cells only.",
+      "fallbackReason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
+      "refusalReason": "row-specific WebGPU artifact is missing",
+      "required": true,
+      "route": "webgpu.image-rect.drawminibitmaprect.expected-unsupported",
+      "status": "expected-unsupported"
+    },
+    "inventoryId": "skia-gm-drawminibitmaprect",
+    "linear": "FOR-465",
+    "nonClaims": {
+      "dashboardRowAddedByFor465": false,
+      "dashboardStatusChangedByFor465": false,
+      "drawbitmaprectEvidenceInherited": false,
+      "fallbackPolicyChanged": false,
+      "pipelineKeyChanged": false,
+      "productionCodeChanged": false,
+      "scoringChanged": false,
+      "skiaComparableClaimAddedByFor465": false,
+      "supportClaimAddedByFor465": false,
+      "thresholdChanged": false,
+      "upstreamSourceChanged": false,
+      "wgslProductionChanged": false
+    },
+    "rank": 2,
+    "reason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
+    "reference": {
+      "plan": "Candidate-specific Skia GM capture for small bitmap rect draw.",
+      "refusalReason": "candidate-specific Skia GM reference capture is missing",
+      "required": true,
+      "status": "not-generated"
+    },
+    "routeDiagnostics": {
+      "cpu": "cpu.image-rect.drawminibitmaprect.expected-unsupported",
+      "fallbackReason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
+      "gpu": "webgpu.image-rect.drawminibitmaprect.expected-unsupported",
+      "policy": "The existing drawbitmaprect nearest evidence is not row-specific for DrawMiniBitmapRectGM. The row stays unsupported until a candidate-specific Skia reference capture, CPU artifact, GPU artifact, diff/stat payload, and route diagnostics exist without threshold changes."
+    },
+    "source": {
+      "candidateInventory": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
+      "draftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-4-produire-preuve-drawminibitmaprect",
+      "findingMemory": "global/kanvas/findings/for-464-formalise-le-manifeste-strict-du-lot-1-d50",
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/DrawMiniBitmapRectGM.kt",
+      "upstreamSource": "gm/drawminibitmaprect.cpp"
+    },
+    "status": "expected-unsupported"
+  },
+  "schemaVersion": 1,
+  "scoreImpact": {
+    "reason": "The row is a visible expected-unsupported refusal, not a supported rendering row.",
+    "supportScoreIncreased": false
+  },
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-4-produire-preuve-drawminibitmaprect",
+  "sourceFindingMemory": "global/kanvas/findings/for-464-formalise-le-manifeste-strict-du-lot-1-d50",
+  "sourceManifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+  "statusCountsAfterFor465": {
+    "diagnostic-only": 4,
+    "expected-unsupported": 1,
+    "supported": 7
+  },
+  "validationCommands": [
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk python3 scripts/validate_for462_d50_lot1_dashboard_integration.py",
+    "rtk python3 scripts/validate_for465_drawminibitmaprect_evidence.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for464-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py",
+    "rtk git diff --check"
+  ]
+}

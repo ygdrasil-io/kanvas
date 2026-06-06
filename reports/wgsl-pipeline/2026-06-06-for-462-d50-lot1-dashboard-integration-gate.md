@@ -2,9 +2,9 @@
 
 ## Resultat
 
-Classification : `lot1-partially-materialized-no-new-support-claims`
+Classification : `lot1-row-specific-refusal-no-new-support-claims`
 
-FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere est deja vert avec 0 `tracked-gap` et 0 `fail`, mais seuls 7 des 12 candidats du lot 1 ont actuellement une ligne materialisee avec preuves existantes.
+FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere est deja vert avec 0 `tracked-gap` et 0 `fail`, mais seuls 7 des 12 candidats du lot 1 ont actuellement une ligne materialisee avec preuves existantes. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect` sans le compter comme support.
 
 Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat reel et bloque les cinq candidats qui n'ont pas encore leurs preuves ligne par ligne.
 
@@ -14,7 +14,8 @@ Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat re
 |---|---:|
 | Candidats lot 1 | 12 |
 | Candidats materialises | 7 |
-| Candidats sans preuve suffisante | 5 |
+| Candidats expected-unsupported row-specific | 1 |
+| Candidats sans preuve suffisante | 4 |
 | Lignes ajoutees par FOR-462 | 0 |
 | Claims support ajoutes par FOR-462 | 0 |
 | Claims Skia-comparable ajoutes par FOR-462 | 0 |
@@ -36,11 +37,16 @@ Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat re
 | `skia-gm-imageblur` | `m53-imageblur-bounded-prepass` | `pass` | `test-oracle` | `pipelineM53InventoryPromotionPack` | `none` |
 | `skia-gm-simpleaaclip` | `m54-simple-aa-clip` | `pass` | `cpu-oracle` | `pipelineM54HardFeatureDepthPack` | `none` |
 
+## Refus row-specific
+
+| Inventory id | Statut | CPU route | GPU route | Fallback |
+|---|---|---|---|---|
+| `skia-gm-drawminibitmaprect` | `expected-unsupported` | `cpu.image-rect.drawminibitmaprect.expected-unsupported` | `webgpu.image-rect.drawminibitmaprect.expected-unsupported` | `bitmap.drawminibitmaprect.row-specific-artifacts-required` |
+
 ## Candidats bloques
 
 | Inventory id | Raison |
 |---|---|
-| `skia-gm-drawminibitmaprect` | preuve ligne par ligne manquante ; pas de promotion dashboard sans reference, CPU, GPU ou refus stable, diff/stat et diagnostics de route |
 | `skia-gm-image` | preuve ligne par ligne manquante ; pas de promotion dashboard sans reference, CPU, GPU ou refus stable, diff/stat et diagnostics de route |
 | `skia-gm-imagesource` | preuve ligne par ligne manquante ; pas de promotion dashboard sans reference, CPU, GPU ou refus stable, diff/stat et diagnostics de route |
 | `skia-gm-offsetimagefilter` | preuve ligne par ligne manquante ; pas de promotion dashboard sans reference, CPU, GPU ou refus stable, diff/stat et diagnostics de route |
@@ -65,4 +71,4 @@ rtk git diff --check
 
 ## Suite
 
-Open row-specific evidence tickets for the five missing lot 1 candidates before any dashboard support promotion.
+Open row-specific evidence tickets for the four remaining diagnostic-only lot 1 candidates before any dashboard support promotion.
