@@ -52,6 +52,8 @@ public object WebGpuSink {
             SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
         val aaStencilCoverFinalWgslDiagnosticSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        val hostDrawPaintBindingFor436Snapshot:
+            SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
     )
 
     /**
@@ -127,6 +129,8 @@ public object WebGpuSink {
                     device.m60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot(),
                 aaStencilCoverFinalWgslDiagnosticSnapshot =
                     device.m60F16AaStencilCoverFinalWgslDiagnosticSnapshot(),
+                hostDrawPaintBindingFor436Snapshot =
+                    device.m60F16HostDrawPaintBindingFor436Snapshot(),
             )
         }
     }
