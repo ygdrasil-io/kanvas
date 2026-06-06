@@ -50,9 +50,12 @@ ALLOWED_LOCAL_DIFFS = {
     "scripts/validate_for432_m60_f16_width_quantized_color_reconstruction.py",
     "scripts/validate_for433_m60_f16_stencil_subdraw_source_color.py",
     "scripts/validate_for434_m60_f16_stencil_source_payload_trace.py",
+    "scripts/validate_for435_m60_f16_paint_stroke_input_trace.py",
     "reports/wgsl-pipeline/2026-06-06-for-434-m60-f16-stencil-source-payload-trace.md",
+    "reports/wgsl-pipeline/2026-06-06-for-435-m60-f16-paint-stroke-input-trace.md",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/{SCENE_ID}.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-paint-stroke-input-trace-for435",
 }
 FORBIDDEN_DIFF_PREFIXES = (
     "gpu-raster/src/main/resources/shaders/",
