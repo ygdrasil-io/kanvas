@@ -36,7 +36,9 @@ ALLOWED_LOCAL_DIFFS = {
     "scripts/validate_for445_m60_f16_runtime_integer_lane_mask_probe.py",
     "scripts/validate_for446_m60_f16_for442_float_mask_field_audit.py",
     "scripts/validate_for447_m60_f16_zero_mask_opt_in_correction.py",
+    "scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
     "reports/wgsl-pipeline/2026-06-06-for-447-m60-f16-zero-mask-opt-in-correction.md",
+    "reports/wgsl-pipeline/2026-06-06-for-448-m60-f16-zero-mask-neutral-path-trace.md",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/{SCENE_ID}.json",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/reference-cpu.png",
@@ -44,6 +46,17 @@ ALLOWED_LOCAL_DIFFS = {
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/current-webgpu-diff.png",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/opt-in-webgpu-zero-mask-correction.png",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/opt-in-webgpu-zero-mask-correction-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/m60-f16-zero-mask-neutral-path-trace-for448.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/reference-cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/current-webgpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/current-webgpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/inside-webgpu-for447.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/inside-webgpu-for447-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/outside-webgpu-for448.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/outside-webgpu-for448-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/both-webgpu-for448.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/both-webgpu-for448-diff.png",
 }
 FORBIDDEN_DIFF_PREFIXES = (
     "gpu-raster/src/main/resources/shaders/",
@@ -75,7 +88,7 @@ def load_json(path: Path) -> dict[str, Any]:
 
 def git_changed_paths() -> set[str]:
     diff_result = subprocess.run(
-        ["git", "diff", "--name-only", "HEAD"],
+        ["git", "diff", "--name-only", "origin/master"],
         cwd=ROOT,
         check=True,
         text=True,
@@ -145,6 +158,7 @@ def source_audit() -> None:
             "git",
             "diff",
             "--unified=0",
+            "origin/master",
             "--",
             rel(CAPTURE_TEST),
             rel(DEVICE),

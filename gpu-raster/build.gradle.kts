@@ -268,6 +268,12 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16ZeroMaskCorrectionFor447.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16ZeroMaskCorrectionFor447.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled", it)
+    }
+    System.getProperty("kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.mode")?.let {
+        systemProperty("kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.mode", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }

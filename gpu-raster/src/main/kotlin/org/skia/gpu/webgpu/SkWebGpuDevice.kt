@@ -232,6 +232,10 @@ private const val WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG: Stri
     "kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled"
 private const val WEBGPU_M60_F16_ZERO_MASK_CORRECTION_FOR447_FLAG: String =
     "kanvas.webgpu.m60F16ZeroMaskCorrectionFor447.enabled"
+private const val WEBGPU_M60_F16_ZERO_MASK_NEUTRAL_PATH_TRACE_FOR448_FLAG: String =
+    "kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled"
+private const val WEBGPU_M60_F16_ZERO_MASK_NEUTRAL_PATH_TRACE_FOR448_MODE: String =
+    "kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.mode"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_RENDER_FIX_FOR431_FLAG: String =
     "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_FOR432_FLAG: String =
@@ -1077,6 +1081,18 @@ public class SkWebGpuDevice(
             WEBGPU_M60_F16_ZERO_MASK_CORRECTION_FOR447_FLAG,
             "false",
         ).toBoolean()
+    private val m60F16ZeroMaskNeutralPathTraceFor448Requested: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_ZERO_MASK_NEUTRAL_PATH_TRACE_FOR448_FLAG,
+            "false",
+        ).toBoolean()
+    private val m60F16ZeroMaskNeutralPathTraceFor448Mode: String =
+        System.getProperty(
+            WEBGPU_M60_F16_ZERO_MASK_NEUTRAL_PATH_TRACE_FOR448_MODE,
+            "both",
+        ).lowercase().let { mode ->
+            if (mode in setOf("inside", "outside", "both")) mode else "both"
+        }
     private val m60F16WidthQuantizedColorReconstructionFor432Requested: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_FOR432_FLAG,
@@ -3564,6 +3580,14 @@ public class SkWebGpuDevice(
          */
         val m60F16ZeroMaskCorrectionFor447: Boolean = false,
         /**
+         * FOR-448 opt-in zero-mask neutral path trace. This selects an
+         * in-memory shader variant that can discard the six FOR-447 target
+         * pixels on the inside pass, outside pass, or both passes to prove
+         * which pass actually affects the final pixels. Disabled by default
+         * and never added to production WGSL.
+         */
+        val m60F16ZeroMaskNeutralPathTraceFor448: Boolean = false,
+        /**
          * FOR-394 diagnostic-only transport. When the explicit M60 F16 flag
          * is enabled and the bounded stroke fixture is recognized, the cover
          * pass uniform carries band bounds and cap/join ids so the shader can
@@ -5052,6 +5076,7 @@ public class SkWebGpuDevice(
         runtimeIntegerLaneMaskProbeFor445Diagnostic: Boolean = false,
         widthQuantizedRenderFixFor431: Boolean = false,
         zeroMaskCorrectionFor447: Boolean = false,
+        zeroMaskNeutralPathTraceFor448Mode: String? = null,
     ): GPUShaderModule {
         val cached = shaderModuleCache[cacheKey]
         if (cached != null) {
@@ -5116,6 +5141,35 @@ ${if (runtimeIntegerLaneMaskProbeFor445Diagnostic) "@binding(2) @group(0) var<st
                     "    if (m60_f16_zero_mask_correction_for447_target(frag.xy)) { discard; }\n",
             )
         }
+        if (zeroMaskNeutralPathTraceFor448Mode != null) {
+            val coverageLine = "    coverage = coverage * clip_cov(frag.xy);\n"
+            val discardLine = "    if (m60_f16_zero_mask_neutral_path_trace_for448_target(frag.xy)) { discard; }\n"
+            fun insertAfterCoverageOccurrence(source: String, occurrenceIndex: Int): String {
+                var searchFrom = 0
+                var index = -1
+                repeat(occurrenceIndex + 1) {
+                    index = source.indexOf(coverageLine, searchFrom)
+                    if (index >= 0) {
+                        searchFrom = index + coverageLine.length
+                    }
+                }
+                return if (index >= 0) {
+                    source.replaceRange(
+                        index,
+                        index + coverageLine.length,
+                        coverageLine + discardLine,
+                    )
+                } else {
+                    source
+                }
+            }
+            wgsl = when (zeroMaskNeutralPathTraceFor448Mode) {
+                "inside" -> insertAfterCoverageOccurrence(wgsl, 0)
+                "outside" -> insertAfterCoverageOccurrence(wgsl, 1)
+                "both" -> wgsl.replace(coverageLine, coverageLine + discardLine)
+                else -> wgsl
+            }
+        }
         val insertedHelpers = buildString {
             if (boundedRuntimeCorrection) {
                 append(
@@ -5170,6 +5224,27 @@ fn m60_f16_width_quantized_coverage_for431(pixel: vec2f, coverage: f32) -> f32 {
                 append(
                     """
 fn m60_f16_zero_mask_correction_for447_target(pixel: vec2f) -> bool {
+    if (!m60_f16_candidate_lane(pixel)) {
+        return false;
+    }
+    let px = u32(floor(pixel.x));
+    let py = u32(floor(pixel.y));
+    if (px == 92u && py == 75u) { return true; }
+    if (px == 91u && py == 76u) { return true; }
+    if (px == 90u && py == 77u) { return true; }
+    if (px == 89u && py == 78u) { return true; }
+    if (px == 88u && py == 79u) { return true; }
+    if (px == 87u && py == 80u) { return true; }
+    return false;
+}
+""".trimIndent(),
+                )
+                append("\n\n")
+            }
+            if (zeroMaskNeutralPathTraceFor448Mode != null) {
+                append(
+                    """
+fn m60_f16_zero_mask_neutral_path_trace_for448_target(pixel: vec2f) -> bool {
     if (!m60_f16_candidate_lane(pixel)) {
         return false;
     }
@@ -5802,6 +5877,14 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             zeroMaskCorrectionFor447 = true,
         )
 
+    private fun loadM60F16ZeroMaskNeutralPathTraceFor448Shader(mode: String): GPUShaderModule =
+        loadM60F16AaStencilCoverProbeShader(
+            cacheKey = "experimental://m60-f16-aa-stencil-cover-zero-mask-neutral-path-trace-for448/$mode",
+            diagnostic = false,
+            boundedRuntimeCorrection = false,
+            zeroMaskNeutralPathTraceFor448Mode = mode,
+        )
+
     private fun loadM60F16WidthQuantizedColorReconstructionFor432Shader(): GPUShaderModule =
         loadM60F16AaStencilCoverProbeShader(
             cacheKey = if (m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled) {
@@ -6250,6 +6333,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     private val m60F16ZeroMaskCorrectionFor447ShaderLazy: Lazy<GPUShaderModule> = lazy {
         loadM60F16ZeroMaskCorrectionFor447Shader()
     }
+    private val m60F16ZeroMaskNeutralPathTraceFor448ShaderCache:
+        MutableMap<String, GPUShaderModule> = mutableMapOf()
     private val m60F16WidthQuantizedColorReconstructionFor432ShaderLazy: Lazy<GPUShaderModule> = lazy {
         loadM60F16WidthQuantizedColorReconstructionFor432Shader()
     }
@@ -6283,6 +6368,11 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     private val m60F16ZeroMaskCorrectionFor447Shader: GPUShaderModule
         get() = m60F16ZeroMaskCorrectionFor447ShaderLazy.value
+
+    private fun m60F16ZeroMaskNeutralPathTraceFor448Shader(mode: String): GPUShaderModule =
+        m60F16ZeroMaskNeutralPathTraceFor448ShaderCache.getOrPut(mode) {
+            loadM60F16ZeroMaskNeutralPathTraceFor448Shader(mode)
+        }
 
     private val m60F16WidthQuantizedColorReconstructionFor432Shader: GPUShaderModule
         get() = m60F16WidthQuantizedColorReconstructionFor432ShaderLazy.value
@@ -6357,6 +6447,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         MutableMap<Triple<SkBlendMode, SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
     private val m60F16ZeroMaskCorrectionFor447PipelineCache:
         MutableMap<Triple<SkBlendMode, SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
+    private val m60F16ZeroMaskNeutralPathTraceFor448PipelineCache:
+        MutableMap<Pair<Triple<SkBlendMode, SkPathFillType, CoverageSide>, String>, GPURenderPipeline> =
+            mutableMapOf()
     private val m60F16WidthQuantizedColorReconstructionFor432PipelineCache:
         MutableMap<Triple<SkBlendMode, SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
 
@@ -6520,6 +6613,71 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                     ),
                     fragment = FragmentState(
                         module = m60F16ZeroMaskCorrectionFor447Shader,
+                        entryPoint = entryPoint,
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = readMask,
+                        stencilWriteMask = 0xFFu,
+                    ),
+                ),
+            )
+        }
+
+    private fun m60F16ZeroMaskNeutralPathTraceFor448PipelineFor(
+        mode: SkBlendMode,
+        fillType: SkPathFillType,
+        side: CoverageSide,
+    ): GPURenderPipeline =
+        m60F16ZeroMaskNeutralPathTraceFor448PipelineCache.getOrPut(
+            Triple(mode, fillType, side) to m60F16ZeroMaskNeutralPathTraceFor448Mode,
+        ) {
+            val readMask: UInt = if (fillType.isEvenOdd()) 0x01u else 0xFFu
+            val insideCompare =
+                if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
+            val compare = when (side) {
+                CoverageSide.Inside -> insideCompare
+                CoverageSide.Outside ->
+                    if (insideCompare == GPUCompareFunction.Equal) GPUCompareFunction.NotEqual
+                    else GPUCompareFunction.Equal
+            }
+            val entryPoint = when (side) {
+                CoverageSide.Inside -> "fs_inside"
+                CoverageSide.Outside -> "fs_outside"
+            }
+            val shader = m60F16ZeroMaskNeutralPathTraceFor448Shader(
+                m60F16ZeroMaskNeutralPathTraceFor448Mode,
+            )
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = aaPolygonPipelineLayout,
+                    vertex = VertexState(
+                        module = shader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                    ),
+                    fragment = FragmentState(
+                        module = shader,
                         entryPoint = entryPoint,
                         targets = listOf(
                             ColorTargetState(
@@ -12896,6 +13054,26 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         }
     }
 
+    private fun m60F16ZeroMaskNeutralPathTraceFor448Enabled(paint: SkPaint): Boolean {
+        val style = activeStrokeStyleForPathAaDiagnostics ?: return false
+        if (!m60F16ZeroMaskNeutralPathTraceFor448Requested) return false
+        if (!targetColorSpaceBlend) return false
+        if (intermediateFormat != GPUTextureFormat.RGBA16Float) return false
+        if (width != 192 || height != 128) return false
+        if (!System.getProperty(WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG, "false").toBoolean()) return false
+        if (paint.blendMode != SkBlendMode.kSrcOver) return false
+        if (paint.shader != null || paint.colorFilter != null || paint.maskFilter != null || paint.pathEffect != null) {
+            return false
+        }
+        if (kotlin.math.abs(style.strokeWidth - 10f) > 0.001f) return false
+        return when (style.cap to style.join) {
+            "butt" to "bevel",
+            "round" to "round",
+            "square" to "bevel" -> true
+            else -> false
+        }
+    }
+
     override fun setActiveClipShape(shape: SkClipShape?) {
         activeClipShape = shape
     }
@@ -15672,6 +15850,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                             m60F16WidthQuantizedRenderFixFor431Enabled(paint),
                         m60F16ZeroMaskCorrectionFor447 =
                             m60F16ZeroMaskCorrectionFor447Enabled(paint),
+                        m60F16ZeroMaskNeutralPathTraceFor448 =
+                            m60F16ZeroMaskNeutralPathTraceFor448Enabled(paint),
                         m60F16BandMetadata = m60F16AaStencilCoverBandMetadata(paint),
                     ),
                 )
@@ -15918,6 +16098,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                                 m60F16WidthQuantizedRenderFixFor431Enabled(paint),
                             m60F16ZeroMaskCorrectionFor447 =
                                 m60F16ZeroMaskCorrectionFor447Enabled(paint),
+                            m60F16ZeroMaskNeutralPathTraceFor448 =
+                                m60F16ZeroMaskNeutralPathTraceFor448Enabled(paint),
                             m60F16BandMetadata = m60F16AaStencilCoverBandMetadata(paint),
                         ),
                     )
@@ -17003,14 +17185,23 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                     setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
                     val diagnosticBindGroup = res.m60F16FragmentLaneDiagnosticBindGroup
                     val activeDiagnosticBindGroup =
-                        diagnosticBindGroup.takeUnless { d.m60F16ZeroMaskCorrectionFor447 }
+                        diagnosticBindGroup.takeUnless {
+                            d.m60F16ZeroMaskCorrectionFor447 ||
+                                d.m60F16ZeroMaskNeutralPathTraceFor448
+                        }
                     val boundedRuntimeCorrection =
                         d.m60F16BoundedRuntimeCorrectionProbe && d.m60F16BandMetadata != null
                     activeDiagnosticBindGroup?.let {
                         setBindGroup(0u, it)
                     }
                     setPipeline(
-                        if (d.m60F16ZeroMaskCorrectionFor447) {
+                        if (d.m60F16ZeroMaskNeutralPathTraceFor448) {
+                            m60F16ZeroMaskNeutralPathTraceFor448PipelineFor(
+                                d.mode,
+                                d.fillType,
+                                CoverageSide.Inside,
+                            )
+                        } else if (d.m60F16ZeroMaskCorrectionFor447) {
                             m60F16ZeroMaskCorrectionFor447PipelineFor(
                                 d.mode,
                                 d.fillType,
@@ -17048,7 +17239,13 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                     )
                     draw((d.coverVerts.size / 2).toUInt())
                     setPipeline(
-                        if (d.m60F16ZeroMaskCorrectionFor447) {
+                        if (d.m60F16ZeroMaskNeutralPathTraceFor448) {
+                            m60F16ZeroMaskNeutralPathTraceFor448PipelineFor(
+                                d.mode,
+                                d.fillType,
+                                CoverageSide.Outside,
+                            )
+                        } else if (d.m60F16ZeroMaskCorrectionFor447) {
                             m60F16ZeroMaskCorrectionFor447PipelineFor(
                                 d.mode,
                                 d.fillType,
@@ -21697,6 +21894,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         m60F16WidthQuantizedRenderFixFor431PipelineCache.clear()
         m60F16ZeroMaskCorrectionFor447PipelineCache.values.forEach { it.close() }
         m60F16ZeroMaskCorrectionFor447PipelineCache.clear()
+        m60F16ZeroMaskNeutralPathTraceFor448PipelineCache.values.forEach { it.close() }
+        m60F16ZeroMaskNeutralPathTraceFor448PipelineCache.clear()
         m60F16WidthQuantizedColorReconstructionFor432PipelineCache.values.forEach { it.close() }
         m60F16WidthQuantizedColorReconstructionFor432PipelineCache.clear()
         aaStencilCoverGradientPipelineCache.values.forEach { it.close() }
@@ -21798,6 +21997,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         if (m60F16ZeroMaskCorrectionFor447ShaderLazy.isInitialized()) {
             m60F16ZeroMaskCorrectionFor447Shader.close()
         }
+        m60F16ZeroMaskNeutralPathTraceFor448ShaderCache.values.forEach { it.close() }
+        m60F16ZeroMaskNeutralPathTraceFor448ShaderCache.clear()
         if (m60F16WidthQuantizedColorReconstructionFor432ShaderLazy.isInitialized()) {
             m60F16WidthQuantizedColorReconstructionFor432Shader.close()
         }
