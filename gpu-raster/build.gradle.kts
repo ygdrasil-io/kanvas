@@ -277,6 +277,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16StencilWriteSubpassTraceFor449.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16StencilWriteSubpassTraceFor449.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16StencilBoundaryAuditFor450.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16StencilBoundaryAuditFor450.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }

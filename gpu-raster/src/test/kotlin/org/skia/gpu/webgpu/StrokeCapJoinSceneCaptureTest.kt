@@ -650,6 +650,16 @@ class StrokeCapJoinSceneCaptureTest {
                 adapter = adapter,
             )
         }
+        if (System.getProperty(FOR450_STENCIL_BOUNDARY_AUDIT_PROPERTY, "false").toBoolean()) {
+            writeM60F16StencilBoundaryAuditFor450(
+                currentGpu = experimentalGpu,
+                currentGpuCmp = experimentalGpuCmp,
+                currentResidualStats = residualStats,
+                predrawSnapshot = aaStencilCoverPredrawDstReadbackSnapshot,
+                postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
+                adapter = adapter,
+            )
+        }
         widthQuantizedColorReconstructionFor432Result?.let { result ->
             writeM60F16WidthQuantizedColorReconstructionFor432(
                 reference = reference,
@@ -7129,6 +7139,207 @@ class StrokeCapJoinSceneCaptureTest {
                 "rtk python3 scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py",
                 "rtk python3 scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
                 "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for449-pycache python3 -m py_compile scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun writeM60F16StencilBoundaryAuditFor450(
+        currentGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-stencil-boundary-audit-for450"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16StencilBoundaryAuditFor450Json(
+                sceneId = sceneId,
+                currentGpu = currentGpu,
+                currentGpuCmp = currentGpuCmp,
+                currentResidualStats = currentResidualStats,
+                predrawSnapshot = predrawSnapshot,
+                postPassSnapshot = postPassSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16StencilBoundaryAuditFor450Json(
+        sceneId: String,
+        currentGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ): String {
+        val targetPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6)
+        val predrawByPixel = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val postPassByPixel = postPassSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val observedPredrawTargets = targetPoints.count { point ->
+            predrawByPixel[point].orEmpty().any { it.second.readbackAvailable && it.second.dstBeforeRgbaFloat != null }
+        }
+        val observedPostPassTargets = targetPoints.count { point ->
+            postPassByPixel[point].orEmpty().any { it.second.readbackAvailable && it.second.observedRgbaFloat != null }
+        }
+        val classification = "stencil-boundary-requires-render-pass-split"
+        val pixelsJson = targetPoints.joinToString(",\n") { (x, y) ->
+            val point = x to y
+            val predrawSamples = predrawByPixel[point].orEmpty()
+            val postPassSamples = postPassByPixel[point].orEmpty()
+            val selectedPredraw = predrawSamples.firstOrNull {
+                it.second.targetWithinScissor && it.second.readbackAvailable && it.second.dstBeforeRgbaFloat != null
+            }
+            val selectedPostPass = postPassSamples.firstOrNull {
+                it.second.targetWithinScissor && it.second.readbackAvailable && it.second.observedRgbaFloat != null
+            }
+            """
+                {
+                  "x": $x,
+                  "y": $y,
+                  "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentGpu.getPixel(x, y)))},
+                  "beforeStencilWriteBoundary": {
+                    "available": ${selectedPredraw != null},
+                    "kind": "color-only-predraw-textureLoad",
+                    "drawIndex": ${selectedPredraw?.first?.drawIndex ?: "null"},
+                    "rgbaFloat": ${selectedPredraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                    "rgba8": ${selectedPredraw?.second?.dstBeforeRgba8.intArrayOrNullJson()}
+                  },
+                  "afterStencilBeforeCoverBoundary": {
+                    "available": false,
+                    "stencilDirectReadbackAvailable": false,
+                    "requiresRenderPassSplit": true,
+                    "requiresBackendApiExtension": false,
+                    "reason": "Stencil write and both cover subdraws are encoded inside one beginRenderPass block; Kanvas has no observation boundary after stencil draw and before cover draw without splitting that render pass."
+                  },
+                  "afterCoverBeforeFinalReadBoundary": {
+                    "available": ${selectedPostPass != null},
+                    "kind": "color-only-postpass-textureLoad",
+                    "drawIndex": ${selectedPostPass?.first?.drawIndex ?: "null"},
+                    "rgbaFloat": ${selectedPostPass?.second?.observedRgbaFloat.floatArrayOrNullJson()},
+                    "rgba8": ${selectedPostPass?.second?.observedRgba8.intArrayOrNullJson()}
+                  }
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-450",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-exposer-une-frontiere-de-preuve-stencil-write-sure-apres-for-449",
+              "sourceFindingMemory": "global/kanvas/findings/for-449-trace-stencil-subpass-m60-f16-reste-inconclusive-sans-lecture-stencil-directe",
+              "sourceArtifacts": {
+                "for449": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/m60-f16-stencil-write-subpass-trace-for449.json",
+                "for448": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/m60-f16-zero-mask-neutral-path-trace-for448.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "optInFlag": ${FOR450_STENCIL_BOUNDARY_AUDIT_PROPERTY.jsonString()},
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR450_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixAppliedByDefault": false,
+              "for442UsedAsDecisionSource": false,
+              "sourceAudit": {
+                "depthStencilFormat": "Depth24PlusStencil8",
+                "depthStencilUsage": "GPUTextureUsage.RenderAttachment",
+                "depthStencilUsageHasCopySrc": false,
+                "depthStencilUsageHasTextureBinding": false,
+                "depthStencilStoreOp": "Discard",
+                "stencilWriteAndCoverShareRenderPass": true,
+                "stencilDrawBeforeCoverDrawsInSamePass": true,
+                "productionWgslChanged": false
+              },
+              "boundarySummary": {
+                "zeroMaskPixelCount": ${targetPoints.size},
+                "currentSimilarity": ${String.format(Locale.US, "%.6f", currentGpuCmp.similarity)},
+                "currentTotalResidual": null,
+                "currentTotalResidualReason": "FOR-450 audits WebGPU boundary availability; it reuses mismatch counters but does not recompute a CPU reference residual in this artifact.",
+                "currentMismatchPixels": ${currentResidualStats.mismatchPixels},
+                "predrawColorBoundaryObservedTargetCount": $observedPredrawTargets,
+                "postCoverColorBoundaryObservedTargetCount": $observedPostPassTargets,
+                "afterStencilBeforeCoverBoundaryAvailable": false,
+                "directStencilReadbackAvailable": false,
+                "requiresRenderPassSplit": true,
+                "requiresBackendApiExtension": false,
+                "for442DecisionSourceUsedCount": 0
+              },
+              "boundaries": [
+                {
+                  "name": "before-stencil-write",
+                  "requestedBoundary": "before StencilCoverAaPolygonDraw stencil write",
+                  "available": ${observedPredrawTargets == targetPoints.size},
+                  "readbackKind": "color-only",
+                  "evidence": "FOR-410 predraw RGBA16Float textureLoad",
+                  "stencilDirectReadbackAvailable": false,
+                  "reason": "The color destination can be sampled before the draw; stencil has not been written yet and is not a meaningful direct stencil-write proof."
+                },
+                {
+                  "name": "after-stencil-before-cover",
+                  "requestedBoundary": "after stencil draw and before inside/outside cover color draws",
+                  "available": false,
+                  "readbackKind": "none",
+                  "stencilDirectReadbackAvailable": false,
+                  "requiresRenderPassSplit": true,
+                  "reason": "The stencil draw and cover draws are encoded in one render pass. Existing Kanvas diagnostics do not expose an inter-draw GPU readback boundary inside that pass."
+                },
+                {
+                  "name": "after-cover-before-final-read",
+                  "requestedBoundary": "after inside/outside cover color draws and before final readback",
+                  "available": ${observedPostPassTargets == targetPoints.size},
+                  "readbackKind": "color-only",
+                  "evidence": "FOR-405/FOR-410 post-pass RGBA16Float textureLoad",
+                  "stencilDirectReadbackAvailable": false,
+                  "reason": "Color output is observable after the pass, but the depth/stencil attachment is not copyable or shader-readable in the current backend contract."
+                }
+              ],
+              "partialPixels": [
+            $pixelsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "activationByDefault": false,
+                "for442UsedAsDecisionSource": false,
+                "for447Promoted": false,
+                "renderPassSplitApplied": false
+              },
+              "classificationReason": "FOR-450 finds color-only boundaries before and after StencilCoverAaPolygonDraw, but no safe boundary after stencil draw and before cover draw. Direct stencil-write proof therefore requires a dedicated render-pass split ticket before any stencil-based correction.",
+              "nextAction": "Open an implementation ticket for an opt-in render-pass split or backend boundary extension if direct stencil-write evidence is still required; otherwise keep refusing stencil-based corrections.",
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16StencilBoundaryAuditFor450.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for450_m60_f16_stencil_boundary_audit.py",
+                "rtk python3 scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for450-pycache python3 -m py_compile scripts/validate_for450_m60_f16_stencil_boundary_audit.py scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py",
                 "rtk git diff --check"
               ]
             }
@@ -23767,6 +23978,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.mode"
         private const val FOR449_STENCIL_WRITE_SUBPASS_TRACE_PROPERTY =
             "kanvas.webgpu.m60F16StencilWriteSubpassTraceFor449.enabled"
+        private const val FOR450_STENCIL_BOUNDARY_AUDIT_PROPERTY =
+            "kanvas.webgpu.m60F16StencilBoundaryAuditFor450.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -23937,6 +24150,13 @@ class StrokeCapJoinSceneCaptureTest {
             "fragment-invoked-but-fixed-blend-neutral",
             "later-write-overwrites-subpass-effect",
             "direct-stencil-subpass-trace-inconclusive",
+        )
+        private val M60_F16_FOR450_ALLOWED_CLASSIFICATIONS = listOf(
+            "stencil-boundary-direct-readback-available",
+            "stencil-boundary-color-only-readback-available",
+            "stencil-boundary-requires-render-pass-split",
+            "stencil-boundary-requires-backend-api-extension",
+            "stencil-boundary-audit-inconclusive",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
