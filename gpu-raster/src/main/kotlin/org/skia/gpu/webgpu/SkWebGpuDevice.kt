@@ -244,6 +244,8 @@ private const val WEBGPU_M60_F16_PRODUCTION_COVER_STENCIL_VS_DIAGNOSTIC_TEXTURE_
     "kanvas.webgpu.m60F16ProductionCoverStencilVsDiagnosticTextureFor456.enabled"
 private const val WEBGPU_M60_F16_PRODUCTION_BOUND_COVER_STENCIL_DIAGNOSTIC_FOR457_FLAG: String =
     "kanvas.webgpu.m60F16ProductionBoundCoverStencilDiagnosticFor457.enabled"
+private const val WEBGPU_M60_F16_PRODUCTION_COVER_STATE_VS_SHADER_EMISSION_FOR458_FLAG: String =
+    "kanvas.webgpu.m60F16ProductionCoverStateVsShaderEmissionFor458.enabled"
 private const val WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG: String =
     "kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled"
 private const val WEBGPU_M60_F16_ZERO_MASK_CORRECTION_FOR447_FLAG: String =
@@ -764,6 +766,59 @@ public class SkWebGpuDevice(
         val events: List<M60F16DiagnosticStencilTextureFor453Event>,
     )
 
+    public data class M60F16ProductionCoverStateVsShaderEmissionFor458Snapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val requestedBoundary: String,
+        val observedBoundary: String,
+        val productionDepthStencilTextureLabel: String,
+        val productionDepthStencilUsage: String,
+        val productionDepthStencilUsageHasCopySrc: Boolean,
+        val normalRenderingUsesDiagnosticTexture: Boolean,
+        val productionWgslChanged: Boolean,
+        val events: List<M60F16ProductionCoverStateVsShaderEmissionFor458Event>,
+    )
+
+    public data class M60F16ProductionCoverStateVsShaderEmissionFor458Event(
+        val drawIndex: Int,
+        val pipelineFamily: String,
+        val fillType: String,
+        val blendMode: String,
+        val scissor: IntArray,
+        val edgeCount: Int,
+        val coverVertexCount: Int,
+        val renderPassEncoding: String,
+        val colorLoadOpForCover: String,
+        val colorStoreOpForCover: String,
+        val stencilLoadOpForCover: String,
+        val stencilStoreOpForCover: String,
+        val depthStencilAttachment: String,
+        val usesProductionDepthStencilAttachment: Boolean,
+        val usesDiagnosticDepthStencilAttachment: Boolean,
+        val stencilReference: Int,
+        val stencilReadMask: Int,
+        val stencilWriteMask: Int,
+        val insideCompare: String,
+        val outsideCompare: String,
+        val insideStencilFailOp: String,
+        val insideStencilDepthFailOp: String,
+        val insideStencilPassOp: String,
+        val outsideStencilFailOp: String,
+        val outsideStencilDepthFailOp: String,
+        val outsideStencilPassOp: String,
+        val insidePipelineEntryPoint: String,
+        val outsidePipelineEntryPoint: String,
+        val insideDrawOrdinal: Int,
+        val outsideDrawOrdinal: Int,
+        val coverDrawVertexCount: Int,
+        val shaderCaptureBindGroupUsed: Boolean,
+        val shaderCapturePipelineUsed: Boolean,
+        val productionEquivalentStencilState: Boolean,
+        val fixedFunctionStencilRejectExpectedForZero: Boolean,
+        val targetPixelsWithinScissor: List<Boolean>,
+        val reason: String,
+    )
+
     public data class M60F16AaStencilCoverIsolatedColorTargetSnapshot(
         val propertyName: String,
         val enabled: Boolean,
@@ -1197,13 +1252,23 @@ public class SkWebGpuDevice(
         System.getProperty(
             WEBGPU_M60_F16_PRODUCTION_BOUND_COVER_STENCIL_DIAGNOSTIC_FOR457_FLAG,
             "false",
+        ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_PRODUCTION_COVER_STATE_VS_SHADER_EMISSION_FOR458_FLAG,
+                "false",
+            ).toBoolean()
+    private val m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_PRODUCTION_COVER_STATE_VS_SHADER_EMISSION_FOR458_FLAG,
+            "false",
         ).toBoolean()
     private val m60F16DirectPassWriteHookEnabled: Boolean =
         System.getProperty(WEBGPU_M60_F16_DIRECT_PASS_WRITE_HOOK_FLAG, "false").toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
-            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
     private val m60F16AaStencilCoverContributionIsolationDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_FLAG,
@@ -1212,7 +1277,8 @@ public class SkWebGpuDevice(
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
-            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
     private val m60F16AaStencilCoverPredrawDstReadbackDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_PREDRAW_DST_READBACK_FLAG,
@@ -1221,7 +1287,8 @@ public class SkWebGpuDevice(
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
-            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
     private val m60F16StencilRenderPassSplitFor451DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_STENCIL_RENDER_PASS_SPLIT_FOR451_FLAG,
@@ -1230,7 +1297,8 @@ public class SkWebGpuDevice(
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
-            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
     private val m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_STENCIL_BACKEND_READBACK_AUDIT_FOR452_FLAG,
@@ -1244,7 +1312,8 @@ public class SkWebGpuDevice(
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
-            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
     private val m60F16AaStencilCoverShaderReturnDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_DIAGNOSTIC_FLAG,
@@ -1269,7 +1338,8 @@ public class SkWebGpuDevice(
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
-            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
     private val m60F16AaStencilCoverIsolatedColorTargetDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_ISOLATED_COLOR_TARGET_FLAG,
@@ -1278,7 +1348,8 @@ public class SkWebGpuDevice(
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
-            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
     private val m60F16AaStencilCoverStorageColorTargetComparisonDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_STORAGE_COLOR_TARGET_COMPARISON_FLAG,
@@ -1406,6 +1477,8 @@ public class SkWebGpuDevice(
         MutableList<M60F16DiagnosticStencilTextureFor453Event> = mutableListOf()
     private val m60F16ProductionBoundCoverStencilDiagnosticFor457PendingReadbacks:
         MutableList<M60F16DiagnosticStencilTextureFor453Readback> = mutableListOf()
+    private val m60F16ProductionCoverStateVsShaderEmissionFor458Events:
+        MutableList<M60F16ProductionCoverStateVsShaderEmissionFor458Event> = mutableListOf()
     private val m60F16AaStencilCoverContributionIsolationEvents:
         MutableList<M60F16AaStencilCoverContributionIsolationEvent> = mutableListOf()
     private val m60F16AaStencilCoverShaderReturnDiagnosticEvents:
@@ -1716,6 +1789,23 @@ public class SkWebGpuDevice(
             events = m60F16ProductionBoundCoverStencilDiagnosticFor457Events.toList(),
         )
 
+    public fun m60F16ProductionCoverStateVsShaderEmissionFor458Snapshot():
+        M60F16ProductionCoverStateVsShaderEmissionFor458Snapshot =
+        M60F16ProductionCoverStateVsShaderEmissionFor458Snapshot(
+            propertyName = WEBGPU_M60_F16_PRODUCTION_COVER_STATE_VS_SHADER_EMISSION_FOR458_FLAG,
+            enabled = m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled,
+            requestedBoundary =
+                "during production AA stencil-cover render pass encoding before and around the inside cover draw",
+            observedBoundary =
+                "Kotlin render-pass and pipeline state selected for the production cover path, paired later with shader/stencil readbacks",
+            productionDepthStencilTextureLabel = "SkWebGpuDevice.depthStencil",
+            productionDepthStencilUsage = "GPUTextureUsage.RenderAttachment",
+            productionDepthStencilUsageHasCopySrc = false,
+            normalRenderingUsesDiagnosticTexture = false,
+            productionWgslChanged = false,
+            events = m60F16ProductionCoverStateVsShaderEmissionFor458Events.toList(),
+        )
+
     public fun m60F16AaStencilCoverContributionIsolationSnapshot():
         M60F16AaStencilCoverContributionIsolationSnapshot =
         M60F16AaStencilCoverContributionIsolationSnapshot(
@@ -1728,6 +1818,76 @@ public class SkWebGpuDevice(
             sampleLimit = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.size,
             events = m60F16AaStencilCoverContributionIsolationEvents.toList(),
         )
+
+    private fun recordM60F16ProductionCoverStateVsShaderEmissionFor458Event(
+        drawIndex: Int,
+        d: StencilCoverAaPolygonDraw,
+        renderPassEncoding: String,
+        colorLoadOpForCover: GPULoadOp,
+        stencilLoadOpForCover: GPULoadOp,
+        stencilStoreOpForCover: GPUStoreOp,
+        shaderCaptureBindGroupUsed: Boolean,
+        shaderCapturePipelineUsed: Boolean,
+    ) {
+        if (!m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled ||
+            d.m60F16BandMetadata == null
+        ) {
+            return
+        }
+        val readMask = if (d.fillType.isEvenOdd()) 0x01 else 0xFF
+        val insideCompare =
+            if (d.fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
+        val outsideCompare =
+            if (insideCompare == GPUCompareFunction.Equal) {
+                GPUCompareFunction.NotEqual
+            } else {
+                GPUCompareFunction.Equal
+            }
+        m60F16ProductionCoverStateVsShaderEmissionFor458Events +=
+            M60F16ProductionCoverStateVsShaderEmissionFor458Event(
+                drawIndex = drawIndex,
+                pipelineFamily = "aa-stencil-cover",
+                fillType = d.fillType.name,
+                blendMode = d.mode.name,
+                scissor = d.scissor.copyOf(),
+                edgeCount = d.edgeCount,
+                coverVertexCount = d.coverVerts.size / 2,
+                renderPassEncoding = renderPassEncoding,
+                colorLoadOpForCover = colorLoadOpForCover.name,
+                colorStoreOpForCover = GPUStoreOp.Store.name,
+                stencilLoadOpForCover = stencilLoadOpForCover.name,
+                stencilStoreOpForCover = stencilStoreOpForCover.name,
+                depthStencilAttachment = "SkWebGpuDevice.depthStencil",
+                usesProductionDepthStencilAttachment = true,
+                usesDiagnosticDepthStencilAttachment = false,
+                stencilReference = 0,
+                stencilReadMask = readMask,
+                stencilWriteMask = 0xFF,
+                insideCompare = "GPUCompareFunction.${insideCompare.name}",
+                outsideCompare = "GPUCompareFunction.${outsideCompare.name}",
+                insideStencilFailOp = "GPUStencilOperation.Keep",
+                insideStencilDepthFailOp = "GPUStencilOperation.Keep",
+                insideStencilPassOp = "GPUStencilOperation.Keep",
+                outsideStencilFailOp = "GPUStencilOperation.Keep",
+                outsideStencilDepthFailOp = "GPUStencilOperation.Keep",
+                outsideStencilPassOp = "GPUStencilOperation.Keep",
+                insidePipelineEntryPoint = "fs_inside",
+                outsidePipelineEntryPoint = "fs_outside",
+                insideDrawOrdinal = 0,
+                outsideDrawOrdinal = 1,
+                coverDrawVertexCount = d.coverVerts.size / 2,
+                shaderCaptureBindGroupUsed = shaderCaptureBindGroupUsed,
+                shaderCapturePipelineUsed = shaderCapturePipelineUsed,
+                productionEquivalentStencilState = true,
+                fixedFunctionStencilRejectExpectedForZero =
+                    insideCompare == GPUCompareFunction.NotEqual && readMask == 0xFF,
+                targetPixelsWithinScissor = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS
+                    .take(6)
+                    .map { (x, y) -> m60F16PointWithinScissor(x, y, d.scissor) },
+                reason =
+                    "FOR-458 captured the production cover path state in diagnostic-only mode while keeping the production depth/stencil attachment unchanged.",
+            )
+    }
 
     public fun m60F16AaStencilCoverShaderReturnDiagnosticSnapshot():
         M60F16AaStencilCoverShaderReturnDiagnosticSnapshot =
@@ -17525,6 +17685,9 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             m60F16ProductionBoundCoverStencilDiagnosticFor457Events.clear()
             m60F16ProductionBoundCoverStencilDiagnosticFor457PendingReadbacks.clear()
         }
+        if (m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled) {
+            m60F16ProductionCoverStateVsShaderEmissionFor458Events.clear()
+        }
         if (m60F16AaStencilCoverContributionIsolationDiagnosticsEnabled) {
             m60F16AaStencilCoverContributionIsolationEvents.clear()
         }
@@ -18277,6 +18440,16 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                         activeDiagnosticBindGroup?.let {
                             setBindGroup(0u, it)
                         }
+                        recordM60F16ProductionCoverStateVsShaderEmissionFor458Event(
+                            drawIndex = i,
+                            d = d,
+                            renderPassEncoding = "split-stencil-then-production-cover-pass",
+                            colorLoadOpForCover = GPULoadOp.Load,
+                            stencilLoadOpForCover = GPULoadOp.Load,
+                            stencilStoreOpForCover = GPUStoreOp.Discard,
+                            shaderCaptureBindGroupUsed = activeDiagnosticBindGroup != null,
+                            shaderCapturePipelineUsed = activeDiagnosticBindGroup != null,
+                        )
                         setPipeline(
                             if (d.m60F16ZeroMaskNeutralPathTraceFor448) {
                                 m60F16ZeroMaskNeutralPathTraceFor448PipelineFor(
@@ -18411,6 +18584,16 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                     activeDiagnosticBindGroup?.let {
                         setBindGroup(0u, it)
                     }
+                    recordM60F16ProductionCoverStateVsShaderEmissionFor458Event(
+                        drawIndex = i,
+                        d = d,
+                        renderPassEncoding = "single-production-stencil-cover-pass",
+                        colorLoadOpForCover = loadOp,
+                        stencilLoadOpForCover = GPULoadOp.Clear,
+                        stencilStoreOpForCover = GPUStoreOp.Discard,
+                        shaderCaptureBindGroupUsed = activeDiagnosticBindGroup != null,
+                        shaderCapturePipelineUsed = activeDiagnosticBindGroup != null,
+                    )
                     setPipeline(
                         if (d.m60F16ZeroMaskNeutralPathTraceFor448) {
                             m60F16ZeroMaskNeutralPathTraceFor448PipelineFor(
