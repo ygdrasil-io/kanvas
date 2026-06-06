@@ -811,7 +811,7 @@ tasks.register("pipelineD50Lot1DashboardVisibilityPack") {
     description = "Materializes D50 lot 1 policy-only GM rows so unsupported candidates remain visible in the scene dashboard."
 
     val scriptFile = layout.projectDirectory.file("scripts/m54_hard_feature_depth_pack.py")
-    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/d50-lot1-dashboard-visibility.json")
+    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-visibility.json")
     val sourceArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-d50-lot1-generated")
     inputs.file(scriptFile)
@@ -1360,7 +1360,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
-        val d50Manifest = d50GeneratedRoot.resolve("data/d50-lot1-generated-scenes.json")
+        val d50Manifest = d50GeneratedRoot.resolve("data/d50-gm-dashboard-generated-scenes.json")
         val d50Scenes = if (d50Manifest.isFile) {
             val d50Root = JsonSlurper().parse(d50Manifest) as? Map<*, *>
                 ?: throw GradleException("D50 lot 1 generated scene manifest root must be a JSON object: ${d50Manifest.relativeTo(rootDir)}")
@@ -3056,6 +3056,10 @@ tasks.register("pipelineSceneDashboardGate") {
             "skia-gm-imagesource" to "image.imagesource.row-specific-artifacts-required",
             "skia-gm-offsetimagefilter" to "image-filter.offset.row-specific-artifacts-required",
             "skia-gm-pathfill" to "path.pathfill.row-specific-artifacts-required",
+            "skia-gm-rectpolystroke" to "coverage.rectpolystroke.row-specific-artifacts-required",
+            "skia-gm-imagemakewithfilter" to "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+            "skia-gm-runtimeintrinsics" to "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
+            "skia-gm-textblobtransforms" to "font.textblobtransforms.row-specific-artifacts-required",
         )
         val staticPathAaSentinels = mapOf(
             "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",
