@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-06-06",
+  "ticket": "D51-3",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d51-3-convertir-skia-gm-imagesource-en-preuve-row-specific-precise",
+  "sourceFor467Evidence": {
+    "report": "reports/wgsl-pipeline/2026-06-06-for-467-skia-gm-imagesource-evidence.md",
+    "json": "reports/wgsl-pipeline/scenes/generated/for467-skia-gm-imagesource-evidence.json",
+    "findingMemory": "global/kanvas/findings/for-467-formalise-le-refus-skia-gm-imagesource-d50-lot-1"
+  },
+  "classification": "row-specific-expected-unsupported-precise-refusal",
+  "inventoryId": "skia-gm-imagesource",
+  "status": "expected-unsupported",
+  "fallbackReason": "image.imagesource.image-filter-cubic-panels-webgpu-artifacts-required",
+  "previousFallbackReason": "image.imagesource.row-specific-artifacts-required",
+  "fallbackReasonImproved": true,
+  "d50ManifestChanged": false,
+  "scoreImpact": {
+    "supportScoreIncreased": false,
+    "skiaComparableScoreIncreased": false,
+    "reason": "D51-3 is an audit/refusal evidence update. It does not add a dashboard WebGPU artifact, diff/stat payload, or route diagnostics with fallbackReason=none."
+  },
+  "rowSpecificAudit": {
+    "historicalImageSourceEvidencePromotesRow": false,
+    "adjacentImageEvidenceInherited": false,
+    "imageSourceGmSource": {
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageSourceGM.kt",
+      "upstreamSource": "gm/imagesource.cpp",
+      "gmName": "imagesource",
+      "gmDimensions": {
+        "width": 500,
+        "height": 150
+      },
+      "sourceImage": {
+        "dimensions": {
+          "width": 100,
+          "height": 100
+        },
+        "colorType": "N32 premul",
+        "content": "single white letter e drawn at x=20 y=70 with text size 96"
+      },
+      "sampling": {
+        "panel1": "SkFilterMode.kNearest",
+        "panels2To4": "SkCubicResampler(1/3, 1/3)"
+      },
+      "panelBehavior": [
+        {
+          "panel": 1,
+          "filter": "SkImageFilters.Image(fImage, SkSamplingOptions(SkFilterMode.kNearest))",
+          "shape": "full image nearest"
+        },
+        {
+          "panel": 2,
+          "filter": "SkImageFilters.Image(fImage, srcRect, srcRect, sampling)",
+          "shape": "subset->subset cubic"
+        },
+        {
+          "panel": 3,
+          "filter": "SkImageFilters.Image(fImage, srcRect, dstRect, sampling)",
+          "shape": "subset->dst cubic"
+        },
+        {
+          "panel": 4,
+          "filter": "SkImageFilters.Image(fImage, bounds, dstRect, sampling)",
+          "shape": "bounds->dst cubic"
+        }
+      ],
+      "perPanelApplication": {
+        "paintField": "paint.imageFilter",
+        "clipRect": "SkRect.MakeXYWH(0, 0, 100, 100)",
+        "draw": "drawPaint",
+        "translationAfterPanelPx": 100
+      }
+    },
+    "whyNotPromotable": [
+      "No D51 row-specific WebGPU dashboard artifact exists for ImageSourceGM.",
+      "No D51 diff/stat payload exists for ImageSourceGM.",
+      "No ImageSourceGM route diagnostics with fallbackReason=none exist.",
+      "The historical CPU similarity score does not prove the WebGPU image-filter path.",
+      "Adjacent image evidence does not cover SkImageFilters.Image under clip with cubic panels."
+    ],
+    "adjacentEvidenceNotInherited": [
+      "ImageGM",
+      "BitmapImageGM",
+      "SimpleSnapImageGM",
+      "MakeRasterImageGM",
+      "DrawBitmapRectGM",
+      "image-filter crop/prepass evidence"
+    ]
+  },
+  "artifacts": {
+    "reference": {
+      "status": "available-historical-skia-integration-reference",
+      "path": "skia-integration-tests/src/test/resources/original-888/imagesource.png",
+      "dimensions": {
+        "width": 500,
+        "height": 150
+      },
+      "format": "PNG 16-bit/color RGBA",
+      "promotableAsDashboardReference": false,
+      "reason": "The historical PNG is a useful audit input, but D51-3 does not generate the PM/dashboard reference package required for support."
+    },
+    "cpu": {
+      "status": "available-historical-cpu-similarity-score",
+      "test": "skia-integration-tests/src/test/kotlin/org/skia/tests/ImageSourceTest.kt",
+      "historicalSimilarity": {
+        "ImageSourceGM": 98.53466666666667
+      },
+      "promotableAsDashboardCpuArtifact": false,
+      "reason": "The CPU similarity data is historical and not paired with D51 reference, WebGPU, diff/stat, and route diagnostics."
+    },
+    "webgpu": {
+      "status": "missing",
+      "required": true,
+      "route": "webgpu.image-source.imagesource.expected-unsupported",
+      "artifact": "not-generated",
+      "reason": "No row-specific ImageSourceGM WebGPU artifact or route diagnostics exist under reports/wgsl-pipeline."
+    },
+    "diffStats": {
+      "status": "not-computed",
+      "required": true,
+      "reason": "Diff/stat cannot be computed for promotion without a D51 reference, CPU artifact, WebGPU artifact, and route diagnostics produced as one row-specific evidence set."
+    }
+  },
+  "routeDiagnostics": {
+    "cpu": "cpu.image-source.imagesource.historical-cpu-similarity-only",
+    "gpu": "webgpu.image-source.imagesource.expected-unsupported",
+    "fallbackReason": "image.imagesource.image-filter-cubic-panels-webgpu-artifacts-required",
+    "policy": "Keep ImageSourceGM expected-unsupported until a row-specific WebGPU route renders the image-filter source panels under clip with generated reference/CPU/GPU/diff artifacts and fallbackReason=none."
+  },
+  "d50Guard": {
+    "manifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+    "status": "expected-unsupported",
+    "fallbackReason": "image.imagesource.row-specific-artifacts-required",
+    "strictDashboardStatus": "expected-unsupported",
+    "dashboardRowId": null
+  },
+  "nonClaims": {
+    "supportClaimAddedByD51_3": false,
+    "skiaComparableClaimAddedByD51_3": false,
+    "dashboardRowAddedByD51_3": false,
+    "d50ManifestChanged": false,
+    "resultsJsonChanged": false,
+    "scenesJsonChanged": false,
+    "defaultRenderingChanged": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "productionCodeChanged": false,
+    "wgslProductionChanged": false,
+    "wgsl4kChanged": false,
+    "upstreamSourceChanged": false,
+    "skiaIntegrationTestsChanged": false,
+    "codecSupportClaim": false,
+    "yuvSupportClaim": false,
+    "animationSupportClaim": false,
+    "exifSupportClaim": false,
+    "mipmapSupportClaim": false,
+    "tileModeSupportClaim": false,
+    "dynamicSourceImageSupportClaim": false,
+    "colorManagedImageSupportClaim": false,
+    "arbitraryImageSupportClaim": false,
+    "imageFilterDagV2SupportClaim": false
+  },
+  "expectedChangedFiles": [
+    "reports/wgsl-pipeline/2026-06-06-d51-3-imagesource-row-specific-evidence.md",
+    "reports/wgsl-pipeline/scenes/generated/d51-imagesource-row-specific-evidence.json",
+    "scripts/validate_d51_imagesource_row_specific_evidence.py"
+  ],
+  "validationCommands": [
+    "rtk python3 scripts/validate_d51_imagesource_row_specific_evidence.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d51-imagesource-row-specific-evidence.json",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-d51-imagesource-pycache python3 -m py_compile scripts/validate_d51_imagesource_row_specific_evidence.py",
+    "rtk git diff --check"
+  ]
+}
