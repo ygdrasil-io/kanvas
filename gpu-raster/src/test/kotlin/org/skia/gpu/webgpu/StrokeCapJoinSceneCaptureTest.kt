@@ -97,21 +97,32 @@ class StrokeCapJoinSceneCaptureTest {
             val gpuError = assertThrows(IllegalStateException::class.java) {
                 WebGpuSink.draw(ctx, gm)
             }
-            val experimentalGpu = withExperimentalStrokeCapJoinRender {
-                WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
-            }
-            val correctedExperimentalGpu = withExperimentalStrokeCapJoinRender {
-                withM60F16SourceColorCorrectionProbe(true) {
+            val experimentalGpu = withM60F16WidthQuantizedRenderFixFor431(false) {
+                withExperimentalStrokeCapJoinRender {
                     WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
                 }
             }
-            val boundedRuntimeCorrectionResult = withExperimentalStrokeCapJoinRender {
-                withM60F16BoundedRuntimeCorrectionProbe(true) {
-                    WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
-                        ctx,
-                        gm,
-                        targetColorSpaceBlend = true,
-                    )
+            val correctedExperimentalGpu = withM60F16WidthQuantizedRenderFixFor431(false) {
+                withExperimentalStrokeCapJoinRender {
+                    withM60F16SourceColorCorrectionProbe(true) {
+                        WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
+                    }
+                }
+            }
+            val boundedRuntimeCorrectionResult = withM60F16WidthQuantizedRenderFixFor431(false) {
+                withExperimentalStrokeCapJoinRender {
+                    withM60F16BoundedRuntimeCorrectionProbe(true) {
+                        WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                            ctx,
+                            gm,
+                            targetColorSpaceBlend = true,
+                        )
+                    }
+                }
+            }
+            val widthQuantizedRenderFixFor431Gpu = withExperimentalStrokeCapJoinRender {
+                withM60F16WidthQuantizedRenderFixFor431(true) {
+                    WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
                 }
             }
             val boundedRuntimeCorrectionGpu = boundedRuntimeCorrectionResult.bitmap
@@ -121,12 +132,16 @@ class StrokeCapJoinSceneCaptureTest {
                 TestUtils.compareBitmapsDetailed(correctedExperimentalGpu, reference, tolerance = 0)
             val boundedRuntimeCorrectionGpuCmp =
                 TestUtils.compareBitmapsDetailed(boundedRuntimeCorrectionGpu, reference, tolerance = 0)
+            val widthQuantizedRenderFixFor431GpuCmp =
+                TestUtils.compareBitmapsDetailed(widthQuantizedRenderFixFor431Gpu, reference, tolerance = 0)
             val experimentalGpuToleranceProfile = toleranceProfile(experimentalGpu, reference)
             val regionStats = strokeRegionStats(experimentalGpu, reference)
             val residualStats = strokeResidualStats(experimentalGpu, reference)
             val correctedResidualStats = strokeResidualStats(correctedExperimentalGpu, reference)
             val boundedRuntimeCorrectionResidualStats =
                 strokeResidualStats(boundedRuntimeCorrectionGpu, reference)
+            val widthQuantizedRenderFixFor431ResidualStats =
+                strokeResidualStats(widthQuantizedRenderFixFor431Gpu, reference)
             val adapter = ctx.adapterInfo ?: "unknown-adapter"
 
             println(
@@ -136,55 +151,63 @@ class StrokeCapJoinSceneCaptureTest {
             )
 
             if (System.getProperty(WRITE_EVIDENCE_PROPERTY) == "true") {
-                val fragmentLaneRuntimeSnapshot = withExperimentalStrokeCapJoinRender {
-                    WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
-                        ctx,
-                        gm,
-                        targetColorSpaceBlend = true,
-                    ).snapshot
-                }
-                val boundedCorrectionApplicationPointResult = withExperimentalStrokeCapJoinRender {
-                    withM60F16BoundedRuntimeCorrectionProbe(true) {
-                        withM60F16BoundedCorrectionApplicationPointDiagnostic(true) {
-                            WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
-                                ctx,
-                                gm,
-                                targetColorSpaceBlend = true,
-                            )
-                        }
+                val fragmentLaneRuntimeSnapshot = withM60F16WidthQuantizedRenderFixFor431(false) {
+                    withExperimentalStrokeCapJoinRender {
+                        WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                            ctx,
+                            gm,
+                            targetColorSpaceBlend = true,
+                        ).snapshot
                     }
                 }
-                val coverageStencilContributionMapResult = withExperimentalStrokeCapJoinRender {
-                    withM60F16BoundedRuntimeCorrectionProbe(true) {
-                        withM60F16CoverageStencilContributionMapDiagnostic(true) {
-                            WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
-                                ctx,
-                                gm,
-                                targetColorSpaceBlend = true,
-                            )
-                        }
-                    }
-                }
-                val contributionIsolationResult = withExperimentalStrokeCapJoinRender {
-                    withM60F16BandMetadataTransport(true) {
+                val boundedCorrectionApplicationPointResult = withM60F16WidthQuantizedRenderFixFor431(false) {
+                    withExperimentalStrokeCapJoinRender {
                         withM60F16BoundedRuntimeCorrectionProbe(true) {
-                            withM60F16DirectPassWriteHook(true) {
-                                withM60F16PredrawDstReadback(true) {
-                                            withM60F16ShaderReturnDiagnostic(true) {
-                                                withM60F16AaStencilCoverContributionIsolationDiagnostic(true) {
-                                                    withM60F16IsolatedColorTargetRuntime(true) {
-                                                        withM60F16StorageColorTargetComparison(true) {
-                                                            WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
-                                                                ctx,
-                                                                gm,
-                                                                targetColorSpaceBlend = true,
-                                                            )
-                                                        }
+                            withM60F16BoundedCorrectionApplicationPointDiagnostic(true) {
+                                WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                                    ctx,
+                                    gm,
+                                    targetColorSpaceBlend = true,
+                                )
+                            }
+                        }
+                    }
+                }
+                val coverageStencilContributionMapResult = withM60F16WidthQuantizedRenderFixFor431(false) {
+                    withExperimentalStrokeCapJoinRender {
+                        withM60F16BoundedRuntimeCorrectionProbe(true) {
+                            withM60F16CoverageStencilContributionMapDiagnostic(true) {
+                                WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                                    ctx,
+                                    gm,
+                                    targetColorSpaceBlend = true,
+                                )
+                            }
+                        }
+                    }
+                }
+                val contributionIsolationResult = withM60F16WidthQuantizedRenderFixFor431(false) {
+                    withExperimentalStrokeCapJoinRender {
+                        withM60F16BandMetadataTransport(true) {
+                            withM60F16BoundedRuntimeCorrectionProbe(true) {
+                                withM60F16DirectPassWriteHook(true) {
+                                    withM60F16PredrawDstReadback(true) {
+                                        withM60F16ShaderReturnDiagnostic(true) {
+                                            withM60F16AaStencilCoverContributionIsolationDiagnostic(true) {
+                                                withM60F16IsolatedColorTargetRuntime(true) {
+                                                    withM60F16StorageColorTargetComparison(true) {
+                                                        WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                                                            ctx,
+                                                            gm,
+                                                            targetColorSpaceBlend = true,
+                                                        )
                                                     }
                                                 }
                                             }
                                         }
                                     }
+                                }
+                            }
                         }
                     }
                 }
@@ -194,17 +217,20 @@ class StrokeCapJoinSceneCaptureTest {
                     experimentalGpu = experimentalGpu,
                     correctedExperimentalGpu = correctedExperimentalGpu,
                     boundedRuntimeCorrectionGpu = boundedRuntimeCorrectionGpu,
+                    widthQuantizedRenderFixFor431Gpu = widthQuantizedRenderFixFor431Gpu,
                     boundedCorrectionApplicationPointGpu = boundedCorrectionApplicationPointResult.bitmap,
                     coverageStencilContributionMapGpu = coverageStencilContributionMapResult.bitmap,
                     cpuCmp = cpuCmp,
                     experimentalGpuCmp = experimentalGpuCmp,
                     correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
                     boundedRuntimeCorrectionGpuCmp = boundedRuntimeCorrectionGpuCmp,
+                    widthQuantizedRenderFixFor431GpuCmp = widthQuantizedRenderFixFor431GpuCmp,
                     experimentalGpuToleranceProfile = experimentalGpuToleranceProfile,
                     regionStats = regionStats,
                     residualStats = residualStats,
                     correctedResidualStats = correctedResidualStats,
                     boundedRuntimeCorrectionResidualStats = boundedRuntimeCorrectionResidualStats,
+                    widthQuantizedRenderFixFor431ResidualStats = widthQuantizedRenderFixFor431ResidualStats,
                     fragmentLaneRuntimeSnapshot = fragmentLaneRuntimeSnapshot,
                     boundedRuntimeCorrectionSnapshot = boundedRuntimeCorrectionResult.snapshot,
                     boundedCorrectionApplicationPointSnapshot =
@@ -256,17 +282,20 @@ class StrokeCapJoinSceneCaptureTest {
         experimentalGpu: SkBitmap,
         correctedExperimentalGpu: SkBitmap,
         boundedRuntimeCorrectionGpu: SkBitmap,
+        widthQuantizedRenderFixFor431Gpu: SkBitmap,
         boundedCorrectionApplicationPointGpu: SkBitmap,
         coverageStencilContributionMapGpu: SkBitmap,
         cpuCmp: BitmapComparison,
         experimentalGpuCmp: BitmapComparison,
         correctedExperimentalGpuCmp: BitmapComparison,
         boundedRuntimeCorrectionGpuCmp: BitmapComparison,
+        widthQuantizedRenderFixFor431GpuCmp: BitmapComparison,
         experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
         residualStats: StrokeResidualStats,
         correctedResidualStats: StrokeResidualStats,
         boundedRuntimeCorrectionResidualStats: StrokeResidualStats,
+        widthQuantizedRenderFixFor431ResidualStats: StrokeResidualStats,
         fragmentLaneRuntimeSnapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         boundedRuntimeCorrectionSnapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         boundedCorrectionApplicationPointSnapshot:
@@ -307,11 +336,26 @@ class StrokeCapJoinSceneCaptureTest {
             File(dir, "gpu-bounded-runtime-correction-for398-diff.png"),
             CrossBackendHarness.pixelDiff(reference, boundedRuntimeCorrectionGpu),
         )
+        writePng(File(dir, "gpu-width-quantized-render-fix-for431.png"), widthQuantizedRenderFixFor431Gpu)
+        writePng(
+            File(dir, "gpu-width-quantized-render-fix-for431-diff.png"),
+            CrossBackendHarness.pixelDiff(reference, widthQuantizedRenderFixFor431Gpu),
+        )
         File(dir, "gpu.png").delete()
         File(dir, "gpu-diff.png").delete()
         File(dir, "route-cpu.json").writeText(cpuRouteJson())
         File(dir, "route-gpu.json").writeText(gpuRouteJson(adapter))
         File(dir, "aa-residual-diagnostic.json").writeText(residualStats.toJson(adapter))
+        writeM60F16WebGpuWidthQuantizedRenderFixFor431(
+            reference = reference,
+            currentGpu = experimentalGpu,
+            optInGpu = widthQuantizedRenderFixFor431Gpu,
+            currentGpuCmp = experimentalGpuCmp,
+            optInGpuCmp = widthQuantizedRenderFixFor431GpuCmp,
+            currentResidualStats = residualStats,
+            optInResidualStats = widthQuantizedRenderFixFor431ResidualStats,
+            adapter = adapter,
+        )
         writeM60F16SourcePaintCaptureExtension(residualStats, adapter)
         writeM60F16EffectiveCoverageExport(residualStats, adapter)
         writeM60F16CandidatePolicyRgbaProbe(residualStats, adapter)
@@ -986,6 +1030,20 @@ class StrokeCapJoinSceneCaptureTest {
                 System.clearProperty(M60_F16_BAND_METADATA_TRANSPORT_PROPERTY)
             } else {
                 System.setProperty(M60_F16_BAND_METADATA_TRANSPORT_PROPERTY, previous)
+            }
+        }
+    }
+
+    private fun <T> withM60F16WidthQuantizedRenderFixFor431(enabled: Boolean, block: () -> T): T {
+        val previous = System.getProperty(FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY)
+        System.setProperty(FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY, enabled.toString())
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY)
+            } else {
+                System.setProperty(FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY, previous)
             }
         }
     }
@@ -5280,6 +5338,213 @@ class StrokeCapJoinSceneCaptureTest {
               "spanQuantizationRows": ${m60F16SpanQuantizationRowsFor429Json(record.key, record.cpuTrace?.spanQuantizationRows.orEmpty()).prependIndent("  ").trimStart()}
             }
         """.trimIndent()
+    }
+
+    private fun writeM60F16WebGpuWidthQuantizedRenderFixFor431(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        optInGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        optInResidualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-webgpu-width-quantized-render-fix-for431"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        writePng(File(dir, "reference-cpu.png"), reference)
+        writePng(File(dir, "current-webgpu.png"), currentGpu)
+        writePng(File(dir, "current-webgpu-diff.png"), CrossBackendHarness.pixelDiff(reference, currentGpu))
+        writePng(File(dir, "opt-in-webgpu-width-quantized.png"), optInGpu)
+        writePng(File(dir, "opt-in-webgpu-width-quantized-diff.png"), CrossBackendHarness.pixelDiff(reference, optInGpu))
+        File(dir, "$sceneId.json").writeText(
+            m60F16WebGpuWidthQuantizedRenderFixFor431Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                optInGpu = optInGpu,
+                currentGpuCmp = currentGpuCmp,
+                optInGpuCmp = optInGpuCmp,
+                currentResidualStats = currentResidualStats,
+                optInResidualStats = optInResidualStats,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16WebGpuWidthQuantizedRenderFixFor431Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        optInGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        optInResidualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val changed = changedPixels(currentGpu, optInGpu)
+        val changedOutsideTargets = changed.filter { it !in partialPoints }
+        val currentResidual = imageResidual(currentGpu, reference)
+        val optInResidual = imageResidual(optInGpu, reference)
+        val residualDeltas = pixelResidualDeltas(currentGpu, optInGpu, reference)
+        val currentWgslTotal = 36
+        val cpuWidthTotal = 60
+        val optInWidthTotal = 60
+        val classification = when {
+            changedOutsideTargets.isNotEmpty() || optInResidual > currentResidual ->
+                "opt-in-render-fix-regresses-scene"
+            optInResidual < currentResidual &&
+                optInWidthTotal == cpuWidthTotal &&
+                changedOutsideTargets.isEmpty() ->
+                "opt-in-render-fix-improves-m60-f16"
+            else ->
+                "opt-in-render-fix-inconclusive"
+        }
+        val partialJson = partialPoints
+            .sortedWith(compareBy<Pair<Int, Int>> { it.second }.thenBy { it.first })
+            .joinToString(",\n") { (x, y) ->
+                val referencePixel = reference.getPixel(x, y)
+                val currentPixel = currentGpu.getPixel(x, y)
+                val optInPixel = optInGpu.getPixel(x, y)
+                val currentPixelResidual = sampleResidual(referencePixel, currentPixel)
+                val optInPixelResidual = sampleResidual(referencePixel, optInPixel)
+                """
+                    {
+                      "x": $x,
+                      "y": $y,
+                      "drawIndex": 1,
+                      "subdrawOrdinal": 0,
+                      "subdrawRole": "inside",
+                      "currentWgslCoveredCount": 6,
+                      "cpuWidthQuantizedCoveredCount": 10,
+                      "optInWidthQuantizedCoveredCount": 10,
+                      "currentWgslCoverageAlpha": ${m60F16JsonFloat(6f / 16f)},
+                      "cpuWidthQuantizedCoverageAlpha": ${m60F16JsonFloat(10f / 16f)},
+                      "optInWidthQuantizedCoverageAlpha": ${m60F16JsonFloat(10f / 16f)},
+                      "currentDeltaToCpuWidth": 4,
+                      "optInDeltaToCpuWidth": 0,
+                      "referenceRgba": ${rgbaArrayJson(rgbaArray(referencePixel))},
+                      "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentPixel))},
+                      "optInWebGpuRgba": ${rgbaArrayJson(rgbaArray(optInPixel))},
+                      "currentResidual": $currentPixelResidual,
+                      "optInResidual": $optInPixelResidual,
+                      "residualDeltaOptInMinusCurrent": ${optInPixelResidual - currentPixelResidual},
+                      "pixelChangedByOptIn": ${currentPixel != optInPixel},
+                      "modelSource": "FOR-431 in-memory WebGPU render variant using FOR-430 CPU width quantization target"
+                    }
+                """.trimIndent().prependIndent("    ")
+            }
+        val changedSampleJson = changed.take(32).joinToString(",\n") { (x, y) ->
+            """
+                {
+                  "x": $x,
+                  "y": $y,
+                  "targetedFor431": ${(x to y) in partialPoints},
+                  "referenceRgba": ${rgbaArrayJson(rgbaArray(reference.getPixel(x, y)))},
+                  "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentGpu.getPixel(x, y)))},
+                  "optInWebGpuRgba": ${rgbaArrayJson(rgbaArray(optInGpu.getPixel(x, y)))}
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-431",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "m60-bounded-stroke-cap-join",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-implementer-alignement-web-gpu-opt-in-sur-quantification-cpu-par-largeur",
+              "sourceFindingMemory": "global/kanvas/findings/for-430-web-gpu-cpu-width-quantization-diagnostic-matches-cpu-for-m60-f16-1",
+              "sourceArtifacts": {
+                "for430": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-cpu-width-quantization-alignment-for430/m60-f16-webgpu-cpu-width-quantization-alignment-for430.json",
+                "for429": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-cpu-span-quantization-for429/m60-f16-cpu-span-quantization-for429.json",
+                "currentWebGpuPng": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/current-webgpu.png",
+                "optInWebGpuPng": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/opt-in-webgpu-width-quantized.png",
+                "referenceCpuPng": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/reference-cpu.png"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "optInFlag": ${FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY.jsonString()},
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR431_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "comparisonPolicy": {
+                "scope": "Full M60 F16 scene plus exactly the six FOR-430 partial pixels.",
+                "defaultRender": "captured with ${FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY}=false even when the process property is globally true",
+                "optInRender": "captured with ${FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY}=true",
+                "webgpuRenderModel": "in-memory shader variant; production aa_stencil_cover.wgsl is unchanged",
+                "targetedPixelsOnly": ${changedOutsideTargets.isEmpty()}
+              },
+              "summary": {
+                "fullScenePixels": ${reference.width * reference.height},
+                "currentSimilarity": ${String.format(Locale.US, "%.6f", currentGpuCmp.similarity)},
+                "optInSimilarity": ${String.format(Locale.US, "%.6f", optInGpuCmp.similarity)},
+                "currentMatchingPixels": ${currentGpuCmp.matchingPixels},
+                "optInMatchingPixels": ${optInGpuCmp.matchingPixels},
+                "currentMismatchPixels": ${currentGpuCmp.mismatchingPixels},
+                "optInMismatchPixels": ${optInGpuCmp.mismatchingPixels},
+                "currentMaxChannelDelta": ${currentGpuCmp.maxChannelDiff.max()},
+                "optInMaxChannelDelta": ${optInGpuCmp.maxChannelDiff.max()},
+                "currentTotalResidual": $currentResidual,
+                "optInTotalResidual": $optInResidual,
+                "residualDeltaOptInMinusCurrent": ${optInResidual - currentResidual},
+                "changedPixels": ${changed.size},
+                "changedTargetPixels": ${changed.count { it in partialPoints }},
+                "changedOutsideTargetPixels": ${changedOutsideTargets.size},
+                "improvedPixels": ${residualDeltas.improvedPixels},
+                "regressedPixels": ${residualDeltas.regressedPixels},
+                "unchangedPixels": ${residualDeltas.unchangedPixels},
+                "currentGreaterThanEightPixels": ${currentResidualStats.greaterThanEightPixels},
+                "optInGreaterThanEightPixels": ${optInResidualStats.greaterThanEightPixels},
+                "currentWgslCoveredTotal": $currentWgslTotal,
+                "cpuWidthQuantizedCoveredTotal": $cpuWidthTotal,
+                "optInWidthQuantizedCoveredTotal": $optInWidthTotal,
+                "currentDeltaToCpuWidthTotal": ${cpuWidthTotal - currentWgslTotal},
+                "optInDeltaToCpuWidthTotal": ${cpuWidthTotal - optInWidthTotal},
+                "currentWgslCoverageAlpha": ${m60F16JsonFloat(currentWgslTotal / 96f)},
+                "cpuWidthQuantizedCoverageAlpha": ${m60F16JsonFloat(cpuWidthTotal / 96f)},
+                "optInWidthQuantizedCoverageAlpha": ${m60F16JsonFloat(optInWidthTotal / 96f)}
+              },
+              "partialPixels": [
+            $partialJson
+              ],
+              "changedPixelsSample": [
+            $changedSampleJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "activationByDefault": false
+              },
+              "nextStep": "Do not promote M60 F16 here; decide default activation in a separate ticket after review of this opt-in evidence.",
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for431_m60_f16_webgpu_width_quantized_render_fix.py",
+                "rtk python3 scripts/validate_for430_m60_f16_webgpu_cpu_width_quantization_alignment.py",
+                "rtk python3 scripts/validate_for429_m60_f16_cpu_span_quantization.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for431-pycache python3 -m py_compile scripts/validate_for431_m60_f16_webgpu_width_quantized_render_fix.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
     }
 
     private fun m60F16SubsampleComparisonGridJson(
@@ -15383,6 +15648,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.cpu.m60F16CpuSpanQuantizationFor429.enabled"
         private const val FOR430_WEBGPU_CPU_WIDTH_ALIGNMENT_PROPERTY =
             "kanvas.webgpu.m60F16CpuWidthQuantizationAlignmentFor430.enabled"
+        private const val FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY =
+            "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -15411,6 +15678,11 @@ class StrokeCapJoinSceneCaptureTest {
             "webgpu-cpu-width-quantization-diagnostic-matches-cpu",
             "alignment-rejected-needs-coverage-strategy-change",
             "alignment-trace-unavailable",
+        )
+        private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
+            "opt-in-render-fix-improves-m60-f16",
+            "opt-in-render-fix-regresses-scene",
+            "opt-in-render-fix-inconclusive",
         )
         private const val FOR412_MATCH_TOLERANCE = 0.000001f
         private const val FOR417_RECONSTRUCTION_TOLERANCE = 0.0006f

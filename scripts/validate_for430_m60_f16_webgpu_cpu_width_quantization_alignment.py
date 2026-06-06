@@ -45,6 +45,12 @@ ALLOWED_LOCAL_DIFFS = {
     "reports/wgsl-pipeline/2026-06-06-for-430-m60-f16-webgpu-cpu-width-quantization-alignment.md",
     "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-cpu-width-quantization-alignment-for430",
     "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-cpu-width-quantization-alignment-for430/m60-f16-webgpu-cpu-width-quantization-alignment-for430.json",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+    "scripts/validate_for431_m60_f16_webgpu_width_quantized_render_fix.py",
+    "reports/wgsl-pipeline/2026-06-06-for-431-m60-f16-webgpu-width-quantized-render-fix.md",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-width-quantized-render-fix-for431.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-width-quantized-render-fix-for431-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-width-quantized-render-fix-for431",
 }
 
 
