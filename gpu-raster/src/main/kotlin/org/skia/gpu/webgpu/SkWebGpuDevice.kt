@@ -228,6 +228,8 @@ private const val WEBGPU_M60_F16_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROBE_FOR444_
     "kanvas.webgpu.m60F16RuntimeMaskPackingVsLowLevelProbeFor444.enabled"
 private const val WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG: String =
     "kanvas.webgpu.m60F16RuntimeIntegerLaneMaskProbeFor445.enabled"
+private const val WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG: String =
+    "kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_RENDER_FIX_FOR431_FLAG: String =
     "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_FOR432_FLAG: String =
@@ -769,6 +771,8 @@ public class SkWebGpuDevice(
         val finalCoverage: Float? = null,
         val coveredSubsamples4x4: Int? = null,
         val wgslSubsampleMask4x4: Int? = null,
+        val wgslSubsampleMask4x4RawFloat: Float? = null,
+        val diagnosticStorageVec4s: List<FloatArray>? = null,
         val captureSynthetic: Boolean,
         val classification: String,
         val reason: String,
@@ -1041,6 +1045,10 @@ public class SkWebGpuDevice(
             System.getProperty(
                 WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG,
                 "false",
+            ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG,
+                "false",
             ).toBoolean()
     private val m60F16AaStencilCoverIsolatedColorTargetDiagnosticsEnabled: Boolean =
         System.getProperty(
@@ -1089,6 +1097,10 @@ public class SkWebGpuDevice(
             System.getProperty(
                 WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG,
                 "false",
+            ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG,
+                "false",
             ).toBoolean()
     private val m60F16LowLevelExactMaskProbeFor443DiagnosticsEnabled: Boolean =
         System.getProperty(
@@ -1102,10 +1114,18 @@ public class SkWebGpuDevice(
             System.getProperty(
                 WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG,
                 "false",
+            ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG,
+                "false",
             ).toBoolean()
     private val m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG,
+            "false",
+        ).toBoolean() ||
+        System.getProperty(
+            WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG,
             "false",
         ).toBoolean()
     private val m60F16HostDrawPaintBindingFor436DiagnosticsEnabled: Boolean =
@@ -2004,8 +2024,22 @@ public class SkWebGpuDevice(
                     val quantized = FloatArray(4) { channel ->
                         buffer.getFloat(base + 80 + channel * 4)
                     }
-                    val wgslSubsampleMask4x4 = if (subsampleMaskFor427Format) {
-                        kotlin.math.round(buffer.getFloat(base + 96)).toInt()
+                    val diagnosticStorageVec4s = if (subsampleMaskFor427Format) {
+                        List(M60_F16_SUBSAMPLE_MASK_FOR427_VEC4S_PER_SAMPLE) { vec4 ->
+                            FloatArray(4) { channel ->
+                                buffer.getFloat(base + vec4 * 16 + channel * 4)
+                            }
+                        }
+                    } else {
+                        null
+                    }
+                    val wgslSubsampleMask4x4RawFloat = if (subsampleMaskFor427Format) {
+                        buffer.getFloat(base + 96)
+                    } else {
+                        null
+                    }
+                    val wgslSubsampleMask4x4 = if (wgslSubsampleMask4x4RawFloat != null) {
+                        kotlin.math.round(wgslSubsampleMask4x4RawFloat).toInt()
                     } else {
                         null
                     }
@@ -2057,6 +2091,12 @@ public class SkWebGpuDevice(
                                 null
                             },
                             wgslSubsampleMask4x4 = if (observed) wgslSubsampleMask4x4 else null,
+                            wgslSubsampleMask4x4RawFloat = if (observed) {
+                                wgslSubsampleMask4x4RawFloat
+                            } else {
+                                null
+                            },
+                            diagnosticStorageVec4s = if (observed) diagnosticStorageVec4s else null,
                             captureSynthetic = false,
                             classification = if (observed) {
                                 "shader-return-captured"
@@ -2796,9 +2836,25 @@ public class SkWebGpuDevice(
                     val quantized = FloatArray(4) { channel ->
                         shaderBuffer.getFloat(base + 80 + channel * 4)
                     }
-                    val wgslSubsampleMask4x4 =
+                    val diagnosticStorageVec4s =
                         if (shaderSampleStride == M60_F16_SUBSAMPLE_MASK_FOR427_SAMPLE_STRIDE_BYTES) {
-                            kotlin.math.round(shaderBuffer.getFloat(base + 96)).toInt()
+                            List(M60_F16_SUBSAMPLE_MASK_FOR427_VEC4S_PER_SAMPLE) { vec4 ->
+                                FloatArray(4) { channel ->
+                                    shaderBuffer.getFloat(base + vec4 * 16 + channel * 4)
+                                }
+                            }
+                        } else {
+                            null
+                        }
+                    val wgslSubsampleMask4x4RawFloat =
+                        if (shaderSampleStride == M60_F16_SUBSAMPLE_MASK_FOR427_SAMPLE_STRIDE_BYTES) {
+                            shaderBuffer.getFloat(base + 96)
+                        } else {
+                            null
+                        }
+                    val wgslSubsampleMask4x4 =
+                        if (wgslSubsampleMask4x4RawFloat != null) {
+                            kotlin.math.round(wgslSubsampleMask4x4RawFloat).toInt()
                         } else {
                             null
                         }
@@ -2848,6 +2904,12 @@ public class SkWebGpuDevice(
                                 null
                             },
                             wgslSubsampleMask4x4 = if (observed) wgslSubsampleMask4x4 else null,
+                            wgslSubsampleMask4x4RawFloat = if (observed) {
+                                wgslSubsampleMask4x4RawFloat
+                            } else {
+                                null
+                            },
+                            diagnosticStorageVec4s = if (observed) diagnosticStorageVec4s else null,
                             captureSynthetic = false,
                             classification = if (observed) {
                                 "storage-color-target-comparison-storage-captured"

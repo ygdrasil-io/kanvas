@@ -226,6 +226,10 @@ class StrokeCapJoinSceneCaptureTest {
                                                                     System.getProperty(
                                                                         FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY,
                                                                         "false",
+                                                                    ).toBoolean() ||
+                                                                    System.getProperty(
+                                                                        FOR446_FOR442_FLOAT_MASK_FIELD_AUDIT_PROPERTY,
+                                                                        "false",
                                                                     ).toBoolean(),
                                                         ) {
                                                             withM60F16StorageColorTargetComparison(true) {
@@ -259,7 +263,8 @@ class StrokeCapJoinSceneCaptureTest {
                         System.getProperty(FOR442_RUNTIME_EXACT_MASK_PROBE_PROPERTY, "false").toBoolean() ||
                         System.getProperty(FOR443_LOW_LEVEL_EXACT_MASK_PROBE_PROPERTY, "false").toBoolean() ||
                         System.getProperty(FOR444_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROPERTY, "false").toBoolean() ||
-                        System.getProperty(FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY, "false").toBoolean()
+                        System.getProperty(FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY, "false").toBoolean() ||
+                        System.getProperty(FOR446_FOR442_FLOAT_MASK_FIELD_AUDIT_PROPERTY, "false").toBoolean()
                 val widthQuantizedColorReconstructionFor432Result =
                     if (widthQuantizedColorReconstructionRequested) {
                         withExperimentalStrokeCapJoinRender {
@@ -300,6 +305,10 @@ class StrokeCapJoinSceneCaptureTest {
                                                             ).toBoolean() ||
                                                             System.getProperty(
                                                                 FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY,
+                                                                "false",
+                                                            ).toBoolean() ||
+                                                            System.getProperty(
+                                                                FOR446_FOR442_FLOAT_MASK_FIELD_AUDIT_PROPERTY,
                                                                 "false",
                                                             ).toBoolean(),
                                                     ) {
@@ -342,6 +351,10 @@ class StrokeCapJoinSceneCaptureTest {
                                                                 ).toBoolean() ||
                                                                 System.getProperty(
                                                                     FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY,
+                                                                    "false",
+                                                                ).toBoolean() ||
+                                                                System.getProperty(
+                                                                    FOR446_FOR442_FLOAT_MASK_FIELD_AUDIT_PROPERTY,
                                                                     "false",
                                                                 ).toBoolean(),
                                                         ) {
@@ -657,6 +670,19 @@ class StrokeCapJoinSceneCaptureTest {
             }
             if (System.getProperty(FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY, "false").toBoolean()) {
                 writeM60F16RuntimeIntegerLaneMaskProbeFor445(
+                    reference = reference,
+                    currentGpu = experimentalGpu,
+                    optInGpu = widthQuantizedRenderFixFor431Gpu,
+                    runtimeIntegerSnapshot = result.runtimeIntegerLaneMaskProbeFor445Snapshot,
+                    lowLevelSnapshot = result.lowLevelExactMaskProbeFor443Snapshot,
+                    shaderReturnSnapshot = result.aaStencilCoverShaderReturnDiagnosticSnapshot,
+                    predrawSnapshot = result.aaStencilCoverPredrawDstReadbackSnapshot,
+                    hostSnapshot = result.hostDrawPaintBindingFor436Snapshot,
+                    adapter = adapter,
+                )
+            }
+            if (System.getProperty(FOR446_FOR442_FLOAT_MASK_FIELD_AUDIT_PROPERTY, "false").toBoolean()) {
+                writeM60F16For442FloatMaskFieldAuditFor446(
                     reference = reference,
                     currentGpu = experimentalGpu,
                     optInGpu = widthQuantizedRenderFixFor431Gpu,
@@ -11519,6 +11545,530 @@ class StrokeCapJoinSceneCaptureTest {
                 "Keep rendering unchanged and add the smallest next probe that exposes the missing comparison field."
         }
 
+    private fun writeM60F16For442FloatMaskFieldAuditFor446(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        runtimeIntegerSnapshot: SkWebGpuDevice.M60F16RuntimeIntegerLaneMaskProbeFor445Snapshot,
+        lowLevelSnapshot: SkWebGpuDevice.M60F16LowLevelExactMaskProbeFor443Snapshot,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        hostSnapshot: SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-for442-float-mask-field-audit-for446"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16For442FloatMaskFieldAuditFor446Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                optInGpu = optInGpu,
+                runtimeIntegerSnapshot = runtimeIntegerSnapshot,
+                lowLevelSnapshot = lowLevelSnapshot,
+                shaderReturnSnapshot = shaderReturnSnapshot,
+                predrawSnapshot = predrawSnapshot,
+                hostSnapshot = hostSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16For442FloatMaskFieldAuditFor446Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        runtimeIntegerSnapshot: SkWebGpuDevice.M60F16RuntimeIntegerLaneMaskProbeFor445Snapshot,
+        lowLevelSnapshot: SkWebGpuDevice.M60F16LowLevelExactMaskProbeFor443Snapshot,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        hostSnapshot: SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        adapter: String,
+    ): String {
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toList()
+        val cpuGreenCoverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinGreenCoverageFor438GM())
+        val shaderByPoint = shaderReturnSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val predrawByPoint = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val runtimeIntegerEvent = runtimeIntegerSnapshot.events.firstOrNull { event ->
+            event.drawIndex == 3 && event.copySucceeded
+        }
+        val runtimeIntegerByPoint = runtimeIntegerEvent
+            ?.samples
+            .orEmpty()
+            .associateBy { it.x to it.y }
+        val lowLevelEvent = lowLevelSnapshot.events.firstOrNull { event ->
+            event.drawIndex == 3 && event.copySucceeded
+        }
+        val lowLevelByPoint = lowLevelEvent
+            ?.samples
+            .orEmpty()
+            .associateBy { it.x to it.y }
+        val hostBinding = hostSnapshot.events.firstOrNull { it.drawIndex == 3 }
+        val records = partialPoints
+            .map { (x, y) -> M60F16DrawPixelKey(3, x, y) }
+            .mapIndexed { index, key ->
+                val point = key.x to key.y
+                val selected = shaderByPoint[point].orEmpty()
+                    .filter { (event, sample) ->
+                        event.drawIndex == 3 &&
+                            sample.shaderObserved &&
+                            !sample.captureSynthetic &&
+                            sample.subdrawOrdinal == 0 &&
+                            sample.subdrawRole == "inside"
+                    }
+                    .firstOrNull()
+                val sample = selected?.second
+                val runtimeInteger = runtimeIntegerByPoint[point]
+                val lowLevel = lowLevelByPoint[point]
+                val predraw = predrawByPoint[point].orEmpty()
+                    .firstOrNull { (event, sample) ->
+                        event.drawIndex == 3 &&
+                            sample.targetWithinScissor &&
+                            sample.readbackAvailable &&
+                            sample.dstBeforeRgbaFloat != null
+                    }
+                val cpuGreenCoverageByte = (cpuGreenCoverageMask.getPixel(key.x, key.y) ushr 24) and 0xFF
+                val cpuGreenMask4x4 = if (cpuGreenCoverageByte == 0) 0 else null
+                val runtimeFloatMask = sample?.wgslSubsampleMask4x4
+                val runtimeFloatRaw = sample?.wgslSubsampleMask4x4RawFloat
+                val runtimeIntegerMask = runtimeInteger?.subsampleMask4x4
+                val lowLevelMask = lowLevel?.subsampleMask4x4
+                val missingFields = buildList {
+                    if (selected == null) add("runtimeFloatFor442InsideSample")
+                    if (runtimeFloatMask == null) add("runtimeFloatFor442Mask")
+                    if (runtimeFloatRaw == null) add("runtimeFloatFor442MaskRawF32")
+                    if (runtimeInteger == null || !runtimeInteger.valid) add("runtimeIntegerFor445ValidTuple")
+                    if (lowLevel == null || !lowLevel.valid) add("lowLevelFor443ValidTuple")
+                    if (hostBinding == null) add("hostDrawIndex3PaintBinding")
+                    if (predraw == null) add("webGpuDrawIndex3PredrawDstReadback")
+                }
+                val roundedRaw = runtimeFloatRaw?.let { kotlin.math.round(it).toInt() }
+                val classification = when {
+                    runtimeFloatRaw != null && runtimeFloatMask != null && roundedRaw != runtimeFloatMask ->
+                        "for442-float-mask-field-conversion-artifact"
+                    sample != null && (sample.x != key.x || sample.y != key.y || sample.subdrawRole != "inside") ->
+                        "for442-float-mask-field-sample-selection-mismatch"
+                    runtimeFloatMask != null &&
+                        runtimeFloatMask != 0 &&
+                        sample?.coveredSubsamples4x4 == 0 &&
+                        runtimeIntegerMask == 0 &&
+                        runtimeInteger?.coveredSubsamples4x4 == 0 &&
+                        lowLevelMask == 0 ->
+                        "for442-float-mask-field-retired-as-unreliable"
+                    runtimeFloatMask != null &&
+                        runtimeIntegerMask != null &&
+                        lowLevelMask != null &&
+                        runtimeFloatMask != runtimeIntegerMask &&
+                        runtimeFloatMask != lowLevelMask ->
+                        "for442-float-mask-field-offset-mismatch"
+                    else -> "for442-float-mask-field-audit-inconclusive"
+                }
+                M60F16For442FloatMaskFieldAuditFor446Record(
+                    key = key,
+                    runtimeInteger = runtimeInteger,
+                    lowLevel = lowLevel,
+                    selectedSource = selected,
+                    predraw = predraw,
+                    hostDrawIndex = hostBinding?.drawIndex,
+                    referenceRgba = rgbaArray(reference.getPixel(key.x, key.y)),
+                    currentGpuRgba = rgbaArray(currentGpu.getPixel(key.x, key.y)),
+                    optInGpuRgba = rgbaArray(optInGpu.getPixel(key.x, key.y)),
+                    cpuGreenCoverageByte = cpuGreenCoverageByte,
+                    cpuGreenMask4x4 = cpuGreenMask4x4,
+                    runtimeFloatSubsampleMask4x4 = runtimeFloatMask,
+                    runtimeFloatSubsampleMask4x4RawFloat = runtimeFloatRaw,
+                    runtimeFloatDiagnosticStorageVec4s = sample?.diagnosticStorageVec4s,
+                    runtimeIntegerSubsampleMask4x4 = runtimeIntegerMask,
+                    runtimeIntegerCoveredSubsamples4x4 = runtimeInteger?.coveredSubsamples4x4,
+                    lowLevelSubsampleMask4x4 = lowLevelMask,
+                    lowLevelCoveredSubsamples4x4 = lowLevel?.coveredSubsamples4x4,
+                    runtimeFloatStorageSampleIndex = selected?.let {
+                        partialPoints.indexOf(point) * 2 + sample!!.subdrawOrdinal
+                    },
+                    runtimeIntegerStorageSampleIndex = index,
+                    lowLevelStorageSampleIndex = index,
+                    missingFields = missingFields,
+                    classification = classification,
+                )
+            }
+        val classification = when {
+            records.any { it.classification == "for442-float-mask-field-conversion-artifact" } ->
+                "for442-float-mask-field-conversion-artifact"
+            records.any { it.classification == "for442-float-mask-field-sample-selection-mismatch" } ->
+                "for442-float-mask-field-sample-selection-mismatch"
+            records.any { it.classification == "for442-float-mask-field-retired-as-unreliable" } ->
+                "for442-float-mask-field-retired-as-unreliable"
+            records.any { it.classification == "for442-float-mask-field-offset-mismatch" } ->
+                "for442-float-mask-field-offset-mismatch"
+            else -> "for442-float-mask-field-audit-inconclusive"
+        }
+        val pixelsJson = records.joinToString(",\n") { record ->
+            m60F16For442FloatMaskFieldAuditFor446RecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-446",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-auditer-le-champ-float-for-442-refute-par-for-445",
+              "sourceFindingMemory": "global/kanvas/findings/for-445-runtime-integer-lane-mask-refutes-for-442-float-masks",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR446_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "diagnosticFlag": ${FOR446_FOR442_FLOAT_MASK_FIELD_AUDIT_PROPERTY.jsonString()},
+              "for442RuntimeFlag": ${FOR442_RUNTIME_EXACT_MASK_PROBE_PROPERTY.jsonString()},
+              "for443LowLevelFlag": ${FOR443_LOW_LEVEL_EXACT_MASK_PROBE_PROPERTY.jsonString()},
+              "for445RuntimeIntegerFlag": ${FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY.jsonString()},
+              "for445SourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-runtime-integer-lane-mask-probe-for445/m60-f16-runtime-integer-lane-mask-probe-for445.json",
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixApplied": false,
+              "for446ProbeOptInOnly": true,
+              "for446ProbeDefaultActive": false,
+              "storageLayouts": {
+                "runtimeFor442": {
+                  "storageDeclaration": "array<vec4f, 224>",
+                  "numericTypeRead": "f32 raw plus f32 rounded to Int",
+                  "sampleStrideBytes": 112,
+                  "coordinateVec4OffsetBytes": 0,
+                  "filteredVec4OffsetBytes": 16,
+                  "targetColorspaceVec4OffsetBytes": 32,
+                  "beforeQuantizationVec4OffsetBytes": 48,
+                  "coverageScalarVec4OffsetBytes": 64,
+                  "quantizedVec4OffsetBytes": 80,
+                  "subsampleMaskFieldOffsetBytes": 96
+                },
+                "runtimeIntegerFor445": {
+                  "storageDeclaration": "array<vec4u, 18>",
+                  "numericTypeRead": "u32 masked with 0xFFFF",
+                  "sampleStrideBytes": 48,
+                  "subsampleMaskFieldOffsetBytes": 8,
+                  "coveredCountOffsetBytes": 12
+                },
+                "lowLevelFor443": {
+                  "storageDeclaration": "array<vec4u, 12>",
+                  "numericTypeRead": "u32 masked with 0xFFFF",
+                  "sampleStrideBytes": 32,
+                  "subsampleMaskFieldOffsetBytes": 8
+                }
+              },
+              "comparisonPolicy": {
+                "scope": "Exactly the six M60 F16 CPU-excluded pixels named in FOR-446.",
+                "runtimeFloatBoundary": "FOR-442 fragment shader storage side-channel at base + 6, read as raw f32 and rounded Int.",
+                "runtimeIntegerBoundary": "FOR-445 fragment shader writes integer mask and covered count beside the same return path.",
+                "lowLevelBoundary": "FOR-443 compute shader reads the same AA uniform edge list without fragment storage packing.",
+                "noRenderingFixApplied": true,
+                "boundedToSixPixels": true
+              },
+              "summary": {
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "cpuGreenMaskZero4x4Count": ${records.count { it.cpuGreenMask4x4 == 0 }},
+                "runtimeFloatMaskAvailableCount": ${records.count { it.runtimeFloatSubsampleMask4x4 != null }},
+                "runtimeFloatRawF32AvailableCount": ${records.count { it.runtimeFloatSubsampleMask4x4RawFloat != null }},
+                "runtimeFloatMaskNonZeroCount": ${records.count { (it.runtimeFloatSubsampleMask4x4 ?: 0) != 0 }},
+                "runtimeFloatRawRoundMismatchCount": ${records.count { record ->
+                    val raw = record.runtimeFloatSubsampleMask4x4RawFloat
+                    val mask = record.runtimeFloatSubsampleMask4x4
+                    raw != null && mask != null && kotlin.math.round(raw).toInt() != mask
+                }},
+                "runtimeFloatMaskNonZeroButCoveredCountZeroCount": ${records.count { record ->
+                    (record.runtimeFloatSubsampleMask4x4 ?: 0) != 0 &&
+                        record.selectedSource?.second?.coveredSubsamples4x4 == 0
+                }},
+                "runtimeIntegerMaskAvailableCount": ${records.count { it.runtimeIntegerSubsampleMask4x4 != null }},
+                "runtimeIntegerMaskNonZeroCount": ${records.count { (it.runtimeIntegerSubsampleMask4x4 ?: 0) != 0 }},
+                "runtimeIntegerCoveredCountZeroCount": ${records.count { it.runtimeIntegerCoveredSubsamples4x4 == 0 }},
+                "lowLevelExactMaskAvailableCount": ${records.count { it.lowLevelSubsampleMask4x4 != null }},
+                "lowLevelExactMaskNonZeroCount": ${records.count { (it.lowLevelSubsampleMask4x4 ?: 0) != 0 }},
+                "floatIntegerMismatchCount": ${records.count { record ->
+                    val floatMask = record.runtimeFloatSubsampleMask4x4
+                    val integerMask = record.runtimeIntegerSubsampleMask4x4
+                    floatMask != null && integerMask != null && floatMask != integerMask
+                }},
+                "floatLowLevelMismatchCount": ${records.count { record ->
+                    val floatMask = record.runtimeFloatSubsampleMask4x4
+                    val lowLevelMask = record.lowLevelSubsampleMask4x4
+                    floatMask != null && lowLevelMask != null && floatMask != lowLevelMask
+                }},
+                "hostBoundDrawIndex": ${hostBinding?.drawIndex ?: "null"},
+                "runtimeIntegerEventDrawIndex": ${runtimeIntegerEvent?.drawIndex ?: "null"},
+                "runtimeIntegerCopySucceeded": ${runtimeIntegerEvent?.copySucceeded ?: false},
+                "lowLevelEventDrawIndex": ${lowLevelEvent?.drawIndex ?: "null"},
+                "lowLevelCopySucceeded": ${lowLevelEvent?.copySucceeded ?: false}
+              },
+              "partialPixels": [
+            $pixelsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "for431ActivatedByDefault": false,
+                "renderingFixApplied": false
+              },
+              "classificationReason": ${m60F16For442FloatMaskFieldAuditFor446GlobalReason(classification).jsonString()},
+              "nextStep": ${m60F16For442FloatMaskFieldAuditFor446NextStep(classification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for446_m60_f16_for442_float_mask_field_audit.py",
+                "rtk python3 scripts/validate_for445_m60_f16_runtime_integer_lane_mask_probe.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for446-pycache python3 -m py_compile scripts/validate_for446_m60_f16_for442_float_mask_field_audit.py scripts/validate_for445_m60_f16_runtime_integer_lane_mask_probe.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16For442FloatMaskFieldAuditFor446RecordJson(
+        record: M60F16For442FloatMaskFieldAuditFor446Record,
+    ): String {
+        val event = record.selectedSource?.first
+        val sample = record.selectedSource?.second
+        val runtimeFloatMask = record.runtimeFloatSubsampleMask4x4
+        val runtimeFloatRaw = record.runtimeFloatSubsampleMask4x4RawFloat
+        val integerMask = record.runtimeIntegerSubsampleMask4x4
+        val lowLevelMask = record.lowLevelSubsampleMask4x4
+        val cpuMask = record.cpuGreenMask4x4
+        val runtimeFloatBaseOffset = record.runtimeFloatStorageSampleIndex?.let { it * 112 }
+        val integerBaseOffset = record.runtimeIntegerStorageSampleIndex * 48
+        val lowLevelBaseOffset = record.lowLevelStorageSampleIndex * 32
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16For442FloatMaskFieldAuditFor446LocalReason(record).jsonString()},
+              "referenceCpuRgba": ${intArrayJson(record.referenceRgba)},
+              "currentWebGpuRgba": ${intArrayJson(record.currentGpuRgba)},
+              "optInFor431Rgba": ${intArrayJson(record.optInGpuRgba)},
+              "cpuGreenMask": {
+                "coverageAlphaByte": ${record.cpuGreenCoverageByte},
+                "subsampleMask4x4": ${cpuMask ?: "null"},
+                "subsampleMask4x4Hex": ${cpuMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "coveredSubsamples4x4": ${cpuMask?.countOneBits() ?: "null"},
+                "excludesPixel": ${record.cpuGreenCoverageByte == 0}
+              },
+              "runtimeFor442FloatFieldAudit": {
+                "available": ${runtimeFloatMask != null},
+                "valid": ${sample != null && runtimeFloatMask != null && sample.x == record.key.x && sample.y == record.key.y},
+                "storageSampleIndex": ${record.runtimeFloatStorageSampleIndex ?: "null"},
+                "sampleStrideBytes": 112,
+                "baseOffsetBytes": ${runtimeFloatBaseOffset ?: "null"},
+                "numericTypeRead": "f32 raw plus f32 rounded to Int",
+                "expectedCoordinate": [${record.key.x}, ${record.key.y}],
+                "writtenCoordinate": ${sample?.let { "[${it.x}, ${it.y}]" } ?: "null"},
+                "subdrawOrdinal": ${sample?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${sample?.subdrawRole?.jsonString() ?: "null"},
+                "candidateBranchReached": ${sample?.candidateBranchReached ?: "null"},
+                "shaderObserved": ${sample?.shaderObserved ?: "null"},
+                "targetWithinScissor": ${sample?.targetWithinScissor ?: "null"},
+                "edgeCount": ${event?.edgeCount ?: "null"},
+                "fillType": ${event?.fillType?.jsonString() ?: "null"},
+                "floatMaskRawF32": ${runtimeFloatRaw?.let { m60F16JsonFloat(it) } ?: "null"},
+                "floatMaskRoundedInt": ${runtimeFloatMask ?: "null"},
+                "floatMaskRoundedHex": ${runtimeFloatMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "rawRoundMatchesRoundedField": ${
+            runtimeFloatRaw?.let { raw ->
+                runtimeFloatMask?.let { kotlin.math.round(raw).toInt() == it }
+            } ?: "null"
+        },
+                "popcount": ${runtimeFloatMask?.countOneBits() ?: "null"},
+                "coveredSubsamples4x4FromNeighborVec4": ${sample?.coveredSubsamples4x4 ?: "null"},
+                "popcountMatchesCoveredNeighbor": ${
+            runtimeFloatMask?.let { mask ->
+                sample?.coveredSubsamples4x4?.let { mask.countOneBits() == it }
+            } ?: "null"
+        },
+                "coordinateLaneCandidateSideVec4": ${m60F16For446Vec4Json(
+            listOf(
+                sample?.x?.toFloat(),
+                sample?.y?.toFloat(),
+                sample?.candidateBranchReached?.let { if (it) 1f else 0f },
+                sample?.subdrawRole?.let { if (it == "inside") 1f else 2f },
+            ),
+        )},
+                "filteredVec4": ${sample?.colorAfterColorFilter.floatArrayOrNullJson()},
+                "targetColorspaceVec4": ${sample?.colorAfterTargetColorspaceIfNeeded.floatArrayOrNullJson()},
+                "beforeQuantizationVec4": ${sample?.sourceColorBeforeQuantization.floatArrayOrNullJson()},
+                "rawStorageVec4s": ${m60F16For446Vec4ListJson(record.runtimeFloatDiagnosticStorageVec4s)},
+                "neighborVec4sAroundMaskField": {
+                  "previousMinus2CoverageScalarsVec4": ${record.runtimeFloatDiagnosticStorageVec4s?.getOrNull(4).floatArrayOrNullJson()},
+                  "previousMinus1QuantizedVec4": ${record.runtimeFloatDiagnosticStorageVec4s?.getOrNull(5).floatArrayOrNullJson()},
+                  "nextVec4": null
+                },
+                "coverageScalarVec4": ${m60F16For446Vec4Json(
+            listOf(
+                sample?.coverageOrAaAlpha,
+                sample?.rawPathCoverage,
+                sample?.clipCoverage,
+                sample?.coveredSubsamples4x4?.toFloat(),
+            ),
+        )},
+                "quantizedVec4": ${sample?.sourceColorSentToBlend.floatArrayOrNullJson()},
+                "assumedMaskVec4AtBasePlus6": ${m60F16For446Vec4Json(
+            listOf(runtimeFloatRaw, 0f, 0f, 0f),
+        )},
+                "neighborVec4sAvailable": ${sample?.sourceColorSentToBlend != null && sample.coveredSubsamples4x4 != null}
+              },
+              "runtimeFor445IntegerStorage": {
+                "available": ${integerMask != null},
+                "valid": ${record.runtimeInteger?.valid ?: false},
+                "storageSampleIndex": ${record.runtimeIntegerStorageSampleIndex},
+                "sampleStrideBytes": 48,
+                "baseOffsetBytes": $integerBaseOffset,
+                "subsampleMaskFieldOffsetBytes": ${integerBaseOffset + 8},
+                "coveredCountOffsetBytes": ${integerBaseOffset + 12},
+                "numericTypeRead": "u32 masked with 0xFFFF",
+                "writtenCoordinate": ${record.runtimeInteger?.let { sample ->
+            sample.writtenX?.let { writtenX ->
+                sample.writtenY?.let { writtenY -> "[$writtenX, $writtenY]" }
+            }
+        } ?: "null"},
+                "subdrawOrdinal": ${record.runtimeInteger?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${record.runtimeInteger?.subdrawRole?.jsonString() ?: "null"},
+                "edgeCountEcho": ${record.runtimeInteger?.edgeCountEcho ?: "null"},
+                "fillTypeEcho": ${record.runtimeInteger?.fillTypeEcho ?: "null"},
+                "probeTag": ${record.runtimeInteger?.probeTag ?: "null"},
+                "subsampleMask4x4": ${integerMask ?: "null"},
+                "subsampleMask4x4Hex": ${integerMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "coveredSubsamples4x4": ${record.runtimeIntegerCoveredSubsamples4x4 ?: "null"},
+                "popcount": ${integerMask?.countOneBits() ?: "null"}
+              },
+              "lowLevelFor443Storage": {
+                "available": ${lowLevelMask != null},
+                "valid": ${record.lowLevel?.valid ?: false},
+                "storageSampleIndex": ${record.lowLevelStorageSampleIndex},
+                "sampleStrideBytes": 32,
+                "baseOffsetBytes": $lowLevelBaseOffset,
+                "subsampleMaskFieldOffsetBytes": ${lowLevelBaseOffset + 8},
+                "numericTypeRead": "u32 masked with 0xFFFF",
+                "edgeCountEcho": ${record.lowLevel?.edgeCountEcho ?: "null"},
+                "fillTypeEcho": ${record.lowLevel?.fillTypeEcho ?: "null"},
+                "probeTag": ${record.lowLevel?.drawIndexEcho ?: "null"},
+                "subsampleMask4x4": ${lowLevelMask ?: "null"},
+                "subsampleMask4x4Hex": ${lowLevelMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "coveredSubsamples4x4": ${record.lowLevelCoveredSubsamples4x4 ?: "null"},
+                "popcount": ${lowLevelMask?.countOneBits() ?: "null"}
+              },
+              "maskRelation": {
+                "cpuMaskHex": ${cpuMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "runtimeFloatMaskHex": ${runtimeFloatMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "runtimeIntegerMaskHex": ${integerMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "lowLevelMaskHex": ${lowLevelMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "floatMatchesInteger": ${runtimeFloatMask?.let { mask ->
+            integerMask?.let { mask == it }
+        } ?: "null"},
+                "floatRefutedByInteger": ${runtimeFloatMask?.let { mask ->
+            integerMask?.let { mask != it }
+        } ?: "null"},
+                "floatMatchesLowLevel": ${runtimeFloatMask?.let { mask ->
+            lowLevelMask?.let { mask == it }
+        } ?: "null"},
+                "floatNonZeroButIntegerAndLowLevelZero": ${runtimeFloatMask?.let { mask ->
+            integerMask?.let { integer ->
+                lowLevelMask?.let { low -> mask != 0 && integer == 0 && low == 0 }
+            }
+        } ?: "null"},
+                "floatPopcountMatchesCoveredNeighbor": ${runtimeFloatMask?.let { mask ->
+            sample?.coveredSubsamples4x4?.let { mask.countOneBits() == it }
+        } ?: "null"}
+              },
+              "subsampleComparison4x4": ${m60F16SubsampleComparisonGridJson(
+            key = record.key,
+            cpuMask = lowLevelMask,
+            wgslMask = runtimeFloatMask,
+        ).prependIndent("  ").trimStart()},
+              "webGpuPredraw": {
+                "dstBeforeRgbaFloat": ${record.predraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                "dstBeforeRgba8": ${record.predraw?.second?.dstBeforeRgbaFloat?.let { floatRgbaToByteArrayJson(it) } ?: "null"}
+              },
+              "missingFields": [${record.missingFields.joinToString(", ") { it.jsonString() }}]
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16For446Vec4Json(values: List<Float?>): String =
+        values.joinToString(prefix = "[", postfix = "]") { value ->
+            value?.let { m60F16JsonFloat(it) } ?: "null"
+        }
+
+    private fun m60F16For446Vec4ListJson(values: List<FloatArray>?): String =
+        values?.joinToString(prefix = "[", postfix = "]") { vec4 ->
+            vec4.floatJson()
+        } ?: "null"
+
+    private fun m60F16For442FloatMaskFieldAuditFor446LocalReason(
+        record: M60F16For442FloatMaskFieldAuditFor446Record,
+    ): String = when (record.classification) {
+        "for442-float-mask-field-conversion-artifact" ->
+            "The raw FOR-442 f32 value does not round back to the exported integer mask."
+        "for442-float-mask-field-sample-selection-mismatch" ->
+            "The selected FOR-442 sample does not echo the requested inside coordinate tuple."
+        "for442-float-mask-field-retired-as-unreliable" ->
+            "The FOR-442 float field is nonzero while the neighboring covered-count vec4, FOR-445 integer tuple, and FOR-443 low-level mask all report zero."
+        "for442-float-mask-field-offset-mismatch" ->
+            "The FOR-442 float field differs from both integer comparison paths, but the local neighbor fields do not isolate the writer."
+        "for442-float-mask-field-overwritten" ->
+            "The FOR-442 float field appears overwritten after the expected writer."
+        else ->
+            "The FOR-442 float field audit did not isolate a precise source."
+    }
+
+    private fun m60F16For442FloatMaskFieldAuditFor446GlobalReason(classification: String): String =
+        when (classification) {
+            "for442-float-mask-field-retired-as-unreliable" ->
+                "The two nonzero FOR-442 float masks are exact f32 values, not conversion artifacts, but they contradict the neighboring covered-count field, the FOR-445 integer-lane path, and the FOR-443 low-level mask."
+            "for442-float-mask-field-conversion-artifact" ->
+                "The raw f32 readback and rounded integer field disagree, isolating the issue to numeric conversion."
+            "for442-float-mask-field-sample-selection-mismatch" ->
+                "The exported FOR-442 tuple does not correspond to the requested draw/coordinate/subdraw sample."
+            "for442-float-mask-field-offset-mismatch" ->
+                "The read offset remains suspect because the float field disagrees with both comparison probes."
+            "for442-float-mask-field-overwritten" ->
+                "The field appears to be overwritten after the expected mask write."
+            else ->
+                "The audit could not isolate the FOR-442 float field cause without widening instrumentation."
+        }
+
+    private fun m60F16For442FloatMaskFieldAuditFor446NextStep(classification: String): String =
+        when (classification) {
+            "for442-float-mask-field-retired-as-unreliable" ->
+                "Retire M60F16AaStencilCoverShaderReturnDiagnosticSample.wgslSubsampleMask4x4 from coverage evidence and base the next correction ticket on FOR-445/FOR-443 zero-mask evidence."
+            "for442-float-mask-field-conversion-artifact" ->
+                "Fix or rename the FOR-442 numeric export before using it in any comparison artifact."
+            "for442-float-mask-field-sample-selection-mismatch" ->
+                "Tighten draw/coordinate/subdraw selection before deriving a coverage correction."
+            "for442-float-mask-field-offset-mismatch" ->
+                "Add one smaller storage-layout probe if the field must be preserved; otherwise retire it from the decision chain."
+            else ->
+                "Keep rendering unchanged and retire the FOR-442 float field from support evidence until a narrower field-owner probe exists."
+        }
+
     private fun m60F16MaskHex4x4(mask: Int): String =
         String.format(Locale.US, "0x%04X", mask and 0xFFFF)
 
@@ -15072,6 +15622,38 @@ class StrokeCapJoinSceneCaptureTest {
         val cpuGreenCoverageByte: Int,
         val cpuGreenMask4x4: Int?,
         val runtimeFloatSubsampleMask4x4: Int?,
+        val runtimeIntegerSubsampleMask4x4: Int?,
+        val runtimeIntegerCoveredSubsamples4x4: Int?,
+        val lowLevelSubsampleMask4x4: Int?,
+        val lowLevelCoveredSubsamples4x4: Int?,
+        val runtimeFloatStorageSampleIndex: Int?,
+        val runtimeIntegerStorageSampleIndex: Int,
+        val lowLevelStorageSampleIndex: Int,
+        val missingFields: List<String>,
+        val classification: String,
+    )
+
+    private data class M60F16For442FloatMaskFieldAuditFor446Record(
+        val key: M60F16DrawPixelKey,
+        val runtimeInteger: SkWebGpuDevice.M60F16RuntimeIntegerLaneMaskProbeFor445Sample?,
+        val lowLevel: SkWebGpuDevice.M60F16LowLevelExactMaskProbeFor443Sample?,
+        val selectedSource: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val predraw: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSample,
+            >?,
+        val hostDrawIndex: Int?,
+        val referenceRgba: IntArray,
+        val currentGpuRgba: IntArray,
+        val optInGpuRgba: IntArray,
+        val cpuGreenCoverageByte: Int,
+        val cpuGreenMask4x4: Int?,
+        val runtimeFloatSubsampleMask4x4: Int?,
+        val runtimeFloatSubsampleMask4x4RawFloat: Float?,
+        val runtimeFloatDiagnosticStorageVec4s: List<FloatArray>?,
         val runtimeIntegerSubsampleMask4x4: Int?,
         val runtimeIntegerCoveredSubsamples4x4: Int?,
         val lowLevelSubsampleMask4x4: Int?,
@@ -22048,6 +22630,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16RuntimeMaskPackingVsLowLevelProbeFor444.enabled"
         private const val FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY =
             "kanvas.webgpu.m60F16RuntimeIntegerLaneMaskProbeFor445.enabled"
+        private const val FOR446_FOR442_FLOAT_MASK_FIELD_AUDIT_PROPERTY =
+            "kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -22190,6 +22774,14 @@ class StrokeCapJoinSceneCaptureTest {
             "runtime-integer-lane-fragment-path-diverges-from-low-level",
             "runtime-integer-lane-source-unavailable",
             "runtime-integer-lane-audit-inconclusive",
+        )
+        private val M60_F16_FOR446_ALLOWED_CLASSIFICATIONS = listOf(
+            "for442-float-mask-field-offset-mismatch",
+            "for442-float-mask-field-overwritten",
+            "for442-float-mask-field-conversion-artifact",
+            "for442-float-mask-field-sample-selection-mismatch",
+            "for442-float-mask-field-retired-as-unreliable",
+            "for442-float-mask-field-audit-inconclusive",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
