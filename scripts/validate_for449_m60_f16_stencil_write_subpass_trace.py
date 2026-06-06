@@ -46,6 +46,10 @@ ALLOWED_LOCAL_DIFFS = {
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
     "scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
     "scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py",
+    "scripts/validate_for450_m60_f16_stencil_boundary_audit.py",
+    "reports/wgsl-pipeline/2026-06-06-for-450-m60-f16-stencil-boundary-audit.md",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-boundary-audit-for450",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-boundary-audit-for450/m60-f16-stencil-boundary-audit-for450.json",
     "reports/wgsl-pipeline/2026-06-06-for-449-m60-f16-stencil-write-subpass-trace.md",
     *ARTIFACT_FILES,
 }

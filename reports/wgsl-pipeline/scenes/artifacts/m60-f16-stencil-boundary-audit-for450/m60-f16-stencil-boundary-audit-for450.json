@@ -1,0 +1,271 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-450",
+          "sceneId": "m60-f16-stencil-boundary-audit-for450",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-exposer-une-frontiere-de-preuve-stencil-write-sure-apres-for-449",
+          "sourceFindingMemory": "global/kanvas/findings/for-449-trace-stencil-subpass-m60-f16-reste-inconclusive-sans-lecture-stencil-directe",
+          "sourceArtifacts": {
+            "for449": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-write-subpass-trace-for449/m60-f16-stencil-write-subpass-trace-for449.json",
+            "for448": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/m60-f16-zero-mask-neutral-path-trace-for448.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "optInFlag": "kanvas.webgpu.m60F16StencilBoundaryAuditFor450.enabled",
+          "classification": "stencil-boundary-requires-render-pass-split",
+          "allowedClassifications": [
+            "stencil-boundary-direct-readback-available",
+"stencil-boundary-color-only-readback-available",
+"stencil-boundary-requires-render-pass-split",
+"stencil-boundary-requires-backend-api-extension",
+"stencil-boundary-audit-inconclusive"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "productionWgslChanged": false,
+          "wgsl4kModified": false,
+          "renderingFixAppliedByDefault": false,
+          "for442UsedAsDecisionSource": false,
+          "sourceAudit": {
+            "depthStencilFormat": "Depth24PlusStencil8",
+            "depthStencilUsage": "GPUTextureUsage.RenderAttachment",
+            "depthStencilUsageHasCopySrc": false,
+            "depthStencilUsageHasTextureBinding": false,
+            "depthStencilStoreOp": "Discard",
+            "stencilWriteAndCoverShareRenderPass": true,
+            "stencilDrawBeforeCoverDrawsInSamePass": true,
+            "productionWgslChanged": false
+          },
+          "boundarySummary": {
+            "zeroMaskPixelCount": 6,
+            "currentSimilarity": 95.914714,
+            "currentTotalResidual": null,
+            "currentTotalResidualReason": "FOR-450 audits WebGPU boundary availability; it reuses mismatch counters but does not recompute a CPU reference residual in this artifact.",
+            "currentMismatchPixels": 1004,
+            "predrawColorBoundaryObservedTargetCount": 6,
+            "postCoverColorBoundaryObservedTargetCount": 6,
+            "afterStencilBeforeCoverBoundaryAvailable": false,
+            "directStencilReadbackAvailable": false,
+            "requiresRenderPassSplit": true,
+            "requiresBackendApiExtension": false,
+            "for442DecisionSourceUsedCount": 0
+          },
+          "boundaries": [
+            {
+              "name": "before-stencil-write",
+              "requestedBoundary": "before StencilCoverAaPolygonDraw stencil write",
+              "available": true,
+              "readbackKind": "color-only",
+              "evidence": "FOR-410 predraw RGBA16Float textureLoad",
+              "stencilDirectReadbackAvailable": false,
+              "reason": "The color destination can be sampled before the draw; stencil has not been written yet and is not a meaningful direct stencil-write proof."
+            },
+            {
+              "name": "after-stencil-before-cover",
+              "requestedBoundary": "after stencil draw and before inside/outside cover color draws",
+              "available": false,
+              "readbackKind": "none",
+              "stencilDirectReadbackAvailable": false,
+              "requiresRenderPassSplit": true,
+              "reason": "The stencil draw and cover draws are encoded in one render pass. Existing Kanvas diagnostics do not expose an inter-draw GPU readback boundary inside that pass."
+            },
+            {
+              "name": "after-cover-before-final-read",
+              "requestedBoundary": "after inside/outside cover color draws and before final readback",
+              "available": true,
+              "readbackKind": "color-only",
+              "evidence": "FOR-405/FOR-410 post-pass RGBA16Float textureLoad",
+              "stencilDirectReadbackAvailable": false,
+              "reason": "Color output is observable after the pass, but the depth/stencil attachment is not copyable or shader-readable in the current backend contract."
+            }
+          ],
+          "partialPixels": [
+            {
+  "x": 92,
+  "y": 75,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": false,
+    "stencilDirectReadbackAvailable": false,
+    "requiresRenderPassSplit": true,
+    "requiresBackendApiExtension": false,
+    "reason": "Stencil write and both cover subdraws are encoded inside one beginRenderPass block; Kanvas has no observation boundary after stencil draw and before cover draw without splitting that render pass."
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 91,
+  "y": 76,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": false,
+    "stencilDirectReadbackAvailable": false,
+    "requiresRenderPassSplit": true,
+    "requiresBackendApiExtension": false,
+    "reason": "Stencil write and both cover subdraws are encoded inside one beginRenderPass block; Kanvas has no observation boundary after stencil draw and before cover draw without splitting that render pass."
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 90,
+  "y": 77,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": false,
+    "stencilDirectReadbackAvailable": false,
+    "requiresRenderPassSplit": true,
+    "requiresBackendApiExtension": false,
+    "reason": "Stencil write and both cover subdraws are encoded inside one beginRenderPass block; Kanvas has no observation boundary after stencil draw and before cover draw without splitting that render pass."
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 89,
+  "y": 78,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": false,
+    "stencilDirectReadbackAvailable": false,
+    "requiresRenderPassSplit": true,
+    "requiresBackendApiExtension": false,
+    "reason": "Stencil write and both cover subdraws are encoded inside one beginRenderPass block; Kanvas has no observation boundary after stencil draw and before cover draw without splitting that render pass."
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 88,
+  "y": 79,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": false,
+    "stencilDirectReadbackAvailable": false,
+    "requiresRenderPassSplit": true,
+    "requiresBackendApiExtension": false,
+    "reason": "Stencil write and both cover subdraws are encoded inside one beginRenderPass block; Kanvas has no observation boundary after stencil draw and before cover draw without splitting that render pass."
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 87,
+  "y": 80,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "beforeStencilWriteBoundary": {
+    "available": true,
+    "kind": "color-only-predraw-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "rgba8": [255, 255, 255, 255]
+  },
+  "afterStencilBeforeCoverBoundary": {
+    "available": false,
+    "stencilDirectReadbackAvailable": false,
+    "requiresRenderPassSplit": true,
+    "requiresBackendApiExtension": false,
+    "reason": "Stencil write and both cover subdraws are encoded inside one beginRenderPass block; Kanvas has no observation boundary after stencil draw and before cover draw without splitting that render pass."
+  },
+  "afterCoverBeforeFinalReadBoundary": {
+    "available": true,
+    "kind": "color-only-postpass-textureLoad",
+    "drawIndex": 1,
+    "rgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "rgba8": [181, 191, 230, 255]
+  }
+}
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "activationByDefault": false,
+            "for442UsedAsDecisionSource": false,
+            "for447Promoted": false,
+            "renderPassSplitApplied": false
+          },
+          "classificationReason": "FOR-450 finds color-only boundaries before and after StencilCoverAaPolygonDraw, but no safe boundary after stencil draw and before cover draw. Direct stencil-write proof therefore requires a dedicated render-pass split ticket before any stencil-based correction.",
+          "nextAction": "Open an implementation ticket for an opt-in render-pass split or backend boundary extension if direct stencil-write evidence is still required; otherwise keep refusing stencil-based corrections.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16StencilBoundaryAuditFor450.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for450_m60_f16_stencil_boundary_audit.py",
+            "rtk python3 scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for450-pycache python3 -m py_compile scripts/validate_for450_m60_f16_stencil_boundary_audit.py scripts/validate_for449_m60_f16_stencil_write_subpass_trace.py",
+            "rtk git diff --check"
+          ]
+        }
