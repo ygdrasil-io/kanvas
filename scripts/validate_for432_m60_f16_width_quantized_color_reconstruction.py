@@ -57,6 +57,9 @@ ALLOWED_LOCAL_DIFFS = {
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/current-webgpu.png",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/opt-in-webgpu-width-quantized.png",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/opt-in-diagnostic-webgpu-width-quantized.png",
+    "scripts/validate_for433_m60_f16_stencil_subdraw_source_color.py",
+    "reports/wgsl-pipeline/2026-06-06-for-433-m60-f16-stencil-subdraw-source-color.md",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-subdraw-source-color-for433",
 }
 
 
