@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-06-06",
+  "ticket": "D52-1",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d52-1-preparer-paquet-promotion-drawminibitmaprect",
+  "classification": "promotion-readiness-no-new-rendering-support",
+  "inventoryId": "skia-gm-drawminibitmaprect",
+  "status": "expected-unsupported",
+  "fallbackReason": "bitmap.drawminibitmaprect.rotated-fast-src-rect-webgpu-artifacts-required",
+  "previousEvidence": {
+    "ticket": "D51-1",
+    "report": "reports/wgsl-pipeline/2026-06-06-d51-1-drawminibitmaprect-row-specific-evidence.md",
+    "json": "reports/wgsl-pipeline/scenes/generated/d51-drawminibitmaprect-row-specific-evidence.json",
+    "validator": "scripts/validate_d51_drawminibitmaprect_row_specific_evidence.py",
+    "status": "expected-unsupported",
+    "fallbackReason": "bitmap.drawminibitmaprect.rotated-fast-src-rect-webgpu-artifacts-required"
+  },
+  "readinessDecision": {
+    "promotableNow": false,
+    "reason": "DrawMiniBitmapRectGM cannot be promoted until one row-specific package contains reference, CPU, WebGPU, diff/stat, and route diagnostics for the 1024x1024 GM with fallbackReason=none.",
+    "candidatePriority": "next-bitmap-promotion-candidate",
+    "retainExpectedUnsupported": true
+  },
+  "evidenceClassification": {
+    "reference": {
+      "status": "available-historical-skia-integration-reference",
+      "paths": [
+        "skia-integration-tests/src/test/resources/original-888/drawminibitmaprect.png",
+        "skia-integration-tests/src/test/resources/original-888/drawminibitmaprect_aa.png"
+      ],
+      "promotableAlone": false,
+      "reason": "Historical Skia integration references exist, but they are not a generated row-specific PM package for this promotion attempt."
+    },
+    "cpu": {
+      "status": "available-historical-disabled-stress-test",
+      "tests": [
+        "skia-integration-tests/src/test/kotlin/org/skia/tests/DrawMiniBitmapRectTest.kt",
+        "skia-integration-tests/src/test/kotlin/org/skia/tests/DrawMiniBitmapRectAaTest.kt"
+      ],
+      "historicalSimilarity": {
+        "DrawMiniBitmapRectGM": 93.95856857299805,
+        "DrawMiniBitmapRectAaGM": 92.79909133911133
+      },
+      "promotableAlone": false,
+      "reason": "CPU evidence is historical and the stress tests remain disabled by default, so it is not a current dashboard CPU artifact with route diagnostics."
+    },
+    "webgpu": {
+      "status": "missing",
+      "requiredForPromotion": true,
+      "routeDiagnosticsStatus": "missing-promotion-route",
+      "reason": "No DrawMiniBitmapRectGM 1024x1024 WebGPU artifact exists in the active PM package."
+    },
+    "diffStats": {
+      "status": "missing",
+      "requiredForPromotion": true,
+      "reason": "Diff/stat is impossible to claim without reference, CPU, and WebGPU artifacts generated as one row-specific package."
+    },
+    "routeDiagnostics": {
+      "status": "missing-promotion-route",
+      "availableDiagnosticsKind": "expected-unsupported-refusal-only",
+      "requiredForPromotion": true
+    }
+  },
+  "m66InheritancePolicy": {
+    "forbiddenInheritedDashboardRowId": "m66-bitmap-rect-nearest-skia",
+    "canInheritAsSupport": false,
+    "m66InventoryId": "skia-gm-drawbitmaprect",
+    "d52InventoryId": "skia-gm-drawminibitmaprect",
+    "whyNotReusable": "m66-bitmap-rect-nearest-skia is a 64x64 strict-nearest DrawBitmapRect-derived smoke. It does not cover the DrawMiniBitmapRectGM 1024x1024 stress grid with 2048 atlas, growing source rects, deterministic rotations, SkSamplingOptions.Default, and SrcRectConstraint.kFast."
+  },
+  "nextImplementationSlice": {
+    "id": "D52-2-drawminibitmaprect-row-specific-artifacts",
+    "goal": "Produce the row-specific reference, CPU, WebGPU, diff/stat, and route package for DrawMiniBitmapRectGM 1024x1024.",
+    "requiredArtifacts": [
+      {
+        "kind": "reference",
+        "description": "Generate or package the row-specific DrawMiniBitmapRectGM 1024x1024 reference artifact for the active PM packet."
+      },
+      {
+        "kind": "cpu",
+        "description": "Generate the matching CPU artifact with explicit route diagnostics for the same GM."
+      },
+      {
+        "kind": "webgpu",
+        "description": "Generate the matching WebGPU artifact with explicit route diagnostics for the same GM."
+      },
+      {
+        "kind": "diff-stat",
+        "description": "Compute row-specific diff/stat payloads between reference, CPU, and WebGPU artifacts."
+      },
+      {
+        "kind": "route",
+        "description": "Record CPU and WebGPU routes; set fallbackReason=none only if the WebGPU route passes without a global threshold change."
+      }
+    ],
+    "acceptanceGate": {
+      "fallbackReasonNoneAllowedOnlyWhenWebGpuPasses": true,
+      "globalThresholdChangeAllowed": false,
+      "m66EvidenceInheritanceAllowed": false,
+      "keepExpectedUnsupportedIfAnyArtifactMissing": true
+    }
+  },
+  "scoreImpact": {
+    "supportScoreIncreased": false,
+    "skiaComparableScoreIncreased": false,
+    "readinessScoreIncreased": false,
+    "reason": "D52-1 is readiness packaging only. It adds no supported row, no WebGPU artifact, no diff/stat payload, and no fallbackReason=none."
+  },
+  "nonClaims": {
+    "supportClaimAddedByD52_1": false,
+    "webgpuSupportClaimAddedByD52_1": false,
+    "skiaComparableClaimAddedByD52_1": false,
+    "dashboardRowAddedByD52_1": false,
+    "d50ManifestChanged": false,
+    "d51EvidenceChanged": false,
+    "defaultRenderingChanged": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "rendererChanged": false,
+    "productionCodeChanged": false,
+    "wgslProductionChanged": false,
+    "wgsl4kChanged": false,
+    "upstreamSourceChanged": false,
+    "skiaIntegrationTestsChanged": false,
+    "codecSupportClaim": false,
+    "mipmapSupportClaim": false,
+    "tileModeSupportClaim": false,
+    "colorManagedImageSupportClaim": false,
+    "yuvSupportClaim": false,
+    "animationSupportClaim": false,
+    "exifSupportClaim": false,
+    "bicubicSupportClaim": false,
+    "arbitraryImageSupportClaim": false
+  },
+  "expectedChangedFiles": [
+    "reports/wgsl-pipeline/2026-06-06-d52-1-drawminibitmaprect-promotion-readiness.md",
+    "reports/wgsl-pipeline/scenes/generated/d52-drawminibitmaprect-promotion-readiness.json",
+    "scripts/validate_d52_drawminibitmaprect_promotion_readiness.py"
+  ],
+  "validationCommands": [
+    "rtk python3 scripts/validate_d52_drawminibitmaprect_promotion_readiness.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d52-drawminibitmaprect-promotion-readiness.json",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-d52-drawminibitmaprect-pycache python3 -m py_compile scripts/validate_d52_drawminibitmaprect_promotion_readiness.py",
+    "rtk git diff --check"
+  ]
+}
