@@ -222,6 +222,10 @@ class StrokeCapJoinSceneCaptureTest {
                                                                     System.getProperty(
                                                                         FOR444_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROPERTY,
                                                                         "false",
+                                                                    ).toBoolean() ||
+                                                                    System.getProperty(
+                                                                        FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY,
+                                                                        "false",
                                                                     ).toBoolean(),
                                                         ) {
                                                             withM60F16StorageColorTargetComparison(true) {
@@ -254,7 +258,8 @@ class StrokeCapJoinSceneCaptureTest {
                         System.getProperty(FOR441_EXACT_SUBSAMPLE_MASK_VS_CPU_GREEN_PROPERTY, "false").toBoolean() ||
                         System.getProperty(FOR442_RUNTIME_EXACT_MASK_PROBE_PROPERTY, "false").toBoolean() ||
                         System.getProperty(FOR443_LOW_LEVEL_EXACT_MASK_PROBE_PROPERTY, "false").toBoolean() ||
-                        System.getProperty(FOR444_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROPERTY, "false").toBoolean()
+                        System.getProperty(FOR444_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROPERTY, "false").toBoolean() ||
+                        System.getProperty(FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY, "false").toBoolean()
                 val widthQuantizedColorReconstructionFor432Result =
                     if (widthQuantizedColorReconstructionRequested) {
                         withExperimentalStrokeCapJoinRender {
@@ -291,6 +296,10 @@ class StrokeCapJoinSceneCaptureTest {
                                                                 ).toBoolean() ||
                                                             System.getProperty(
                                                                 FOR444_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROPERTY,
+                                                                "false",
+                                                            ).toBoolean() ||
+                                                            System.getProperty(
+                                                                FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY,
                                                                 "false",
                                                             ).toBoolean(),
                                                     ) {
@@ -329,6 +338,10 @@ class StrokeCapJoinSceneCaptureTest {
                                                                 ).toBoolean() ||
                                                                 System.getProperty(
                                                                     FOR444_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROPERTY,
+                                                                    "false",
+                                                                ).toBoolean() ||
+                                                                System.getProperty(
+                                                                    FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY,
                                                                     "false",
                                                                 ).toBoolean(),
                                                         ) {
@@ -635,6 +648,19 @@ class StrokeCapJoinSceneCaptureTest {
                     reference = reference,
                     currentGpu = experimentalGpu,
                     optInGpu = widthQuantizedRenderFixFor431Gpu,
+                    lowLevelSnapshot = result.lowLevelExactMaskProbeFor443Snapshot,
+                    shaderReturnSnapshot = result.aaStencilCoverShaderReturnDiagnosticSnapshot,
+                    predrawSnapshot = result.aaStencilCoverPredrawDstReadbackSnapshot,
+                    hostSnapshot = result.hostDrawPaintBindingFor436Snapshot,
+                    adapter = adapter,
+                )
+            }
+            if (System.getProperty(FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY, "false").toBoolean()) {
+                writeM60F16RuntimeIntegerLaneMaskProbeFor445(
+                    reference = reference,
+                    currentGpu = experimentalGpu,
+                    optInGpu = widthQuantizedRenderFixFor431Gpu,
+                    runtimeIntegerSnapshot = result.runtimeIntegerLaneMaskProbeFor445Snapshot,
                     lowLevelSnapshot = result.lowLevelExactMaskProbeFor443Snapshot,
                     shaderReturnSnapshot = result.aaStencilCoverShaderReturnDiagnosticSnapshot,
                     predrawSnapshot = result.aaStencilCoverPredrawDstReadbackSnapshot,
@@ -11037,6 +11063,462 @@ class StrokeCapJoinSceneCaptureTest {
                 "Keep the rendering unchanged and add the smallest next storage probe that can make the runtime source field unambiguous."
         }
 
+    private fun writeM60F16RuntimeIntegerLaneMaskProbeFor445(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        runtimeIntegerSnapshot: SkWebGpuDevice.M60F16RuntimeIntegerLaneMaskProbeFor445Snapshot,
+        lowLevelSnapshot: SkWebGpuDevice.M60F16LowLevelExactMaskProbeFor443Snapshot,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        hostSnapshot: SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-runtime-integer-lane-mask-probe-for445"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16RuntimeIntegerLaneMaskProbeFor445Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                optInGpu = optInGpu,
+                runtimeIntegerSnapshot = runtimeIntegerSnapshot,
+                lowLevelSnapshot = lowLevelSnapshot,
+                shaderReturnSnapshot = shaderReturnSnapshot,
+                predrawSnapshot = predrawSnapshot,
+                hostSnapshot = hostSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16RuntimeIntegerLaneMaskProbeFor445Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        runtimeIntegerSnapshot: SkWebGpuDevice.M60F16RuntimeIntegerLaneMaskProbeFor445Snapshot,
+        lowLevelSnapshot: SkWebGpuDevice.M60F16LowLevelExactMaskProbeFor443Snapshot,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        hostSnapshot: SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        adapter: String,
+    ): String {
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toList()
+        val cpuGreenCoverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinGreenCoverageFor438GM())
+        val integerEvent = runtimeIntegerSnapshot.events.firstOrNull { it.drawIndex == 3 }
+            ?: runtimeIntegerSnapshot.events.firstOrNull()
+        val integerByPoint = integerEvent?.samples.orEmpty().associateBy { it.x to it.y }
+        val lowLevelEvent = lowLevelSnapshot.events.firstOrNull { it.drawIndex == 3 }
+            ?: lowLevelSnapshot.events.firstOrNull()
+        val lowLevelByPoint = lowLevelEvent?.samples.orEmpty().associateBy { it.x to it.y }
+        val shaderByPoint = shaderReturnSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val predrawByPoint = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val hostBinding = hostSnapshot.events.firstOrNull { it.drawIndex == 3 }
+        val records = partialPoints.mapIndexed { pointIndex, (x, y) ->
+            val key = M60F16DrawPixelKey(3, x, y)
+            val point = x to y
+            val selected = shaderByPoint[point].orEmpty()
+                .firstOrNull { (event, sample) ->
+                    event.drawIndex == 3 &&
+                        sample.shaderObserved &&
+                        !sample.captureSynthetic &&
+                        sample.subdrawOrdinal == 0 &&
+                        sample.subdrawRole == "inside"
+                }
+            val predraw = predrawByPoint[point].orEmpty()
+                .firstOrNull { (event, sample) ->
+                    event.drawIndex == 3 &&
+                        sample.targetWithinScissor &&
+                        sample.readbackAvailable
+                }
+            val runtimeInteger = integerByPoint[point]
+            val lowLevel = lowLevelByPoint[point]
+            val sample = selected?.second
+            val cpuGreenCoverageByte = (cpuGreenCoverageMask.getPixel(x, y) ushr 24) and 0xFF
+            val cpuGreenMask4x4 = if (cpuGreenCoverageByte == 0) 0 else null
+            val runtimeFloatMask = sample?.wgslSubsampleMask4x4
+            val integerMask = runtimeInteger?.subsampleMask4x4
+            val integerCovered = runtimeInteger?.coveredSubsamples4x4
+            val lowLevelMask = lowLevel?.subsampleMask4x4
+            val integerCountMatches =
+                integerMask == null || integerCovered == null || integerMask.countOneBits() == integerCovered
+            val missingFields = buildList {
+                if (hostBinding == null) add("hostDrawIndex3PaintBinding")
+                if (integerEvent == null) add("runtimeIntegerLaneEvent")
+                if (runtimeInteger == null || !runtimeInteger.valid) add("runtimeIntegerLaneSample")
+                if (integerMask == null) add("runtimeIntegerLaneMask")
+                if (lowLevelEvent == null) add("lowLevelExactMaskEvent")
+                if (lowLevel == null || !lowLevel.valid) add("lowLevelExactMaskSample")
+                if (selected == null) add("runtimeFloatFor442InsideSample")
+                if (runtimeFloatMask == null) add("runtimeFloatFor442Mask")
+                if (predraw == null) add("predrawDstReadback")
+            }
+            val classification = when {
+                integerMask == null -> "runtime-integer-lane-source-unavailable"
+                !integerCountMatches -> "runtime-integer-lane-audit-inconclusive"
+                runtimeFloatMask != null && integerMask == runtimeFloatMask ->
+                    "runtime-integer-lane-confirms-float-mask"
+                runtimeFloatMask != null && integerMask != runtimeFloatMask ->
+                    "runtime-integer-lane-refutes-float-mask"
+                lowLevelMask != null && integerMask != lowLevelMask ->
+                    "runtime-integer-lane-fragment-path-diverges-from-low-level"
+                else -> "runtime-integer-lane-audit-inconclusive"
+            }
+            M60F16RuntimeIntegerLaneMaskProbeFor445Record(
+                key = key,
+                runtimeInteger = runtimeInteger,
+                lowLevel = lowLevel,
+                selectedSource = selected,
+                predraw = predraw,
+                hostDrawIndex = hostBinding?.drawIndex,
+                referenceRgba = rgbaArray(reference.getPixel(x, y)),
+                currentGpuRgba = rgbaArray(currentGpu.getPixel(x, y)),
+                optInGpuRgba = rgbaArray(optInGpu.getPixel(x, y)),
+                cpuGreenCoverageByte = cpuGreenCoverageByte,
+                cpuGreenMask4x4 = cpuGreenMask4x4,
+                runtimeFloatSubsampleMask4x4 = runtimeFloatMask,
+                runtimeIntegerSubsampleMask4x4 = integerMask,
+                runtimeIntegerCoveredSubsamples4x4 = integerCovered,
+                lowLevelSubsampleMask4x4 = lowLevelMask,
+                lowLevelCoveredSubsamples4x4 = lowLevel?.coveredSubsamples4x4,
+                runtimeFloatStorageSampleIndex = if (selected != null) pointIndex * 2 else null,
+                runtimeIntegerStorageSampleIndex = pointIndex,
+                lowLevelStorageSampleIndex = pointIndex,
+                missingFields = missingFields,
+                classification = classification,
+            )
+        }
+        val classification = when {
+            records.any { it.classification == "runtime-integer-lane-refutes-float-mask" } ->
+                "runtime-integer-lane-refutes-float-mask"
+            records.any { it.classification == "runtime-integer-lane-fragment-path-diverges-from-low-level" } ->
+                "runtime-integer-lane-fragment-path-diverges-from-low-level"
+            records.any { it.classification == "runtime-integer-lane-source-unavailable" } &&
+                records.none { it.runtimeIntegerSubsampleMask4x4 != null } ->
+                "runtime-integer-lane-source-unavailable"
+            records.any { it.classification == "runtime-integer-lane-confirms-float-mask" } ->
+                "runtime-integer-lane-confirms-float-mask"
+            else -> "runtime-integer-lane-audit-inconclusive"
+        }
+        val pixelsJson = records.joinToString(",\n") { record ->
+            m60F16RuntimeIntegerLaneMaskProbeFor445RecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-445",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-sonde-integer-lane-runtime-mask-et-covered-count",
+              "sourceFindingMemory": "global/kanvas/findings/for-444-runtime-mask-source-field-remains-ambiguous-against-low-level-zero-masks",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR445_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "diagnosticFlag": ${FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY.jsonString()},
+              "for442RuntimeFlag": ${FOR442_RUNTIME_EXACT_MASK_PROBE_PROPERTY.jsonString()},
+              "for443LowLevelFlag": ${FOR443_LOW_LEVEL_EXACT_MASK_PROBE_PROPERTY.jsonString()},
+              "for444SourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-runtime-mask-packing-vs-low-level-probe-for444/m60-f16-runtime-mask-packing-vs-low-level-probe-for444.json",
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixApplied": false,
+              "for445ProbeOptInOnly": true,
+              "for445ProbeDefaultActive": false,
+              "storageLayouts": {
+                "runtimeFor442": {
+                  "storageDeclaration": "array<vec4f, 224>",
+                  "numericTypeRead": "f32 rounded to Int",
+                  "sampleStrideBytes": 112,
+                  "subsampleMaskFieldOffsetBytes": 96
+                },
+                "runtimeIntegerFor445": {
+                  "storageDeclaration": "array<vec4u, 18>",
+                  "numericTypeRead": "u32 masked with 0xFFFF",
+                  "sampleStrideBytes": 48,
+                  "coordinateOffsetBytes": [0, 4],
+                  "subsampleMaskFieldOffsetBytes": 8,
+                  "coveredCountOffsetBytes": 12,
+                  "validOffsetBytes": 16,
+                  "subdrawOrdinalOffsetBytes": 20,
+                  "subdrawRoleOffsetBytes": 24,
+                  "edgeCountEchoOffsetBytes": 28,
+                  "fillTypeEchoOffsetBytes": 32,
+                  "probeTagOffsetBytes": 36,
+                  "bitOrder": "row-major 4x4 subsamples; sy outer, sx inner; least-significant bit is sx=0, sy=0"
+                },
+                "lowLevelFor443": {
+                  "storageDeclaration": "array<vec4u, 12>",
+                  "numericTypeRead": "u32 masked with 0xFFFF",
+                  "sampleStrideBytes": 32,
+                  "subsampleMaskFieldOffsetBytes": 8
+                }
+              },
+              "comparisonPolicy": {
+                "scope": "Exactly the six M60 F16 CPU-excluded pixels named in FOR-445.",
+                "cpuGreenCoverageFixture": "BoundedStrokeCapJoinGreenCoverageFor438GM",
+                "runtimeIntegerBoundary": ${runtimeIntegerSnapshot.observedBoundary.jsonString()},
+                "runtimeFloatBoundary": ${shaderReturnSnapshot.observedBoundary.jsonString()},
+                "lowLevelBoundary": ${lowLevelSnapshot.observedBoundary.jsonString()},
+                "noRenderingFixApplied": true,
+                "boundedToSixPixels": true
+              },
+              "summary": {
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "cpuGreenMaskZero4x4Count": ${records.count { it.cpuGreenMask4x4 == 0 }},
+                "runtimeFloatMaskAvailableCount": ${records.count { it.runtimeFloatSubsampleMask4x4 != null }},
+                "runtimeFloatMaskNonZeroCount": ${records.count { (it.runtimeFloatSubsampleMask4x4 ?: 0) != 0 }},
+                "runtimeIntegerMaskAvailableCount": ${records.count { it.runtimeIntegerSubsampleMask4x4 != null }},
+                "runtimeIntegerMaskNonZeroCount": ${records.count { (it.runtimeIntegerSubsampleMask4x4 ?: 0) != 0 }},
+                "runtimeIntegerCoveredCountAvailableCount": ${records.count { it.runtimeIntegerCoveredSubsamples4x4 != null }},
+                "runtimeIntegerMaskPopcountMismatchCount": ${records.count { record ->
+                    record.runtimeIntegerSubsampleMask4x4 != null &&
+                        record.runtimeIntegerCoveredSubsamples4x4 != null &&
+                        record.runtimeIntegerSubsampleMask4x4.countOneBits() !=
+                        record.runtimeIntegerCoveredSubsamples4x4
+                }},
+                "lowLevelExactMaskAvailableCount": ${records.count { it.lowLevelSubsampleMask4x4 != null }},
+                "lowLevelExactMaskNonZeroCount": ${records.count { (it.lowLevelSubsampleMask4x4 ?: 0) != 0 }},
+                "runtimeIntegerFloatMismatchCount": ${records.count { record ->
+                    record.runtimeFloatSubsampleMask4x4 != null &&
+                        record.runtimeIntegerSubsampleMask4x4 != null &&
+                        record.runtimeFloatSubsampleMask4x4 != record.runtimeIntegerSubsampleMask4x4
+                }},
+                "runtimeIntegerLowLevelMismatchCount": ${records.count { record ->
+                    record.lowLevelSubsampleMask4x4 != null &&
+                        record.runtimeIntegerSubsampleMask4x4 != null &&
+                        record.lowLevelSubsampleMask4x4 != record.runtimeIntegerSubsampleMask4x4
+                }},
+                "runtimeIntegerStorageTupleValidCount": ${records.count { it.runtimeInteger?.valid == true }},
+                "lowLevelStorageTupleValidCount": ${records.count { it.lowLevel?.valid == true }},
+                "hostBoundDrawIndex": ${hostBinding?.drawIndex ?: "null"},
+                "runtimeIntegerEventDrawIndex": ${integerEvent?.drawIndex ?: "null"},
+                "runtimeIntegerCopySucceeded": ${integerEvent?.copySucceeded ?: "null"},
+                "lowLevelEventDrawIndex": ${lowLevelEvent?.drawIndex ?: "null"},
+                "lowLevelCopySucceeded": ${lowLevelEvent?.copySucceeded ?: "null"}
+              },
+              "partialPixels": [
+            $pixelsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "for431ActivatedByDefault": false,
+                "renderingFixApplied": false
+              },
+              "classificationReason": ${m60F16RuntimeIntegerLaneMaskProbeFor445GlobalReason(classification).jsonString()},
+              "nextStep": ${m60F16RuntimeIntegerLaneMaskProbeFor445NextStep(classification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16RuntimeIntegerLaneMaskProbeFor445.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for445_m60_f16_runtime_integer_lane_mask_probe.py",
+                "rtk python3 scripts/validate_for444_m60_f16_runtime_mask_packing_vs_low_level_probe.py",
+                "rtk python3 scripts/validate_for443_m60_f16_webgpu_low_level_exact_mask_probe.py",
+                "rtk python3 scripts/validate_for442_m60_f16_webgpu_runtime_exact_mask_probe.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for445-pycache python3 -m py_compile scripts/validate_for445_m60_f16_runtime_integer_lane_mask_probe.py scripts/validate_for444_m60_f16_runtime_mask_packing_vs_low_level_probe.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16RuntimeIntegerLaneMaskProbeFor445RecordJson(
+        record: M60F16RuntimeIntegerLaneMaskProbeFor445Record,
+    ): String {
+        val event = record.selectedSource?.first
+        val sample = record.selectedSource?.second
+        val runtimeFloatMask = record.runtimeFloatSubsampleMask4x4
+        val integerMask = record.runtimeIntegerSubsampleMask4x4
+        val lowLevelMask = record.lowLevelSubsampleMask4x4
+        val cpuMask = record.cpuGreenMask4x4
+        val runtimeFloatBaseOffset = record.runtimeFloatStorageSampleIndex?.let { it * 112 }
+        val integerBaseOffset = record.runtimeIntegerStorageSampleIndex * 48
+        val lowLevelBaseOffset = record.lowLevelStorageSampleIndex * 32
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16RuntimeIntegerLaneMaskProbeFor445LocalReason(record).jsonString()},
+              "referenceCpuRgba": ${intArrayJson(record.referenceRgba)},
+              "currentWebGpuRgba": ${intArrayJson(record.currentGpuRgba)},
+              "optInFor431Rgba": ${intArrayJson(record.optInGpuRgba)},
+              "cpuGreenMask": {
+                "coverageAlphaByte": ${record.cpuGreenCoverageByte},
+                "subsampleMask4x4": ${cpuMask ?: "null"},
+                "subsampleMask4x4Hex": ${cpuMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "coveredSubsamples4x4": ${cpuMask?.countOneBits() ?: "null"},
+                "excludesPixel": ${record.cpuGreenCoverageByte == 0}
+              },
+              "runtimeFor442FloatStorage": {
+                "available": ${runtimeFloatMask != null},
+                "valid": ${sample != null && runtimeFloatMask != null && sample.x == record.key.x && sample.y == record.key.y},
+                "storageSampleIndex": ${record.runtimeFloatStorageSampleIndex ?: "null"},
+                "sampleStrideBytes": 112,
+                "baseOffsetBytes": ${runtimeFloatBaseOffset ?: "null"},
+                "subsampleMaskFieldOffsetBytes": ${runtimeFloatBaseOffset?.plus(96) ?: "null"},
+                "numericTypeRead": "f32 rounded to Int",
+                "expectedCoordinate": [${record.key.x}, ${record.key.y}],
+                "writtenCoordinate": ${sample?.let { "[${it.x}, ${it.y}]" } ?: "null"},
+                "subdrawOrdinal": ${sample?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${sample?.subdrawRole?.jsonString() ?: "null"},
+                "edgeCount": ${event?.edgeCount ?: "null"},
+                "fillType": ${event?.fillType?.jsonString() ?: "null"},
+                "subsampleMask4x4": ${runtimeFloatMask ?: "null"},
+                "subsampleMask4x4Hex": ${runtimeFloatMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "coveredSubsamples4x4": ${sample?.coveredSubsamples4x4 ?: "null"},
+                "popcount": ${runtimeFloatMask?.countOneBits() ?: "null"}
+              },
+              "runtimeFor445IntegerStorage": {
+                "available": ${integerMask != null},
+                "valid": ${record.runtimeInteger?.valid ?: false},
+                "storageSampleIndex": ${record.runtimeIntegerStorageSampleIndex},
+                "sampleStrideBytes": 48,
+                "baseOffsetBytes": $integerBaseOffset,
+                "coordinateOffsetBytes": [$integerBaseOffset, ${integerBaseOffset + 4}],
+                "subsampleMaskFieldOffsetBytes": ${integerBaseOffset + 8},
+                "coveredCountOffsetBytes": ${integerBaseOffset + 12},
+                "validOffsetBytes": ${integerBaseOffset + 16},
+                "subdrawOrdinalOffsetBytes": ${integerBaseOffset + 20},
+                "subdrawRoleOffsetBytes": ${integerBaseOffset + 24},
+                "edgeCountEchoOffsetBytes": ${integerBaseOffset + 28},
+                "fillTypeEchoOffsetBytes": ${integerBaseOffset + 32},
+                "probeTagOffsetBytes": ${integerBaseOffset + 36},
+                "numericTypeRead": "u32 masked with 0xFFFF",
+                "expectedCoordinate": [${record.key.x}, ${record.key.y}],
+                "writtenCoordinate": ${record.runtimeInteger?.let { sample ->
+            sample.writtenX?.let { writtenX ->
+                sample.writtenY?.let { writtenY -> "[$writtenX, $writtenY]" }
+            }
+        } ?: "null"},
+                "subdrawOrdinal": ${record.runtimeInteger?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${record.runtimeInteger?.subdrawRole?.jsonString() ?: "null"},
+                "edgeCountEcho": ${record.runtimeInteger?.edgeCountEcho ?: "null"},
+                "fillTypeEcho": ${record.runtimeInteger?.fillTypeEcho ?: "null"},
+                "probeTag": ${record.runtimeInteger?.probeTag ?: "null"},
+                "subsampleMask4x4": ${integerMask ?: "null"},
+                "subsampleMask4x4Hex": ${integerMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "coveredSubsamples4x4": ${record.runtimeIntegerCoveredSubsamples4x4 ?: "null"},
+                "popcount": ${integerMask?.countOneBits() ?: "null"},
+                "popcountMatchesCoveredCount": ${
+            integerMask?.let { mask ->
+                record.runtimeIntegerCoveredSubsamples4x4?.let { mask.countOneBits() == it }
+            } ?: "null"
+        }
+              },
+              "lowLevelFor443Storage": {
+                "available": ${lowLevelMask != null},
+                "valid": ${record.lowLevel?.valid ?: false},
+                "storageSampleIndex": ${record.lowLevelStorageSampleIndex},
+                "sampleStrideBytes": 32,
+                "baseOffsetBytes": $lowLevelBaseOffset,
+                "subsampleMaskFieldOffsetBytes": ${lowLevelBaseOffset + 8},
+                "numericTypeRead": "u32 masked with 0xFFFF",
+                "edgeCountEcho": ${record.lowLevel?.edgeCountEcho ?: "null"},
+                "fillTypeEcho": ${record.lowLevel?.fillTypeEcho ?: "null"},
+                "probeTag": ${record.lowLevel?.drawIndexEcho ?: "null"},
+                "subsampleMask4x4": ${lowLevelMask ?: "null"},
+                "subsampleMask4x4Hex": ${lowLevelMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "coveredSubsamples4x4": ${record.lowLevelCoveredSubsamples4x4 ?: "null"},
+                "popcount": ${lowLevelMask?.countOneBits() ?: "null"}
+              },
+              "maskRelation": {
+                "cpuMaskHex": ${cpuMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "runtimeFloatMaskHex": ${runtimeFloatMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "runtimeIntegerMaskHex": ${integerMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "lowLevelMaskHex": ${lowLevelMask?.let { m60F16MaskHex4x4(it).jsonString() } ?: "null"},
+                "integerMatchesFloat": ${integerMask?.let { mask ->
+            runtimeFloatMask?.let { mask == it }
+        } ?: "null"},
+                "integerRefutesFloat": ${integerMask?.let { mask ->
+            runtimeFloatMask?.let { mask != it }
+        } ?: "null"},
+                "integerMatchesLowLevel": ${integerMask?.let { mask ->
+            lowLevelMask?.let { mask == it }
+        } ?: "null"},
+                "integerNonZeroLowLevelZero": ${integerMask?.let { mask ->
+            lowLevelMask?.let { mask != 0 && it == 0 }
+        } ?: "null"}
+              },
+              "subsampleComparison4x4": ${m60F16SubsampleComparisonGridJson(
+            key = record.key,
+            cpuMask = lowLevelMask,
+            wgslMask = integerMask,
+        ).prependIndent("  ").trimStart()},
+              "webGpuPredraw": {
+                "dstBeforeRgbaFloat": ${record.predraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                "dstBeforeRgba8": ${record.predraw?.second?.dstBeforeRgbaFloat?.let { floatRgbaToByteArrayJson(it) } ?: "null"}
+              },
+              "missingFields": [${record.missingFields.joinToString(", ") { it.jsonString() }}]
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16RuntimeIntegerLaneMaskProbeFor445LocalReason(
+        record: M60F16RuntimeIntegerLaneMaskProbeFor445Record,
+    ): String = when (record.classification) {
+        "runtime-integer-lane-confirms-float-mask" ->
+            "The FOR-445 integer-lane tuple is valid and matches the FOR-442 float mask for this coordinate."
+        "runtime-integer-lane-refutes-float-mask" ->
+            "The FOR-445 integer-lane tuple is valid and differs from the FOR-442 float mask for this coordinate."
+        "runtime-integer-lane-fragment-path-diverges-from-low-level" ->
+            "The FOR-445 integer-lane tuple is valid and differs from the FOR-443 low-level exact mask."
+        "runtime-integer-lane-source-unavailable" ->
+            "The FOR-445 integer-lane tuple was not available for this coordinate."
+        else ->
+            "The FOR-445 tuple is available but the comparison remains inconclusive."
+    }
+
+    private fun m60F16RuntimeIntegerLaneMaskProbeFor445GlobalReason(classification: String): String =
+        when (classification) {
+            "runtime-integer-lane-confirms-float-mask" ->
+                "The integer-lane storage reproduces the FOR-442 float mask, so the float packing path is not the likely source."
+            "runtime-integer-lane-refutes-float-mask" ->
+                "The integer-lane storage disagrees with the FOR-442 float mask on at least one observed pixel, so the FOR-442 float source field or packing remains suspect."
+            "runtime-integer-lane-fragment-path-diverges-from-low-level" ->
+                "The integer-lane runtime mask differs from the FOR-443 low-level mask, keeping the divergence near the fragment-return coverage path."
+            "runtime-integer-lane-source-unavailable" ->
+                "The integer-lane storage did not yield valid six-pixel tuples."
+            else ->
+                "The integer-lane probe did not provide enough evidence to choose between float packing and fragment path divergence."
+        }
+
+    private fun m60F16RuntimeIntegerLaneMaskProbeFor445NextStep(classification: String): String =
+        when (classification) {
+            "runtime-integer-lane-confirms-float-mask" ->
+                "Move the next ticket from packing audit to fragment coverage path divergence."
+            "runtime-integer-lane-refutes-float-mask" ->
+                "Audit the FOR-442 float storage field and source tuple before using it for a rendering correction."
+            "runtime-integer-lane-fragment-path-diverges-from-low-level" ->
+                "Compare the fragment-return coverage variables against the low-level predicate for the same six pixels."
+            "runtime-integer-lane-source-unavailable" ->
+                "Move the probe closer to the fragment return or binding layout before deriving a correction."
+            else ->
+                "Keep rendering unchanged and add the smallest next probe that exposes the missing comparison field."
+        }
+
     private fun m60F16MaskHex4x4(mask: Int): String =
         String.format(Locale.US, "0x%04X", mask and 0xFFFF)
 
@@ -14566,6 +15048,36 @@ class StrokeCapJoinSceneCaptureTest {
         val lowLevelSubsampleMask4x4: Int?,
         val lowLevelCoveredSubsamples4x4: Int?,
         val runtimeStorageSampleIndex: Int?,
+        val lowLevelStorageSampleIndex: Int,
+        val missingFields: List<String>,
+        val classification: String,
+    )
+
+    private data class M60F16RuntimeIntegerLaneMaskProbeFor445Record(
+        val key: M60F16DrawPixelKey,
+        val runtimeInteger: SkWebGpuDevice.M60F16RuntimeIntegerLaneMaskProbeFor445Sample?,
+        val lowLevel: SkWebGpuDevice.M60F16LowLevelExactMaskProbeFor443Sample?,
+        val selectedSource: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val predraw: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSample,
+            >?,
+        val hostDrawIndex: Int?,
+        val referenceRgba: IntArray,
+        val currentGpuRgba: IntArray,
+        val optInGpuRgba: IntArray,
+        val cpuGreenCoverageByte: Int,
+        val cpuGreenMask4x4: Int?,
+        val runtimeFloatSubsampleMask4x4: Int?,
+        val runtimeIntegerSubsampleMask4x4: Int?,
+        val runtimeIntegerCoveredSubsamples4x4: Int?,
+        val lowLevelSubsampleMask4x4: Int?,
+        val lowLevelCoveredSubsamples4x4: Int?,
+        val runtimeFloatStorageSampleIndex: Int?,
+        val runtimeIntegerStorageSampleIndex: Int,
         val lowLevelStorageSampleIndex: Int,
         val missingFields: List<String>,
         val classification: String,
@@ -21534,6 +22046,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16LowLevelExactMaskProbeFor443.enabled"
         private const val FOR444_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROPERTY =
             "kanvas.webgpu.m60F16RuntimeMaskPackingVsLowLevelProbeFor444.enabled"
+        private const val FOR445_RUNTIME_INTEGER_LANE_MASK_PROBE_PROPERTY =
+            "kanvas.webgpu.m60F16RuntimeIntegerLaneMaskProbeFor445.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -21669,6 +22183,13 @@ class StrokeCapJoinSceneCaptureTest {
             "runtime-mask-fragment-coverage-path-diverges",
             "runtime-mask-source-field-ambiguous",
             "runtime-mask-audit-inconclusive",
+        )
+        private val M60_F16_FOR445_ALLOWED_CLASSIFICATIONS = listOf(
+            "runtime-integer-lane-confirms-float-mask",
+            "runtime-integer-lane-refutes-float-mask",
+            "runtime-integer-lane-fragment-path-diverges-from-low-level",
+            "runtime-integer-lane-source-unavailable",
+            "runtime-integer-lane-audit-inconclusive",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
