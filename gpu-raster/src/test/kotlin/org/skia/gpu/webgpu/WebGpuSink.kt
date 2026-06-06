@@ -40,6 +40,8 @@ public object WebGpuSink {
             SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
         val aaStencilCoverPredrawDstReadbackSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        val stencilRenderPassSplitBoundarySnapshot:
+            SkWebGpuDevice.M60F16StencilRenderPassSplitBoundarySnapshot,
         val aaStencilCoverContributionIsolationSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
         val aaStencilCoverShaderReturnDiagnosticSnapshot:
@@ -121,6 +123,8 @@ public object WebGpuSink {
                     device.m60F16AaStencilCoverPostPassReadbackSnapshot(),
                 aaStencilCoverPredrawDstReadbackSnapshot =
                     device.m60F16AaStencilCoverPredrawDstReadbackSnapshot(),
+                stencilRenderPassSplitBoundarySnapshot =
+                    device.m60F16StencilRenderPassSplitBoundarySnapshot(),
                 aaStencilCoverContributionIsolationSnapshot =
                     device.m60F16AaStencilCoverContributionIsolationSnapshot(),
                 aaStencilCoverShaderReturnDiagnosticSnapshot =

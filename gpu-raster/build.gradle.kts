@@ -280,6 +280,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16StencilBoundaryAuditFor450.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16StencilBoundaryAuditFor450.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16StencilRenderPassSplitFor451.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16StencilRenderPassSplitFor451.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
