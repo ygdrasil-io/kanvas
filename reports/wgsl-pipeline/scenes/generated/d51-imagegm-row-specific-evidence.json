@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-06-06",
+  "ticket": "D51-2",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d51-2-convertir-skia-gm-image-en-preuve-row-specific-precise",
+  "sourceFor466Evidence": {
+    "report": "reports/wgsl-pipeline/2026-06-06-for-466-skia-gm-image-evidence.md",
+    "json": "reports/wgsl-pipeline/scenes/generated/for466-skia-gm-image-evidence.json",
+    "findingMemory": "global/kanvas/findings/for-466-formalise-le-refus-skia-gm-image-d50-lot-1"
+  },
+  "classification": "row-specific-expected-unsupported-precise-refusal",
+  "inventoryId": "skia-gm-image",
+  "status": "expected-unsupported",
+  "fallbackReason": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required",
+  "previousFallbackReason": "image.imagegm.row-specific-artifacts-required",
+  "fallbackReasonImproved": true,
+  "d50ManifestChanged": false,
+  "scoreImpact": {
+    "supportScoreIncreased": false,
+    "skiaComparableScoreIncreased": false,
+    "reason": "D51-2 is an audit/refusal evidence update. It does not add a dashboard WebGPU artifact, diff/stat payload, or route diagnostics with fallbackReason=none."
+  },
+  "rowSpecificAudit": {
+    "historicalImageEvidencePromotesRow": false,
+    "adjacentImageEvidenceInherited": false,
+    "imageGmSource": {
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt",
+      "upstreamSource": "gm/image.cpp",
+      "gmName": "image-surface",
+      "gmDimensions": {
+        "width": 960,
+        "height": 1200
+      },
+      "snapshotSurfaceDimensions": {
+        "width": 64,
+        "height": 64
+      },
+      "surfaceKind": "SkSurface.MakeRaster with SkImageInfo.MakeN32 premul",
+      "sampling": "SkSamplingOptions.Default",
+      "rowVariants": [
+        "drawImage original snapshot",
+        "drawImage modified snapshot",
+        "surf.draw current surface",
+        "drawImageRect full-crop",
+        "drawImageRect over-crop",
+        "drawImageRect upper-left",
+        "drawImageRect no-crop"
+      ],
+      "kanvasGpuColumnMaterialized": false,
+      "kanvasGpuColumnReason": "ImageGM keeps the upstream GPU column label, but the Kanvas port has no GPU surface column and leaves that slot empty."
+    },
+    "whyNotPromotable": [
+      "No D51 row-specific WebGPU dashboard artifact exists for ImageGM.",
+      "No D51 diff/stat payload exists for ImageGM.",
+      "No ImageGM route diagnostics with fallbackReason=none exist.",
+      "The historical CPU similarity score does not prove the WebGPU path.",
+      "The upstream GPU column is intentionally not materialized by the Kanvas ImageGM port."
+    ]
+  },
+  "artifacts": {
+    "reference": {
+      "status": "available-historical-skia-integration-reference",
+      "path": "skia-integration-tests/src/test/resources/original-888/image-surface.png",
+      "dimensions": {
+        "width": 960,
+        "height": 1200
+      },
+      "format": "PNG 16-bit/color RGBA",
+      "promotableAsDashboardReference": false,
+      "reason": "The historical PNG is a useful audit input, but D51-2 does not generate the PM/dashboard reference package required for support."
+    },
+    "cpu": {
+      "status": "available-historical-cpu-similarity-score",
+      "test": "skia-integration-tests/src/test/kotlin/org/skia/tests/ImageGMTest.kt",
+      "historicalSimilarity": {
+        "ImageGM": 98.16961805555555
+      },
+      "promotableAsDashboardCpuArtifact": false,
+      "reason": "The CPU similarity data is historical and not paired with D51 reference, WebGPU, diff/stat, and route diagnostics."
+    },
+    "webgpu": {
+      "status": "missing",
+      "required": true,
+      "route": "webgpu.image.imagegm.expected-unsupported",
+      "artifact": "not-generated",
+      "reason": "No row-specific ImageGM WebGPU artifact or route diagnostics exist under reports/wgsl-pipeline."
+    },
+    "diffStats": {
+      "status": "not-computed",
+      "required": true,
+      "reason": "Diff/stat cannot be computed for promotion without a D51 reference, CPU artifact, WebGPU artifact, and route diagnostics produced as one row-specific evidence set."
+    }
+  },
+  "routeDiagnostics": {
+    "cpu": "cpu.image.imagegm.historical-cpu-similarity-only",
+    "gpu": "webgpu.image.imagegm.expected-unsupported",
+    "fallbackReason": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required",
+    "policy": "Keep ImageGM expected-unsupported until a row-specific WebGPU route renders the surface-snapshot drawImage/drawImageRect GM with generated reference/CPU/GPU/diff artifacts and fallbackReason=none."
+  },
+  "d50Guard": {
+    "manifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+    "status": "expected-unsupported",
+    "fallbackReason": "image.imagegm.row-specific-artifacts-required",
+    "strictDashboardStatus": "expected-unsupported",
+    "dashboardRowId": null
+  },
+  "nonClaims": {
+    "supportClaimAddedByD51_2": false,
+    "skiaComparableClaimAddedByD51_2": false,
+    "dashboardRowAddedByD51_2": false,
+    "d50ManifestChanged": false,
+    "resultsJsonChanged": false,
+    "scenesJsonChanged": false,
+    "defaultRenderingChanged": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "productionCodeChanged": false,
+    "wgslProductionChanged": false,
+    "wgsl4kChanged": false,
+    "upstreamSourceChanged": false,
+    "skiaIntegrationTestsChanged": false,
+    "codecSupportClaim": false,
+    "yuvSupportClaim": false,
+    "animationSupportClaim": false,
+    "exifSupportClaim": false,
+    "mipmapSupportClaim": false,
+    "tileModeSupportClaim": false,
+    "colorManagedImageSupportClaim": false,
+    "arbitraryImageSupportClaim": false
+  },
+  "expectedChangedFiles": [
+    "reports/wgsl-pipeline/2026-06-06-d51-2-imagegm-row-specific-evidence.md",
+    "reports/wgsl-pipeline/scenes/generated/d51-imagegm-row-specific-evidence.json",
+    "scripts/validate_d51_imagegm_row_specific_evidence.py"
+  ],
+  "validationCommands": [
+    "rtk python3 scripts/validate_d51_imagegm_row_specific_evidence.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d51-imagegm-row-specific-evidence.json",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-d51-imagegm-pycache python3 -m py_compile scripts/validate_d51_imagegm_row_specific_evidence.py",
+    "rtk git diff --check"
+  ]
+}
