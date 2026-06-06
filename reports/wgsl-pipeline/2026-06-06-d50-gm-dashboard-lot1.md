@@ -12,7 +12,7 @@ FOR-464 a formalise un manifeste PM strict pour le lot 1 D50 dans l'ordre FOR-46
 
 Sept lignes restent `supported` uniquement parce qu'elles pointent vers des lignes dashboard existantes avec `status=pass`, `gpu.status=pass` et `fallbackReason=none`. Aucune ligne ne reste `diagnostic-only`: les cinq candidats non prouves sont visibles en `expected-unsupported` jusqu'a disposer de reference, CPU, GPU, diff/stat, diagnostics de route et politique de seuil inchangee.
 
-FOR-465 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. FOR-466 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. FOR-467 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. FOR-468 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. FOR-469 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. Le score de support ne monte pas: le changement ameliore la visibilite du refus, pas le rendu.
+D50 n'ajoute aucune ligne dashboard active pour ces refus. FOR-465, FOR-466, FOR-467, FOR-468 et FOR-469 ajoutent chacun 0 revendication de support et 0 revendication Skia-comparable. Le score de support ne monte pas: le changement ameliore la lecture du refus, pas le rendu.
 
 ## Statuts Lot 1
 
@@ -32,7 +32,7 @@ FOR-465 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication 
 | Lignes diagnostic-only | 0 | 0 | 0 |
 | Lignes Skia-comparable | 5 | 17 | 12 |
 
-Ces compteurs avant/apres donnent le contexte dashboard existant. Les deltas ne sont pas des nouvelles revendications FOR-464, FOR-465, FOR-466, FOR-467 ou FOR-468.
+Ces compteurs avant/apres donnent le contexte dashboard existant. Les cinq refus sont des decisions strictes `expected-unsupported` dans le manifeste D50, pas des lignes dashboard supplementaires ni des nouvelles revendications de support FOR-464, FOR-465, FOR-466, FOR-467, FOR-468 ou FOR-469.
 
 ## Lignes
 
@@ -67,10 +67,16 @@ Ces compteurs avant/apres donnent le contexte dashboard existant. Les deltas ne 
 - Aucun statut dashboard n'est change par FOR-468.
 - Aucun statut dashboard n'est change par FOR-469.
 - Aucune ligne dashboard n'est ajoutee par FOR-465.
+- FOR-465 ajoute 0 ligne dashboard active.
 - Aucune ligne dashboard n'est ajoutee par FOR-466.
+- FOR-466 ajoute 0 ligne dashboard active.
 - Aucune ligne dashboard n'est ajoutee par FOR-467.
+- FOR-467 ajoute 0 ligne dashboard active.
 - Aucune ligne dashboard n'est ajoutee par FOR-468.
+- FOR-468 ajoute 0 ligne dashboard active.
 - Aucune ligne dashboard n'est ajoutee par FOR-469.
+- FOR-469 ajoute 0 ligne dashboard active.
+- D50 ajoute 0 ligne dashboard active: les cinq refus restent dans le manifeste strict, sans augmenter `status.pass`.
 - Aucune nouvelle ligne de support n'est ajoutee par FOR-465.
 - Aucune nouvelle ligne de support n'est ajoutee par FOR-466.
 - Aucune nouvelle ligne de support n'est ajoutee par FOR-467.

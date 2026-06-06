@@ -309,13 +309,16 @@ EXPECTED_FILES = {
     "reports/wgsl-pipeline/2026-06-06-for-467-skia-gm-imagesource-evidence.md",
     "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
     "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md",
+    "reports/wgsl-pipeline/2026-06-06-d50-lot1-pm-closeout.md",
     "reports/wgsl-pipeline/scenes/generated/d50-lot1-dashboard-integration-for462.json",
     "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+    "reports/wgsl-pipeline/scenes/generated/d50-lot1-pm-closeout.json",
     "reports/wgsl-pipeline/scenes/generated/for465-drawminibitmaprect-evidence.json",
     "reports/wgsl-pipeline/scenes/generated/for466-skia-gm-image-evidence.json",
     "reports/wgsl-pipeline/scenes/generated/for467-skia-gm-imagesource-evidence.json",
     "reports/wgsl-pipeline/scenes/generated/for468-skia-gm-offsetimagefilter-evidence.json",
     "reports/wgsl-pipeline/scenes/generated/for469-skia-gm-pathfill-evidence.json",
+    "scripts/validate_d50_lot1_pm_closeout.py",
     "scripts/validate_for462_d50_lot1_dashboard_integration.py",
     "scripts/validate_for465_drawminibitmaprect_evidence.py",
     "scripts/validate_for466_skia_gm_image_evidence.py",
@@ -813,6 +816,7 @@ def build_evidence() -> dict[str, Any]:
         "supportClaimsAddedByFor468": 0,
         "skiaComparableClaimsAddedByFor468": 0,
         "dashboardRowsAddedByFor469": 0,
+        "dashboardRowsAddedByD50Visibility": 0,
         "supportClaimsAddedByFor469": 0,
         "skiaComparableClaimsAddedByFor469": 0,
         "visualSupportAbove50PercentClaimByFor464": False,
@@ -828,6 +832,7 @@ def build_evidence() -> dict[str, Any]:
         "dashboardStatusChangedByFor467": False,
         "dashboardStatusChangedByFor468": False,
         "dashboardStatusChangedByFor469": False,
+        "dashboardSupportStatusChangedByD50Visibility": False,
         "thresholdChanged": False,
         "scoringChanged": False,
         "fallbackPolicyChanged": False,
@@ -893,10 +898,10 @@ def build_evidence() -> dict[str, Any]:
             "rtk python3 scripts/validate_for466_skia_gm_image_evidence.py",
             "rtk python3 scripts/validate_for467_skia_gm_imagesource_evidence.py",
             "rtk python3 scripts/validate_for468_skia_gm_offsetimagefilter_evidence.py",
-        "rtk python3 scripts/validate_for469_skia_gm_pathfill_evidence.py",
-        "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
-        "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/for469-skia-gm-pathfill-evidence.json",
-        "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for469-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py scripts/validate_for465_drawminibitmaprect_evidence.py scripts/validate_for466_skia_gm_image_evidence.py scripts/validate_for467_skia_gm_imagesource_evidence.py scripts/validate_for468_skia_gm_offsetimagefilter_evidence.py scripts/validate_for469_skia_gm_pathfill_evidence.py",
+            "rtk python3 scripts/validate_for469_skia_gm_pathfill_evidence.py",
+            "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+            "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/for469-skia-gm-pathfill-evidence.json",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for469-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py scripts/validate_for465_drawminibitmaprect_evidence.py scripts/validate_for466_skia_gm_image_evidence.py scripts/validate_for467_skia_gm_imagesource_evidence.py scripts/validate_for468_skia_gm_offsetimagefilter_evidence.py scripts/validate_for469_skia_gm_pathfill_evidence.py",
             "rtk git diff --check",
         ],
     }
@@ -926,9 +931,9 @@ def build_lot1_manifest(evidence: dict[str, Any]) -> dict[str, Any]:
         "classification": evidence["classification"],
         "dashboardConsumesLotDirectly": False,
         "dashboardConsumptionReason": (
-            "Only rows with existing dashboard evidence are recognized as supported; "
-            "five rows have stable expected-unsupported refusals; no lot 1 candidate remains "
-            "diagnostic-only after FOR-469."
+            "Only rows with existing dashboard evidence are active dashboard rows. "
+            "Five D50 lot 1 candidates are classified as expected-unsupported in the strict manifest, "
+            "but D50 does not add dashboard rows or support claims."
         ),
         "lot": 1,
         "candidateCount": evidence["lot1CandidateCount"],
@@ -951,6 +956,7 @@ def build_lot1_manifest(evidence: dict[str, Any]) -> dict[str, Any]:
             "supportClaimsAddedByFor468": 0,
             "skiaComparableClaimsAddedByFor468": 0,
             "dashboardRowsAddedByFor469": 0,
+            "dashboardRowsAddedByD50Visibility": 0,
             "supportClaimsAddedByFor469": 0,
             "skiaComparableClaimsAddedByFor469": 0,
             "supportClaimsAddedByFor462": 0,
@@ -962,6 +968,7 @@ def build_lot1_manifest(evidence: dict[str, Any]) -> dict[str, Any]:
             "dashboardStatusChangedByFor467": False,
             "dashboardStatusChangedByFor468": False,
             "dashboardStatusChangedByFor469": False,
+            "dashboardSupportStatusChangedByD50Visibility": False,
             "broadSkiaGmParityClaim": False,
             "visualSupportAbove50PercentClaim": False,
             "thresholdChanged": False,
@@ -1010,9 +1017,9 @@ def write_report(evidence: dict[str, Any]) -> None:
         "",
         f"Classification : `{evidence['classification']}`",
         "",
-        "FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere est deja vert avec 0 `tracked-gap` et 0 `fail`, mais seuls 7 des 12 candidats du lot 1 ont actuellement une ligne materialisee avec preuves existantes. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect`; FOR-466 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-image`; FOR-467 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-imagesource`; FOR-468 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-offsetimagefilter`; FOR-469 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-pathfill`. Aucun de ces refus n'est compte comme support.",
+        "FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere reste vert avec 0 `tracked-gap` et 0 `fail`; les 12 candidats du lot 1 sont maintenant classes dans le manifeste strict: 7 lignes `pass` existantes et 5 refus `expected-unsupported` documentes hors dashboard actif. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect`; FOR-466 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-image`; FOR-467 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-imagesource`; FOR-468 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-offsetimagefilter`; FOR-469 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-pathfill`. Aucun de ces refus n'est compte comme support.",
         "",
-        "Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat reel et les cinq candidats sans preuves ligne par ligne sont maintenant des refus visibles.",
+        "D50 n'ajoute aucune ligne dashboard active. Le nombre de lignes `pass` reste inchange, et les cinq refus restent des decisions de manifeste strict.",
         "",
         "## Compteurs",
         "",
@@ -1023,6 +1030,7 @@ def write_report(evidence: dict[str, Any]) -> None:
         f"| Candidats expected-unsupported row-specific | {evidence['expectedUnsupportedCandidateCount']} |",
         f"| Candidats sans preuve suffisante | {evidence['missingCandidateCount']} |",
         f"| Lignes ajoutees par FOR-462 | {evidence['materializedRowsAddedByFor462']} |",
+        f"| Lignes dashboard ajoutees par D50 | {evidence['dashboardRowsAddedByD50Visibility']} |",
         f"| Claims support ajoutes par FOR-462 | {evidence['supportClaimsAddedByFor462']} |",
         f"| Claims Skia-comparable ajoutes par FOR-462 | {evidence['skiaComparableClaimsAddedByFor462']} |",
         f"| Dashboard total | {evidence['dashboardCounters']['total']} |",
@@ -1082,6 +1090,7 @@ def write_report(evidence: dict[str, Any]) -> None:
         "",
         "- FOR-462 ne change pas les statuts dashboard actifs.",
         "- FOR-462 n'ajoute aucun claim de support.",
+        "- D50 n'ajoute aucune ligne dashboard active.",
         "- FOR-462 n'ajoute aucun claim de fidelite Skia-comparable.",
         "- FOR-462 ne modifie pas les seuils, le scoring, la politique de fallback, `PipelineKey`, le code de production ou les sources upstream.",
         "- FOR-462 ne revendique pas broad Skia GM parity.",
@@ -1123,7 +1132,7 @@ def write_lot1_report(evidence: dict[str, Any]) -> None:
         "",
         "Sept lignes restent `supported` uniquement parce qu'elles pointent vers des lignes dashboard existantes avec `status=pass`, `gpu.status=pass` et `fallbackReason=none`. Aucune ligne ne reste `diagnostic-only`: les cinq candidats non prouves sont visibles en `expected-unsupported` jusqu'a disposer de reference, CPU, GPU, diff/stat, diagnostics de route et politique de seuil inchangee.",
         "",
-        "FOR-465 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. FOR-466 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. FOR-467 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. FOR-468 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. FOR-469 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. Le score de support ne monte pas: le changement ameliore la visibilite du refus, pas le rendu.",
+        "D50 n'ajoute aucune ligne dashboard active pour ces refus. FOR-465, FOR-466, FOR-467, FOR-468 et FOR-469 ajoutent chacun 0 revendication de support et 0 revendication Skia-comparable. Le score de support ne monte pas: le changement ameliore la lecture du refus, pas le rendu.",
         "",
         "## Statuts Lot 1",
         "",
@@ -1143,7 +1152,7 @@ def write_lot1_report(evidence: dict[str, Any]) -> None:
         f"| Lignes diagnostic-only | {before['diagnosticOnlyRows']} | {after['diagnosticOnlyRows']} | {after['diagnosticOnlyRows'] - before['diagnosticOnlyRows']} |",
         f"| Lignes Skia-comparable | {before['skiaComparableRows']} | {after['skiaComparableRows']} | {after['skiaComparableRows'] - before['skiaComparableRows']} |",
         "",
-        "Ces compteurs avant/apres donnent le contexte dashboard existant. Les deltas ne sont pas des nouvelles revendications FOR-464, FOR-465, FOR-466, FOR-467 ou FOR-468.",
+        "Ces compteurs avant/apres donnent le contexte dashboard existant. Les cinq refus sont des decisions strictes `expected-unsupported` dans le manifeste D50, pas des lignes dashboard supplementaires ni des nouvelles revendications de support FOR-464, FOR-465, FOR-466, FOR-467, FOR-468 ou FOR-469.",
         "",
         "## Lignes",
         "",
@@ -1175,10 +1184,16 @@ def write_lot1_report(evidence: dict[str, Any]) -> None:
         "- Aucun statut dashboard n'est change par FOR-468.",
         "- Aucun statut dashboard n'est change par FOR-469.",
         "- Aucune ligne dashboard n'est ajoutee par FOR-465.",
+        "- FOR-465 ajoute 0 ligne dashboard active.",
         "- Aucune ligne dashboard n'est ajoutee par FOR-466.",
+        "- FOR-466 ajoute 0 ligne dashboard active.",
         "- Aucune ligne dashboard n'est ajoutee par FOR-467.",
+        "- FOR-467 ajoute 0 ligne dashboard active.",
         "- Aucune ligne dashboard n'est ajoutee par FOR-468.",
+        "- FOR-468 ajoute 0 ligne dashboard active.",
         "- Aucune ligne dashboard n'est ajoutee par FOR-469.",
+        "- FOR-469 ajoute 0 ligne dashboard active.",
+        "- D50 ajoute 0 ligne dashboard active: les cinq refus restent dans le manifeste strict, sans augmenter `status.pass`.",
         "- Aucune nouvelle ligne de support n'est ajoutee par FOR-465.",
         "- Aucune nouvelle ligne de support n'est ajoutee par FOR-466.",
         "- Aucune nouvelle ligne de support n'est ajoutee par FOR-467.",
@@ -1660,6 +1675,7 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
     require(written["supportClaimsAddedByFor468"] == 0, "FOR-468 must not add support claims")
     require(written["skiaComparableClaimsAddedByFor468"] == 0, "FOR-468 must not add Skia-comparable claims")
     require(written["dashboardRowsAddedByFor469"] == 0, "FOR-469 must not add dashboard rows")
+    require(written["dashboardRowsAddedByD50Visibility"] == 0, "D50 must not add dashboard rows")
     require(written["supportClaimsAddedByFor469"] == 0, "FOR-469 must not add support claims")
     require(written["skiaComparableClaimsAddedByFor469"] == 0, "FOR-469 must not add Skia-comparable claims")
     require(written["visualSupportAbove50PercentClaimByFor464"] is False, "FOR-464 must not claim >50% visual support")
@@ -1778,6 +1794,7 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
     require(non_claims["supportClaimsAddedByFor468"] == 0, "manifest must say 0 FOR-468 support claims")
     require(non_claims["skiaComparableClaimsAddedByFor468"] == 0, "manifest must say 0 FOR-468 Skia-comparable claims")
     require(non_claims["dashboardRowsAddedByFor469"] == 0, "manifest must say 0 FOR-469 dashboard rows added")
+    require(non_claims["dashboardRowsAddedByD50Visibility"] == 0, "manifest must say D50 adds 0 dashboard rows")
     require(non_claims["supportClaimsAddedByFor469"] == 0, "manifest must say 0 FOR-469 support claims")
     require(non_claims["skiaComparableClaimsAddedByFor469"] == 0, "manifest must say 0 FOR-469 Skia-comparable claims")
     require(non_claims["visualSupportAbove50PercentClaim"] is False, "manifest must reject >50% visual support claim")
@@ -1838,10 +1855,10 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
     report = REPORT.read_text(encoding="utf-8")
     for required in (
         "0 `tracked-gap` et 0 `fail`",
-        "Aucune ligne dashboard n'est ajoutee par FOR-462",
+        "D50 n'ajoute aucune ligne dashboard active",
         "FOR-462 n'ajoute aucun claim de support",
         "broad Skia GM parity",
-        "cinq candidats sans preuves ligne par ligne",
+        "5 refus `expected-unsupported` documentes hors dashboard actif",
     ):
         require(required in report, f"report missing: {required}")
     lot_report = LOT1_REPORT.read_text(encoding="utf-8")
@@ -1851,6 +1868,7 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
         "FOR-467 ajoute 0 ligne dashboard",
         "FOR-468 ajoute 0 ligne dashboard",
         "FOR-469 ajoute 0 ligne dashboard",
+        "D50 ajoute 0 ligne dashboard active",
         "0 revendication de support",
         "0 revendication Skia-comparable",
         "score de support ne monte pas",
