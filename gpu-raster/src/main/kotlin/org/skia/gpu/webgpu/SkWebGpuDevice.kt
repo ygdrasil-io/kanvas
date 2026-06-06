@@ -226,6 +226,8 @@ private const val WEBGPU_M60_F16_LOW_LEVEL_EXACT_MASK_PROBE_FOR443_FLAG: String 
     "kanvas.webgpu.m60F16LowLevelExactMaskProbeFor443.enabled"
 private const val WEBGPU_M60_F16_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROBE_FOR444_FLAG: String =
     "kanvas.webgpu.m60F16RuntimeMaskPackingVsLowLevelProbeFor444.enabled"
+private const val WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG: String =
+    "kanvas.webgpu.m60F16RuntimeIntegerLaneMaskProbeFor445.enabled"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_RENDER_FIX_FOR431_FLAG: String =
     "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_FOR432_FLAG: String =
@@ -811,6 +813,48 @@ public class SkWebGpuDevice(
         val reason: String,
     )
 
+    public data class M60F16RuntimeIntegerLaneMaskProbeFor445Snapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val requestedBoundary: String,
+        val observedBoundary: String,
+        val diagnosticShader: String,
+        val pipelineLayout: String,
+        val sampleLimit: Int,
+        val events: List<M60F16RuntimeIntegerLaneMaskProbeFor445Event>,
+    )
+
+    public data class M60F16RuntimeIntegerLaneMaskProbeFor445Event(
+        val drawIndex: Int,
+        val pipelineFamily: String,
+        val fillType: String,
+        val blendMode: String,
+        val scissor: IntArray,
+        val edgeCount: Int,
+        val coverVertexCount: Int,
+        val copySucceeded: Boolean,
+        val copyFailureReason: String?,
+        val samples: List<M60F16RuntimeIntegerLaneMaskProbeFor445Sample>,
+    )
+
+    public data class M60F16RuntimeIntegerLaneMaskProbeFor445Sample(
+        val x: Int,
+        val y: Int,
+        val writtenX: Int?,
+        val writtenY: Int?,
+        val targetWithinScissor: Boolean,
+        val valid: Boolean,
+        val subsampleMask4x4: Int?,
+        val coveredSubsamples4x4: Int?,
+        val subdrawOrdinal: Int?,
+        val subdrawRole: String?,
+        val edgeCountEcho: Int?,
+        val fillTypeEcho: Int?,
+        val probeTag: Int?,
+        val classification: String,
+        val reason: String,
+    )
+
     public data class M60F16HostDrawPaintBindingFor436Snapshot(
         val propertyName: String,
         val enabled: Boolean,
@@ -985,7 +1029,19 @@ public class SkWebGpuDevice(
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_DIAGNOSTIC_FLAG,
             "false",
-        ).toBoolean()
+        ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_RUNTIME_EXACT_MASK_PROBE_FOR442_FLAG,
+                "false",
+            ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROBE_FOR444_FLAG,
+                "false",
+            ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG,
+                "false",
+            ).toBoolean()
     private val m60F16AaStencilCoverIsolatedColorTargetDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_ISOLATED_COLOR_TARGET_FLAG,
@@ -1029,6 +1085,10 @@ public class SkWebGpuDevice(
             System.getProperty(
                 WEBGPU_M60_F16_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROBE_FOR444_FLAG,
                 "false",
+            ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG,
+                "false",
             ).toBoolean()
     private val m60F16LowLevelExactMaskProbeFor443DiagnosticsEnabled: Boolean =
         System.getProperty(
@@ -1038,7 +1098,16 @@ public class SkWebGpuDevice(
             System.getProperty(
                 WEBGPU_M60_F16_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROBE_FOR444_FLAG,
                 "false",
+            ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG,
+                "false",
             ).toBoolean()
+    private val m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG,
+            "false",
+        ).toBoolean()
     private val m60F16HostDrawPaintBindingFor436DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_HOST_DRAW_PAINT_BINDING_FOR436_FLAG,
@@ -1086,6 +1155,10 @@ public class SkWebGpuDevice(
         MutableList<M60F16LowLevelExactMaskProbeFor443Event> = mutableListOf()
     private val m60F16LowLevelExactMaskProbeFor443PendingReadbacks:
         MutableList<M60F16LowLevelExactMaskProbeFor443Readback> = mutableListOf()
+    private val m60F16RuntimeIntegerLaneMaskProbeFor445Events:
+        MutableList<M60F16RuntimeIntegerLaneMaskProbeFor445Event> = mutableListOf()
+    private val m60F16RuntimeIntegerLaneMaskProbeFor445PendingReadbacks:
+        MutableList<M60F16RuntimeIntegerLaneMaskProbeFor445Readback> = mutableListOf()
     private val m60F16AaStencilCoverFinalWgslSources: MutableMap<String, String> = linkedMapOf()
     private val m60F16HostDrawPaintBindingFor436Events:
         MutableList<M60F16HostDrawPaintBindingFor436Event> = mutableListOf()
@@ -1265,6 +1338,21 @@ public class SkWebGpuDevice(
             pipelineLayout = M60_F16_LOW_LEVEL_EXACT_MASK_PROBE_FOR443_LAYOUT,
             sampleLimit = M60_F16_LOW_LEVEL_EXACT_MASK_PROBE_FOR443_POINTS.size,
             events = m60F16LowLevelExactMaskProbeFor443Events.toList(),
+        )
+
+    public fun m60F16RuntimeIntegerLaneMaskProbeFor445Snapshot():
+        M60F16RuntimeIntegerLaneMaskProbeFor445Snapshot =
+        M60F16RuntimeIntegerLaneMaskProbeFor445Snapshot(
+            propertyName = WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG,
+            enabled = m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled,
+            requestedBoundary =
+                "per StencilCoverAaPolygonDraw fragment return, beside the FOR-442 runtime mask side-channel",
+            observedBoundary =
+                "fragment shader writes integer mask lanes immediately before returning @location(0)",
+            diagnosticShader = M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_SHADER,
+            pipelineLayout = M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_LAYOUT,
+            sampleLimit = M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_POINTS.size,
+            events = m60F16RuntimeIntegerLaneMaskProbeFor445Events.toList(),
         )
 
     public fun m60F16HostDrawPaintBindingFor436Snapshot():
@@ -2151,6 +2239,129 @@ public class SkWebGpuDevice(
                                 fillTypeEcho = null,
                                 classification = "webgpu-low-level-mask-probe-unavailable",
                                 reason = "FOR-443 low-level exact-mask compute readback failed.",
+                            )
+                        },
+                    )
+            } finally {
+                readback.staging.close()
+                readback.storage.close()
+            }
+        }
+    }
+
+    private suspend fun recordM60F16RuntimeIntegerLaneMaskProbeFor445Readbacks() {
+        if (!m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled) return
+        val readbacks = m60F16RuntimeIntegerLaneMaskProbeFor445PendingReadbacks.toList()
+        m60F16RuntimeIntegerLaneMaskProbeFor445PendingReadbacks.clear()
+        readbacks.forEach { readback ->
+            val metadata = readback.metadata
+            try {
+                readback.staging.mapAsync(
+                    GPUMapMode.Read,
+                    0uL,
+                    readback.bufferSize,
+                ).getOrThrow()
+                val bytes = readback.staging
+                    .getMappedRange(0uL, readback.bufferSize)
+                    .toByteArray()
+                readback.staging.unmap()
+                val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+                val samples = M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_POINTS.mapIndexed { index, point ->
+                    val base = index * M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_SAMPLE_STRIDE_BYTES
+                    val x = buffer.getInt(base)
+                    val y = buffer.getInt(base + 4)
+                    val mask = buffer.getInt(base + 8) and 0xFFFF
+                    val covered = buffer.getInt(base + 12)
+                    val validFlag = buffer.getInt(base + 16)
+                    val subdrawOrdinal = buffer.getInt(base + 20)
+                    val side = buffer.getInt(base + 24)
+                    val edgeCountEcho = buffer.getInt(base + 28)
+                    val fillTypeEcho = buffer.getInt(base + 32)
+                    val probeTag = buffer.getInt(base + 36)
+                    val valid = validFlag == 1 &&
+                        x == point.first &&
+                        y == point.second &&
+                        side == 1 &&
+                        probeTag == 445
+                    val consistentCount = covered == mask.countOneBits()
+                    val classification = when {
+                        !valid -> "runtime-integer-lane-source-unavailable"
+                        !consistentCount -> "runtime-integer-lane-audit-inconclusive"
+                        else -> "runtime-integer-lane-audit-inconclusive"
+                    }
+                    val reason = when {
+                        !valid ->
+                            "FOR-445 runtime integer-lane storage did not echo the expected pixel/inside/probe tuple."
+                        !consistentCount ->
+                            "The FOR-445 integer mask popcount does not match the integer covered-subsample count."
+                        else ->
+                            "FOR-445 captured integer-lane runtime mask and covered count; artifact comparison classifies it against FOR-442 and FOR-443."
+                    }
+                    M60F16RuntimeIntegerLaneMaskProbeFor445Sample(
+                        x = point.first,
+                        y = point.second,
+                        writtenX = x,
+                        writtenY = y,
+                        targetWithinScissor = metadata.scissor.containsPoint(point.first, point.second),
+                        valid = valid,
+                        subsampleMask4x4 = if (valid) mask else null,
+                        coveredSubsamples4x4 = if (valid) covered else null,
+                        subdrawOrdinal = if (validFlag != 0) subdrawOrdinal else null,
+                        subdrawRole = when (side) {
+                            1 -> "inside"
+                            2 -> "outside"
+                            else -> null
+                        },
+                        edgeCountEcho = if (validFlag != 0) edgeCountEcho else null,
+                        fillTypeEcho = if (validFlag != 0) fillTypeEcho else null,
+                        probeTag = if (validFlag != 0) probeTag else null,
+                        classification = classification,
+                        reason = reason,
+                    )
+                }
+                m60F16RuntimeIntegerLaneMaskProbeFor445Events +=
+                    M60F16RuntimeIntegerLaneMaskProbeFor445Event(
+                        drawIndex = metadata.drawIndex,
+                        pipelineFamily = "StencilCoverAaPolygonDraw",
+                        fillType = metadata.fillType,
+                        blendMode = metadata.blendMode,
+                        scissor = metadata.scissor.copyOf(),
+                        edgeCount = metadata.edgeCount,
+                        coverVertexCount = metadata.coverVertexCount,
+                        copySucceeded = true,
+                        copyFailureReason = null,
+                        samples = samples,
+                    )
+            } catch (t: Throwable) {
+                m60F16RuntimeIntegerLaneMaskProbeFor445Events +=
+                    M60F16RuntimeIntegerLaneMaskProbeFor445Event(
+                        drawIndex = metadata.drawIndex,
+                        pipelineFamily = "StencilCoverAaPolygonDraw",
+                        fillType = metadata.fillType,
+                        blendMode = metadata.blendMode,
+                        scissor = metadata.scissor.copyOf(),
+                        edgeCount = metadata.edgeCount,
+                        coverVertexCount = metadata.coverVertexCount,
+                        copySucceeded = false,
+                        copyFailureReason =
+                            "FOR-445 runtime integer-lane mask readback failed: ${t::class.simpleName}: ${t.message}",
+                        samples = M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_POINTS.map { (x, y) ->
+                            M60F16RuntimeIntegerLaneMaskProbeFor445Sample(
+                                x = x,
+                                y = y,
+                                writtenX = null,
+                                writtenY = null,
+                                targetWithinScissor = metadata.scissor.containsPoint(x, y),
+                                valid = false,
+                                subsampleMask4x4 = null,
+                                coveredSubsamples4x4 = null,
+                                subdrawOrdinal = null,
+                                subdrawRole = null,
+                                edgeCountEcho = null,
+                                fillTypeEcho = null,
+                                probeTag = null,
+                                classification = "runtime-integer-lane-source-unavailable",
+                                reason = "FOR-445 runtime integer-lane mask readback failed.",
                             )
                         },
                     )
@@ -4762,6 +4973,7 @@ public class SkWebGpuDevice(
         contributionIsolationDiagnostic: Boolean = false,
         storageZeroCauseDiagnostic: Boolean = false,
         subsampleMaskFor427Diagnostic: Boolean = false,
+        runtimeIntegerLaneMaskProbeFor445Diagnostic: Boolean = false,
         widthQuantizedRenderFixFor431: Boolean = false,
     ): GPUShaderModule {
         val cached = shaderModuleCache[cacheKey]
@@ -4793,6 +5005,7 @@ public class SkWebGpuDevice(
                     """
 @binding(0) @group(0) var<uniform> uniforms: Uniforms;
 @binding(1) @group(0) var<storage, read_write> m60F16FragmentLaneDiagnostic: array<vec4f, $vec4Count>;
+${if (runtimeIntegerLaneMaskProbeFor445Diagnostic) "@binding(2) @group(0) var<storage, read_write> m60F16RuntimeIntegerLaneMaskProbeFor445: array<vec4u, $M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_VEC4S>;" else ""}
 """.trimIndent() + "\n"
                 } else {
                     """
@@ -4953,6 +5166,58 @@ fn m60_f16_subsample_mask_4x4(pixel: vec2f) -> f32 {
     return mask;
 }
 
+${if (runtimeIntegerLaneMaskProbeFor445Diagnostic) {
+                            """
+fn m60_f16_subsample_mask_4x4_u32(pixel: vec2f) -> vec2u {
+    if (uniforms.edgeCount == 0u) {
+        return vec2u(65535u, 16u);
+    }
+    var bit: u32 = 1u;
+    var mask: u32 = 0u;
+    var covered: u32 = 0u;
+    for (var sy: u32 = 0u; sy < 4u; sy = sy + 1u) {
+        let y = floor(pixel.y) + (f32(sy) + 0.5) * 0.25;
+        for (var sx: u32 = 0u; sx < 4u; sx = sx + 1u) {
+            let x = floor(pixel.x) + (f32(sx) + 0.5) * 0.25;
+            if (sample_covered(vec2f(x, y)) > 0.5) {
+                mask = mask | bit;
+                covered = covered + 1u;
+            }
+            bit = bit << 1u;
+        }
+    }
+    return vec2u(mask, covered);
+}
+
+fn m60_f16_record_integer_lane_mask_for445(pixel: vec2f, side: u32) {
+    let slot = m60_f16_application_point_slot(pixel);
+    if (slot < 0 || slot >= 6 || side != 1u) {
+        return;
+    }
+    let px = u32(floor(pixel.x));
+    let py = u32(floor(pixel.y));
+    let exact = m60_f16_subsample_mask_4x4_u32(pixel);
+    let subdraw_ordinal = select(0u, 1u, side == 2u);
+    let base = u32(slot) * 3u;
+    m60F16RuntimeIntegerLaneMaskProbeFor445[base] = vec4u(px, py, exact.x, exact.y);
+    m60F16RuntimeIntegerLaneMaskProbeFor445[base + 1u] = vec4u(
+        1u,
+        subdraw_ordinal,
+        side,
+        uniforms.edgeCount
+    );
+    m60F16RuntimeIntegerLaneMaskProbeFor445[base + 2u] = vec4u(
+        uniforms.fillType,
+        445u,
+        0u,
+        0u
+    );
+}
+""".trimEnd()
+                        } else {
+                            ""
+                        }}
+
 fn m60_f16_record_application_point(
     pixel: vec2f,
     side: u32,
@@ -4977,6 +5242,13 @@ ${if (storageZeroCauseDiagnostic) {
     if (!output_nonzero) {
         return;
     }
+""".trimEnd()
+                        } else {
+                            ""
+                        }}
+${if (runtimeIntegerLaneMaskProbeFor445Diagnostic) {
+                            """
+    m60_f16_record_integer_lane_mask_for445(pixel, side);
 """.trimEnd()
                         } else {
                             ""
@@ -5384,7 +5656,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     private fun loadM60F16AaStencilCoverShaderReturnDiagnosticShader(): GPUShaderModule =
         loadM60F16AaStencilCoverProbeShader(
-            cacheKey = if (m60F16RuntimeExactMaskProbeFor442DiagnosticsEnabled) {
+            cacheKey = if (m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled) {
+                "diagnostic://m60-f16-aa-stencil-cover-shader-return-runtime-integer-lane-mask-for445"
+            } else if (m60F16RuntimeExactMaskProbeFor442DiagnosticsEnabled) {
                 "diagnostic://m60-f16-aa-stencil-cover-shader-return-runtime-exact-mask-for442"
             } else {
                 "diagnostic://m60-f16-aa-stencil-cover-shader-return-for412"
@@ -5393,6 +5667,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             boundedRuntimeCorrection = true,
             contributionIsolationDiagnostic = true,
             subsampleMaskFor427Diagnostic = m60F16RuntimeExactMaskProbeFor442DiagnosticsEnabled,
+            runtimeIntegerLaneMaskProbeFor445Diagnostic =
+                m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled,
         )
 
     private fun loadM60F16AaStencilCoverShaderReturnStorageZeroCauseShader(): GPUShaderModule =
@@ -5415,10 +5691,16 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     private fun loadM60F16WidthQuantizedColorReconstructionFor432Shader(): GPUShaderModule =
         loadM60F16AaStencilCoverProbeShader(
-            cacheKey = "diagnostic://m60-f16-aa-stencil-cover-width-quantized-color-reconstruction-for432",
+            cacheKey = if (m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled) {
+                "diagnostic://m60-f16-aa-stencil-cover-width-quantized-color-reconstruction-runtime-integer-lane-mask-for445"
+            } else {
+                "diagnostic://m60-f16-aa-stencil-cover-width-quantized-color-reconstruction-for432"
+            },
             diagnostic = true,
             boundedRuntimeCorrection = false,
             contributionIsolationDiagnostic = true,
+            runtimeIntegerLaneMaskProbeFor445Diagnostic =
+                m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled,
             widthQuantizedRenderFixFor431 = true,
         )
 
@@ -5900,18 +6182,31 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     private val m60F16FragmentLaneDiagnosticBindGroupLayoutLazy: Lazy<GPUBindGroupLayout> = lazy {
         context.device.createBindGroupLayout(
             BindGroupLayoutDescriptor(
-                entries = listOf(
-                    BindGroupLayoutEntry(
-                        binding = 0u,
-                        visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
-                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
-                    ),
-                    BindGroupLayoutEntry(
-                        binding = 1u,
-                        visibility = GPUShaderStage.Fragment,
-                        buffer = BufferBindingLayout(type = GPUBufferBindingType.Storage),
-                    ),
-                ),
+                entries = buildList {
+                    add(
+                        BindGroupLayoutEntry(
+                            binding = 0u,
+                            visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                        ),
+                    )
+                    add(
+                        BindGroupLayoutEntry(
+                            binding = 1u,
+                            visibility = GPUShaderStage.Fragment,
+                            buffer = BufferBindingLayout(type = GPUBufferBindingType.Storage),
+                        ),
+                    )
+                    if (m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled) {
+                        add(
+                            BindGroupLayoutEntry(
+                                binding = 2u,
+                                visibility = GPUShaderStage.Fragment,
+                                buffer = BufferBindingLayout(type = GPUBufferBindingType.Storage),
+                            ),
+                        )
+                    }
+                },
             ),
         )
     }
@@ -16165,6 +16460,10 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             m60F16LowLevelExactMaskProbeFor443Events.clear()
             m60F16LowLevelExactMaskProbeFor443PendingReadbacks.clear()
         }
+        if (m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled) {
+            m60F16RuntimeIntegerLaneMaskProbeFor445Events.clear()
+            m60F16RuntimeIntegerLaneMaskProbeFor445PendingReadbacks.clear()
+        }
 
         // G-suivi (round 17 follow-up) -- drop pending draws whose vertex
         // arrays would produce a zero-size GPU buffer. WebGPU panics in
@@ -16373,6 +16672,13 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                         storage,
                         0uL,
                         res.m60F16FragmentLaneDiagnosticBufferSize,
+                    )
+                }
+                res.m60F16RuntimeIntegerLaneMaskProbeFor445Storage?.let { storage ->
+                    encoder.clearBuffer(
+                        storage,
+                        0uL,
+                        res.m60F16RuntimeIntegerLaneMaskProbeFor445BufferSize,
                     )
                 }
                 if (res.m60F16LowLevelExactMaskProbeFor443BindGroup != null) {
@@ -16832,6 +17138,31 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                         destinationOffset = 0uL,
                         size = res.m60F16FragmentLaneDiagnosticBufferSize,
                     )
+                }
+                if (res.m60F16RuntimeIntegerLaneMaskProbeFor445Storage != null &&
+                    res.m60F16RuntimeIntegerLaneMaskProbeFor445Staging != null
+                ) {
+                    encoder.copyBufferToBuffer(
+                        source = res.m60F16RuntimeIntegerLaneMaskProbeFor445Storage,
+                        sourceOffset = 0uL,
+                        destination = res.m60F16RuntimeIntegerLaneMaskProbeFor445Staging,
+                        destinationOffset = 0uL,
+                        size = res.m60F16RuntimeIntegerLaneMaskProbeFor445BufferSize,
+                    )
+                    m60F16RuntimeIntegerLaneMaskProbeFor445PendingReadbacks +=
+                        M60F16RuntimeIntegerLaneMaskProbeFor445Readback(
+                            metadata = M60F16AaStencilCoverPostPassReadbackMetadata(
+                                drawIndex = i,
+                                fillType = d.fillType.name,
+                                blendMode = d.mode.name,
+                                scissor = d.scissor.copyOf(),
+                                edgeCount = d.edgeCount,
+                                coverVertexCount = d.coverVerts.size / 2,
+                            ),
+                            storage = res.m60F16RuntimeIntegerLaneMaskProbeFor445Storage,
+                            staging = res.m60F16RuntimeIntegerLaneMaskProbeFor445Staging,
+                            bufferSize = res.m60F16RuntimeIntegerLaneMaskProbeFor445BufferSize,
+                        )
                 }
                 return@forEachIndexed
             }
@@ -18174,6 +18505,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         recordM60F16AaStencilCoverIsolatedColorTargetReadbacks()
         recordM60F16AaStencilCoverStorageColorTargetComparisonReadbacks()
         recordM60F16LowLevelExactMaskProbeFor443Readbacks()
+        recordM60F16RuntimeIntegerLaneMaskProbeFor445Readbacks()
         val pixels = target.readPixels()
         recordOutputReadbackBoundary(pixels)
 
@@ -18309,6 +18641,10 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         val m60F16FragmentLaneDiagnosticStaging: GPUBuffer? = null,
         val m60F16FragmentLaneDiagnosticBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
         val m60F16FragmentLaneDiagnosticBufferSize: ULong = M60_F16_FRAGMENT_LANE_DIAGNOSTIC_BUFFER_SIZE,
+        val m60F16RuntimeIntegerLaneMaskProbeFor445Storage: GPUBuffer? = null,
+        val m60F16RuntimeIntegerLaneMaskProbeFor445Staging: GPUBuffer? = null,
+        val m60F16RuntimeIntegerLaneMaskProbeFor445BufferSize: ULong =
+            M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_BUFFER_SIZE,
         val m60F16AaStencilCoverPostPassReadbackStorage: GPUBuffer? = null,
         val m60F16AaStencilCoverPostPassReadbackStaging: GPUBuffer? = null,
         val m60F16AaStencilCoverPostPassReadbackBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
@@ -18414,6 +18750,13 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     )
 
     private data class M60F16LowLevelExactMaskProbeFor443Readback(
+        val metadata: M60F16AaStencilCoverPostPassReadbackMetadata,
+        val storage: GPUBuffer,
+        val staging: GPUBuffer,
+        val bufferSize: ULong,
+    )
+
+    private data class M60F16RuntimeIntegerLaneMaskProbeFor445Readback(
         val metadata: M60F16AaStencilCoverPostPassReadbackMetadata,
         val storage: GPUBuffer,
         val staging: GPUBuffer,
@@ -20137,14 +20480,56 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         } else {
             null
         }
+        val runtimeIntegerLaneMaskProbeFor445Enabled =
+            m60F16RuntimeIntegerLaneMaskProbeFor445DiagnosticsEnabled &&
+                anyDiagnosticEnabled
+        val runtimeIntegerLaneMaskProbeFor445Storage =
+            if (runtimeIntegerLaneMaskProbeFor445Enabled) {
+                context.device.createBuffer(
+                    BufferDescriptor(
+                        size = M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_BUFFER_SIZE,
+                        usage = GPUBufferUsage.Storage or GPUBufferUsage.CopySrc or GPUBufferUsage.CopyDst,
+                        label =
+                            "SkWebGpuDevice.m60F16RuntimeIntegerLaneMaskProbeFor445.storage.diagnosticOnly",
+                    ),
+                )
+            } else {
+                null
+            }
+        val runtimeIntegerLaneMaskProbeFor445Staging =
+            if (runtimeIntegerLaneMaskProbeFor445Enabled) {
+                context.device.createBuffer(
+                    BufferDescriptor(
+                        size = M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_BUFFER_SIZE,
+                        usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                        label =
+                            "SkWebGpuDevice.m60F16RuntimeIntegerLaneMaskProbeFor445.staging.diagnosticOnly",
+                    ),
+                )
+            } else {
+                null
+            }
         val diagnosticBindGroup = if (anyDiagnosticEnabled) {
             context.device.createBindGroup(
                 BindGroupDescriptor(
                     layout = m60F16FragmentLaneDiagnosticBindGroupLayout,
-                    entries = listOf(
-                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
-                        BindGroupEntry(binding = 1u, resource = BufferBinding(buffer = diagnosticStorage!!)),
-                    ),
+                    entries = buildList {
+                        add(BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)))
+                        add(
+                            BindGroupEntry(
+                                binding = 1u,
+                                resource = BufferBinding(buffer = diagnosticStorage!!),
+                            ),
+                        )
+                        if (runtimeIntegerLaneMaskProbeFor445Storage != null) {
+                            add(
+                                BindGroupEntry(
+                                    binding = 2u,
+                                    resource = BufferBinding(buffer = runtimeIntegerLaneMaskProbeFor445Storage),
+                                ),
+                            )
+                        }
+                    },
                 ),
             )
         } else {
@@ -20365,13 +20750,23 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             context.device.createBindGroup(
                 BindGroupDescriptor(
                     layout = m60F16FragmentLaneDiagnosticBindGroupLayout,
-                    entries = listOf(
-                        BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
-                        BindGroupEntry(
-                            binding = 1u,
-                            resource = BufferBinding(buffer = storageColorTargetComparisonShaderStorage!!),
-                        ),
-                    ),
+                    entries = buildList {
+                        add(BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)))
+                        add(
+                            BindGroupEntry(
+                                binding = 1u,
+                                resource = BufferBinding(buffer = storageColorTargetComparisonShaderStorage!!),
+                            ),
+                        )
+                        if (runtimeIntegerLaneMaskProbeFor445Storage != null) {
+                            add(
+                                BindGroupEntry(
+                                    binding = 2u,
+                                    resource = BufferBinding(buffer = runtimeIntegerLaneMaskProbeFor445Storage),
+                                ),
+                            )
+                        }
+                    },
                 ),
             )
         } else {
@@ -20483,6 +20878,10 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             m60F16FragmentLaneDiagnosticStaging = diagnosticStaging,
             m60F16FragmentLaneDiagnosticBindGroup = diagnosticBindGroup,
             m60F16FragmentLaneDiagnosticBufferSize = diagnosticBufferSize,
+            m60F16RuntimeIntegerLaneMaskProbeFor445Storage =
+                runtimeIntegerLaneMaskProbeFor445Storage,
+            m60F16RuntimeIntegerLaneMaskProbeFor445Staging =
+                runtimeIntegerLaneMaskProbeFor445Staging,
             m60F16AaStencilCoverPostPassReadbackStorage = postPassReadbackStorage,
             m60F16AaStencilCoverPostPassReadbackStaging = postPassReadbackStaging,
             m60F16AaStencilCoverPostPassReadbackBindGroup = postPassReadbackBindGroup,
@@ -21218,6 +21617,10 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             "diagnostic in-memory FOR-443 compute variant of shaders/aa_stencil_cover.wgsl sample_covered"
         const val M60_F16_LOW_LEVEL_EXACT_MASK_PROBE_FOR443_LAYOUT: String =
             "diagnostic-only compute layout: binding0 AA uniform, binding1 six-pixel exact-mask storage buffer"
+        const val M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_SHADER: String =
+            "diagnostic in-memory FOR-445 fragment-return integer-lane exact-mask variant of shaders/aa_stencil_cover.wgsl"
+        const val M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_LAYOUT: String =
+            "diagnostic-only render layout: binding0 AA uniform, binding1 FOR-442 vec4f storage, binding2 six-pixel integer mask storage"
         const val RAW_COLOR_SENTINEL_TEXEL_SAMPLE_LIMIT: Int = 16
         const val FOR258_SHADER_SIDE_PROBE_SAMPLE_STRIDE_BYTES: Int = 16
         const val FOR258_SHADER_SIDE_PROBE_SAMPLE_COUNT: UInt = 2u
@@ -21284,6 +21687,19 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             88 to 79,
             87 to 80,
         )
+        const val M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_VEC4S_PER_SAMPLE: Int = 3
+        const val M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_SAMPLE_STRIDE_BYTES: Int =
+            M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_VEC4S_PER_SAMPLE *
+                M60_F16_FRAGMENT_LANE_DIAGNOSTIC_SAMPLE_STRIDE_BYTES
+        const val M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_SAMPLE_COUNT: Int = 6
+        const val M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_VEC4S: Int =
+            M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_VEC4S_PER_SAMPLE *
+                M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_SAMPLE_COUNT
+        val M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_BUFFER_SIZE: ULong =
+            (M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_SAMPLE_STRIDE_BYTES *
+                M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_SAMPLE_COUNT).toULong()
+        val M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_POINTS: List<Pair<Int, Int>> =
+            M60_F16_LOW_LEVEL_EXACT_MASK_PROBE_FOR443_POINTS
         val M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS: List<Pair<Int, Int>> = listOf(
             92 to 75,
             91 to 76,
