@@ -46,12 +46,16 @@ ALLOWED_LOCAL_DIFFS = {
     "scripts/validate_for437_m60_f16_cpu_reference_source_expectation.py",
     "scripts/validate_for438_m60_f16_cpu_vs_webgpu_green_draw_coverage.py",
     "scripts/validate_for439_m60_f16_webgpu_stencil_cover_geometry_vs_cpu_green_mask.py",
+    "scripts/validate_for440_m60_f16_webgpu_edge_predicate_vs_cpu_green_coverage.py",
     "reports/wgsl-pipeline/2026-06-06-for-438-m60-f16-cpu-vs-webgpu-green-draw-coverage.md",
     "reports/wgsl-pipeline/2026-06-06-for-439-m60-f16-webgpu-stencil-cover-geometry-vs-cpu-green-mask.md",
+    "reports/wgsl-pipeline/2026-06-06-for-440-m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage.md",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/{SCENE_ID}.json",
     "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-stencil-cover-geometry-vs-cpu-green-mask-for439",
     "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-stencil-cover-geometry-vs-cpu-green-mask-for439/m60-f16-webgpu-stencil-cover-geometry-vs-cpu-green-mask-for439.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage-for440",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage-for440/m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage-for440.json",
 }
 FORBIDDEN_DIFF_PREFIXES = (
     "gpu-raster/src/main/kotlin/",

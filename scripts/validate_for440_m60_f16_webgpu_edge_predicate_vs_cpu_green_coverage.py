@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate FOR-439 M60 F16 WebGPU stencil-cover geometry vs CPU green mask evidence."""
+"""Validate FOR-440 M60 F16 WebGPU edge predicate vs CPU green coverage evidence."""
 
 from __future__ import annotations
 
@@ -14,47 +14,42 @@ from typing import Any
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[1]
-SCENE_ID = "m60-f16-webgpu-stencil-cover-geometry-vs-cpu-green-mask-for439"
+SCENE_ID = "m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage-for440"
 ARTIFACT = ROOT / "reports/wgsl-pipeline/scenes/artifacts" / SCENE_ID / f"{SCENE_ID}.json"
-REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-439-m60-f16-webgpu-stencil-cover-geometry-vs-cpu-green-mask.md"
-FOR438_SCENE_ID = "m60-f16-cpu-vs-webgpu-green-draw-coverage-for438"
-FOR438_ARTIFACT = ROOT / "reports/wgsl-pipeline/scenes/artifacts" / FOR438_SCENE_ID / f"{FOR438_SCENE_ID}.json"
-FOR438_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-438-m60-f16-cpu-vs-webgpu-green-draw-coverage.md"
+REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-440-m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage.md"
+FOR439_SCENE_ID = "m60-f16-webgpu-stencil-cover-geometry-vs-cpu-green-mask-for439"
+FOR439_ARTIFACT = ROOT / "reports/wgsl-pipeline/scenes/artifacts" / FOR439_SCENE_ID / f"{FOR439_SCENE_ID}.json"
+FOR439_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-439-m60-f16-webgpu-stencil-cover-geometry-vs-cpu-green-mask.md"
 CAPTURE_TEST = ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt"
 BUILD = ROOT / "gpu-raster/build.gradle.kts"
-DEVICE = ROOT / "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
+SHADER = ROOT / "gpu-raster/src/main/resources/shaders/aa_stencil_cover.wgsl"
 
-FLAG = "kanvas.webgpu.m60F16StencilCoverGeometryVsCpuGreenMaskFor439.enabled"
-FOR438_FLAG = "kanvas.webgpu.m60F16CpuVsWebGpuGreenDrawCoverageFor438.enabled"
+FLAG = "kanvas.webgpu.m60F16EdgePredicateVsCpuGreenCoverageFor440.enabled"
+FOR439_FLAG = "kanvas.webgpu.m60F16StencilCoverGeometryVsCpuGreenMaskFor439.enabled"
 FOR427_FLAG = "kanvas.webgpu.m60F16AaStencilCoverSubsampleMaskFor427.enabled"
 EXPECTED_POINTS = {(92, 75), (91, 76), (90, 77), (89, 78), (88, 79), (87, 80)}
 ALLOWED_CLASSIFICATIONS = {
-    "webgpu-scissor-or-bounds-overinclude",
-    "webgpu-cover-polygon-overcovers-edge",
-    "webgpu-coordinate-mapping-shift",
-    "webgpu-inside-outside-subdraw-selection-mismatch",
-    "webgpu-band-metadata-mismatch",
-    "cpu-green-mask-fixture-mismatch",
+    "webgpu-edge-predicate-overincludes-cpu-excluded-samples",
+    "webgpu-cover-polygon-vertex-expansion-overincludes",
+    "webgpu-winding-or-orientation-mismatch",
+    "webgpu-coordinate-rounding-shift",
+    "cpu-stroke-coverage-rule-needs-export",
     "trace-incomplete",
-    "webgpu-cpu-geometry-divergence-unresolved",
+    "webgpu-edge-predicate-unresolved",
 }
 INCOMPLETE_CLASSIFICATIONS = {
     "trace-incomplete",
-    "webgpu-cpu-geometry-divergence-unresolved",
+    "webgpu-edge-predicate-unresolved",
 }
 ALLOWED_LOCAL_DIFFS = {
     "gpu-raster/build.gradle.kts",
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
-    "scripts/validate_for437_m60_f16_cpu_reference_source_expectation.py",
     "scripts/validate_for438_m60_f16_cpu_vs_webgpu_green_draw_coverage.py",
     "scripts/validate_for439_m60_f16_webgpu_stencil_cover_geometry_vs_cpu_green_mask.py",
     "scripts/validate_for440_m60_f16_webgpu_edge_predicate_vs_cpu_green_coverage.py",
-    "reports/wgsl-pipeline/2026-06-06-for-439-m60-f16-webgpu-stencil-cover-geometry-vs-cpu-green-mask.md",
     "reports/wgsl-pipeline/2026-06-06-for-440-m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage.md",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/{SCENE_ID}.json",
-    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage-for440",
-    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage-for440/m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage-for440.json",
 }
 FORBIDDEN_DIFF_PREFIXES = (
     "gpu-raster/src/main/kotlin/",
@@ -66,7 +61,7 @@ FORBIDDEN_DIFF_PREFIXES = (
 
 
 def fail(message: str) -> None:
-    raise SystemExit(f"FOR-439 validation failed: {message}")
+    raise SystemExit(f"FOR-440 validation failed: {message}")
 
 
 def require(condition: bool, message: str) -> None:
@@ -102,30 +97,32 @@ def require_rgba(value: Any, expected: list[int], field: str) -> None:
 def source_audit() -> None:
     capture = CAPTURE_TEST.read_text(encoding="utf-8")
     build = BUILD.read_text(encoding="utf-8")
-    device = DEVICE.read_text(encoding="utf-8")
+    shader = SHADER.read_text(encoding="utf-8")
     scene_index = capture.find(SCENE_ID)
-    scene_window = capture[scene_index : scene_index + 52000] if scene_index >= 0 else ""
+    scene_window = capture[scene_index : scene_index + 62000] if scene_index >= 0 else ""
     checks = {
-        "writerCalled": "writeM60F16StencilCoverGeometryVsCpuGreenMaskFor439(" in capture,
+        "writerCalled": "writeM60F16EdgePredicateVsCpuGreenCoverageFor440(" in capture,
         "sceneIdPresent": SCENE_ID in capture,
         "flagRelayed": FLAG in capture and FLAG in build,
-        "for439Requested": "FOR439_STENCIL_COVER_GEOMETRY_VS_CPU_GREEN_MASK_PROPERTY" in capture,
-        "for427ForcedForMask": "withM60F16AaStencilCoverSubsampleMaskFor427(" in capture and FOR427_FLAG in capture,
-        "for436ForcedForHostBinding": "withM60F16HostDrawPaintBindingFor436(" in capture,
+        "for440Requested": "FOR440_EDGE_PREDICATE_VS_CPU_GREEN_COVERAGE_PROPERTY" in capture,
+        "coverageCountExported": "coveredSubsamples4x4" in scene_window and "coverageDerivedCoveredSubsamples" in scene_window,
+        "for439SourceLinked": "for-439-web-gpu-cover-polygon-overcovers-cpu-green-excluded" in scene_window,
         "usesCpuGreenFixture": "BoundedStrokeCapJoinGreenCoverageFor438GM" in scene_window,
-        "usesGeometryFields": all(
+        "usesEdgePredicateFields": all(
             token in scene_window
             for token in (
-                "edgeCount",
-                "coverVertexCount",
-                "targetWithinScissor",
-                "wgslSubsampleMask4x4",
-                "subsampleComparison4x4",
+                "webGpuSubsampleMask4x4",
+                "coverageDerivedCoveredSubsamples",
+                "subsampleEdgePredicate4x4",
+                "webGpuEdgePredicate",
+                "sourceDraftMemory",
                 "sourceFindingMemory",
             )
         ),
-        "validatorCommandPresent": "validate_for439_m60_f16_webgpu_stencil_cover_geometry_vs_cpu_green_mask.py" in capture,
-        "runtimeAlreadyExposesMask": "val wgslSubsampleMask4x4: Int? = null" in device,
+        "shaderPredicateExists": all(
+            token in shader for token in ("fn winding_at", "fn sample_covered", "fn supersampled_path_cov")
+        ),
+        "validatorCommandPresent": "validate_for440_m60_f16_webgpu_edge_predicate_vs_cpu_green_coverage.py" in capture,
     }
     missing = [name for name, ok in checks.items() if not ok]
     require(not missing, f"source audit failed: {missing}")
@@ -161,7 +158,7 @@ def source_audit() -> None:
         if path:
             changed.add(path.rstrip("/"))
     unexpected = sorted(path for path in changed if path not in ALLOWED_LOCAL_DIFFS)
-    require(not unexpected, f"unexpected local diffs for FOR-439: {unexpected}")
+    require(not unexpected, f"unexpected local diffs for FOR-440: {unexpected}")
     forbidden = sorted(path for path in changed if path.startswith(FORBIDDEN_DIFF_PREFIXES))
     require(not forbidden, f"forbidden production/spec/external diffs: {forbidden}")
 
@@ -196,74 +193,56 @@ def require_classification_consistency(data: dict[str, Any], pixels: list[dict[s
     pixel_classes = {pixel.get("classification") for pixel in pixels}
     require(pixel_classes == {classification}, f"pixel classifications mismatch: {pixel_classes}")
 
-    if classification == "webgpu-cover-polygon-overcovers-edge":
+    if classification == "webgpu-edge-predicate-overincludes-cpu-excluded-samples":
         for pixel in pixels:
             cpu = pixel["cpuGreenMask"]
-            webgpu = pixel["webGpuCoverGeometry"]
-            require(cpu.get("coverageAlphaByte") == 0, "CPU green alpha must be zero")
-            require(cpu.get("subsampleMask4x4") == 0, "CPU green 4x4 mask must be empty")
-            require(cpu.get("excludesPixel") is True, "CPU green mask must exclude pixel")
-            require(webgpu.get("targetWithinScissor") is True, "WebGPU target must be inside scissor")
-            require(webgpu.get("shaderObserved") is True, "WebGPU shader must observe pixel")
+            webgpu = pixel["webGpuEdgePredicate"]
+            relation = pixel["coverageRelation"]
+            require(cpu.get("subsampleMask4x4") == 0, "CPU mask must be empty")
+            require(cpu.get("coveredSubsamples4x4") == 0, "CPU covered count must be zero")
+            require(webgpu.get("coveredSubsamples4x4") == 10, "WebGPU must include 10 subsamples")
             require(webgpu.get("predicateIncludesPixel") is True, "WebGPU predicate must include pixel")
-            require(webgpu.get("coveredSubsamples4x4") == 10, "WebGPU must cover 10 subsamples")
-    elif classification == "webgpu-scissor-or-bounds-overinclude":
-        for pixel in pixels:
-            require(pixel["webGpuCoverGeometry"].get("targetWithinScissor") is True, "scissor must include point")
-            require(pixel["cpuGreenMask"].get("excludesPixel") is True, "CPU must exclude point")
-    elif classification == "webgpu-coordinate-mapping-shift":
-        require(
-            any(pixel["webGpuCoverGeometry"].get("targetWithinScissor") is not True for pixel in pixels),
-            "coordinate-shift classification requires at least one scissor miss",
-        )
-    elif classification == "webgpu-inside-outside-subdraw-selection-mismatch":
-        require(
-            any(pixel["subdrawSelection"].get("insideSubdrawSelected") is not True for pixel in pixels),
-            "subdraw mismatch classification requires a non-inside selection",
-        )
-    elif classification == "webgpu-band-metadata-mismatch":
-        require(
-            any(
-                pixel["webGpuCoverGeometry"].get("edgeCount") in (None, 0)
-                or pixel["webGpuCoverGeometry"].get("coverVertexCount") in (None, 0)
-                for pixel in pixels
-            ),
-            "metadata mismatch classification requires missing geometry metadata",
-        )
-    elif classification == "cpu-green-mask-fixture-mismatch":
-        require(
-            any(pixel["cpuGreenMask"].get("coverageAlphaByte") != 0 for pixel in pixels),
-            "CPU fixture mismatch requires nonzero CPU green coverage",
-        )
+            require(relation.get("coverageNumeratorOf16") == 10, "coverage numerator mismatch")
+            require(relation.get("coveredSubsamples4x4") == 10, "covered subsample relation mismatch")
+            require(relation.get("exactSubsampleMaskAvailable") is False, "exact mask should be declared unavailable")
+            require(relation.get("matchesCoverageCount") is True, "coverage must match covered subsample count")
+    elif classification == "webgpu-cover-polygon-vertex-expansion-overincludes":
+        require(any(pixel["webGpuEdgePredicate"].get("coverVertexCount") in (None, 0) for pixel in pixels), "vertex expansion classification requires empty cover geometry")
+    elif classification == "webgpu-winding-or-orientation-mismatch":
+        require(any(pixel["webGpuEdgePredicate"].get("subdrawRole") != "inside" for pixel in pixels), "winding classification requires non-inside role")
+    elif classification == "webgpu-coordinate-rounding-shift":
+        require(any(pixel["webGpuEdgePredicate"].get("targetWithinScissor") is not True for pixel in pixels), "coordinate classification requires scissor miss")
+    elif classification == "cpu-stroke-coverage-rule-needs-export":
+        require(any(pixel["cpuGreenMask"].get("coverageAlphaByte") != 0 for pixel in pixels), "CPU export classification requires nonzero CPU green coverage")
 
 
 def main() -> None:
     data = load_json(ARTIFACT)
-    for438 = load_json(FOR438_ARTIFACT)
+    for439 = load_json(FOR439_ARTIFACT)
 
     require(REPORT.is_file(), f"missing report: {rel(REPORT)}")
-    require(ARTIFACT.stat().st_size < 120_000, "artifact must stay bounded")
+    require(ARTIFACT.stat().st_size < 130_000, "artifact must stay bounded")
     require(data.get("schemaVersion") == 1, "schema version mismatch")
-    require(data.get("linear") == "FOR-439", "Linear id mismatch")
+    require(data.get("linear") == "FOR-440", "Linear id mismatch")
     require(data.get("sceneId") == SCENE_ID, "scene id mismatch")
-    require(data.get("sourceSceneId") == FOR438_SCENE_ID, "FOR-438 source scene mismatch")
+    require(data.get("sourceSceneId") == FOR439_SCENE_ID, "FOR-439 source scene mismatch")
     require(
         data.get("sourceDraftMemory")
-        == "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-auditer-geometrie-scissor-web-gpu-stencil-cover-draw-index-3-contre-masque-cpu-vert",
+        == "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-auditer-predicat-arete-web-gpu-stencil-cover-aa-polygon-draw-contre-couverture-cpu-trait-vert",
         "source draft memory link mismatch",
     )
     require(
         data.get("sourceFindingMemory")
-        == "global/kanvas/findings/for-438-web-gpu-stencil-cover-overcovers-green-draw-while-cpu-green-coverage-is-zero",
-        "FOR-438 finding link mismatch",
+        == "global/kanvas/findings/for-439-web-gpu-cover-polygon-overcovers-cpu-green-excluded-m60-f16-pixels",
+        "FOR-439 finding link mismatch",
     )
-    require(data.get("sourceArtifact") == rel(FOR438_ARTIFACT), "FOR-438 artifact link mismatch")
-    require(data.get("sourceReport") == rel(FOR438_REPORT), "FOR-438 report link mismatch")
+    require(data.get("sourceArtifact") == rel(FOR439_ARTIFACT), "FOR-439 artifact link mismatch")
+    require(data.get("sourceReport") == rel(FOR439_REPORT), "FOR-439 report link mismatch")
     require(set(data.get("allowedClassifications", [])) == ALLOWED_CLASSIFICATIONS, "allowed classifications mismatch")
-    require(data.get("diagnosticFlag") == FLAG, "FOR-439 diagnostic flag mismatch")
-    require(data.get("sourceFor438DiagnosticFlag") == FOR438_FLAG, "FOR-438 flag mismatch")
-    require(data.get("sourceFor427SubsampleMaskDiagnosticFlag") == FOR427_FLAG, "FOR-427 mask flag mismatch")
-    require(for438.get("classification") == "webgpu-stencil-cover-overcovers-green-draw", "FOR-438 prerequisite changed")
+    require(data.get("diagnosticFlag") == FLAG, "FOR-440 diagnostic flag mismatch")
+    require(data.get("sourceFor439DiagnosticFlag") == FOR439_FLAG, "FOR-439 flag mismatch")
+    require(data.get("sourceFor427SubsampleMaskDiagnosticFlag") == FOR427_FLAG, "FOR-427 flag mismatch")
+    require(for439.get("classification") == "webgpu-cover-polygon-overcovers-edge", "FOR-439 prerequisite changed")
 
     for key in (
         "supportClaim",
@@ -300,8 +279,8 @@ def main() -> None:
     require(policy.get("boundedToSixPixels") is True, "six pixel bound missing")
     require(policy.get("noRenderingFixApplied") is True, "rendering fix policy mismatch")
     require(policy.get("cpuGreenCoverageFixture") == "BoundedStrokeCapJoinGreenCoverageFor438GM", "CPU fixture mismatch")
-    require("4x4" in policy.get("subsampleGrid", ""), "subsample grid policy missing")
-    require("coverageOrAaAlpha" in policy.get("subsampleGrid", ""), "coverage fallback policy missing")
+    require("supersampled_path_cov" in policy.get("webGpuPredicateFormula", ""), "predicate formula missing")
+    require("coverageOrAaAlpha 0.625 equals 10 / 16" in policy.get("coverageRelation", ""), "coverage relation missing")
 
     host = data.get("hostDrawIndex3")
     require(isinstance(host, dict), "hostDrawIndex3 missing")
@@ -310,9 +289,9 @@ def main() -> None:
     require(host.get("strokeCap") == "round", "host cap mismatch")
     require(host.get("strokeJoin") == "round", "host join mismatch")
     require_close(host.get("strokeWidth"), 10.0, "host strokeWidth")
-    require(isinstance(host.get("scissor"), list) and len(host["scissor"]) == 4, "host scissor missing")
     require(isinstance(host.get("edgeCount"), int) and host["edgeCount"] > 0, "host edgeCount missing")
     require(isinstance(host.get("coverVertexCount"), int) and host["coverVertexCount"] > 0, "host coverVertexCount missing")
+    require(host.get("coverSubdrawRoles") == ["inside", "outside"], "cover subdraw roles mismatch")
 
     summary = data.get("summary")
     require(isinstance(summary, dict), "summary missing")
@@ -322,10 +301,12 @@ def main() -> None:
     require(summary.get("hostBoundPaintHexArgb") == "0xFF008A4C", "host paint mismatch")
     require(summary.get("cpuGreenCoverageZeroCount") == 6, "CPU zero count mismatch")
     require(summary.get("cpuGreenMaskZero4x4Count") == 6, "CPU 4x4 zero count mismatch")
+    require(summary.get("webGpuMaskAvailableCount") == 0, "WebGPU exact mask availability mismatch")
     require(summary.get("webGpuInsideSubdrawCount") == 6, "inside subdraw count mismatch")
     require(summary.get("webGpuScissorContainsPointCount") == 6, "scissor count mismatch")
     require(summary.get("webGpuPredicateIncludesPixelCount") == 6, "predicate count mismatch")
     require(summary.get("webGpuCoveredSubsamples10Of16Count") == 6, "10/16 count mismatch")
+    require(summary.get("coverageRelationMatchesMaskCount") == 6, "coverage/count relation mismatch")
     require(summary.get("traceComplete") is True, "trace must be complete")
 
     pixels = data.get("partialPixels")
@@ -341,12 +322,9 @@ def main() -> None:
         require_rgba(pixel.get("optInFor431Rgba"), [111, 147, 129, 255], "optInFor431Rgba")
         require(pixel.get("missingFields") == [], "pixel trace must be complete")
 
-        selection = pixel.get("subdrawSelection")
-        require(isinstance(selection, dict), "subdrawSelection missing")
-        require(selection.get("drawIndex") == 3, "selection drawIndex mismatch")
-        require(selection.get("subdrawOrdinal") == 0, "selection ordinal mismatch")
-        require(selection.get("subdrawRole") == "inside", "selection role mismatch")
-        require(selection.get("insideSubdrawSelected") is True, "inside subdraw not selected")
+        coords = pixel.get("coordinates")
+        require(isinstance(coords, dict), "coordinates missing")
+        require(coords.get("wgslFragmentCoordinateSource") == "@builtin(position) frag.xy", "coordinate source mismatch")
 
         cpu = pixel.get("cpuGreenMask")
         require(isinstance(cpu, dict), "cpuGreenMask missing")
@@ -356,33 +334,43 @@ def main() -> None:
         require(cpu.get("coveredSubsamples4x4") == 0, "CPU green covered count must be zero")
         require(cpu.get("excludesPixel") is True, "CPU green mask must exclude pixel")
 
-        webgpu = pixel.get("webGpuCoverGeometry")
-        require(isinstance(webgpu, dict), "webGpuCoverGeometry missing")
+        webgpu = pixel.get("webGpuEdgePredicate")
+        require(isinstance(webgpu, dict), "webGpuEdgePredicate missing")
         require(webgpu.get("pipelineFamily") == "StencilCoverAaPolygonDraw", "pipeline family mismatch")
         require(webgpu.get("fillType") == "kWinding", "fillType mismatch")
+        require(webgpu.get("subdrawOrdinal") == 0, "subdraw ordinal mismatch")
+        require(webgpu.get("subdrawRole") == "inside", "subdraw role mismatch")
         require(webgpu.get("targetWithinScissor") is True, "targetWithinScissor mismatch")
         require(webgpu.get("shaderObserved") is True, "shaderObserved mismatch")
         require(webgpu.get("candidateBranchReached") is True, "candidate branch mismatch")
         require(isinstance(webgpu.get("edgeCount"), int) and webgpu["edgeCount"] > 0, "edgeCount missing")
         require(isinstance(webgpu.get("coverVertexCount"), int) and webgpu["coverVertexCount"] > 0, "coverVertexCount missing")
         require_close(webgpu.get("coverageOrAaAlpha"), 0.625, "coverageOrAaAlpha")
+        require(webgpu.get("coverageDerivedCoveredSubsamples4x4") == 10, "coverage-derived count mismatch")
         require(webgpu.get("coveredSubsamples4x4") == 10, "covered subsamples mismatch")
         require(webgpu.get("predicateIncludesPixel") is True, "predicateIncludesPixel mismatch")
+        require(webgpu.get("wgslSubsampleMask4x4") is None, "WGSL exact subsample mask should be unavailable")
 
-        grid = pixel.get("subsampleComparison4x4")
-        require(isinstance(grid, list) and len(grid) == 16, "4x4 comparison grid missing")
-        cpu_only = [cell for cell in grid if cell.get("cpuCovered") is True and cell.get("wgslCovered") is not True]
-        wgsl_only = [cell for cell in grid if cell.get("wgslCovered") is True and cell.get("cpuCovered") is not True]
-        require(len(cpu_only) == 0, "CPU must not cover subsamples in FOR-439")
-        if isinstance(webgpu.get("wgslSubsampleMask4x4"), int):
-            require(len(wgsl_only) == 10, f"WGSL-only subsample count mismatch: {len(wgsl_only)}")
-        else:
-            require(all(cell.get("wgslCovered") is None for cell in grid), "WGSL grid must be null when mask is absent")
+        relation = pixel.get("coverageRelation")
+        require(isinstance(relation, dict), "coverageRelation missing")
+        require_close(relation.get("coverageOrAaAlpha"), 0.625, "relation coverage")
+        require(relation.get("coverageNumeratorOf16") == 10, "relation numerator mismatch")
+        require(relation.get("maskPopcount") is None, "relation mask popcount should be unavailable")
+        require(relation.get("coveredSubsamples4x4") == 10, "relation covered count mismatch")
+        require(relation.get("exactSubsampleMaskAvailable") is False, "relation exact mask availability mismatch")
+        require(relation.get("matchesCoverageCount") is True, "relation must match")
+
+        grid = pixel.get("subsampleEdgePredicate4x4")
+        require(isinstance(grid, list) and len(grid) == 16, "edge predicate grid missing")
+        cpu_only = [cell for cell in grid if cell.get("cpuGreenCovered") is True]
+        require(len(cpu_only) == 0, "CPU green must not cover subsamples")
+        require(all(cell.get("webGpuEdgePredicateCovered") is None for cell in grid), "exact WebGPU subsample cells must be null")
+        require(all(cell.get("divergent") is None for cell in grid), "exact divergence cells must be null")
 
     source_audit()
     print(
-        "FOR-439 validation passed: WebGPU drawIndex 3 inside stencil-cover geometry "
-        f"classifies as {data.get('classification')} against the CPU green mask."
+        "FOR-440 validation passed: WebGPU edge predicate evidence classifies as "
+        f"{data.get('classification')} against the CPU green mask."
     )
 
 
