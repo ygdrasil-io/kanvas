@@ -4,9 +4,9 @@
 
 Classification : `lot1-row-specific-refusals-no-new-support-claims`
 
-FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere est deja vert avec 0 `tracked-gap` et 0 `fail`, mais seuls 7 des 12 candidats du lot 1 ont actuellement une ligne materialisee avec preuves existantes. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect`; FOR-466 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-image`; FOR-467 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-imagesource`; FOR-468 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-offsetimagefilter`. Aucun de ces refus n'est compte comme support.
+FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere est deja vert avec 0 `tracked-gap` et 0 `fail`, mais seuls 7 des 12 candidats du lot 1 ont actuellement une ligne materialisee avec preuves existantes. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect`; FOR-466 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-image`; FOR-467 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-imagesource`; FOR-468 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-offsetimagefilter`; FOR-469 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-pathfill`. Aucun de ces refus n'est compte comme support.
 
-Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat reel et bloque le candidat restant qui n'a pas encore ses preuves ligne par ligne.
+Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat reel et les cinq candidats sans preuves ligne par ligne sont maintenant des refus visibles.
 
 ## Compteurs
 
@@ -14,8 +14,8 @@ Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat re
 |---|---:|
 | Candidats lot 1 | 12 |
 | Candidats materialises | 7 |
-| Candidats expected-unsupported row-specific | 4 |
-| Candidats sans preuve suffisante | 1 |
+| Candidats expected-unsupported row-specific | 5 |
+| Candidats sans preuve suffisante | 0 |
 | Lignes ajoutees par FOR-462 | 0 |
 | Claims support ajoutes par FOR-462 | 0 |
 | Claims Skia-comparable ajoutes par FOR-462 | 0 |
@@ -45,12 +45,12 @@ Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat re
 | `skia-gm-image` | `expected-unsupported` | `cpu.image.imagegm.expected-unsupported` | `webgpu.image.imagegm.expected-unsupported` | `image.imagegm.row-specific-artifacts-required` |
 | `skia-gm-imagesource` | `expected-unsupported` | `cpu.image-source.imagesource.expected-unsupported` | `webgpu.image-source.imagesource.expected-unsupported` | `image.imagesource.row-specific-artifacts-required` |
 | `skia-gm-offsetimagefilter` | `expected-unsupported` | `cpu.image-filter.offset.expected-unsupported` | `webgpu.image-filter.offset.expected-unsupported` | `image-filter.offset.row-specific-artifacts-required` |
+| `skia-gm-pathfill` | `expected-unsupported` | `cpu.path-aa.fill.expected-unsupported` | `webgpu.path-aa.fill.expected-unsupported` | `path-aa.fill.row-specific-artifacts-required` |
 
-## Candidats bloques
+## Candidats bloques sans refus stable
 
 | Inventory id | Raison |
 |---|---|
-| `skia-gm-pathfill` | preuve ligne par ligne manquante ; pas de promotion dashboard sans reference, CPU, GPU ou refus stable, diff/stat et diagnostics de route |
 
 ## Non-claims
 
@@ -71,4 +71,4 @@ rtk git diff --check
 
 ## Suite
 
-Open row-specific evidence for the remaining diagnostic-only lot 1 candidate before any dashboard support promotion.
+Lot 1 is now fully classified as supported or expected-unsupported; open renderer work only when row-specific reference, CPU, GPU, diff/stat, and route artifacts are available.
