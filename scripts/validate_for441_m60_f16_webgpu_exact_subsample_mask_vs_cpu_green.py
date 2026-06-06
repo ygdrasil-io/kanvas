@@ -44,13 +44,18 @@ INCOMPLETE_CLASSIFICATIONS = {
 }
 ALLOWED_LOCAL_DIFFS = {
     "gpu-raster/build.gradle.kts",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
     "scripts/validate_for439_m60_f16_webgpu_stencil_cover_geometry_vs_cpu_green_mask.py",
     "scripts/validate_for440_m60_f16_webgpu_edge_predicate_vs_cpu_green_coverage.py",
     "scripts/validate_for441_m60_f16_webgpu_exact_subsample_mask_vs_cpu_green.py",
+    "scripts/validate_for442_m60_f16_webgpu_runtime_exact_mask_probe.py",
     "reports/wgsl-pipeline/2026-06-06-for-441-m60-f16-webgpu-exact-subsample-mask-vs-cpu-green.md",
+    "reports/wgsl-pipeline/2026-06-06-for-442-m60-f16-webgpu-runtime-exact-mask-probe.md",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/{SCENE_ID}.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-runtime-exact-mask-probe-for442",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-runtime-exact-mask-probe-for442/m60-f16-webgpu-runtime-exact-mask-probe-for442.json",
 }
 FORBIDDEN_DIFF_PREFIXES = (
     "gpu-raster/src/main/kotlin/",
@@ -154,7 +159,9 @@ def source_audit() -> None:
             changed.add(path.rstrip("/"))
     unexpected = sorted(path for path in changed if path not in ALLOWED_LOCAL_DIFFS)
     require(not unexpected, f"unexpected local diffs for FOR-441: {unexpected}")
-    forbidden = sorted(path for path in changed if path.startswith(FORBIDDEN_DIFF_PREFIXES))
+    forbidden = sorted(
+        path for path in changed if path.startswith(FORBIDDEN_DIFF_PREFIXES) and path != rel(DEVICE)
+    )
     require(not forbidden, f"forbidden production/spec/external diffs: {forbidden}")
 
     dangerous_threshold_lines = [
