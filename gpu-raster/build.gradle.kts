@@ -289,6 +289,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16DiagnosticStencilTextureFor453.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16DiagnosticStencilTextureFor453.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16CoverSourceAttributionFor454.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16CoverSourceAttributionFor454.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }

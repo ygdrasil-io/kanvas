@@ -704,6 +704,20 @@ class StrokeCapJoinSceneCaptureTest {
                 adapter = adapter,
             )
         }
+        if (System.getProperty(FOR454_COVER_SOURCE_ATTRIBUTION_PROPERTY, "false").toBoolean()) {
+            writeM60F16CoverSourceAttributionFor454(
+                currentGpu = experimentalGpu,
+                currentGpuCmp = experimentalGpuCmp,
+                currentResidualStats = residualStats,
+                predrawSnapshot = aaStencilCoverPredrawDstReadbackSnapshot,
+                splitSnapshot = stencilRenderPassSplitBoundarySnapshot,
+                diagnosticStencilSnapshot = diagnosticStencilTextureFor453Snapshot,
+                shaderReturnSnapshot = aaStencilCoverShaderReturnDiagnosticSnapshot,
+                isolatedColorTargetSnapshot = aaStencilCoverIsolatedColorTargetSnapshot,
+                postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
+                adapter = adapter,
+            )
+        }
         widthQuantizedColorReconstructionFor432Result?.let { result ->
             writeM60F16WidthQuantizedColorReconstructionFor432(
                 reference = reference,
@@ -7969,6 +7983,344 @@ class StrokeCapJoinSceneCaptureTest {
               ]
             }
         """.trimIndent() + "\n"
+    }
+
+    private data class M60F16CoverSourceAttributionFor454Pixel(
+        val x: Int,
+        val y: Int,
+        val predraw: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSample,
+            >?,
+        val split: Pair<
+            SkWebGpuDevice.M60F16StencilRenderPassSplitBoundaryEvent,
+            SkWebGpuDevice.M60F16StencilRenderPassSplitBoundarySample,
+            >?,
+        val stencil: Pair<
+            SkWebGpuDevice.M60F16DiagnosticStencilTextureFor453Event,
+            SkWebGpuDevice.M60F16DiagnosticStencilTextureFor453Sample,
+            >?,
+        val shader: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val isolated: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetSample,
+            >?,
+        val postPass: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSample,
+            >?,
+        val classification: String,
+    )
+
+    private fun writeM60F16CoverSourceAttributionFor454(
+        currentGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        splitSnapshot: SkWebGpuDevice.M60F16StencilRenderPassSplitBoundarySnapshot,
+        diagnosticStencilSnapshot: SkWebGpuDevice.M60F16DiagnosticStencilTextureFor453Snapshot,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        isolatedColorTargetSnapshot: SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-cover-source-attribution-for454"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16CoverSourceAttributionFor454Json(
+                sceneId = sceneId,
+                currentGpu = currentGpu,
+                currentGpuCmp = currentGpuCmp,
+                currentResidualStats = currentResidualStats,
+                predrawSnapshot = predrawSnapshot,
+                splitSnapshot = splitSnapshot,
+                diagnosticStencilSnapshot = diagnosticStencilSnapshot,
+                shaderReturnSnapshot = shaderReturnSnapshot,
+                isolatedColorTargetSnapshot = isolatedColorTargetSnapshot,
+                postPassSnapshot = postPassSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16CoverSourceAttributionFor454Json(
+        sceneId: String,
+        currentGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        splitSnapshot: SkWebGpuDevice.M60F16StencilRenderPassSplitBoundarySnapshot,
+        diagnosticStencilSnapshot: SkWebGpuDevice.M60F16DiagnosticStencilTextureFor453Snapshot,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        isolatedColorTargetSnapshot: SkWebGpuDevice.M60F16AaStencilCoverIsolatedColorTargetSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ): String {
+        val targetPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6)
+        val predrawByPixel = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val splitByPixel = splitSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val stencilByPixel = diagnosticStencilSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val shaderByPixel = shaderReturnSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val isolatedByPixel = isolatedColorTargetSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val postPassByPixel = postPassSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+
+        fun <E, S> firstAvailable(
+            records: List<Pair<E, S>>,
+            available: (S) -> Boolean,
+        ): Pair<E, S>? = records.firstOrNull { available(it.second) } ?: records.firstOrNull()
+
+        fun rgbaNonZero(rgba: FloatArray?): Boolean = rgba != null && rgba.take(3).any { kotlin.math.abs(it) > 0.000001f }
+
+        val pixels = targetPoints.map { (x, y) ->
+            val predraw = firstAvailable(predrawByPixel[x to y].orEmpty()) { it.readbackAvailable }
+            val split = firstAvailable(splitByPixel[x to y].orEmpty()) { it.readbackAvailable }
+            val stencil = firstAvailable(stencilByPixel[x to y].orEmpty()) {
+                it.readbackAvailable && it.stencilValue != null
+            }
+            val shader = shaderByPixel[x to y].orEmpty()
+                .firstOrNull { (_, sample) ->
+                    sample.shaderObserved &&
+                        !sample.captureSynthetic &&
+                        rgbaNonZero(sample.sourceColorSentToBlend)
+                }
+                ?: shaderByPixel[x to y].orEmpty().firstOrNull { (_, sample) ->
+                    sample.shaderObserved && !sample.captureSynthetic
+                }
+                ?: shaderByPixel[x to y].orEmpty().firstOrNull()
+            val isolated = firstAvailable(isolatedByPixel[x to y].orEmpty()) { it.readbackAvailable }
+            val postPass = firstAvailable(postPassByPixel[x to y].orEmpty()) { it.readbackAvailable }
+            val stencilZero = stencil?.second?.stencilValue == 0 && stencil.second.stencilCovered == false
+            val sourceNonZero = rgbaNonZero(shader?.second?.sourceColorSentToBlend) ||
+                rgbaNonZero(isolated?.second?.scratchOutputRgbaFloat)
+            val postNonZero = rgbaNonZero(postPass?.second?.observedRgbaFloat)
+            val classification = when {
+                stencilZero && sourceNonZero && postPass?.second?.readbackAvailable == true ->
+                    "cover-source-attribution-cover-writes-zero-stencil-pixels"
+                stencilZero && sourceNonZero ->
+                    "cover-source-attribution-source-color-drives-residual"
+                stencilZero && postNonZero ->
+                    "cover-source-attribution-blend-drives-residual"
+                stencilZero && postPass?.second?.readbackAvailable == true && !postNonZero ->
+                    "cover-source-attribution-no-post-stencil-write-observed"
+                else -> "cover-source-attribution-inconclusive"
+            }
+            M60F16CoverSourceAttributionFor454Pixel(
+                x = x,
+                y = y,
+                predraw = predraw,
+                split = split,
+                stencil = stencil,
+                shader = shader,
+                isolated = isolated,
+                postPass = postPass,
+                classification = classification,
+            )
+        }
+        val globalClassification = when {
+            pixels.all { it.classification == "cover-source-attribution-cover-writes-zero-stencil-pixels" } ->
+                "cover-source-attribution-cover-writes-zero-stencil-pixels"
+            pixels.any { it.classification == "cover-source-attribution-source-color-drives-residual" } ->
+                "cover-source-attribution-source-color-drives-residual"
+            pixels.any { it.classification == "cover-source-attribution-blend-drives-residual" } ->
+                "cover-source-attribution-blend-drives-residual"
+            pixels.all { it.classification == "cover-source-attribution-no-post-stencil-write-observed" } ->
+                "cover-source-attribution-no-post-stencil-write-observed"
+            else -> "cover-source-attribution-inconclusive"
+        }
+        val pixelsJson = pixels.joinToString(",\n") { pixel ->
+            m60F16CoverSourceAttributionFor454PixelJson(pixel, currentGpu).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-454",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-attribution-cover-source-apres-for-453",
+              "sourceFindingMemory": "global/kanvas/findings/for-453-diagnostic-stencil-texture-direct-copy-available-and-zero-target-stencil-values",
+              "sourceArtifacts": {
+                "for453": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-diagnostic-stencil-texture-for453/m60-f16-diagnostic-stencil-texture-for453.json",
+                "for452": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-backend-readback-audit-for452/m60-f16-stencil-backend-readback-audit-for452.json",
+                "for451": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-render-pass-split-boundary-for451/m60-f16-stencil-render-pass-split-boundary-for451.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "optInFlag": ${FOR454_COVER_SOURCE_ATTRIBUTION_PROPERTY.jsonString()},
+              "classification": ${globalClassification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR454_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixAppliedByDefault": false,
+              "for442UsedAsDecisionSource": false,
+              "for447Promoted": false,
+              "diagnosticGuards": {
+                "predrawDstReadback": {"guardId": ${predrawSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${predrawSnapshot.enabled}, "enabledByDefault": false},
+                "stencilSplitBoundary": {"guardId": ${splitSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${splitSnapshot.enabled}, "enabledByDefault": false},
+                "diagnosticStencilTextureFor453": {"guardId": ${diagnosticStencilSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${diagnosticStencilSnapshot.enabled}, "enabledByDefault": false},
+                "shaderReturnDiagnostic": {"guardId": ${shaderReturnSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${shaderReturnSnapshot.enabled}, "enabledByDefault": false},
+                "isolatedColorTarget": {"guardId": ${isolatedColorTargetSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${isolatedColorTargetSnapshot.enabled}, "enabledByDefault": false},
+                "postPassReadback": {"guardId": ${postPassSnapshot.propertyName.jsonString()}, "enabledForEvidenceRun": ${postPassSnapshot.enabled}, "enabledByDefault": false}
+              },
+              "boundarySummary": {
+                "zeroMaskPixelCount": ${targetPoints.size},
+                "currentSimilarity": ${String.format(Locale.US, "%.6f", currentGpuCmp.similarity)},
+                "currentMismatchPixels": ${currentResidualStats.mismatchPixels},
+                "stencilZeroTargetCount": ${pixels.count { it.stencil?.second?.stencilValue == 0 && it.stencil.second.stencilCovered == false }},
+                "predrawAvailableTargetCount": ${pixels.count { it.predraw?.second?.readbackAvailable == true }},
+                "afterStencilBeforeCoverAvailableTargetCount": ${pixels.count { it.split?.second?.readbackAvailable == true }},
+                "shaderReturnObservedTargetCount": ${pixels.count { it.shader?.second?.shaderObserved == true }},
+                "isolatedColorTargetAvailableTargetCount": ${pixels.count { it.isolated?.second?.readbackAvailable == true }},
+                "postCoverAvailableTargetCount": ${pixels.count { it.postPass?.second?.readbackAvailable == true }},
+                "for442DecisionSourceUsedCount": 0
+              },
+              "partialPixels": [
+            $pixelsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "activationByDefault": false,
+                "for442UsedAsDecisionSource": false,
+                "for447Promoted": false,
+                "renderingFixAppliedByDefault": false,
+                "mainDepthStencilTextureModified": false,
+                "diagnosticStencilTextureMadePermanent": false
+              },
+              "classificationReason": ${m60F16CoverSourceAttributionFor454Reason(globalClassification).jsonString()},
+              "nextAction": ${m60F16CoverSourceAttributionFor454NextAction(globalClassification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16CoverSourceAttributionFor454.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for454_m60_f16_cover_source_attribution.py",
+                "rtk python3 scripts/validate_for453_m60_f16_diagnostic_stencil_texture.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for454-pycache python3 -m py_compile scripts/validate_for454_m60_f16_cover_source_attribution.py scripts/validate_for453_m60_f16_diagnostic_stencil_texture.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16CoverSourceAttributionFor454Reason(classification: String): String = when (classification) {
+        "cover-source-attribution-cover-writes-zero-stencil-pixels" ->
+            "FOR-454 observes six zero stencil values from FOR-453 while the opt-in cover/source diagnostics still expose non-zero cover output and post-cover pixels for the same coordinates."
+        "cover-source-attribution-source-color-drives-residual" ->
+            "FOR-454 observes zero stencil values and non-zero shader source output, but the post-cover boundary is incomplete."
+        "cover-source-attribution-blend-drives-residual" ->
+            "FOR-454 observes zero stencil values and post-cover color without a complete non-zero source-color attribution."
+        "cover-source-attribution-no-post-stencil-write-observed" ->
+            "FOR-454 observes zero stencil values and no non-zero post-cover write on the selected pixels."
+        else ->
+            "FOR-454 did not collect enough aligned stencil, source, isolated color, and post-cover samples to assign a single cover/source contribution."
+    }
+
+    private fun m60F16CoverSourceAttributionFor454NextAction(classification: String): String = when (classification) {
+        "cover-source-attribution-cover-writes-zero-stencil-pixels" ->
+            "Open a focused ticket to audit why the cover/source path emits color for coordinates whose diagnostic stencil membership is zero."
+        "cover-source-attribution-source-color-drives-residual" ->
+            "Open a focused source-color payload ticket for the cover path using the zero-stencil coordinates."
+        "cover-source-attribution-blend-drives-residual" ->
+            "Open a focused blend attribution ticket comparing source, destination, and fixed-function blend output for the zero-stencil coordinates."
+        "cover-source-attribution-no-post-stencil-write-observed" ->
+            "Open a later-pass overwrite ticket because FOR-454 did not observe a cover-stage write on the zero-stencil coordinates."
+        else ->
+            "Open a narrower attribution ticket that captures the missing boundary named in the FOR-454 per-pixel evidence."
+    }
+
+    private fun m60F16CoverSourceAttributionFor454PixelJson(
+        pixel: M60F16CoverSourceAttributionFor454Pixel,
+        currentGpu: SkBitmap,
+    ): String {
+        val predraw = pixel.predraw
+        val split = pixel.split
+        val stencil = pixel.stencil
+        val shader = pixel.shader
+        val isolated = pixel.isolated
+        val postPass = pixel.postPass
+        return """
+            {
+              "x": ${pixel.x},
+              "y": ${pixel.y},
+              "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentGpu.getPixel(pixel.x, pixel.y)))},
+              "classification": ${pixel.classification.jsonString()},
+              "stencilEvidence": {
+                "drawIndex": ${stencil?.first?.drawIndex ?: "null"},
+                "readbackAvailable": ${stencil?.second?.readbackAvailable ?: false},
+                "stencilValue": ${stencil?.second?.stencilValue ?: "null"},
+                "stencilCovered": ${stencil?.second?.stencilCovered ?: "null"}
+              },
+              "beforeCover": {
+                "drawIndex": ${predraw?.first?.drawIndex ?: "null"},
+                "available": ${predraw?.second?.readbackAvailable ?: false},
+                "dstBeforeRgbaFloat": ${predraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                "dstBeforeRgba8": ${predraw?.second?.dstBeforeRgba8.intArrayOrNullJson()}
+              },
+              "afterStencilBeforeCover": {
+                "drawIndex": ${split?.first?.drawIndex ?: "null"},
+                "available": ${split?.second?.readbackAvailable ?: false},
+                "rgbaFloat": ${split?.second?.afterStencilBeforeCoverRgbaFloat.floatArrayOrNullJson()},
+                "rgba8": ${split?.second?.afterStencilBeforeCoverRgba8.intArrayOrNullJson()}
+              },
+              "shaderReturn": {
+                "drawIndex": ${shader?.first?.drawIndex ?: "null"},
+                "subdrawOrdinal": ${shader?.second?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${shader?.second?.subdrawRole?.jsonString() ?: "null"},
+                "shaderObserved": ${shader?.second?.shaderObserved ?: false},
+                "candidateBranchReached": ${shader?.second?.candidateBranchReached ?: false},
+                "coverageOrAaAlpha": ${shader?.second?.coverageOrAaAlpha?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "sourceAlphaAfterCoverage": ${shader?.second?.sourceAlphaAfterCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "sourceColorSentToBlend": ${shader?.second?.sourceColorSentToBlend.floatArrayOrNullJson()},
+                "sourceColorBeforeQuantization": ${shader?.second?.sourceColorBeforeQuantization.floatArrayOrNullJson()},
+                "rawPathCoverage": ${shader?.second?.rawPathCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "clipCoverage": ${shader?.second?.clipCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "finalCoverage": ${shader?.second?.finalCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"}
+              },
+              "isolatedColorTarget": {
+                "drawIndex": ${isolated?.first?.drawIndex ?: "null"},
+                "available": ${isolated?.second?.readbackAvailable ?: false},
+                "scratchOutputRgbaFloat": ${isolated?.second?.scratchOutputRgbaFloat.floatArrayOrNullJson()},
+                "scratchOutputRgba8": ${isolated?.second?.scratchOutputRgba8.intArrayOrNullJson()}
+              },
+              "afterCover": {
+                "drawIndex": ${postPass?.first?.drawIndex ?: "null"},
+                "available": ${postPass?.second?.readbackAvailable ?: false},
+                "observedRgbaFloat": ${postPass?.second?.observedRgbaFloat.floatArrayOrNullJson()},
+                "observedRgba8": ${postPass?.second?.observedRgba8.intArrayOrNullJson()}
+              }
+            }
+        """.trimIndent()
     }
 
     private fun m60F16ZeroMaskOptInCorrectionFor447Reason(classification: String): String =
@@ -24611,6 +24963,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16StencilBackendReadbackAuditFor452.enabled"
         private const val FOR453_DIAGNOSTIC_STENCIL_TEXTURE_PROPERTY =
             "kanvas.webgpu.m60F16DiagnosticStencilTextureFor453.enabled"
+        private const val FOR454_COVER_SOURCE_ATTRIBUTION_PROPERTY =
+            "kanvas.webgpu.m60F16CoverSourceAttributionFor454.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -24811,6 +25165,15 @@ class StrokeCapJoinSceneCaptureTest {
             "diagnostic-stencil-texture-copy-aspect-rejected",
             "diagnostic-stencil-texture-ordering-unsafe",
             "diagnostic-stencil-texture-audit-inconclusive",
+        )
+        private val M60_F16_FOR454_ALLOWED_CLASSIFICATIONS = listOf(
+            "cover-source-attribution-cover-writes-zero-stencil-pixels",
+            "cover-source-attribution-source-color-drives-residual",
+            "cover-source-attribution-destination-drives-residual",
+            "cover-source-attribution-blend-drives-residual",
+            "cover-source-attribution-coverage-drives-residual",
+            "cover-source-attribution-no-post-stencil-write-observed",
+            "cover-source-attribution-inconclusive",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
