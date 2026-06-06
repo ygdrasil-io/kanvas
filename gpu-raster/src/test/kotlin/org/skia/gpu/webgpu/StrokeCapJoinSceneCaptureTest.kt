@@ -211,8 +211,11 @@ class StrokeCapJoinSceneCaptureTest {
                         }
                     }
                 }
+                val widthQuantizedColorReconstructionRequested =
+                    System.getProperty(FOR432_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_PROPERTY, "false").toBoolean() ||
+                        System.getProperty(FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY, "false").toBoolean()
                 val widthQuantizedColorReconstructionFor432Result =
-                    if (System.getProperty(FOR432_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_PROPERTY, "false").toBoolean()) {
+                    if (widthQuantizedColorReconstructionRequested) {
                         withExperimentalStrokeCapJoinRender {
                             withM60F16WidthQuantizedRenderFixFor431(true) {
                                 withM60F16WidthQuantizedColorReconstructionFor432(true) {
@@ -395,6 +398,16 @@ class StrokeCapJoinSceneCaptureTest {
                 postPassSnapshot = result.aaStencilCoverPostPassReadbackSnapshot,
                 adapter = adapter,
             )
+            if (System.getProperty(FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY, "false").toBoolean()) {
+                writeM60F16StencilSubdrawSourceColorFor433(
+                    reference = reference,
+                    currentGpu = experimentalGpu,
+                    optInGpu = widthQuantizedRenderFixFor431Gpu,
+                    shaderReturnSnapshot = result.aaStencilCoverShaderReturnDiagnosticSnapshot,
+                    predrawSnapshot = result.aaStencilCoverPredrawDstReadbackSnapshot,
+                    adapter = adapter,
+                )
+            }
         }
         writeM60F16SourcePaintCaptureExtension(residualStats, adapter)
         writeM60F16EffectiveCoverageExport(residualStats, adapter)
@@ -6168,6 +6181,372 @@ class StrokeCapJoinSceneCaptureTest {
                 "Add the exact missing FOR-432 trace field named in partialPixels[].missingFields before drawing a correction conclusion."
         }
 
+    private fun writeM60F16StencilSubdrawSourceColorFor433(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-stencil-subdraw-source-color-for433"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16StencilSubdrawSourceColorFor433Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                optInGpu = optInGpu,
+                shaderReturnSnapshot = shaderReturnSnapshot,
+                predrawSnapshot = predrawSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16StencilSubdrawSourceColorFor433Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        adapter: String,
+    ): String {
+        val coverageAlpha = 10f / 16f
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val shaderByPoint = shaderReturnSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val predrawByPoint = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val records = partialPoints
+            .map { (x, y) -> M60F16DrawPixelKey(1, x, y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.y }.thenBy { it.x })
+            .map { key ->
+                val point = key.x to key.y
+                val sources = shaderByPoint[point].orEmpty()
+                    .sortedWith(
+                        compareBy<Pair<
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                            >> { it.first.drawIndex }
+                            .thenBy { it.second.subdrawOrdinal }
+                            .thenBy { it.second.subdrawRole },
+                    )
+                val observedSources = sources.filter { (_, sample) ->
+                    sample.shaderObserved && !sample.captureSynthetic && sample.sourceColorSentToBlend != null
+                }
+                val widthQuantizedSources = observedSources.filter { (_, sample) ->
+                    val capturedAlpha = sample.coverageOrAaAlpha
+                    capturedAlpha != null && kotlin.math.abs(capturedAlpha - coverageAlpha) <= (1f / 255f)
+                }
+                val effectiveRenderDrawIndex = widthQuantizedSources.firstOrNull()?.first?.drawIndex ?: key.drawIndex
+                val targetDrawSources = widthQuantizedSources.filter { (event, _) ->
+                    event.drawIndex == effectiveRenderDrawIndex
+                }
+                val selected = targetDrawSources.firstOrNull { (_, sample) ->
+                    sample.subdrawOrdinal == 0 && sample.subdrawRole == "inside"
+                } ?: targetDrawSources.firstOrNull()
+                val alternateSingleCandidatesShareSource = targetDrawSources.size > 1 &&
+                    selected != null &&
+                    targetDrawSources.all { (_, sample) ->
+                        val selectedSource = selected.second.sourceColorSentToBlend
+                        val candidateSource = sample.sourceColorSentToBlend
+                        selectedSource != null &&
+                            candidateSource != null &&
+                            selectedSource.contentEquals(candidateSource)
+                    }
+                val predraw = predrawByPoint[point].orEmpty()
+                    .sortedBy { it.first.drawIndex }
+                    .firstOrNull { (event, sample) ->
+                        event.drawIndex == effectiveRenderDrawIndex &&
+                            sample.targetWithinScissor &&
+                            sample.readbackAvailable &&
+                            sample.dstBeforeRgbaFloat != null
+                    }
+                val capturedSource = selected?.second?.sourceColorSentToBlend
+                val capturedAlpha = selected?.second?.coverageOrAaAlpha
+                val referenceFloat = rgbaByteArrayToFloat(rgbaArray(reference.getPixel(key.x, key.y)))
+                val dstBefore = predraw?.second?.dstBeforeRgbaFloat
+                val requiredSource = dstBefore?.let {
+                    inverseSourceOverPremul(referenceFloat, it, coverageAlpha)
+                }
+                val reconstructedCpu = requiredSource?.let { source ->
+                    sourceOverPremul(source, requireNotNull(dstBefore))
+                }
+                val sourceDelta = if (capturedSource != null && requiredSource != null) {
+                    rgbaDelta(capturedSource, requiredSource, 1f / 255f)
+                } else {
+                    null
+                }
+                val reconstructedDelta = reconstructedCpu?.let {
+                    rgbaDelta(it, referenceFloat, 1f / 255f)
+                }
+                val requiredSourcePremulConsistent = requiredSource?.let { source ->
+                    source[3] in -0.000001f..1.000001f &&
+                        source.sliceArray(0..2).all { channel -> channel >= -0.000001f && channel <= source[3] + 0.000001f }
+                }
+                val missingFields = buildList {
+                    if (targetDrawSources.isEmpty()) add("for432WidthQuantizedShaderReturnSubdraw")
+                    if (selected == null) add("selectedSingleStencilCandidate")
+                    if (capturedSource == null) add("sourceColorSentToBlend")
+                    if (capturedAlpha == null) add("coverageOrAaAlpha")
+                    if (dstBefore == null) add("dstBeforeRgbaFloat")
+                    if (requiredSource == null) add("requiredPremulSourceByInverseSrcOver")
+                    if (reconstructedCpu == null) add("reconstructedCpuReferenceByRequiredSource")
+                }
+                val classification = when {
+                    missingFields.isNotEmpty() -> "trace-incomplete"
+                    requiredSourcePremulConsistent != true ||
+                        reconstructedDelta?.withinTolerance != true -> "cpu-reference-inversion-inconsistent"
+                    capturedAlpha == null ||
+                        kotlin.math.abs(capturedAlpha - coverageAlpha) > (1f / 255f) -> "coverage-alpha-mismatch"
+                    targetDrawSources.size > 1 && !alternateSingleCandidatesShareSource -> "stencil-side-ambiguous"
+                    sourceDelta?.withinTolerance != true -> "source-payload-mismatch"
+                    else -> "source-payload-mismatch"
+                }
+                M60F16StencilSubdrawSourceColorRecord(
+                    key = key,
+                    effectiveRenderDrawIndex = effectiveRenderDrawIndex,
+                    selectedSource = selected,
+                    targetDrawSources = targetDrawSources,
+                    predraw = predraw,
+                    referenceRgba = rgbaArray(reference.getPixel(key.x, key.y)),
+                    currentGpuRgba = rgbaArray(currentGpu.getPixel(key.x, key.y)),
+                    optInGpuRgba = rgbaArray(optInGpu.getPixel(key.x, key.y)),
+                    requiredSourcePremul = requiredSource,
+                    reconstructedCpuReference = reconstructedCpu,
+                    sourceDelta = sourceDelta,
+                    reconstructedDelta = reconstructedDelta,
+                    requiredSourcePremulConsistent = requiredSourcePremulConsistent,
+                    alternateSingleCandidatesShareSource = alternateSingleCandidatesShareSource,
+                    missingFields = missingFields,
+                    classification = classification,
+                )
+            }
+        val classificationCounts = records.groupingBy { it.classification }.eachCount()
+        val globalClassification = when {
+            records.any { it.classification == "trace-incomplete" } -> "trace-incomplete"
+            records.any { it.classification == "cpu-reference-inversion-inconsistent" } ->
+                "cpu-reference-inversion-inconsistent"
+            records.any { it.classification == "coverage-alpha-mismatch" } -> "coverage-alpha-mismatch"
+            records.any { it.classification == "stencil-side-ambiguous" } -> "stencil-side-ambiguous"
+            else -> "source-payload-mismatch"
+        }
+        val maxSourceDelta = records.mapNotNull { it.sourceDelta?.maxChannel }.maxOrNull() ?: 0f
+        val maxCapturedAlphaDelta = records.mapNotNull { record ->
+            record.selectedSource?.second?.coverageOrAaAlpha?.let { kotlin.math.abs(it - coverageAlpha) }
+        }.maxOrNull() ?: 0f
+        val recordsJson = records.joinToString(",\n") { record ->
+            m60F16StencilSubdrawSourceColorFor433RecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-433",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "m60-f16-width-quantized-color-reconstruction-for432",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-isoler-source-couleur-du-sous-passage-stencil-regresse",
+              "sourceFindingMemory": "global/kanvas/findings/for-432-web-gpu-width-quantized-color-reconstruction-matches-single-stencil-gated-subdraw",
+              "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-width-quantized-color-reconstruction-for432/m60-f16-width-quantized-color-reconstruction-for432.json",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${globalClassification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR433_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "diagnosticFlag": ${FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY.jsonString()},
+              "sourceFor432DiagnosticFlag": ${FOR432_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_PROPERTY.jsonString()},
+              "sourceFor431OptInFlag": ${FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY.jsonString()},
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixApplied": false,
+              "comparisonPolicy": {
+                "scope": "Exactly the six FOR-432 width-quantized regression pixels.",
+                "source": "FOR-432 selected single stencil-gated sourceColorSentToBlend.",
+                "inverseMath": "premultiplied SrcOver inversion: requiredSource.rgb = cpuReference.rgb - dstBefore.rgb * (1 - 10/16), requiredSource.a = 10/16.",
+                "coverageAlpha": ${m60F16JsonFloat(coverageAlpha)},
+                "noRenderingFixApplied": true,
+                "boundedToSixPixels": true
+              },
+              "summary": {
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "sourcePayloadMismatchCount": ${classificationCounts["source-payload-mismatch"] ?: 0},
+                "coverageAlphaMismatchCount": ${classificationCounts["coverage-alpha-mismatch"] ?: 0},
+                "stencilSideAmbiguousCount": ${classificationCounts["stencil-side-ambiguous"] ?: 0},
+                "cpuReferenceInversionInconsistentCount": ${classificationCounts["cpu-reference-inversion-inconsistent"] ?: 0},
+                "traceIncompletePixelCount": ${classificationCounts["trace-incomplete"] ?: 0},
+                "maxSourceVsRequiredChannelDelta": ${String.format(Locale.US, "%.9f", maxSourceDelta)},
+                "maxCapturedCoverageAlphaDelta": ${String.format(Locale.US, "%.9f", maxCapturedAlphaDelta)}
+              },
+              "partialPixels": [
+            $recordsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "for431ActivatedByDefault": false,
+                "renderingFixApplied": false
+              },
+              "classificationReason": ${m60F16StencilSubdrawSourceColorFor433GlobalReason(globalClassification).jsonString()},
+              "nextStep": ${m60F16StencilSubdrawSourceColorFor433NextStep(globalClassification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16StencilSubdrawSourceColorFor433.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for433_m60_f16_stencil_subdraw_source_color.py",
+                "rtk python3 scripts/validate_for432_m60_f16_width_quantized_color_reconstruction.py",
+                "rtk python3 scripts/validate_for431_m60_f16_webgpu_width_quantized_render_fix.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for433-pycache python3 -m py_compile scripts/validate_for433_m60_f16_stencil_subdraw_source_color.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16StencilSubdrawSourceColorFor433RecordJson(
+        record: M60F16StencilSubdrawSourceColorRecord,
+    ): String {
+        val selected = record.selectedSource?.second
+        val targetCandidatesJson = record.targetDrawSources.joinToString(",\n") { (event, sample) ->
+            """
+                {
+                  "drawIndex": ${event.drawIndex},
+                  "subdrawOrdinal": ${sample.subdrawOrdinal},
+                  "subdrawRole": ${sample.subdrawRole.jsonString()},
+                  "coverageOrAaAlpha": ${sample.coverageOrAaAlpha?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                  "sourceColorSentToBlend": ${sample.sourceColorSentToBlend.floatArrayOrNullJson()}
+                }
+            """.trimIndent().prependIndent("        ")
+        }
+        val missingFieldsJson = record.missingFields.joinToString(", ") { it.jsonString() }
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "effectiveRenderDrawIndex": ${record.effectiveRenderDrawIndex},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16StencilSubdrawSourceColorFor433LocalReason(record).jsonString()},
+              "referenceCpuRgba": ${rgbaArrayJson(record.referenceRgba)},
+              "currentWebGpuRgba": ${rgbaArrayJson(record.currentGpuRgba)},
+              "optInFor431Rgba": ${rgbaArrayJson(record.optInGpuRgba)},
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": ${m60F16JsonFloat(10f / 16f)},
+                "capturedCoverageOrAaAlpha": ${selected?.coverageOrAaAlpha?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "capturedCoverageAlphaDelta": ${selected?.coverageOrAaAlpha?.let { String.format(Locale.US, "%.9f", kotlin.math.abs(it - 10f / 16f)) } ?: "null"}
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": ${record.predraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                "dstBeforeRgba8": ${record.predraw?.second?.dstBeforeRgba8.intArrayOrNullJson()}
+              },
+              "selectedStencilCandidate": {
+                "label": ${selected?.let { "single-${it.subdrawOrdinal}-${it.subdrawRole}" }?.jsonString() ?: "null"},
+                "drawIndex": ${record.selectedSource?.first?.drawIndex ?: "null"},
+                "subdrawOrdinal": ${selected?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${selected?.subdrawRole?.jsonString() ?: "null"},
+                "candidateBranchReached": ${selected?.candidateBranchReached ?: "null"},
+                "ambiguousSingleStencilCandidateCount": ${record.targetDrawSources.size},
+                "alternateSingleCandidatesShareSource": ${record.alternateSingleCandidatesShareSource}
+              },
+              "source": {
+                "capturedWebGpuPremulRgbaFloat": ${selected?.sourceColorSentToBlend.floatArrayOrNullJson()},
+                "capturedWebGpuPremulRgba8Approx": ${selected?.sourceColorSentToBlend?.let { floatRgbaToByteArrayJson(it) } ?: "null"},
+                "sourceColorBeforeQuantization": ${selected?.sourceColorBeforeQuantization.floatArrayOrNullJson()}
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": ${record.requiredSourcePremul.floatArrayOrNullJson()},
+                "rgba8Approx": ${record.requiredSourcePremul?.let { floatRgbaToByteArrayJson(it) } ?: "null"},
+                "premulConsistent": ${record.requiredSourcePremulConsistent ?: "null"},
+                "reconstructedCpuReferenceRgbaFloat": ${record.reconstructedCpuReference.floatArrayOrNullJson()},
+                "reconstructedVsCpuReferenceDelta": ${record.reconstructedDelta?.let { rgbaDeltaJson(it) } ?: "null"}
+              },
+              "webGpuSourceVsRequiredDelta": ${record.sourceDelta?.let { rgbaDeltaJson(it) } ?: "null"},
+              "candidateSubdraws": [
+            $targetCandidatesJson
+              ],
+              "missingFields": [$missingFieldsJson]
+            }
+        """.trimIndent()
+    }
+
+    private fun inverseSourceOverPremul(out: FloatArray, dst: FloatArray, sourceAlpha: Float): FloatArray =
+        FloatArray(4) { index ->
+            if (index == 3) {
+                sourceAlpha
+            } else {
+                out[index] - dst[index] * (1f - sourceAlpha)
+            }
+        }
+
+    private fun floatRgbaToByteArrayJson(rgba: FloatArray): String =
+        rgba.joinToString(prefix = "[", postfix = "]") { value ->
+            ((value.coerceIn(0f, 1f) * 255f) + 0.5f).toInt().toString()
+        }
+
+    private fun m60F16StencilSubdrawSourceColorFor433LocalReason(
+        record: M60F16StencilSubdrawSourceColorRecord,
+    ): String = when (record.classification) {
+        "source-payload-mismatch" ->
+            "The selected FOR-432 stencil-gated source differs from the premultiplied source required to reach the CPU reference at 10/16 coverage."
+        "coverage-alpha-mismatch" ->
+            "The selected FOR-432 source does not carry the expected 10/16 coverage alpha."
+        "stencil-side-ambiguous" ->
+            "Multiple single-stencil candidates carry distinct source payloads, so the selected stencil side is ambiguous."
+        "cpu-reference-inversion-inconsistent" ->
+            "The inverse SrcOver source is outside premultiplied bounds or cannot reconstruct the CPU reference."
+        else ->
+            "The source-color comparison is incomplete; missing fields: ${record.missingFields.joinToString()}."
+    }
+
+    private fun m60F16StencilSubdrawSourceColorFor433GlobalReason(classification: String): String =
+        when (classification) {
+            "source-payload-mismatch" ->
+                "All six pixels have matching 10/16 coverage and complete FOR-432 trace data, but the WebGPU source payload is not the premultiplied source required by the CPU reference."
+            "coverage-alpha-mismatch" ->
+                "At least one selected source does not preserve the expected 10/16 coverage alpha."
+            "stencil-side-ambiguous" ->
+                "The trace cannot isolate one stencil side because candidate subdraws disagree on the source payload."
+            "cpu-reference-inversion-inconsistent" ->
+                "The CPU reference cannot be reconstructed by a valid premultiplied source under the captured destination and 10/16 coverage."
+            else ->
+                "At least one selected pixel is missing a FOR-432 source, destination, or inversion field."
+        }
+
+    private fun m60F16StencilSubdrawSourceColorFor433NextStep(classification: String): String =
+        when (classification) {
+            "source-payload-mismatch" ->
+                "Open the next correction ticket on the paint/source payload feeding the M60 F16 AA stencil-cover width-quantized subpass, without changing coverage thresholds or promoting FOR-431."
+            "coverage-alpha-mismatch" ->
+                "Inspect the coverage-to-alpha transfer before adjusting source color payload."
+            "stencil-side-ambiguous" ->
+                "Add a narrower stencil-side isolation trace before changing source or coverage logic."
+            "cpu-reference-inversion-inconsistent" ->
+                "Recheck the CPU reference and destination capture before deriving a rendering fix."
+            else ->
+                "Add the missing FOR-432 field named in partialPixels[].missingFields before deriving a correction."
+        }
+
     private fun m60F16SubsampleComparisonGridJson(
         key: M60F16DrawPixelKey,
         cpuMask: Int?,
@@ -9390,6 +9769,36 @@ class StrokeCapJoinSceneCaptureTest {
         val reconstructedSrcOver: FloatArray?,
         val reconstructionVsDstAfter: RgbaFloatDelta?,
         val reconstructionVsObservedImage: RgbaFloatDelta?,
+    )
+
+    private data class M60F16StencilSubdrawSourceColorRecord(
+        val key: M60F16DrawPixelKey,
+        val effectiveRenderDrawIndex: Int,
+        val selectedSource: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val targetDrawSources: List<
+            Pair<
+                SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                >,
+            >,
+        val predraw: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSample,
+            >?,
+        val referenceRgba: IntArray,
+        val currentGpuRgba: IntArray,
+        val optInGpuRgba: IntArray,
+        val requiredSourcePremul: FloatArray?,
+        val reconstructedCpuReference: FloatArray?,
+        val sourceDelta: RgbaFloatDelta?,
+        val reconstructedDelta: RgbaFloatDelta?,
+        val requiredSourcePremulConsistent: Boolean?,
+        val alternateSingleCandidatesShareSource: Boolean,
+        val missingFields: List<String>,
+        val classification: String,
     )
 
     private data class M60F16CoverageNeighborhood3x3(
@@ -16331,6 +16740,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled"
         private const val FOR432_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_PROPERTY =
             "kanvas.webgpu.m60F16WidthQuantizedColorReconstructionFor432.enabled"
+        private const val FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY =
+            "kanvas.webgpu.m60F16StencilSubdrawSourceColorFor433.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -16366,6 +16777,13 @@ class StrokeCapJoinSceneCaptureTest {
             "coverage-applied-to-wrong-subdraw",
             "fixed-function-blend-mismatch",
             "reconstruction-matches-regression",
+            "trace-incomplete",
+        )
+        private val M60_F16_FOR433_ALLOWED_CLASSIFICATIONS = listOf(
+            "source-payload-mismatch",
+            "coverage-alpha-mismatch",
+            "stencil-side-ambiguous",
+            "cpu-reference-inversion-inconsistent",
             "trace-incomplete",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
