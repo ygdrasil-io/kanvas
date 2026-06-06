@@ -265,6 +265,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16ZeroMaskCorrectionFor447.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16ZeroMaskCorrectionFor447.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
