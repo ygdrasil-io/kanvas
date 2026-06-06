@@ -230,6 +230,8 @@ private const val WEBGPU_M60_F16_RUNTIME_INTEGER_LANE_MASK_PROBE_FOR445_FLAG: St
     "kanvas.webgpu.m60F16RuntimeIntegerLaneMaskProbeFor445.enabled"
 private const val WEBGPU_M60_F16_STENCIL_RENDER_PASS_SPLIT_FOR451_FLAG: String =
     "kanvas.webgpu.m60F16StencilRenderPassSplitFor451.enabled"
+private const val WEBGPU_M60_F16_STENCIL_BACKEND_READBACK_AUDIT_FOR452_FLAG: String =
+    "kanvas.webgpu.m60F16StencilBackendReadbackAuditFor452.enabled"
 private const val WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG: String =
     "kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled"
 private const val WEBGPU_M60_F16_ZERO_MASK_CORRECTION_FOR447_FLAG: String =
@@ -652,6 +654,37 @@ public class SkWebGpuDevice(
         val afterStencilBeforeCoverRgba8: IntArray?,
         val directStencilReadbackAvailable: Boolean,
         val classification: String,
+        val reason: String,
+    )
+
+    public data class M60F16StencilBackendReadbackAuditSnapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val requestedBoundary: String,
+        val auditedBoundary: String,
+        val depthStencilFormat: String,
+        val mainDepthStencilTextureLabel: String,
+        val mainDepthStencilUsage: String,
+        val mainDepthStencilUsageHasCopySrc: Boolean,
+        val mainDepthStencilUsageHasTextureBinding: Boolean,
+        val texelCopyTextureInfoAspectAvailable: Boolean,
+        val stencilTextureAspectAvailable: Boolean,
+        val stencilTextureAspectName: String,
+        val copyFromMainTextureAttempted: Boolean,
+        val shaderReadFromMainTextureAttempted: Boolean,
+        val diagnosticTextureRequired: Boolean,
+        val directStencilReadbackAvailable: Boolean,
+        val productionOrderingChanged: Boolean,
+        val classification: String,
+        val auditedRoutes: List<M60F16StencilBackendReadbackAuditRoute>,
+    )
+
+    public data class M60F16StencilBackendReadbackAuditRoute(
+        val name: String,
+        val attempted: Boolean,
+        val usableForDirectReadback: Boolean,
+        val candidateForNextTicket: Boolean,
+        val status: String,
         val reason: String,
     )
 
@@ -1086,6 +1119,11 @@ public class SkWebGpuDevice(
             WEBGPU_M60_F16_STENCIL_RENDER_PASS_SPLIT_FOR451_FLAG,
             "false",
         ).toBoolean()
+    private val m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_STENCIL_BACKEND_READBACK_AUDIT_FOR452_FLAG,
+            "false",
+        ).toBoolean()
     private val m60F16AaStencilCoverShaderReturnDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_DIAGNOSTIC_FLAG,
@@ -1400,7 +1438,8 @@ public class SkWebGpuDevice(
         M60F16StencilRenderPassSplitBoundarySnapshot =
         M60F16StencilRenderPassSplitBoundarySnapshot(
             propertyName = WEBGPU_M60_F16_STENCIL_RENDER_PASS_SPLIT_FOR451_FLAG,
-            enabled = m60F16StencilRenderPassSplitFor451DiagnosticsEnabled,
+            enabled = m60F16StencilRenderPassSplitFor451DiagnosticsEnabled ||
+                m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled,
             requestedBoundary =
                 "after StencilCoverAaPolygonDraw stencil draw and before inside/outside cover draws",
             observedBoundary =
@@ -1414,6 +1453,84 @@ public class SkWebGpuDevice(
             depthStencilLoadOpAfterSplit = GPULoadOp.Load.name,
             sampleLimit = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.size,
             events = m60F16StencilRenderPassSplitBoundaryEvents.toList(),
+        )
+
+    public fun m60F16StencilBackendReadbackAuditFor452Snapshot():
+        M60F16StencilBackendReadbackAuditSnapshot =
+        M60F16StencilBackendReadbackAuditSnapshot(
+            propertyName = WEBGPU_M60_F16_STENCIL_BACKEND_READBACK_AUDIT_FOR452_FLAG,
+            enabled = m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled,
+            requestedBoundary =
+                "after FOR-451 split stencil draw and before inside/outside cover draws",
+            auditedBoundary =
+                "backend API and resource usage audit for direct stencil copy/readback",
+            depthStencilFormat = GPUTextureFormat.Depth24PlusStencil8.name,
+            mainDepthStencilTextureLabel = "SkWebGpuDevice.depthStencil",
+            mainDepthStencilUsage = "GPUTextureUsage.RenderAttachment",
+            mainDepthStencilUsageHasCopySrc = false,
+            mainDepthStencilUsageHasTextureBinding = false,
+            texelCopyTextureInfoAspectAvailable = true,
+            stencilTextureAspectAvailable = true,
+            stencilTextureAspectName = "GPUTextureAspect.StencilOnly",
+            copyFromMainTextureAttempted = false,
+            shaderReadFromMainTextureAttempted = false,
+            diagnosticTextureRequired = true,
+            directStencilReadbackAvailable = false,
+            productionOrderingChanged = false,
+            classification = "stencil-backend-diagnostic-texture-required",
+            auditedRoutes = listOf(
+                M60F16StencilBackendReadbackAuditRoute(
+                    name = "main-depth-stencil-copy-src",
+                    attempted = false,
+                    usableForDirectReadback = false,
+                    candidateForNextTicket = false,
+                    status = "refused-main-texture-missing-copy-src",
+                    reason =
+                        "The production depth/stencil texture is created with GPUTextureUsage.RenderAttachment only. " +
+                            "Copying its stencil aspect would require adding CopySrc to the main render resource, " +
+                            "which is outside this diagnostic ticket.",
+                ),
+                M60F16StencilBackendReadbackAuditRoute(
+                    name = "main-depth-stencil-texture-binding",
+                    attempted = false,
+                    usableForDirectReadback = false,
+                    candidateForNextTicket = false,
+                    status = "refused-main-texture-missing-texture-binding",
+                    reason =
+                        "The production depth/stencil texture is not created with TextureBinding, so a shader or " +
+                            "compute read from the main stencil attachment is not a safe opt-in extension.",
+                ),
+                M60F16StencilBackendReadbackAuditRoute(
+                    name = "stencil-aspect-copy-to-buffer",
+                    attempted = false,
+                    usableForDirectReadback = false,
+                    candidateForNextTicket = false,
+                    status = "api-aspect-available-source-usage-missing",
+                    reason =
+                        "TexelCopyTextureInfo exposes an aspect field and GPUTextureAspect.StencilOnly exists, " +
+                            "but the current source texture lacks CopySrc, so no copy is attempted.",
+                ),
+                M60F16StencilBackendReadbackAuditRoute(
+                    name = "shader-or-compute-stencil-read",
+                    attempted = false,
+                    usableForDirectReadback = false,
+                    candidateForNextTicket = false,
+                    status = "api-view-aspect-available-source-usage-missing",
+                    reason =
+                        "GPUTextureAspect.StencilOnly can describe a view aspect, but the production texture lacks " +
+                            "TextureBinding and Kanvas has no production stencil-read shader path to reuse.",
+                ),
+                M60F16StencilBackendReadbackAuditRoute(
+                    name = "separate-diagnostic-depth-stencil-texture",
+                    attempted = false,
+                    usableForDirectReadback = false,
+                    candidateForNextTicket = true,
+                    status = "required-follow-up",
+                    reason =
+                        "A separate diagnostic resource with explicit copy or binding usage is the only route that " +
+                            "keeps the production depth/stencil texture and pass ordering unchanged.",
+                ),
+            ),
         )
 
     public fun m60F16AaStencilCoverContributionIsolationSnapshot():
@@ -2775,7 +2892,11 @@ public class SkWebGpuDevice(
     }
 
     private suspend fun recordM60F16StencilRenderPassSplitBoundaryReadbacks() {
-        if (!m60F16StencilRenderPassSplitFor451DiagnosticsEnabled) return
+        if (!m60F16StencilRenderPassSplitFor451DiagnosticsEnabled &&
+            !m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled
+        ) {
+            return
+        }
         val readbacks = m60F16StencilRenderPassSplitBoundaryPendingReadbacks.toList()
         m60F16StencilRenderPassSplitBoundaryPendingReadbacks.clear()
         readbacks.forEach { readback ->
@@ -17003,7 +17124,9 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             m60F16AaStencilCoverPredrawDstReadbackEvents.clear()
             m60F16AaStencilCoverPredrawDstPendingReadbacks.clear()
         }
-        if (m60F16StencilRenderPassSplitFor451DiagnosticsEnabled) {
+        if (m60F16StencilRenderPassSplitFor451DiagnosticsEnabled ||
+            m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled
+        ) {
             m60F16StencilRenderPassSplitBoundaryEvents.clear()
             m60F16StencilRenderPassSplitBoundaryPendingReadbacks.clear()
         }
@@ -17336,7 +17459,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                     }
                 }
                 val stencilRenderPassSplitFor451Active =
-                    m60F16StencilRenderPassSplitFor451DiagnosticsEnabled &&
+                    (m60F16StencilRenderPassSplitFor451DiagnosticsEnabled ||
+                        m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled) &&
                         d.m60F16BandMetadata != null &&
                         res.m60F16StencilRenderPassSplitBoundaryBindGroup != null
                 if (stencilRenderPassSplitFor451Active) {
@@ -21418,7 +21542,9 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             null
         }
         val stencilRenderPassSplitBoundaryEnabled =
-            m60F16StencilRenderPassSplitFor451DiagnosticsEnabled && d.m60F16BandMetadata != null &&
+            (m60F16StencilRenderPassSplitFor451DiagnosticsEnabled ||
+                m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled) &&
+                d.m60F16BandMetadata != null &&
                 intermediateFormat == GPUTextureFormat.RGBA16Float
         val stencilRenderPassSplitBoundaryStorage = if (stencilRenderPassSplitBoundaryEnabled) {
             context.device.createBuffer(
