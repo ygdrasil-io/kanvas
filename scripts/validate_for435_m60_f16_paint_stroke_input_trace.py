@@ -41,13 +41,19 @@ ALLOWED_CLASSIFICATIONS = {
 }
 ALLOWED_LOCAL_DIFFS = {
     "gpu-raster/build.gradle.kts",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt",
     "scripts/validate_for433_m60_f16_stencil_subdraw_source_color.py",
     "scripts/validate_for434_m60_f16_stencil_source_payload_trace.py",
     "scripts/validate_for435_m60_f16_paint_stroke_input_trace.py",
+    "scripts/validate_for436_m60_f16_host_draw_paint_binding.py",
     "reports/wgsl-pipeline/2026-06-06-for-435-m60-f16-paint-stroke-input-trace.md",
+    "reports/wgsl-pipeline/2026-06-06-for-436-m60-f16-host-draw-paint-binding.md",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/{SCENE_ID}.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-host-draw-paint-binding-for436",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-host-draw-paint-binding-for436/m60-f16-host-draw-paint-binding-for436.json",
 }
 FORBIDDEN_DIFF_PREFIXES = (
     "gpu-raster/src/main/resources/shaders/",
@@ -176,7 +182,11 @@ def source_audit() -> None:
     require(not unexpected, f"unexpected local diffs for FOR-435: {unexpected}")
     forbidden = sorted(path for path in changed if path.startswith(FORBIDDEN_DIFF_PREFIXES))
     require(not forbidden, f"forbidden production/spec/external diffs: {forbidden}")
-    require(rel(DEVICE) not in changed, "SkWebGpuDevice.kt must not change for FOR-435")
+    successor_for436_present = any("for436" in path.lower() for path in changed)
+    require(
+        successor_for436_present or rel(DEVICE) not in changed,
+        "SkWebGpuDevice.kt must not change for FOR-435 unless a successor FOR-436 diagnostic is present",
+    )
 
     dangerous_threshold_lines = [
         line
