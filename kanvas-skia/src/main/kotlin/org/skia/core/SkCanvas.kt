@@ -1828,6 +1828,9 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
         constraint: SrcRectConstraint = SrcRectConstraint.kStrict,
     ) {
         val s = top
+        val clipped = clipDrawImageRectSourceToImage(image, src, dst) ?: return
+        val effectiveSrc = clipped.src
+        val effectiveDst = clipped.dst
         // K2 — when `paint.maskFilter` is set we re-route through the
         // shader-rect path (same as upstream Skia's `USE_SHADER` branch
         // in `SkBitmapDevice::drawImageRect` when `CanApplyDstMatrixAsCTM`
@@ -1853,7 +1856,11 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             // `src` pixel. SkBitmapShader composes `localMatrix⁻¹` with
             // `deviceToLocal` so we pass the src-to-dst mapping (the shader
             // inverts it internally as part of its sample pipeline).
-            val srcToDst = SkMatrix.MakeRectToRect(src, dst, SkMatrix.ScaleToFit.kFill_ScaleToFit)
+            val srcToDst = SkMatrix.MakeRectToRect(
+                effectiveSrc,
+                effectiveDst,
+                SkMatrix.ScaleToFit.kFill_ScaleToFit,
+            )
             if (srcToDst == null) return
             // K2 — when the routing is driven by a maskFilter we tile the
             // shader with `kDecal` so that samples taken inside the
@@ -1876,14 +1883,56 @@ public open class SkCanvas(rootDevice: SkDevice, surfaceProps: SkSurfaceProps? =
             }
             // Use drawPath directly to avoid drawRect's fast-path which
             // would re-enter and short-circuit on a null shader.
-            drawPath(SkPath.Rect(dst), effective)
+            drawPath(SkPath.Rect(effectiveDst), effective)
             return
         }
-        val (x0, y0) = s.matrix.mapXY(dst.left, dst.top)
-        val (x1, y1) = s.matrix.mapXY(dst.right, dst.bottom)
+        val (x0, y0) = s.matrix.mapXY(effectiveDst.left, effectiveDst.top)
+        val (x1, y1) = s.matrix.mapXY(effectiveDst.right, effectiveDst.bottom)
         val devDst = SkRect.MakeLTRB(minOf(x0, x1), minOf(y0, y1), maxOf(x0, x1), maxOf(y0, y1))
         bindClip(s)
-        s.device.drawImageRect(image, src, devDst, sampling, paint, constraint, s.clip)
+        s.device.drawImageRect(image, effectiveSrc, devDst, sampling, paint, constraint, s.clip)
+    }
+
+    private data class DrawImageRectClip(val src: SkRect, val dst: SkRect)
+
+    private fun clipDrawImageRectSourceToImage(
+        image: SkImage,
+        src: SkRect,
+        dst: SkRect,
+    ): DrawImageRectClip? {
+        if (image.width <= 0 || image.height <= 0) return null
+        val srcW = src.right - src.left
+        val srcH = src.bottom - src.top
+        val dstW = dst.right - dst.left
+        val dstH = dst.bottom - dst.top
+        if (srcW <= 0f || srcH <= 0f || dstW <= 0f || dstH <= 0f) return null
+
+        val clippedLeft = maxOf(src.left, 0f)
+        val clippedTop = maxOf(src.top, 0f)
+        val clippedRight = minOf(src.right, image.width.toFloat())
+        val clippedBottom = minOf(src.bottom, image.height.toFloat())
+        if (clippedRight <= clippedLeft || clippedBottom <= clippedTop) return null
+        if (clippedLeft == src.left && clippedTop == src.top &&
+            clippedRight == src.right && clippedBottom == src.bottom
+        ) {
+            return DrawImageRectClip(src, dst)
+        }
+
+        fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+
+        val u0 = (clippedLeft - src.left) / srcW
+        val u1 = (clippedRight - src.left) / srcW
+        val v0 = (clippedTop - src.top) / srcH
+        val v1 = (clippedBottom - src.top) / srcH
+        return DrawImageRectClip(
+            src = SkRect.MakeLTRB(clippedLeft, clippedTop, clippedRight, clippedBottom),
+            dst = SkRect.MakeLTRB(
+                lerp(dst.left, dst.right, u0),
+                lerp(dst.top, dst.bottom, v0),
+                lerp(dst.left, dst.right, u1),
+                lerp(dst.top, dst.bottom, v1),
+            ),
+        )
     }
 
     // ─── Phase R2.13 — drawRegion / drawImageNine ─────────────────────────
