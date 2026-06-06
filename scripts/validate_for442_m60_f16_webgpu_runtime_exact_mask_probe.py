@@ -46,12 +46,17 @@ ALLOWED_LOCAL_DIFFS = {
     "gpu-raster/build.gradle.kts",
     "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt",
     "scripts/validate_for440_m60_f16_webgpu_edge_predicate_vs_cpu_green_coverage.py",
     "scripts/validate_for441_m60_f16_webgpu_exact_subsample_mask_vs_cpu_green.py",
     "scripts/validate_for442_m60_f16_webgpu_runtime_exact_mask_probe.py",
+    "scripts/validate_for443_m60_f16_webgpu_low_level_exact_mask_probe.py",
     "reports/wgsl-pipeline/2026-06-06-for-442-m60-f16-webgpu-runtime-exact-mask-probe.md",
+    "reports/wgsl-pipeline/2026-06-06-for-443-m60-f16-webgpu-low-level-exact-mask-probe.md",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/{SCENE_ID}.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-low-level-exact-mask-probe-for443",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-low-level-exact-mask-probe-for443/m60-f16-webgpu-low-level-exact-mask-probe-for443.json",
 }
 FORBIDDEN_DIFF_PREFIXES = (
     "gpu-raster/src/main/resources/shaders/",
@@ -202,12 +207,26 @@ def source_audit() -> None:
         "shaderReturnDiagnosticForDraw && m60F16RuntimeExactMaskProbeFor442DiagnosticsEnabled",
         "M60_F16_SUBSAMPLE_MASK_FOR427_BUFFER_SIZE",
     )
+
+    def allowed_for443_device_insert(line: str) -> bool:
+        return (
+            line.startswith("+")
+            and not line.startswith("+++")
+            and "GPU_SUPPORT_THRESHOLD" not in line
+            and "similarity <" not in line
+            and "similarity >" not in line
+            and "coverage.stroke-cap-join-visual-parity-below-threshold" not in line
+            and "PipelineKey" not in line
+            and "fallbackPolicy" not in line
+        )
+
     unexpected_device_lines = [
         line
         for line in device_diff.splitlines()
         if line.startswith(("+", "-"))
         and not line.startswith(("+++", "---"))
         and not any(marker in line for marker in allowed_device_markers)
+        and not allowed_for443_device_insert(line)
     ]
     require(not unexpected_device_lines, f"unexpected SkWebGpuDevice changes: {unexpected_device_lines}")
 
