@@ -15,191 +15,31 @@
     "source": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
     "supportedRows": 21
   },
-  "broadSkiaGmParityClaim": false,
+  "candidateCount": 12,
   "classification": "lot1-partially-materialized-no-new-support-claims",
-  "dashboardCounters": {
-    "inventoryDerived": 45,
-    "status.expected-unsupported": 23,
-    "status.fail": 0,
-    "status.pass": 70,
-    "status.tracked-gap": 0,
-    "total": 93
-  },
+  "dashboardConsumesLotDirectly": false,
+  "dashboardConsumptionReason": "Only rows with existing dashboard evidence are recognized as supported; missing candidates remain diagnostic-only until row-specific renderer artifacts exist.",
   "dashboardGate": "build/reports/wgsl-pipeline-scene-gate/scene-dashboard-gate.json",
-  "dashboardRowsAddedByFor464": 0,
-  "dashboardStatusChangedByFor462": false,
-  "dashboardStatusChangedByFor464": false,
   "date": "2026-06-06",
-  "fallbackPolicyChanged": false,
-  "linear": "FOR-462",
-  "lot1CandidateCount": 12,
-  "materialized": [
-    {
-      "inventoryId": "skia-gm-drawbitmaprect",
-      "rows": [
-        {
-          "derivationTask": "pipelineM66GmPromotionWave",
-          "fallbackReason": "none",
-          "id": "m66-bitmap-rect-nearest-skia",
-          "referenceKind": "skia-upstream",
-          "status": "pass"
-        }
-      ]
-    },
-    {
-      "inventoryId": "skia-gm-bitmappremul",
-      "rows": [
-        {
-          "derivationTask": "pipelineM53InventoryPromotionPack",
-          "fallbackReason": "none",
-          "id": "m53-bitmap-premul-alpha",
-          "referenceKind": "skia-upstream",
-          "status": "pass"
-        }
-      ]
-    },
-    {
-      "inventoryId": "skia-gm-localmatriximageshader",
-      "rows": [
-        {
-          "derivationTask": "pipelineM54HardFeatureDepthPack",
-          "fallbackReason": "none",
-          "id": "m54-local-matrix-blend-composition",
-          "referenceKind": "skia-upstream",
-          "status": "pass"
-        }
-      ]
-    },
-    {
-      "inventoryId": "skia-gm-gradientsdegenerate",
-      "rows": [
-        {
-          "derivationTask": "pipelineM53InventoryPromotionPack",
-          "fallbackReason": "none",
-          "id": "m53-degenerate-gradient-linear",
-          "referenceKind": "test-oracle",
-          "status": "pass"
-        }
-      ]
-    },
-    {
-      "inventoryId": "skia-gm-matriximagefilter",
-      "rows": [
-        {
-          "derivationTask": "pipelineM54HardFeatureDepthPack",
-          "fallbackReason": "none",
-          "id": "m54-matrix-imagefilter-affine",
-          "referenceKind": "test-oracle",
-          "status": "pass"
-        }
-      ]
-    },
-    {
-      "inventoryId": "skia-gm-imageblur",
-      "rows": [
-        {
-          "derivationTask": "pipelineM53InventoryPromotionPack",
-          "fallbackReason": "none",
-          "id": "m53-imageblur-bounded-prepass",
-          "referenceKind": "test-oracle",
-          "status": "pass"
-        }
-      ]
-    },
-    {
-      "inventoryId": "skia-gm-simpleaaclip",
-      "rows": [
-        {
-          "derivationTask": "pipelineM54HardFeatureDepthPack",
-          "fallbackReason": "none",
-          "id": "m54-simple-aa-clip",
-          "referenceKind": "cpu-oracle",
-          "status": "pass"
-        }
-      ]
-    }
-  ],
-  "materializedCandidateCount": 7,
-  "materializedReferenceKindCounts": {
-    "cpu-oracle": 1,
-    "skia-upstream": 3,
-    "test-oracle": 3
+  "linear": "FOR-464",
+  "lot": 1,
+  "nonClaims": {
+    "broadSkiaGmParityClaim": false,
+    "dashboardRowsAddedByFor464": 0,
+    "dashboardStatusChangedByFor462": false,
+    "dashboardStatusChangedByFor464": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "productionCodeChanged": false,
+    "scoringChanged": false,
+    "skiaComparableClaimsAddedByFor462": 0,
+    "skiaComparableClaimsAddedByFor464": 0,
+    "supportClaimsAddedByFor462": 0,
+    "supportClaimsAddedByFor464": 0,
+    "thresholdChanged": false,
+    "visualSupportAbove50PercentClaim": false
   },
-  "materializedRowsAddedByFor462": 0,
-  "missing": [
-    {
-      "inventoryId": "skia-gm-drawminibitmaprect",
-      "requiredEvidence": [
-        "row-specific reference artifact",
-        "CPU artifact and route diagnostics",
-        "GPU artifact or stable expected-unsupported refusal",
-        "diff and stats artifacts",
-        "fallbackReason=none for support rows",
-        "unchanged dashboard thresholds and gate policy"
-      ],
-      "status": "missing-row-specific-evidence"
-    },
-    {
-      "inventoryId": "skia-gm-image",
-      "requiredEvidence": [
-        "row-specific reference artifact",
-        "CPU artifact and route diagnostics",
-        "GPU artifact or stable expected-unsupported refusal",
-        "diff and stats artifacts",
-        "fallbackReason=none for support rows",
-        "unchanged dashboard thresholds and gate policy"
-      ],
-      "status": "missing-row-specific-evidence"
-    },
-    {
-      "inventoryId": "skia-gm-imagesource",
-      "requiredEvidence": [
-        "row-specific reference artifact",
-        "CPU artifact and route diagnostics",
-        "GPU artifact or stable expected-unsupported refusal",
-        "diff and stats artifacts",
-        "fallbackReason=none for support rows",
-        "unchanged dashboard thresholds and gate policy"
-      ],
-      "status": "missing-row-specific-evidence"
-    },
-    {
-      "inventoryId": "skia-gm-offsetimagefilter",
-      "requiredEvidence": [
-        "row-specific reference artifact",
-        "CPU artifact and route diagnostics",
-        "GPU artifact or stable expected-unsupported refusal",
-        "diff and stats artifacts",
-        "fallbackReason=none for support rows",
-        "unchanged dashboard thresholds and gate policy"
-      ],
-      "status": "missing-row-specific-evidence"
-    },
-    {
-      "inventoryId": "skia-gm-pathfill",
-      "requiredEvidence": [
-        "row-specific reference artifact",
-        "CPU artifact and route diagnostics",
-        "GPU artifact or stable expected-unsupported refusal",
-        "diff and stats artifacts",
-        "fallbackReason=none for support rows",
-        "unchanged dashboard thresholds and gate policy"
-      ],
-      "status": "missing-row-specific-evidence"
-    }
-  ],
-  "missingCandidateCount": 5,
-  "nextAction": "Open row-specific evidence tickets for the five missing lot 1 candidates before any dashboard support promotion.",
-  "pipelineKeyChanged": false,
-  "productionCodeChanged": false,
-  "schemaVersion": 1,
-  "scoringChanged": false,
-  "skiaComparableClaimsAddedByFor462": 0,
-  "skiaComparableClaimsAddedByFor464": 0,
-  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-3-formaliser-le-manifeste-strict-du-lot-1-dashboard",
-  "sourceFindingMemory": "global/kanvas/findings/for-462-verrouille-le-lot-1-d50-sans-faux-support",
-  "sourceInventory": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
-  "strictLot1Rows": [
+  "rows": [
     {
       "dashboardRowId": "m66-bitmap-rect-nearest-skia",
       "dashboardStatus": "pass",
@@ -399,21 +239,13 @@
       "supportClaimAddedByFor464": false
     }
   ],
-  "strictLot1StatusCounts": {
+  "schemaVersion": 1,
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-3-formaliser-le-manifeste-strict-du-lot-1-dashboard",
+  "sourceFindingMemory": "global/kanvas/findings/for-462-verrouille-le-lot-1-d50-sans-faux-support",
+  "sourceInventory": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
+  "sourceLinear": "FOR-462",
+  "statusCounts": {
     "diagnostic-only": 5,
     "supported": 7
-  },
-  "strictManifestFormalizedBy": "FOR-464",
-  "supportClaimsAddedByFor462": 0,
-  "supportClaimsAddedByFor464": 0,
-  "thresholdChanged": false,
-  "upstreamSourceChanged": false,
-  "validationCommands": [
-    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
-    "rtk python3 scripts/validate_for462_d50_lot1_dashboard_integration.py",
-    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
-    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for464-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py",
-    "rtk git diff --check"
-  ],
-  "visualSupportAbove50PercentClaimByFor464": false
+  }
 }
