@@ -806,6 +806,36 @@ tasks.register("pipelineM66GmPromotionWave") {
     }
 }
 
+tasks.register("pipelineD50Lot1DashboardVisibilityPack") {
+    group = "verification"
+    description = "Materializes D50 lot 1 policy-only GM rows so unsupported candidates remain visible in the scene dashboard."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m54_hard_feature_depth_pack.py")
+    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/d50-lot1-dashboard-visibility.json")
+    val sourceArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-d50-lot1-generated")
+    inputs.file(scriptFile)
+    inputs.file(contractFile)
+    inputs.dir(sourceArtifactDir)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--contract",
+                contractFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineM86FidelityBurndown") {
     group = "verification"
     description = "Generates M86 fidelity burn-down ranking, root-cause classification, and PM evidence."
@@ -1101,6 +1131,7 @@ tasks.register("pipelineGeneratedSceneExport") {
     val m63GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m63-generated")
     val m64GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m64-generated")
     val m66GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m66-generated")
+    val d50GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-d50-lot1-generated")
     val m57GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m57-generated")
     val m60GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m60-generated")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
@@ -1113,6 +1144,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         "pipelineM63ColorBlendParityPack",
         "pipelineM64RegisteredRuntimeEffectsPack",
         "pipelineM66GmPromotionWave",
+        "pipelineD50Lot1DashboardVisibilityPack",
         "pipelineM57PathAaClipMicroPromotionPack",
         "pipelineM60NestedClipPathAaPromotionPack",
     )
@@ -1127,6 +1159,7 @@ tasks.register("pipelineGeneratedSceneExport") {
     inputs.dir(m63GeneratedDir)
     inputs.dir(m64GeneratedDir)
     inputs.dir(m66GeneratedDir)
+    inputs.dir(d50GeneratedDir)
     inputs.dir(m57GeneratedDir)
     inputs.dir(m60GeneratedDir)
     outputs.dir(outputDir)
@@ -1143,6 +1176,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         val m63GeneratedRoot = m63GeneratedDir.get().asFile
         val m64GeneratedRoot = m64GeneratedDir.get().asFile
         val m66GeneratedRoot = m66GeneratedDir.get().asFile
+        val d50GeneratedRoot = d50GeneratedDir.get().asFile
         val m57GeneratedRoot = m57GeneratedDir.get().asFile
         val m60GeneratedRoot = m60GeneratedDir.get().asFile
         val manifest = manifestFile.asFile
@@ -1187,6 +1221,7 @@ tasks.register("pipelineGeneratedSceneExport") {
             val normalized = relativePath.replace('\\', '/')
             return listOf(
                 m60GeneratedRoot.resolve(normalized),
+                d50GeneratedRoot.resolve(normalized),
                 m66GeneratedRoot.resolve(normalized),
                 m64GeneratedRoot.resolve(normalized),
                 m63GeneratedRoot.resolve(normalized),
@@ -1325,6 +1360,15 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
+        val d50Manifest = d50GeneratedRoot.resolve("data/d50-lot1-generated-scenes.json")
+        val d50Scenes = if (d50Manifest.isFile) {
+            val d50Root = JsonSlurper().parse(d50Manifest) as? Map<*, *>
+                ?: throw GradleException("D50 lot 1 generated scene manifest root must be a JSON object: ${d50Manifest.relativeTo(rootDir)}")
+            d50Root["scenes"] as? List<*>
+                ?: throw GradleException("D50 lot 1 generated scene manifest must contain a `scenes` array: ${d50Manifest.relativeTo(rootDir)}")
+        } else {
+            emptyList<Any?>()
+        }
         val m60Manifest = m60GeneratedRoot.resolve("data/m60-generated-scenes.json")
         val m60Scenes = if (m60Manifest.isFile) {
             val m60Root = JsonSlurper().parse(m60Manifest) as? Map<*, *>
@@ -1334,7 +1378,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
-        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes + m60Scenes + m61Scenes + m62Scenes + m63Scenes + m64Scenes + m66Scenes
+        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes + m60Scenes + m61Scenes + m62Scenes + m63Scenes + m64Scenes + m66Scenes + d50Scenes
         val normalizedScenes = mutableListOf<Any?>()
 
         allGeneratedScenes.forEachIndexed { index, rawScene ->
@@ -3007,6 +3051,11 @@ tasks.register("pipelineSceneDashboardGate") {
             "m66-path-aa-dashing-edge-budget-refusal" to "coverage.edge-count-exceeded",
             "m66-image-filter-crop-prepass-refusal" to "image-filter.crop-input-nonnull-prepass-required",
             "m66-font-complex-shaping-refusal" to "font.complex-shaping-requires-explicit-shaper",
+            "skia-gm-drawminibitmaprect" to "bitmap.drawminibitmaprect.row-specific-artifacts-required",
+            "skia-gm-image" to "image.imagegm.row-specific-artifacts-required",
+            "skia-gm-imagesource" to "image.imagesource.row-specific-artifacts-required",
+            "skia-gm-offsetimagefilter" to "image-filter.offset.row-specific-artifacts-required",
+            "skia-gm-pathfill" to "path.pathfill.row-specific-artifacts-required",
         )
         val staticPathAaSentinels = mapOf(
             "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",
