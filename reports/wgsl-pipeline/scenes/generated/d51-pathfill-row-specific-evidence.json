@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-06-06",
+  "ticket": "D51-5",
+  "executionAttachment": {
+    "linearParent": "FOR-460",
+    "dedicatedLinearIssueCreated": false,
+    "reason": "Linear dedicated issue creation is blocked by the free issue limit."
+  },
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d51-5-convertir-skia-gm-pathfill-en-preuve-row-specific-precise",
+  "sourceFor469Evidence": {
+    "report": "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md",
+    "json": "reports/wgsl-pipeline/scenes/generated/for469-skia-gm-pathfill-evidence.json",
+    "findingMemory": "global/kanvas/findings/for-469-formalise-le-refus-skia-gm-pathfill-d50-lot-1"
+  },
+  "classification": "row-specific-expected-unsupported-precise-refusal",
+  "inventoryId": "skia-gm-pathfill",
+  "status": "expected-unsupported",
+  "fallbackReason": "path-aa.fill.multi-shape-conic-cubic-transform-webgpu-artifacts-required",
+  "previousFallbackReason": "path-aa.fill.row-specific-artifacts-required",
+  "fallbackReasonImproved": true,
+  "d50ManifestChanged": false,
+  "scoreImpact": {
+    "supportScoreIncreased": false,
+    "skiaComparableScoreIncreased": false,
+    "reason": "D51-5 is an audit/refusal evidence update. It does not add a dashboard WebGPU artifact, diff/stat payload, or route diagnostics with fallbackReason=none."
+  },
+  "rowSpecificAudit": {
+    "historicalPathFillEvidencePromotesRow": false,
+    "historicalPathSceneEvidenceInherited": false,
+    "pathFillGmSource": {
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/PathFillGM.kt",
+      "upstreamSource": "gm/pathfill.cpp",
+      "gmName": "pathfill",
+      "gmDimensions": {
+        "width": 640,
+        "height": 480
+      },
+      "paint": {
+        "antiAlias": true,
+        "style": "fill"
+      },
+      "stackedPaths": [
+        {
+          "index": 0,
+          "name": "frame",
+          "description": "FillPathWithPaint output from stroked rounded rect",
+          "dy": 15
+        },
+        {
+          "index": 1,
+          "name": "triangle",
+          "description": "closed triangle",
+          "dy": 30
+        },
+        {
+          "index": 2,
+          "name": "rect",
+          "description": "axis-aligned rectangle",
+          "dy": 30
+        },
+        {
+          "index": 3,
+          "name": "oval",
+          "description": "oval path",
+          "dy": 30
+        },
+        {
+          "index": 4,
+          "name": "sawtooth-32",
+          "description": "32-tooth polygon",
+          "dy": 30
+        },
+        {
+          "index": 5,
+          "name": "star-5",
+          "description": "5-point star",
+          "dy": 48
+        },
+        {
+          "index": 6,
+          "name": "star-13",
+          "description": "13-point star",
+          "dy": 48
+        },
+        {
+          "index": 7,
+          "name": "line-degenerate-line",
+          "description": "closed line and degenerate line segments",
+          "dy": 40
+        },
+        {
+          "index": 8,
+          "name": "house",
+          "description": "polygon with cavity polyline",
+          "dy": 30
+        },
+        {
+          "index": 9,
+          "name": "sawtooth-3",
+          "description": "3-tooth polygon",
+          "dy": 30
+        }
+      ],
+      "pictogramPaths": [
+        {
+          "name": "info",
+          "curveTypes": [
+            "cubic"
+          ],
+          "transform": "save; scale(0.300000011920929, 0.300000011920929); translate(50, 50); draw; restore"
+        },
+        {
+          "name": "accessibility",
+          "curveTypes": [
+            "cubic"
+          ],
+          "transform": "scale(2, 2); translate(5, 15); draw"
+        },
+        {
+          "name": "visualizer",
+          "curveTypes": [
+            "conic"
+          ],
+          "transform": "scale(0.5, 0.5); translate(5, 50); draw"
+        }
+      ],
+      "combinedCoverageFeatures": [
+        "anti-aliased path fill",
+        "multi-shape path stack",
+        "stroke-expanded filled frame path",
+        "degenerate line fill inputs",
+        "cubic pictogram curves",
+        "conic pictogram curves",
+        "successive scale and translate transforms"
+      ]
+    },
+    "whyNotPromotable": [
+      "No D51 row-specific WebGPU dashboard artifact exists for PathFillGM.",
+      "No D51 diff/stat payload exists for PathFillGM.",
+      "No PathFillGM route diagnostics with fallbackReason=none exist.",
+      "The historical CPU similarity score and PNG reference do not prove the WebGPU multi-shape Path AA fill route.",
+      "The cross-backend test uses rasterFloor=0.0 and gpuFloor=0.0, so it is not a promotion gate.",
+      "Adjacent Path AA, convex path, stroke, cap/join/dash, edge-budget, and historical path scene evidence is not inherited as PathFillGM support."
+    ],
+    "adjacentEvidenceNotInherited": [
+      "broad Path AA evidence",
+      "stroke evidence",
+      "cap/join/dash evidence",
+      "convex path evidence",
+      "edge-budget evidence",
+      "historical path scenes",
+      "pictogram coverage evidence",
+      "broad conic/cubic coverage evidence"
+    ]
+  },
+  "artifacts": {
+    "reference": {
+      "status": "available-historical-skia-integration-reference",
+      "path": "skia-integration-tests/src/test/resources/original-888/pathfill.png",
+      "dimensions": {
+        "width": 640,
+        "height": 480
+      },
+      "format": "PNG 16-bit/color RGBA",
+      "promotableAsDashboardReference": false,
+      "reason": "The historical PNG is a useful audit input, but D51-5 does not generate the PM/dashboard reference package required for support."
+    },
+    "cpu": {
+      "status": "available-historical-cpu-similarity-score",
+      "test": "skia-integration-tests/src/test/kotlin/org/skia/tests/PathFillTest.kt",
+      "historicalSimilarity": {
+        "PathFillGM": 97.89453125
+      },
+      "promotableAsDashboardCpuArtifact": false,
+      "reason": "The CPU similarity data is historical and not paired with D51 WebGPU, diff/stat, and route diagnostics."
+    },
+    "crossBackend": {
+      "status": "available-floor-0-non-promotable",
+      "test": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/PathFillCrossBackendTest.kt",
+      "rasterFloor": 0.0,
+      "gpuFloor": 0.0,
+      "promotableAsDashboardGpuArtifact": false,
+      "reason": "Floor 0 cross-backend smoke does not establish PathFillGM WebGPU support."
+    },
+    "webgpu": {
+      "status": "missing",
+      "required": true,
+      "route": "webgpu.path-aa.fill.expected-unsupported",
+      "artifact": "not-generated",
+      "reason": "No row-specific PathFillGM WebGPU artifact or route diagnostics exist under reports/wgsl-pipeline."
+    },
+    "diffStats": {
+      "status": "not-computed",
+      "required": true,
+      "reason": "Diff/stat cannot be computed for promotion without a D51 reference, CPU artifact, WebGPU artifact, and route diagnostics produced as one row-specific evidence set."
+    }
+  },
+  "routeDiagnostics": {
+    "cpu": "cpu.path-aa.fill.historical-cpu-similarity-only",
+    "gpu": "webgpu.path-aa.fill.expected-unsupported",
+    "fallbackReason": "path-aa.fill.multi-shape-conic-cubic-transform-webgpu-artifacts-required",
+    "policy": "Keep PathFillGM expected-unsupported until a row-specific WebGPU route renders the multi-shape anti-aliased fill stack, stroke-expanded frame, degenerate shapes, conic/cubic pictograms, and scale/translate transforms with generated reference/CPU/GPU/diff artifacts and fallbackReason=none."
+  },
+  "d50Guard": {
+    "manifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+    "status": "expected-unsupported",
+    "fallbackReason": "path-aa.fill.row-specific-artifacts-required",
+    "strictDashboardStatus": "expected-unsupported",
+    "dashboardRowId": null
+  },
+  "nonClaims": {
+    "supportClaimAddedByD51_5": false,
+    "skiaComparableClaimAddedByD51_5": false,
+    "dashboardRowAddedByD51_5": false,
+    "d50ManifestChanged": false,
+    "resultsJsonChanged": false,
+    "scenesJsonChanged": false,
+    "defaultRenderingChanged": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "productionCodeChanged": false,
+    "wgslProductionChanged": false,
+    "wgsl4kChanged": false,
+    "upstreamSourceChanged": false,
+    "skiaIntegrationTestsChanged": false,
+    "webgpuPathFillGmSupportClaim": false,
+    "broadPathAaSupportClaim": false,
+    "strokeSupportClaim": false,
+    "capJoinDashSupportClaim": false,
+    "convexPathSupportClaim": false,
+    "edgeBudgetSupportClaim": false,
+    "pictogramCoverageSupportClaim": false,
+    "broadConicCubicCoverageSupportClaim": false,
+    "historicalPathSceneInheritanceClaim": false
+  },
+  "expectedChangedFiles": [
+    "reports/wgsl-pipeline/2026-06-06-d51-5-pathfill-row-specific-evidence.md",
+    "reports/wgsl-pipeline/scenes/generated/d51-pathfill-row-specific-evidence.json",
+    "scripts/validate_d51_pathfill_row_specific_evidence.py"
+  ],
+  "validationCommands": [
+    "rtk python3 scripts/validate_d51_pathfill_row_specific_evidence.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d51-pathfill-row-specific-evidence.json",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-d51-pathfill-pycache python3 -m py_compile scripts/validate_d51_pathfill_row_specific_evidence.py",
+    "rtk git diff --check"
+  ]
+}
