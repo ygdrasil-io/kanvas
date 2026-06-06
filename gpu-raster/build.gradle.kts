@@ -307,6 +307,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16ProductionCoverColorAttachmentAcceptanceFor459.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16ProductionCoverColorAttachmentAcceptanceFor459.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16ShaderCaptureInterpretationPolicyFor463.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16ShaderCaptureInterpretationPolicyFor463.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }

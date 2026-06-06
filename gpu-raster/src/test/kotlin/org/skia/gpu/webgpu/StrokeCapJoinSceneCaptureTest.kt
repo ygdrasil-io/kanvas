@@ -794,6 +794,9 @@ class StrokeCapJoinSceneCaptureTest {
                 adapter = adapter,
             )
         }
+        if (System.getProperty(FOR463_SHADER_CAPTURE_INTERPRETATION_POLICY_PROPERTY, "false").toBoolean()) {
+            writeM60F16ShaderCaptureInterpretationPolicyFor463(adapter = adapter)
+        }
         widthQuantizedColorReconstructionFor432Result?.let { result ->
             writeM60F16WidthQuantizedColorReconstructionFor432(
                 reference = reference,
@@ -9362,6 +9365,177 @@ class StrokeCapJoinSceneCaptureTest {
             ),
         )
     }
+
+    private fun writeM60F16ShaderCaptureInterpretationPolicyFor463(adapter: String) {
+        val sceneId = "m60-f16-shader-capture-interpretation-policy-for463"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(m60F16ShaderCaptureInterpretationPolicyFor463Json(sceneId, adapter))
+    }
+
+    private fun m60F16ShaderCaptureInterpretationPolicyFor463Json(sceneId: String, adapter: String): String {
+        val for455Path =
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-stencil-cover-emission-audit-for455/" +
+                "m60-f16-zero-stencil-cover-emission-audit-for455.json"
+        val for458Path =
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-production-cover-state-vs-shader-emission-for458/" +
+                "m60-f16-production-cover-state-vs-shader-emission-for458.json"
+        val for459Path =
+            "reports/wgsl-pipeline/scenes/artifacts/m60-f16-production-cover-color-attachment-acceptance-for459/" +
+                "m60-f16-production-cover-color-attachment-acceptance-for459.json"
+        val for455Text = repoFile(for455Path).readText()
+        val for458Text = repoFile(for458Path).readText()
+        val for459Text = repoFile(for459Path).readText()
+        fun stringField(text: String, field: String): String? =
+            Regex("\"${Regex.escape(field)}\"\\s*:\\s*\"([^\"]*)\"").find(text)?.groupValues?.get(1)
+        fun intField(text: String, field: String): Int? =
+            Regex("\"${Regex.escape(field)}\"\\s*:\\s*(-?\\d+)").find(text)?.groupValues?.get(1)?.toInt()
+        val for455InsideEmission = intField(for455Text, "insideShaderEmissionOnZeroStencilCount") ?: -1
+        val insideShaderEmission = intField(for458Text, "insideShaderEmissionOnDiagnosticZeroStencilCount") ?: -1
+        val colorChanged = intField(for459Text, "colorAttachmentChangedTargetCount") ?: -1
+        val colorUnchanged = intField(for459Text, "colorAttachmentUnchangedTargetCount") ?: -1
+        val for442DecisionSourceUsed =
+            listOf(for455Text, for458Text, for459Text).sumOf { intField(it, "for442DecisionSourceUsedCount") ?: 0 }
+        val for455Classification = stringField(for455Text, "classification").orEmpty()
+        val for458Classification = stringField(for458Text, "classification").orEmpty()
+        val for459Classification = stringField(for459Text, "classification").orEmpty()
+        val classification = when {
+            insideShaderEmission == 6 &&
+                for455InsideEmission == 6 &&
+                colorChanged == 0 &&
+                colorUnchanged == 6 &&
+                for442DecisionSourceUsed == 0 &&
+                for459Classification == "production-cover-color-attachment-rejects-zero-stencil-targets" ->
+                "shader-capture-before-reject-confirmed-by-color-attachment"
+            insideShaderEmission > 0 && colorChanged > 0 ->
+                "shader-capture-color-attachment-contradiction"
+            else ->
+                "shader-capture-interpretation-policy-inconclusive"
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-463",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-formaliser-interpretation-shader-capture-before-reject-apres-for-459",
+              "sourceFindingMemory": "global/kanvas/findings/for-459-confirme-que-le-cover-inside-seul-necrit-pas-dans-la-cible-couleur-sur-stencil-zero",
+              "sourceArtifacts": {
+                "for455": ${for455Path.jsonString()},
+                "for458": ${for458Path.jsonString()},
+                "for459": ${for459Path.jsonString()}
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "none-for463-consolidates-existing-json-evidence",
+              "optInFlag": ${FOR463_SHADER_CAPTURE_INTERPRETATION_POLICY_PROPERTY.jsonString()},
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR463_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixAppliedByDefault": false,
+              "for442UsedAsDecisionSource": false,
+              "for447Promoted": false,
+              "insideShaderEmissionOnDiagnosticZeroStencilCount": $insideShaderEmission,
+              "colorAttachmentChangedTargetCount": $colorChanged,
+              "colorAttachmentUnchangedTargetCount": $colorUnchanged,
+              "for442DecisionSourceUsedCount": $for442DecisionSourceUsed,
+              "policyFlags": {
+                "shaderEmissionAloneMeansColorAcceptance": false,
+                "requiresColorAttachmentEvidenceForAcceptanceClaim": true,
+                "for442DecisionSourceUsed": false,
+                "for447Promoted": false,
+                "defaultRenderingChanged": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackPolicyChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false
+              },
+              "sourceClassifications": {
+                "for455": ${for455Classification.jsonString()},
+                "for458": ${for458Classification.jsonString()},
+                "for459": ${for459Classification.jsonString()}
+              },
+              "evidenceSummary": {
+                "for455InsideShaderEmissionOnZeroStencilCount": $for455InsideEmission,
+                "insideShaderEmissionOnDiagnosticZeroStencilCount": $insideShaderEmission,
+                "colorAttachmentChangedTargetCount": $colorChanged,
+                "colorAttachmentUnchangedTargetCount": $colorUnchanged,
+                "for442DecisionSourceUsedCount": $for442DecisionSourceUsed,
+                "supportClaim": false,
+                "defaultRenderingChanged": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackPolicyChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "for447Promoted": false
+              },
+              "interpretationPolicy": {
+                "rule": "An inside shader emission captured on a zero-stencil diagnostic pixel is not sufficient evidence of color attachment acceptance.",
+                "acceptanceRequirement": "A color attachment readback must show a changed target pixel before a future ticket may claim post-stencil color acceptance.",
+                "for463Decision": "FOR-459 unchanged color attachment samples confirm the FOR-458 shader capture as a before-reject observation for this target set."
+              },
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "activationByDefault": false,
+                "for442UsedAsDecisionSource": false,
+                "for447Promoted": false,
+                "renderingFixAppliedByDefault": false
+              },
+              "classificationReason": ${m60F16ShaderCaptureInterpretationPolicyFor463Reason(classification).jsonString()},
+              "nextAction": ${m60F16ShaderCaptureInterpretationPolicyFor463NextAction(classification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16ShaderCaptureInterpretationPolicyFor463.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for463_m60_f16_shader_capture_interpretation_policy.py",
+                "rtk python3 scripts/validate_for459_m60_f16_production_cover_color_attachment_acceptance.py",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for463-pycache python3 -m py_compile scripts/validate_for463_m60_f16_shader_capture_interpretation_policy.py scripts/validate_for459_m60_f16_production_cover_color_attachment_acceptance.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16ShaderCaptureInterpretationPolicyFor463Reason(classification: String): String =
+        when (classification) {
+            "shader-capture-before-reject-confirmed-by-color-attachment" ->
+                "FOR-455/FOR-458 observe inside shader emission on the six zero-stencil targets, while FOR-459 observes zero color-attachment changes for the same inside cover-only replay. The shader capture is therefore interpreted as before-reject evidence, not color acceptance."
+            "shader-capture-color-attachment-contradiction" ->
+                "The shader-capture evidence is paired with changed color-attachment samples, so this target set would contradict the before-reject policy and require a focused correction ticket."
+            else ->
+                "The available FOR-455/FOR-458/FOR-459 evidence is incomplete or inconsistent, so no interpretation policy can be promoted for this target set."
+        }
+
+    private fun m60F16ShaderCaptureInterpretationPolicyFor463NextAction(classification: String): String =
+        when (classification) {
+            "shader-capture-before-reject-confirmed-by-color-attachment" ->
+                "Apply this interpretation policy to the next M60 F16 tickets and require color-attachment evidence before opening any correction based on shader emission."
+            "shader-capture-color-attachment-contradiction" ->
+                "Open one focused ticket to isolate the color-attachment acceptance contradiction before changing rendering behavior."
+            else ->
+                "Re-run the missing source evidence and keep FOR-442/FOR-447 out of the decision path."
+        }
 
     private fun m60F16ProductionCoverColorAttachmentAcceptanceFor459Json(
         sceneId: String,
@@ -26678,6 +26852,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16ProductionCoverStateVsShaderEmissionFor458.enabled"
         private const val FOR459_PRODUCTION_COVER_COLOR_ATTACHMENT_ACCEPTANCE_PROPERTY =
             "kanvas.webgpu.m60F16ProductionCoverColorAttachmentAcceptanceFor459.enabled"
+        private const val FOR463_SHADER_CAPTURE_INTERPRETATION_POLICY_PROPERTY =
+            "kanvas.webgpu.m60F16ShaderCaptureInterpretationPolicyFor463.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -26922,6 +27098,11 @@ class StrokeCapJoinSceneCaptureTest {
             "production-cover-color-attachment-accepts-zero-stencil-targets",
             "production-cover-color-attachment-observation-unavailable",
             "production-cover-color-attachment-acceptance-inconclusive",
+        )
+        private val M60_F16_FOR463_ALLOWED_CLASSIFICATIONS = listOf(
+            "shader-capture-before-reject-confirmed-by-color-attachment",
+            "shader-capture-color-attachment-contradiction",
+            "shader-capture-interpretation-policy-inconclusive",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",

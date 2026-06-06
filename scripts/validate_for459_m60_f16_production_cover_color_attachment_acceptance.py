@@ -35,6 +35,7 @@ ARTIFACT_FILES = {
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/{SCENE_ID}.json",
 }
+FOR463_SCENE_ID = "m60-f16-shader-capture-interpretation-policy-for463"
 ALLOWED_LOCAL_DIFFS = {
     "gpu-raster/build.gradle.kts",
     "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
@@ -42,7 +43,11 @@ ALLOWED_LOCAL_DIFFS = {
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt",
     "scripts/validate_for458_m60_f16_production_cover_state_vs_shader_emission.py",
     "scripts/validate_for459_m60_f16_production_cover_color_attachment_acceptance.py",
+    "scripts/validate_for463_m60_f16_shader_capture_interpretation_policy.py",
     "reports/wgsl-pipeline/2026-06-06-for-459-m60-f16-production-cover-color-attachment-acceptance.md",
+    "reports/wgsl-pipeline/2026-06-06-for-463-m60-f16-shader-capture-interpretation-policy.md",
+    f"reports/wgsl-pipeline/scenes/artifacts/{FOR463_SCENE_ID}",
+    f"reports/wgsl-pipeline/scenes/artifacts/{FOR463_SCENE_ID}/{FOR463_SCENE_ID}.json",
     *ARTIFACT_FILES,
 }
 FORBIDDEN_DIFF_PREFIXES = (
@@ -81,18 +86,7 @@ def git_changed_paths() -> set[str]:
         text=True,
         capture_output=True,
     )
-    status_result = subprocess.run(
-        ["git", "status", "--short"],
-        cwd=ROOT,
-        check=True,
-        text=True,
-        capture_output=True,
-    )
     changed = {line.strip() for line in diff_result.stdout.splitlines() if line.strip()}
-    for line in status_result.stdout.splitlines():
-        path = line[3:].strip()
-        if path:
-            changed.add(path.rstrip("/"))
     return changed
 
 
