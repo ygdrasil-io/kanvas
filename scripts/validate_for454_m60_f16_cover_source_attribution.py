@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate FOR-453 M60 F16 diagnostic stencil texture evidence."""
+"""Validate FOR-454 M60 F16 cover/source attribution evidence."""
 
 from __future__ import annotations
 
@@ -13,25 +13,24 @@ from typing import Any
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[1]
-SCENE_ID = "m60-f16-diagnostic-stencil-texture-for453"
+SCENE_ID = "m60-f16-cover-source-attribution-for454"
 ARTIFACT = ROOT / "reports/wgsl-pipeline/scenes/artifacts" / SCENE_ID / f"{SCENE_ID}.json"
-REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-453-m60-f16-diagnostic-stencil-texture.md"
+REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-454-m60-f16-cover-source-attribution.md"
 DEVICE = ROOT / "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
 CAPTURE_TEST = ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt"
-SINK = ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt"
 BUILD = ROOT / "gpu-raster/build.gradle.kts"
 PRODUCTION_SHADER = ROOT / "gpu-raster/src/main/resources/shaders/aa_stencil_cover.wgsl"
 
-FLAG = "kanvas.webgpu.m60F16DiagnosticStencilTextureFor453.enabled"
-FOR452_FLAG = "kanvas.webgpu.m60F16StencilBackendReadbackAuditFor452.enabled"
+FLAG = "kanvas.webgpu.m60F16CoverSourceAttributionFor454.enabled"
 EXPECTED_POINTS = {(92, 75), (91, 76), (90, 77), (89, 78), (88, 79), (87, 80)}
 ALLOWED_CLASSIFICATIONS = {
-    "diagnostic-stencil-texture-direct-copy-available",
-    "diagnostic-stencil-texture-shader-read-available",
-    "diagnostic-stencil-texture-usage-combination-unsupported",
-    "diagnostic-stencil-texture-copy-aspect-rejected",
-    "diagnostic-stencil-texture-ordering-unsafe",
-    "diagnostic-stencil-texture-audit-inconclusive",
+    "cover-source-attribution-cover-writes-zero-stencil-pixels",
+    "cover-source-attribution-source-color-drives-residual",
+    "cover-source-attribution-destination-drives-residual",
+    "cover-source-attribution-blend-drives-residual",
+    "cover-source-attribution-coverage-drives-residual",
+    "cover-source-attribution-no-post-stencil-write-observed",
+    "cover-source-attribution-inconclusive",
 }
 ARTIFACT_FILES = {
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
@@ -41,14 +40,9 @@ ALLOWED_LOCAL_DIFFS = {
     "gpu-raster/build.gradle.kts",
     "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
-    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt",
-    "scripts/validate_for452_m60_f16_stencil_backend_readback_audit.py",
     "scripts/validate_for453_m60_f16_diagnostic_stencil_texture.py",
     "scripts/validate_for454_m60_f16_cover_source_attribution.py",
-    "reports/wgsl-pipeline/2026-06-06-for-453-m60-f16-diagnostic-stencil-texture.md",
     "reports/wgsl-pipeline/2026-06-06-for-454-m60-f16-cover-source-attribution.md",
-    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-cover-source-attribution-for454",
-    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-cover-source-attribution-for454/m60-f16-cover-source-attribution-for454.json",
     *ARTIFACT_FILES,
 }
 FORBIDDEN_DIFF_PREFIXES = (
@@ -60,7 +54,7 @@ FORBIDDEN_DIFF_PREFIXES = (
 
 
 def fail(message: str) -> None:
-    raise SystemExit(f"FOR-453 validation failed: {message}")
+    raise SystemExit(f"FOR-454 validation failed: {message}")
 
 
 def require(condition: bool, message: str) -> None:
@@ -105,44 +99,32 @@ def git_changed_paths() -> set[str]:
 def source_audit() -> None:
     device = DEVICE.read_text(encoding="utf-8")
     capture = CAPTURE_TEST.read_text(encoding="utf-8")
-    sink = SINK.read_text(encoding="utf-8")
     build = BUILD.read_text(encoding="utf-8")
     shader = PRODUCTION_SHADER.read_text(encoding="utf-8")
     checks = {
         "flagRelayed": FLAG in device and FLAG in build and FLAG in capture,
-        "snapshotExposed": "m60F16DiagnosticStencilTextureFor453Snapshot()" in device and sink,
-        "writerCalled": "writeM60F16DiagnosticStencilTextureFor453(" in capture,
-        "for452BoundaryStillPresent": FOR452_FLAG in capture and FOR452_FLAG in device,
-        "diagnosticTextureCopySrc": (
-            "SkWebGpuDevice.m60F16DiagnosticStencilTextureFor453.depthStencil.diagnosticOnly" in device
-            and "usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc" in device
-        ),
-        "stagingCopyDestination": (
-            "SkWebGpuDevice.m60F16DiagnosticStencilTextureFor453.staging.diagnosticOnly" in device
-            and "usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst" in device
-        ),
-        "copyStencilAspect": (
-            "GPUTextureAspect.StencilOnly" in device
-            and "TexelCopyTextureInfo" in device
-            and "TexelCopyBufferInfo" in device
-            and ".copyTextureToBuffer(" in device
-        ),
+        "compositeFlag": "m60F16CoverSourceAttributionFor454DiagnosticsEnabled" in device,
+        "writerCalled": "writeM60F16CoverSourceAttributionFor454(" in capture,
+        "allowedClassifications": all(token in capture for token in ALLOWED_CLASSIFICATIONS),
+        "usesFor453StencilEvidence": "diagnosticStencilTextureFor453Snapshot" in capture
+        and "stencilValue" in capture
+        and "stencilCovered" in capture,
         "mainTextureRenderAttachmentOnly": (
             "label = \"SkWebGpuDevice.depthStencil\"" in device
             and "format = GPUTextureFormat.Depth24PlusStencil8" in device
             and "usage = GPUTextureUsage.RenderAttachment" in device
         ),
-        "allowedClassifications": all(token in capture for token in ALLOWED_CLASSIFICATIONS),
         "for442Excluded": '"for442UsedAsDecisionSource": false' in capture,
-        "productionShaderDoesNotContainFor453": "for453" not in shader.lower()
-        and "diagnostic_stencil_texture" not in shader,
+        "for447NotPromoted": '"for447Promoted": false' in capture,
+        "productionShaderDoesNotContainFor454": "for454" not in shader.lower()
+        and "cover_source_attribution" not in shader,
     }
     missing = [name for name, ok in checks.items() if not ok]
     require(not missing, f"source audit failed: {missing}")
 
     changed = git_changed_paths()
     unexpected = sorted(path for path in changed if path not in ALLOWED_LOCAL_DIFFS)
-    require(not unexpected, f"unexpected local diffs for FOR-453: {unexpected}")
+    require(not unexpected, f"unexpected local diffs for FOR-454: {unexpected}")
     forbidden = sorted(path for path in changed if path.startswith(FORBIDDEN_DIFF_PREFIXES))
     require(not forbidden, f"forbidden spec/external/production-shader diffs: {forbidden}")
 
@@ -183,13 +165,13 @@ def source_audit() -> None:
 def require_artifact() -> dict[str, Any]:
     data = load_json(ARTIFACT)
     require(data.get("schemaVersion") == 1, "schemaVersion must be 1")
-    require(data.get("linear") == "FOR-453", "linear must be FOR-453")
+    require(data.get("linear") == "FOR-454", "linear must be FOR-454")
     require(data.get("sceneId") == SCENE_ID, "sceneId mismatch")
     require(data.get("optInFlag") == FLAG, "opt-in flag mismatch")
     require(data.get("classification") in ALLOWED_CLASSIFICATIONS, "classification not allowed")
     require(
-        data.get("classification") == "diagnostic-stencil-texture-direct-copy-available",
-        "FOR-453 must classify the separate diagnostic texture copy as available",
+        data.get("classification") == "cover-source-attribution-cover-writes-zero-stencil-pixels",
+        "FOR-454 must classify the six zero-stencil pixels as cover/source writes",
     )
 
     for field in (
@@ -204,73 +186,64 @@ def require_artifact() -> dict[str, Any]:
         "wgsl4kModified",
         "renderingFixAppliedByDefault",
         "for442UsedAsDecisionSource",
+        "for447Promoted",
     ):
         require(data.get(field) is False, f"{field} must be false")
 
-    audit = data.get("diagnosticTextureAudit")
-    require(isinstance(audit, dict), "diagnosticTextureAudit must be object")
-    require(audit.get("enabled") is True, "audit must be enabled")
-    require(
-        audit.get("diagnosticTextureUsage") == "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
-        "diagnostic texture usage mismatch",
-    )
-    require(audit.get("diagnosticTextureUsageHasCopySrc") is True, "diagnostic texture must have CopySrc")
-    require(
-        audit.get("diagnosticTextureUsageHasTextureBinding") is False,
-        "diagnostic texture must not claim TextureBinding",
-    )
-    require(audit.get("mainDepthStencilUsage") == "GPUTextureUsage.RenderAttachment", "main usage mismatch")
-    require(audit.get("mainDepthStencilUsageHasCopySrc") is False, "main texture must not claim CopySrc")
-    require(audit.get("mainDepthStencilUsageHasTextureBinding") is False, "main texture must not claim TextureBinding")
-    require(audit.get("stencilTextureAspectName") == "GPUTextureAspect.StencilOnly", "stencil aspect mismatch")
-    require(audit.get("bytesPerStencilPixel") == 1, "bytesPerStencilPixel must be 1")
-    require(audit.get("eventCount") == 3, "eventCount must be 3")
-    require(audit.get("diagnosticTextureCreatedEventCount") == 3, "diagnostic texture creation count must be 3")
-    require(audit.get("copyAttemptedEventCount") == 3, "copy attempted count must be 3")
-    require(audit.get("copySucceededEventCount") == 3, "copy succeeded count must be 3")
-    events = audit.get("events")
-    require(isinstance(events, list) and len(events) == 3, "events must contain three entries")
-    for event in events:
-        require(event.get("diagnosticTextureCreated") is True, "diagnostic texture must be created")
-        require(event.get("stencilPassReplayed") is True, "stencil pass must be replayed")
-        require(event.get("copyAttempted") is True, "copy must be attempted")
-        require(event.get("copySucceeded") is True, "copy must succeed")
-        require(event.get("copyFailureReason") is None, "copyFailureReason must be null")
+    guards = data.get("diagnosticGuards")
+    require(isinstance(guards, dict), "diagnosticGuards must be object")
+    for name in (
+        "predrawDstReadback",
+        "stencilSplitBoundary",
+        "diagnosticStencilTextureFor453",
+        "shaderReturnDiagnostic",
+        "isolatedColorTarget",
+        "postPassReadback",
+    ):
+        guard = guards.get(name)
+        require(isinstance(guard, dict), f"missing guard {name}")
+        require(guard.get("enabledForEvidenceRun") is True, f"{name} must be enabled for evidence")
+        require(guard.get("enabledByDefault") is False, f"{name} must be disabled by default")
 
     summary = data.get("boundarySummary")
     require(isinstance(summary, dict), "boundarySummary must be object")
     require(summary.get("zeroMaskPixelCount") == 6, "zeroMaskPixelCount must be 6")
-    require(summary.get("directStencilReadbackAvailable") is True, "direct stencil readback must be available")
-    require(summary.get("stencilValuesAvailableTargetCount") == 6, "six stencil values must be available")
+    require(summary.get("stencilZeroTargetCount") == 6, "six stencil-zero targets required")
+    require(summary.get("predrawAvailableTargetCount") == 6, "six predraw samples required")
+    require(summary.get("afterStencilBeforeCoverAvailableTargetCount") == 6, "six split-boundary samples required")
+    require(summary.get("shaderReturnObservedTargetCount") == 6, "six shader-return samples required")
+    require(summary.get("isolatedColorTargetAvailableTargetCount") == 6, "six isolated color samples required")
+    require(summary.get("postCoverAvailableTargetCount") == 6, "six post-cover samples required")
     require(summary.get("for442DecisionSourceUsedCount") == 0, "FOR-442 must not be used")
 
     pixels = data.get("partialPixels")
     require(isinstance(pixels, list) and len(pixels) == 6, "partialPixels must contain six pixels")
     require({(p.get("x"), p.get("y")) for p in pixels} == EXPECTED_POINTS, "partialPixels mismatch")
     for pixel in pixels:
-        require(pixel.get("targetWithinScissor") is True, "target pixel must be inside scissor")
-        require(pixel.get("readbackAttempted") is True, "readback must be attempted")
-        require(pixel.get("readbackAvailable") is True, "readback must be available")
-        require(pixel.get("stencilValue") == 0, "stencilValue must be 0 for all target pixels")
-        require(pixel.get("stencilCovered") is False, "stencilCovered must be false for all target pixels")
-        require(
-            pixel.get("sampleClassification") == "diagnostic-stencil-texture-direct-copy-sample",
-            "sample classification mismatch",
-        )
+        require(pixel.get("classification") == data["classification"], "pixel classification mismatch")
+        stencil = pixel.get("stencilEvidence")
+        require(isinstance(stencil, dict), "stencilEvidence must be object")
+        require(stencil.get("readbackAvailable") is True, "stencil readback must be available")
+        require(stencil.get("stencilValue") == 0, "stencilValue must be 0")
+        require(stencil.get("stencilCovered") is False, "stencilCovered must be false")
+        for section in ("beforeCover", "afterStencilBeforeCover", "isolatedColorTarget", "afterCover"):
+            value = pixel.get(section)
+            require(isinstance(value, dict), f"{section} must be object")
+            require(value.get("available") is True, f"{section} must be available")
+        shader = pixel.get("shaderReturn")
+        require(isinstance(shader, dict), "shaderReturn must be object")
+        require(shader.get("shaderObserved") is True, "shaderReturn must be observed")
+        require(shader.get("sourceColorSentToBlend") is not None, "sourceColorSentToBlend must be present")
 
     non_goals = data.get("nonGoalsPreserved")
     require(isinstance(non_goals, dict), "nonGoalsPreserved must be object")
     for key, value in non_goals.items():
         require(value is False, f"non-goal {key} must be false")
-    require(non_goals.get("mainDepthStencilTextureModified") is False, "main depth/stencil texture must not change")
-
     next_action = data.get("nextAction", "")
-    lower_next = next_action.lower()
-    require("cover-source attribution" in lower_next, "nextAction must name cover-source attribution")
-    require("six zero stencil values" in lower_next, "nextAction must use six zero stencil values")
-    require("if " not in lower_next, "nextAction must not keep a conditional alternate route")
-    require("otherwise" not in lower_next, "nextAction must not keep a second route")
-    require("sinon" not in lower_next, "nextAction must not keep a second route")
+    require("cover/source" in next_action, "nextAction must name cover/source")
+    require("stencil membership is zero" in next_action, "nextAction must use zero stencil evidence")
+    require("if " not in next_action.lower(), "nextAction must not keep a conditional alternate route")
+    require("otherwise" not in next_action.lower(), "nextAction must not keep a second route")
     require("FOR-442" not in data.get("classificationReason", ""), "classification must not depend on FOR-442")
     return data
 
@@ -280,12 +253,12 @@ def require_report(data: dict[str, Any]) -> None:
     text = REPORT.read_text(encoding="utf-8")
     lower = text.lower()
     require(data["classification"] in text, "report must include artifact classification")
-    require(FLAG in text, "report must include FOR-453 flag")
-    require("FOR-452" in text and "FOR-442" in text, "report must cite source/exclusion tickets")
+    require(FLAG in text, "report must include FOR-454 flag")
+    require("FOR-453" in text and "FOR-442" in text and "FOR-447" in text, "report must cite source/exclusions")
     require("exclu" in lower, "report must state FOR-442 is excluded")
     require("suite unique" in lower, "report must name a single follow-up")
-    require("cover/source" in lower, "report must conclude cover/source attribution follow-up")
-    require("stencilvalue=0" in lower, "report must state the zero stencil values")
+    require("cover/source" in lower, "report must conclude cover/source follow-up")
+    require("stencilvalue=0" in lower, "report must state zero stencil values")
     require("sinon" not in lower, "report must not keep a conditional alternate follow-up")
     require("deux suites" not in lower, "report must not keep multiple follow-ups")
 
@@ -295,10 +268,11 @@ def main() -> None:
     data = require_artifact()
     require_report(data)
     print(
-        "FOR-453 validation passed: "
+        "FOR-454 validation passed: "
         f"classification={data['classification']} "
-        f"stencilValues={data['boundarySummary']['stencilValuesAvailableTargetCount']} "
-        f"copySucceededEvents={data['diagnosticTextureAudit']['copySucceededEventCount']}"
+        f"stencilZero={data['boundarySummary']['stencilZeroTargetCount']} "
+        f"shaderReturn={data['boundarySummary']['shaderReturnObservedTargetCount']} "
+        f"postCover={data['boundarySummary']['postCoverAvailableTargetCount']}"
     )
 
 
