@@ -1,0 +1,358 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-457",
+          "sceneId": "m60-f16-production-bound-cover-stencil-diagnostic-for457",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-ressource-stencil-diagnostique-liee-au-passage-cover-production-apres-for-456",
+          "sourceFindingMemory": "global/kanvas/findings/for-456-conclut-que-le-stencil-production-cover-nest-pas-lisible-directement",
+          "sourceArtifacts": {
+            "for456": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-production-cover-stencil-vs-diagnostic-texture-for456/m60-f16-production-cover-stencil-vs-diagnostic-texture-for456.json",
+            "for453": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-diagnostic-stencil-texture-for453/m60-f16-diagnostic-stencil-texture-for453.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "optInFlag": "kanvas.webgpu.m60F16ProductionBoundCoverStencilDiagnosticFor457.enabled",
+          "classification": "production-bound-cover-stencil-matches-for453-diagnostic-zero",
+          "allowedClassifications": [
+            "production-bound-cover-stencil-matches-for453-diagnostic-zero",
+"production-bound-cover-stencil-differs-from-for453-diagnostic",
+"production-bound-cover-stencil-resource-unavailable",
+"production-bound-cover-stencil-replay-not-equivalent",
+"production-bound-cover-stencil-diagnostic-inconclusive"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "productionWgslChanged": false,
+          "wgsl4kModified": false,
+          "renderingFixAppliedByDefault": false,
+          "for442UsedAsDecisionSource": false,
+          "for447Promoted": false,
+          "productionBoundDiagnosticAudit": {
+            "bindingMode": "separate-diagnostic-depth-stencil-resource-replayed-with-production-cover-pipelines",
+            "requestedBoundary": "after replaying stencil and production cover pipelines against a separate diagnostic depth/stencil texture",
+            "observedBoundary": "copyTextureToBuffer from the production-bound diagnostic texture stencil aspect after the cover replay",
+            "productionDepthStencilFormat": "Depth24PlusStencil8",
+            "productionDepthStencilTextureLabel": "SkWebGpuDevice.depthStencil",
+            "productionDepthStencilUsage": "GPUTextureUsage.RenderAttachment",
+            "productionDepthStencilUsageHasCopySrc": false,
+            "diagnosticDepthStencilUsage": "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
+            "diagnosticTextureUsageHasCopySrc": true,
+            "stencilTextureAspect": "GPUTextureAspect.StencilOnly",
+            "bytesPerStencilPixel": 1,
+            "scratchColorTargetUsed": true,
+            "normalRenderingUsesDiagnosticTexture": false,
+            "productionDepthStencilTextureModified": false,
+            "stencilPassReplayed": true,
+            "coverPassReplayedWithProductionPipelines": true,
+            "copyFromDiagnosticAttempted": true,
+            "copyFromDiagnosticSucceeded": true,
+            "for453ComparisonAvailable": true
+          },
+          "coverPipelineAudit": {
+            "fillType": "kWinding",
+            "stencilReference": 0,
+            "stencilReadMask": 255,
+            "insideCompare": "GPUCompareFunction.NotEqual",
+            "outsideCompare": "GPUCompareFunction.Equal",
+            "expectedInsideBehaviorForStencilZero": "reject",
+            "expectedOutsideBehaviorForStencilZero": "accept",
+            "stencilLoadOpForDiagnosticReplay": "GPULoadOp.Clear",
+            "stencilStoreOpForDiagnosticReplay": "GPUStoreOp.Store"
+          },
+          "boundarySummary": {
+            "zeroMaskPixelCount": 6,
+            "currentSimilarity": 95.914714,
+            "currentMismatchPixels": 1004,
+            "for453DiagnosticStencilZeroTargetCount": 6,
+            "productionBoundDiagnosticStencilAvailableTargetCount": 6,
+            "for453ComparisonAvailableTargetCount": 6,
+            "matchingFor453DiagnosticZeroTargetCount": 6,
+            "differingStencilTargetCount": 0,
+            "insideShaderEmissionOnDiagnosticZeroStencilCount": 6,
+            "isolatedColorTargetEmissionCount": 6,
+            "postCoverAvailableTargetCount": 6,
+            "for442DecisionSourceUsedCount": 0
+          },
+          "partialPixels": [
+            {
+  "x": 92,
+  "y": 75,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "classification": "production-bound-cover-stencil-matches-for453-diagnostic-zero",
+  "diagnosticStencilTextureFor453": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false
+  },
+  "productionBoundCoverStencilDiagnostic": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false,
+    "sampleClassification": "production-bound-cover-stencil-direct-copy-sample",
+    "matchesFor453Diagnostic": true
+  },
+  "coverSubdraw": {
+    "drawIndex": 1,
+    "subdrawOrdinal": 0,
+    "subdrawRole": "inside",
+    "shaderObserved": true,
+    "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+    "expectedCompareForRole": "GPUCompareFunction.NotEqual",
+    "expectedResultForStencilZero": "reject"
+  },
+  "isolatedColorTarget": {
+    "drawIndex": 1,
+    "available": true,
+    "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+    "scratchOutputRgba8": [22, 32, 71, 96]
+  },
+  "afterCover": {
+    "drawIndex": 1,
+    "available": true,
+    "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "observedRgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 91,
+  "y": 76,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "classification": "production-bound-cover-stencil-matches-for453-diagnostic-zero",
+  "diagnosticStencilTextureFor453": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false
+  },
+  "productionBoundCoverStencilDiagnostic": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false,
+    "sampleClassification": "production-bound-cover-stencil-direct-copy-sample",
+    "matchesFor453Diagnostic": true
+  },
+  "coverSubdraw": {
+    "drawIndex": 1,
+    "subdrawOrdinal": 0,
+    "subdrawRole": "inside",
+    "shaderObserved": true,
+    "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+    "expectedCompareForRole": "GPUCompareFunction.NotEqual",
+    "expectedResultForStencilZero": "reject"
+  },
+  "isolatedColorTarget": {
+    "drawIndex": 1,
+    "available": true,
+    "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+    "scratchOutputRgba8": [22, 32, 71, 96]
+  },
+  "afterCover": {
+    "drawIndex": 1,
+    "available": true,
+    "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "observedRgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 90,
+  "y": 77,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "classification": "production-bound-cover-stencil-matches-for453-diagnostic-zero",
+  "diagnosticStencilTextureFor453": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false
+  },
+  "productionBoundCoverStencilDiagnostic": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false,
+    "sampleClassification": "production-bound-cover-stencil-direct-copy-sample",
+    "matchesFor453Diagnostic": true
+  },
+  "coverSubdraw": {
+    "drawIndex": 1,
+    "subdrawOrdinal": 0,
+    "subdrawRole": "inside",
+    "shaderObserved": true,
+    "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+    "expectedCompareForRole": "GPUCompareFunction.NotEqual",
+    "expectedResultForStencilZero": "reject"
+  },
+  "isolatedColorTarget": {
+    "drawIndex": 1,
+    "available": true,
+    "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+    "scratchOutputRgba8": [22, 32, 71, 96]
+  },
+  "afterCover": {
+    "drawIndex": 1,
+    "available": true,
+    "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "observedRgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 89,
+  "y": 78,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "classification": "production-bound-cover-stencil-matches-for453-diagnostic-zero",
+  "diagnosticStencilTextureFor453": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false
+  },
+  "productionBoundCoverStencilDiagnostic": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false,
+    "sampleClassification": "production-bound-cover-stencil-direct-copy-sample",
+    "matchesFor453Diagnostic": true
+  },
+  "coverSubdraw": {
+    "drawIndex": 1,
+    "subdrawOrdinal": 0,
+    "subdrawRole": "inside",
+    "shaderObserved": true,
+    "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+    "expectedCompareForRole": "GPUCompareFunction.NotEqual",
+    "expectedResultForStencilZero": "reject"
+  },
+  "isolatedColorTarget": {
+    "drawIndex": 1,
+    "available": true,
+    "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+    "scratchOutputRgba8": [22, 32, 71, 96]
+  },
+  "afterCover": {
+    "drawIndex": 1,
+    "available": true,
+    "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "observedRgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 88,
+  "y": 79,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "classification": "production-bound-cover-stencil-matches-for453-diagnostic-zero",
+  "diagnosticStencilTextureFor453": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false
+  },
+  "productionBoundCoverStencilDiagnostic": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false,
+    "sampleClassification": "production-bound-cover-stencil-direct-copy-sample",
+    "matchesFor453Diagnostic": true
+  },
+  "coverSubdraw": {
+    "drawIndex": 1,
+    "subdrawOrdinal": 0,
+    "subdrawRole": "inside",
+    "shaderObserved": true,
+    "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+    "expectedCompareForRole": "GPUCompareFunction.NotEqual",
+    "expectedResultForStencilZero": "reject"
+  },
+  "isolatedColorTarget": {
+    "drawIndex": 1,
+    "available": true,
+    "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+    "scratchOutputRgba8": [22, 32, 71, 96]
+  },
+  "afterCover": {
+    "drawIndex": 1,
+    "available": true,
+    "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "observedRgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 87,
+  "y": 80,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "classification": "production-bound-cover-stencil-matches-for453-diagnostic-zero",
+  "diagnosticStencilTextureFor453": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false
+  },
+  "productionBoundCoverStencilDiagnostic": {
+    "drawIndex": 1,
+    "readbackAvailable": true,
+    "stencilValue": 0,
+    "stencilCovered": false,
+    "sampleClassification": "production-bound-cover-stencil-direct-copy-sample",
+    "matchesFor453Diagnostic": true
+  },
+  "coverSubdraw": {
+    "drawIndex": 1,
+    "subdrawOrdinal": 0,
+    "subdrawRole": "inside",
+    "shaderObserved": true,
+    "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+    "expectedCompareForRole": "GPUCompareFunction.NotEqual",
+    "expectedResultForStencilZero": "reject"
+  },
+  "isolatedColorTarget": {
+    "drawIndex": 1,
+    "available": true,
+    "scratchOutputRgbaFloat": [0.086242676, 0.125488281, 0.278320313, 0.376464844],
+    "scratchOutputRgba8": [22, 32, 71, 96]
+  },
+  "afterCover": {
+    "drawIndex": 1,
+    "available": true,
+    "observedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "observedRgba8": [181, 191, 230, 255]
+  }
+}
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "activationByDefault": false,
+            "for442UsedAsDecisionSource": false,
+            "for447Promoted": false,
+            "renderingFixAppliedByDefault": false,
+            "mainDepthStencilTextureModified": false,
+            "normalRenderingUsesDiagnosticTexture": false
+          },
+          "classificationReason": "FOR-457 binds a separate diagnostic depth/stencil texture to a replay of the production cover pipelines. The replayed stencil readback is compared against the FOR-453 diagnostic stencil texture without changing the production depth/stencil attachment or the default rendered image.",
+          "nextAction": "Open a focused ticket to audit why the production cover pass emits inside-source color when the production-bound diagnostic cover replay still matches the FOR-453 zero-stencil texture.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16ProductionBoundCoverStencilDiagnosticFor457.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for457_m60_f16_production_bound_cover_stencil_diagnostic.py",
+            "rtk python3 scripts/validate_for456_m60_f16_production_cover_stencil_vs_diagnostic_texture.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for457-pycache python3 -m py_compile scripts/validate_for457_m60_f16_production_bound_cover_stencil_diagnostic.py scripts/validate_for456_m60_f16_production_cover_stencil_vs_diagnostic_texture.py",
+            "rtk git diff --check"
+          ]
+        }
