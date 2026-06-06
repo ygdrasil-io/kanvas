@@ -298,6 +298,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16ProductionCoverStencilVsDiagnosticTextureFor456.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16ProductionCoverStencilVsDiagnosticTextureFor456.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16ProductionBoundCoverStencilDiagnosticFor457.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16ProductionBoundCoverStencilDiagnosticFor457.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }

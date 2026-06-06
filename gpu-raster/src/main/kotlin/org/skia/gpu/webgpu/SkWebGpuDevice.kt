@@ -242,6 +242,8 @@ private const val WEBGPU_M60_F16_ZERO_STENCIL_COVER_EMISSION_AUDIT_FOR455_FLAG: 
     "kanvas.webgpu.m60F16ZeroStencilCoverEmissionAuditFor455.enabled"
 private const val WEBGPU_M60_F16_PRODUCTION_COVER_STENCIL_VS_DIAGNOSTIC_TEXTURE_FOR456_FLAG: String =
     "kanvas.webgpu.m60F16ProductionCoverStencilVsDiagnosticTextureFor456.enabled"
+private const val WEBGPU_M60_F16_PRODUCTION_BOUND_COVER_STENCIL_DIAGNOSTIC_FOR457_FLAG: String =
+    "kanvas.webgpu.m60F16ProductionBoundCoverStencilDiagnosticFor457.enabled"
 private const val WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG: String =
     "kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled"
 private const val WEBGPU_M60_F16_ZERO_MASK_CORRECTION_FOR447_FLAG: String =
@@ -745,6 +747,23 @@ public class SkWebGpuDevice(
         val reason: String,
     )
 
+    public data class M60F16ProductionBoundCoverStencilDiagnosticFor457Snapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val requestedBoundary: String,
+        val observedBoundary: String,
+        val depthStencilFormat: String,
+        val diagnosticTextureUsage: String,
+        val diagnosticTextureUsageHasCopySrc: Boolean,
+        val mainDepthStencilTextureLabel: String,
+        val mainDepthStencilUsage: String,
+        val mainDepthStencilUsageHasCopySrc: Boolean,
+        val normalRenderingUsesDiagnosticTexture: Boolean,
+        val stencilTextureAspectName: String,
+        val bytesPerStencilPixel: Int,
+        val events: List<M60F16DiagnosticStencilTextureFor453Event>,
+    )
+
     public data class M60F16AaStencilCoverIsolatedColorTargetSnapshot(
         val propertyName: String,
         val enabled: Boolean,
@@ -1174,11 +1193,17 @@ public class SkWebGpuDevice(
             WEBGPU_M60_F16_PRODUCTION_COVER_STENCIL_VS_DIAGNOSTIC_TEXTURE_FOR456_FLAG,
             "false",
         ).toBoolean()
+    private val m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_PRODUCTION_BOUND_COVER_STENCIL_DIAGNOSTIC_FOR457_FLAG,
+            "false",
+        ).toBoolean()
     private val m60F16DirectPassWriteHookEnabled: Boolean =
         System.getProperty(WEBGPU_M60_F16_DIRECT_PASS_WRITE_HOOK_FLAG, "false").toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
-            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
     private val m60F16AaStencilCoverContributionIsolationDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_FLAG,
@@ -1186,7 +1211,8 @@ public class SkWebGpuDevice(
         ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
-            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
     private val m60F16AaStencilCoverPredrawDstReadbackDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_PREDRAW_DST_READBACK_FLAG,
@@ -1194,7 +1220,8 @@ public class SkWebGpuDevice(
         ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
-            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
     private val m60F16StencilRenderPassSplitFor451DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_STENCIL_RENDER_PASS_SPLIT_FOR451_FLAG,
@@ -1202,7 +1229,8 @@ public class SkWebGpuDevice(
         ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
-            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
     private val m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_STENCIL_BACKEND_READBACK_AUDIT_FOR452_FLAG,
@@ -1215,7 +1243,8 @@ public class SkWebGpuDevice(
         ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
-            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
     private val m60F16AaStencilCoverShaderReturnDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_DIAGNOSTIC_FLAG,
@@ -1239,7 +1268,8 @@ public class SkWebGpuDevice(
             ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
-            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
     private val m60F16AaStencilCoverIsolatedColorTargetDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_ISOLATED_COLOR_TARGET_FLAG,
@@ -1247,7 +1277,8 @@ public class SkWebGpuDevice(
         ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
-            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
     private val m60F16AaStencilCoverStorageColorTargetComparisonDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_STORAGE_COLOR_TARGET_COMPARISON_FLAG,
@@ -1370,6 +1401,10 @@ public class SkWebGpuDevice(
     private val m60F16DiagnosticStencilTextureFor453Events:
         MutableList<M60F16DiagnosticStencilTextureFor453Event> = mutableListOf()
     private val m60F16DiagnosticStencilTextureFor453PendingReadbacks:
+        MutableList<M60F16DiagnosticStencilTextureFor453Readback> = mutableListOf()
+    private val m60F16ProductionBoundCoverStencilDiagnosticFor457Events:
+        MutableList<M60F16DiagnosticStencilTextureFor453Event> = mutableListOf()
+    private val m60F16ProductionBoundCoverStencilDiagnosticFor457PendingReadbacks:
         MutableList<M60F16DiagnosticStencilTextureFor453Readback> = mutableListOf()
     private val m60F16AaStencilCoverContributionIsolationEvents:
         MutableList<M60F16AaStencilCoverContributionIsolationEvent> = mutableListOf()
@@ -1657,6 +1692,28 @@ public class SkWebGpuDevice(
             stencilTextureAspectName = "GPUTextureAspect.StencilOnly",
             bytesPerStencilPixel = M60_F16_DIAGNOSTIC_STENCIL_TEXTURE_BYTES_PER_PIXEL,
             events = m60F16DiagnosticStencilTextureFor453Events.toList(),
+        )
+
+    public fun m60F16ProductionBoundCoverStencilDiagnosticFor457Snapshot():
+        M60F16ProductionBoundCoverStencilDiagnosticFor457Snapshot =
+        M60F16ProductionBoundCoverStencilDiagnosticFor457Snapshot(
+            propertyName = WEBGPU_M60_F16_PRODUCTION_BOUND_COVER_STENCIL_DIAGNOSTIC_FOR457_FLAG,
+            enabled = m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled,
+            requestedBoundary =
+                "after replaying stencil and production cover pipelines against a separate diagnostic depth/stencil texture",
+            observedBoundary =
+                "copyTextureToBuffer from the production-bound diagnostic texture stencil aspect after the cover replay",
+            depthStencilFormat = GPUTextureFormat.Depth24PlusStencil8.name,
+            diagnosticTextureUsage =
+                "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
+            diagnosticTextureUsageHasCopySrc = true,
+            mainDepthStencilTextureLabel = "SkWebGpuDevice.depthStencil",
+            mainDepthStencilUsage = "GPUTextureUsage.RenderAttachment",
+            mainDepthStencilUsageHasCopySrc = false,
+            normalRenderingUsesDiagnosticTexture = false,
+            stencilTextureAspectName = "GPUTextureAspect.StencilOnly",
+            bytesPerStencilPixel = M60_F16_DIAGNOSTIC_STENCIL_TEXTURE_BYTES_PER_PIXEL,
+            events = m60F16ProductionBoundCoverStencilDiagnosticFor457Events.toList(),
         )
 
     public fun m60F16AaStencilCoverContributionIsolationSnapshot():
@@ -3206,6 +3263,107 @@ public class SkWebGpuDevice(
                     )
                 }
                 m60F16DiagnosticStencilTextureFor453Events +=
+                    M60F16DiagnosticStencilTextureFor453Event(
+                        drawIndex = metadata.drawIndex,
+                        pipelineFamily = "aa-stencil-cover",
+                        fillType = metadata.fillType,
+                        blendMode = metadata.blendMode,
+                        scissor = metadata.scissor.copyOf(),
+                        edgeCount = metadata.edgeCount,
+                        coverVertexCount = metadata.coverVertexCount,
+                        diagnosticTextureCreated = true,
+                        diagnosticTextureUsage =
+                            "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
+                        stencilPassReplayed = true,
+                        copyAttempted = true,
+                        copySucceeded = false,
+                        copyFailureReason = "${t::class.simpleName}: ${t.message}",
+                        samples = samples,
+                    )
+            }
+        }
+    }
+
+    private suspend fun recordM60F16ProductionBoundCoverStencilDiagnosticFor457Readbacks() {
+        if (!m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled) return
+        val readbacks = m60F16ProductionBoundCoverStencilDiagnosticFor457PendingReadbacks.toList()
+        m60F16ProductionBoundCoverStencilDiagnosticFor457PendingReadbacks.clear()
+        readbacks.forEach { readback ->
+            val metadata = readback.metadata
+            try {
+                readback.staging.mapAsync(
+                    GPUMapMode.Read,
+                    0uL,
+                    readback.bufferSize,
+                ).getOrThrow()
+                val bytes = readback.staging
+                    .getMappedRange(0uL, readback.bufferSize)
+                    .toByteArray()
+                readback.staging.unmap()
+                val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
+                    val targetWithinScissor = m60F16PointWithinScissor(x, y, metadata.scissor)
+                    val byteOffset = y * readback.paddedBytesPerRow + x
+                    val stencilValue = if (byteOffset in bytes.indices) bytes[byteOffset].toInt() and 0xFF else null
+                    val valid = targetWithinScissor && stencilValue != null
+                    M60F16DiagnosticStencilTextureFor453Sample(
+                        x = x,
+                        y = y,
+                        targetWithinScissor = targetWithinScissor,
+                        readbackAttempted = true,
+                        readbackAvailable = valid,
+                        stencilValue = if (valid) stencilValue else null,
+                        stencilCovered = if (valid) stencilValue != 0 else null,
+                        classification = if (valid) {
+                            "production-bound-cover-stencil-direct-copy-sample"
+                        } else {
+                            "production-bound-cover-stencil-sample-unavailable"
+                        },
+                        reason = if (valid) {
+                            "FOR-457 replayed this draw's stencil pass and production cover pipelines into a separate diagnostic texture, then copied the StencilOnly aspect to a staging buffer."
+                        } else {
+                            "FOR-457 copied the production-bound diagnostic stencil texture, but this coordinate was outside the selected draw scissor or outside the staging buffer."
+                        },
+                    )
+                }
+                m60F16ProductionBoundCoverStencilDiagnosticFor457Events +=
+                    M60F16DiagnosticStencilTextureFor453Event(
+                        drawIndex = metadata.drawIndex,
+                        pipelineFamily = "aa-stencil-cover",
+                        fillType = metadata.fillType,
+                        blendMode = metadata.blendMode,
+                        scissor = metadata.scissor.copyOf(),
+                        edgeCount = metadata.edgeCount,
+                        coverVertexCount = metadata.coverVertexCount,
+                        diagnosticTextureCreated = true,
+                        diagnosticTextureUsage =
+                            "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
+                        stencilPassReplayed = true,
+                        copyAttempted = true,
+                        copySucceeded = true,
+                        copyFailureReason = null,
+                        samples = samples,
+                    )
+            } catch (t: Throwable) {
+                val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
+                    val targetWithinScissor = m60F16PointWithinScissor(x, y, metadata.scissor)
+                    M60F16DiagnosticStencilTextureFor453Sample(
+                        x = x,
+                        y = y,
+                        targetWithinScissor = targetWithinScissor,
+                        readbackAttempted = true,
+                        readbackAvailable = false,
+                        stencilValue = null,
+                        stencilCovered = null,
+                        classification = if (targetWithinScissor) {
+                            "production-bound-cover-stencil-copy-failed"
+                        } else {
+                            "production-bound-cover-stencil-sample-unavailable"
+                        },
+                        reason =
+                            "FOR-457 production-bound diagnostic stencil texture copy/readback failed: ${t::class.simpleName}: ${t.message}",
+                    )
+                }
+                m60F16ProductionBoundCoverStencilDiagnosticFor457Events +=
                     M60F16DiagnosticStencilTextureFor453Event(
                         drawIndex = metadata.drawIndex,
                         pipelineFamily = "aa-stencil-cover",
@@ -17353,7 +17511,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         }
         if (m60F16StencilRenderPassSplitFor451DiagnosticsEnabled ||
             m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled ||
-            m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled
+            m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled ||
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
         ) {
             m60F16StencilRenderPassSplitBoundaryEvents.clear()
             m60F16StencilRenderPassSplitBoundaryPendingReadbacks.clear()
@@ -17361,6 +17520,10 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         if (m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled) {
             m60F16DiagnosticStencilTextureFor453Events.clear()
             m60F16DiagnosticStencilTextureFor453PendingReadbacks.clear()
+        }
+        if (m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled) {
+            m60F16ProductionBoundCoverStencilDiagnosticFor457Events.clear()
+            m60F16ProductionBoundCoverStencilDiagnosticFor457PendingReadbacks.clear()
         }
         if (m60F16AaStencilCoverContributionIsolationDiagnosticsEnabled) {
             m60F16AaStencilCoverContributionIsolationEvents.clear()
@@ -17693,7 +17856,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                 val stencilRenderPassSplitFor451Active =
                     (m60F16StencilRenderPassSplitFor451DiagnosticsEnabled ||
                         m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled ||
-                        m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled) &&
+                        m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled ||
+                        m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled) &&
                         d.m60F16BandMetadata != null &&
                         res.m60F16StencilRenderPassSplitBoundaryBindGroup != null
                 if (stencilRenderPassSplitFor451Active) {
@@ -17873,6 +18037,169 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                                         diagnosticTextureUsage =
                                             "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
                                         stencilPassReplayed = false,
+                                        copyAttempted = true,
+                                        copySucceeded = false,
+                                        copyFailureReason = "${t::class.simpleName}: ${t.message}",
+                                        samples = samples,
+                                    )
+                            }
+                        }
+                    }
+                    if (m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled) {
+                        val metadata = M60F16AaStencilCoverPostPassReadbackMetadata(
+                            drawIndex = i,
+                            fillType = d.fillType.name,
+                            blendMode = d.mode.name,
+                            scissor = d.scissor.copyOf(),
+                            edgeCount = d.edgeCount,
+                            coverVertexCount = d.coverVerts.size / 2,
+                        )
+                        val diagnosticView = res.m60F16ProductionBoundCoverStencilDiagnosticFor457View
+                        val diagnosticTexture = res.m60F16ProductionBoundCoverStencilDiagnosticFor457Texture
+                        val diagnosticStaging = res.m60F16ProductionBoundCoverStencilDiagnosticFor457Staging
+                        val scratchView = res.m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchView
+                        if (
+                            diagnosticView == null ||
+                            diagnosticTexture == null ||
+                            diagnosticStaging == null ||
+                            scratchView == null
+                        ) {
+                            val reason =
+                                res.m60F16ProductionBoundCoverStencilDiagnosticFor457CreationFailureReason
+                                    ?: "production-bound diagnostic stencil texture resources were not created"
+                            val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
+                                val targetWithinScissor = m60F16PointWithinScissor(x, y, metadata.scissor)
+                                M60F16DiagnosticStencilTextureFor453Sample(
+                                    x = x,
+                                    y = y,
+                                    targetWithinScissor = targetWithinScissor,
+                                    readbackAttempted = false,
+                                    readbackAvailable = false,
+                                    stencilValue = null,
+                                    stencilCovered = null,
+                                    classification = if (targetWithinScissor) {
+                                        "production-bound-cover-stencil-resource-unavailable"
+                                    } else {
+                                        "production-bound-cover-stencil-sample-unavailable"
+                                    },
+                                    reason = reason,
+                                )
+                            }
+                            m60F16ProductionBoundCoverStencilDiagnosticFor457Events +=
+                                M60F16DiagnosticStencilTextureFor453Event(
+                                    drawIndex = metadata.drawIndex,
+                                    pipelineFamily = "aa-stencil-cover",
+                                    fillType = metadata.fillType,
+                                    blendMode = metadata.blendMode,
+                                    scissor = metadata.scissor.copyOf(),
+                                    edgeCount = metadata.edgeCount,
+                                    coverVertexCount = metadata.coverVertexCount,
+                                    diagnosticTextureCreated = false,
+                                    diagnosticTextureUsage =
+                                        "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
+                                    stencilPassReplayed = false,
+                                    copyAttempted = false,
+                                    copySucceeded = false,
+                                    copyFailureReason = reason,
+                                    samples = samples,
+                                )
+                        } else {
+                            try {
+                                encoder.beginRenderPass(
+                                    RenderPassDescriptor(
+                                        colorAttachments = listOf(
+                                            RenderPassColorAttachment(
+                                                view = scratchView,
+                                                loadOp = GPULoadOp.Clear,
+                                                clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                                storeOp = GPUStoreOp.Store,
+                                            ),
+                                        ),
+                                        depthStencilAttachment = RenderPassDepthStencilAttachment(
+                                            view = diagnosticView,
+                                            stencilClearValue = 0u,
+                                            stencilLoadOp = GPULoadOp.Clear,
+                                            stencilStoreOp = GPUStoreOp.Store,
+                                            stencilReadOnly = false,
+                                            depthReadOnly = true,
+                                        ),
+                                    ),
+                                ) {
+                                    setBindGroup(0u, res.bindGroup)
+                                    setScissorRect(
+                                        x = d.scissor[0].toUInt(),
+                                        y = d.scissor[1].toUInt(),
+                                        width = d.scissor[2].toUInt(),
+                                        height = d.scissor[3].toUInt(),
+                                    )
+                                    setPipeline(stencilWritePipeline)
+                                    setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
+                                    draw((d.stencilVerts.size / 2).toUInt())
+                                    setStencilReference(0u)
+                                    setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
+                                    setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Inside))
+                                    draw((d.coverVerts.size / 2).toUInt())
+                                    setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Outside))
+                                    draw((d.coverVerts.size / 2).toUInt())
+                                    end()
+                                }
+                                encoder.copyTextureToBuffer(
+                                    source = TexelCopyTextureInfo(
+                                        texture = diagnosticTexture,
+                                        aspect = GPUTextureAspect.StencilOnly,
+                                    ),
+                                    destination = TexelCopyBufferInfo(
+                                        buffer = diagnosticStaging,
+                                        offset = 0uL,
+                                        bytesPerRow =
+                                            res.m60F16ProductionBoundCoverStencilDiagnosticFor457PaddedBytesPerRow
+                                                .toUInt(),
+                                        rowsPerImage = height.toUInt(),
+                                    ),
+                                    copySize = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                                )
+                                m60F16ProductionBoundCoverStencilDiagnosticFor457PendingReadbacks +=
+                                    M60F16DiagnosticStencilTextureFor453Readback(
+                                        metadata = metadata,
+                                        staging = diagnosticStaging,
+                                        bufferSize =
+                                            res.m60F16ProductionBoundCoverStencilDiagnosticFor457BufferSize,
+                                        paddedBytesPerRow =
+                                            res.m60F16ProductionBoundCoverStencilDiagnosticFor457PaddedBytesPerRow,
+                                    )
+                            } catch (t: Throwable) {
+                                val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
+                                    val targetWithinScissor = m60F16PointWithinScissor(x, y, metadata.scissor)
+                                    M60F16DiagnosticStencilTextureFor453Sample(
+                                        x = x,
+                                        y = y,
+                                        targetWithinScissor = targetWithinScissor,
+                                        readbackAttempted = true,
+                                        readbackAvailable = false,
+                                        stencilValue = null,
+                                        stencilCovered = null,
+                                        classification = if (targetWithinScissor) {
+                                            "production-bound-cover-stencil-copy-failed"
+                                        } else {
+                                            "production-bound-cover-stencil-sample-unavailable"
+                                        },
+                                        reason =
+                                            "FOR-457 production-bound diagnostic cover replay/copy failed: ${t::class.simpleName}: ${t.message}",
+                                    )
+                                }
+                                m60F16ProductionBoundCoverStencilDiagnosticFor457Events +=
+                                    M60F16DiagnosticStencilTextureFor453Event(
+                                        drawIndex = metadata.drawIndex,
+                                        pipelineFamily = "aa-stencil-cover",
+                                        fillType = metadata.fillType,
+                                        blendMode = metadata.blendMode,
+                                        scissor = metadata.scissor.copyOf(),
+                                        edgeCount = metadata.edgeCount,
+                                        coverVertexCount = metadata.coverVertexCount,
+                                        diagnosticTextureCreated = true,
+                                        diagnosticTextureUsage =
+                                            "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
+                                        stencilPassReplayed = true,
                                         copyAttempted = true,
                                         copySucceeded = false,
                                         copyFailureReason = "${t::class.simpleName}: ${t.message}",
@@ -19752,6 +20079,11 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             it.m60F16DiagnosticStencilTextureFor453Staging?.close()
             it.m60F16DiagnosticStencilTextureFor453View?.close()
             it.m60F16DiagnosticStencilTextureFor453Texture?.close()
+            it.m60F16ProductionBoundCoverStencilDiagnosticFor457Staging?.close()
+            it.m60F16ProductionBoundCoverStencilDiagnosticFor457View?.close()
+            it.m60F16ProductionBoundCoverStencilDiagnosticFor457Texture?.close()
+            it.m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchView?.close()
+            it.m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchTexture?.close()
             it.m60F16AaStencilCoverIsolatedColorTargetStaging?.close()
             it.m60F16AaStencilCoverIsolatedColorTargetStorage?.close()
             it.m60F16AaStencilCoverIsolatedColorTargetScratchView?.close()
@@ -19815,6 +20147,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         recordM60F16AaStencilCoverPredrawDstReadbacks()
         recordM60F16StencilRenderPassSplitBoundaryReadbacks()
         recordM60F16DiagnosticStencilTextureFor453Readbacks()
+        recordM60F16ProductionBoundCoverStencilDiagnosticFor457Readbacks()
         recordM60F16AaStencilCoverPostPassReadbacks()
         recordM60F16AaStencilCoverIsolatedColorTargetReadbacks()
         recordM60F16AaStencilCoverStorageColorTargetComparisonReadbacks()
@@ -19980,6 +20313,14 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         val m60F16DiagnosticStencilTextureFor453BufferSize: ULong = 0uL,
         val m60F16DiagnosticStencilTextureFor453PaddedBytesPerRow: Int = 0,
         val m60F16DiagnosticStencilTextureFor453CreationFailureReason: String? = null,
+        val m60F16ProductionBoundCoverStencilDiagnosticFor457Texture: GPUTexture? = null,
+        val m60F16ProductionBoundCoverStencilDiagnosticFor457View: GPUTextureView? = null,
+        val m60F16ProductionBoundCoverStencilDiagnosticFor457Staging: GPUBuffer? = null,
+        val m60F16ProductionBoundCoverStencilDiagnosticFor457BufferSize: ULong = 0uL,
+        val m60F16ProductionBoundCoverStencilDiagnosticFor457PaddedBytesPerRow: Int = 0,
+        val m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchTexture: GPUTexture? = null,
+        val m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchView: GPUTextureView? = null,
+        val m60F16ProductionBoundCoverStencilDiagnosticFor457CreationFailureReason: String? = null,
         val m60F16AaStencilCoverIsolatedColorTargetScratchTexture: GPUTexture? = null,
         val m60F16AaStencilCoverIsolatedColorTargetScratchView: GPUTextureView? = null,
         val m60F16AaStencilCoverIsolatedColorTargetDepthStencilTexture: GPUTexture? = null,
@@ -21946,7 +22287,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         val stencilRenderPassSplitBoundaryEnabled =
             (m60F16StencilRenderPassSplitFor451DiagnosticsEnabled ||
                 m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled ||
-                m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled) &&
+                m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled ||
+                m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled) &&
                 d.m60F16BandMetadata != null &&
                 intermediateFormat == GPUTextureFormat.RGBA16Float
         val stencilRenderPassSplitBoundaryStorage = if (stencilRenderPassSplitBoundaryEnabled) {
@@ -22032,6 +22374,74 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             }
         val diagnosticStencilTextureFor453CreationFailureReason =
             diagnosticStencilTextureFor453Result?.exceptionOrNull()?.let { t ->
+                "${t::class.simpleName}: ${t.message}"
+            }
+        val productionBoundCoverStencilDiagnosticFor457Enabled =
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled &&
+                d.m60F16BandMetadata != null &&
+                intermediateFormat == GPUTextureFormat.RGBA16Float
+        val productionBoundCoverStencilDiagnosticFor457PaddedBytesPerRow =
+            if (productionBoundCoverStencilDiagnosticFor457Enabled) {
+                ((width * M60_F16_DIAGNOSTIC_STENCIL_TEXTURE_BYTES_PER_PIXEL +
+                    M60_F16_DIAGNOSTIC_STENCIL_TEXTURE_BYTES_PER_ROW_ALIGNMENT - 1) /
+                    M60_F16_DIAGNOSTIC_STENCIL_TEXTURE_BYTES_PER_ROW_ALIGNMENT) *
+                    M60_F16_DIAGNOSTIC_STENCIL_TEXTURE_BYTES_PER_ROW_ALIGNMENT
+            } else {
+                0
+            }
+        val productionBoundCoverStencilDiagnosticFor457BufferSize =
+            (productionBoundCoverStencilDiagnosticFor457PaddedBytesPerRow.toLong() * height.toLong()).toULong()
+        val productionBoundCoverStencilDiagnosticFor457Result =
+            if (productionBoundCoverStencilDiagnosticFor457Enabled) {
+                runCatching {
+                    context.device.createTexture(
+                        TextureDescriptor(
+                            size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                            format = GPUTextureFormat.Depth24PlusStencil8,
+                            usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
+                            label =
+                                "SkWebGpuDevice.m60F16ProductionBoundCoverStencilDiagnosticFor457.depthStencil.diagnosticOnly",
+                        ),
+                    )
+                }
+            } else {
+                null
+            }
+        val productionBoundCoverStencilDiagnosticFor457Texture =
+            productionBoundCoverStencilDiagnosticFor457Result?.getOrNull()
+        val productionBoundCoverStencilDiagnosticFor457View =
+            productionBoundCoverStencilDiagnosticFor457Texture?.createView()
+        val productionBoundCoverStencilDiagnosticFor457Staging =
+            if (productionBoundCoverStencilDiagnosticFor457Texture != null) {
+                context.device.createBuffer(
+                    BufferDescriptor(
+                        size = productionBoundCoverStencilDiagnosticFor457BufferSize,
+                        usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                        label =
+                            "SkWebGpuDevice.m60F16ProductionBoundCoverStencilDiagnosticFor457.staging.diagnosticOnly",
+                    ),
+                )
+            } else {
+                null
+            }
+        val productionBoundCoverStencilDiagnosticFor457ScratchTexture =
+            if (productionBoundCoverStencilDiagnosticFor457Texture != null) {
+                context.device.createTexture(
+                    TextureDescriptor(
+                        size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                        format = GPUTextureFormat.RGBA16Float,
+                        usage = GPUTextureUsage.RenderAttachment,
+                        label =
+                            "SkWebGpuDevice.m60F16ProductionBoundCoverStencilDiagnosticFor457.scratchColor.diagnosticOnly",
+                    ),
+                )
+            } else {
+                null
+            }
+        val productionBoundCoverStencilDiagnosticFor457ScratchView =
+            productionBoundCoverStencilDiagnosticFor457ScratchTexture?.createView()
+        val productionBoundCoverStencilDiagnosticFor457CreationFailureReason =
+            productionBoundCoverStencilDiagnosticFor457Result?.exceptionOrNull()?.let { t ->
                 "${t::class.simpleName}: ${t.message}"
             }
         val isolatedColorTargetEnabled =
@@ -22322,6 +22732,22 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                 diagnosticStencilTextureFor453PaddedBytesPerRow,
             m60F16DiagnosticStencilTextureFor453CreationFailureReason =
                 diagnosticStencilTextureFor453CreationFailureReason,
+            m60F16ProductionBoundCoverStencilDiagnosticFor457Texture =
+                productionBoundCoverStencilDiagnosticFor457Texture,
+            m60F16ProductionBoundCoverStencilDiagnosticFor457View =
+                productionBoundCoverStencilDiagnosticFor457View,
+            m60F16ProductionBoundCoverStencilDiagnosticFor457Staging =
+                productionBoundCoverStencilDiagnosticFor457Staging,
+            m60F16ProductionBoundCoverStencilDiagnosticFor457BufferSize =
+                productionBoundCoverStencilDiagnosticFor457BufferSize,
+            m60F16ProductionBoundCoverStencilDiagnosticFor457PaddedBytesPerRow =
+                productionBoundCoverStencilDiagnosticFor457PaddedBytesPerRow,
+            m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchTexture =
+                productionBoundCoverStencilDiagnosticFor457ScratchTexture,
+            m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchView =
+                productionBoundCoverStencilDiagnosticFor457ScratchView,
+            m60F16ProductionBoundCoverStencilDiagnosticFor457CreationFailureReason =
+                productionBoundCoverStencilDiagnosticFor457CreationFailureReason,
             m60F16AaStencilCoverIsolatedColorTargetScratchTexture = isolatedColorTargetScratchTexture,
             m60F16AaStencilCoverIsolatedColorTargetScratchView = isolatedColorTargetScratchView,
             m60F16AaStencilCoverIsolatedColorTargetDepthStencilTexture = isolatedColorTargetDepthStencilTexture,
