@@ -1,0 +1,746 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-437",
+          "sceneId": "m60-f16-cpu-reference-source-expectation-for437",
+          "sourceSceneId": "m60-f16-host-draw-paint-binding-for436",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-tracer-attente-source-cpu-reference-pour-pixels-draw-index-3",
+          "sourceFindingMemory": "global/kanvas/findings/for-436-web-gpu-host-draw-paint-binding-trace-classifies-cpu-reference-source-expectation-mismatch",
+          "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-host-draw-paint-binding-for436/m60-f16-host-draw-paint-binding-for436.json",
+          "sourceReport": "reports/wgsl-pipeline/2026-06-06-for-436-m60-f16-host-draw-paint-binding.md",
+          "sourceFor435Artifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-paint-stroke-input-trace-for435/m60-f16-paint-stroke-input-trace-for435.json",
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "classification": "cpu-reference-source-derived-from-different-draw",
+          "allowedClassifications": [
+            "cpu-reference-source-is-fixture-blue",
+"cpu-reference-source-derived-from-different-draw",
+"cpu-reference-composition-inversion-mismatch",
+"fixture-expectation-mismatch",
+"trace-incomplete",
+"cpu-reference-source-expectation-unresolved"
+          ],
+          "diagnosticFlag": "kanvas.webgpu.m60F16CpuReferenceSourceExpectationFor437.enabled",
+          "sourceFor436DiagnosticFlag": "kanvas.webgpu.m60F16HostDrawPaintBindingFor436.enabled",
+          "sourceFor435DiagnosticFlag": "kanvas.webgpu.m60F16PaintStrokeInputTraceFor435.enabled",
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "productionWgslChanged": false,
+          "wgsl4kModified": false,
+          "renderingFixApplied": false,
+          "comparisonPolicy": {
+            "scope": "Exactly the six FOR-436 residual pixels. Invert the CPU reference through SrcOver at 10/16 coverage, then compare the required source payload to the static BoundedStrokeCapJoinGM fixture paints transformed into the CPU reference colorspace.",
+            "cpuReferenceSink": "RasterSinkF16(DM_REFERENCE_COLOR_SPACE)",
+            "cpuReferenceColorSpace": "Rec2020 transfer + Rec2020 gamut",
+            "cpuReferencePrefixBeforeDrawIndex3": "BoundedStrokeCapJoinPrefixFor437GM renders the scene through the first blue draw and its outline before the round/round drawIndex 3 is submitted.",
+            "coverageNumerator": 10,
+            "coverageDenominator": 16,
+            "coverageAlpha": 0.625000,
+            "noRenderingFixApplied": true,
+            "boundedToSixPixels": true
+          },
+          "summary": {
+            "partialPixelCount": 6,
+            "expectedPartialPixelCount": 6,
+            "hostBindingEventCount": 3,
+            "hostBoundDrawIndex": 3,
+            "hostBoundPaintHexArgb": "0xFF008A4C",
+            "hostBoundStrokeWidth": 10.000000,
+            "hostBoundStrokeCap": "round",
+            "hostBoundStrokeJoin": "round",
+            "bestFixtureCandidateDrawIndex": 1,
+            "bestFixtureCandidatePaintHexArgb": "0xFF0066CC",
+            "bestFixtureCandidateStrokeCap": "butt",
+            "bestFixtureCandidateStrokeJoin": "bevel",
+            "cpuReferencePrefixMatchCount": 6,
+            "maxRequiredPaintVsFixtureBlueTargetDelta": 0.176108778,
+            "maxRequiredPaintVsHostBoundTargetDelta": 0.534421206,
+            "traceComplete": true
+          },
+          "fixtureSourceCandidates": [
+            {
+  "drawIndex": 1,
+  "paintHexArgb": "0xFF0066CC",
+  "paintRgba8": [0, 102, 204, 255],
+  "stroke": {
+    "width": 10.0,
+    "cap": "butt",
+    "join": "bevel"
+  },
+  "bandXStart": 0.000000,
+  "bandXEnd": 48.000000,
+  "targetColorspacePayloadRgbaFloat": [0.232717484, 0.338138580, 0.742351830, 1.000000000],
+  "targetColorspacePayloadRgba8Approx": [59, 86, 189, 255]
+},
+{
+  "drawIndex": 3,
+  "paintHexArgb": "0xFF008A4C",
+  "paintRgba8": [0, 138, 76, 255],
+  "stroke": {
+    "width": 10.0,
+    "cap": "round",
+    "join": "round"
+  },
+  "bandXStart": 48.000000,
+  "bandXEnd": 96.000000,
+  "targetColorspacePayloadRgbaFloat": [0.266751766, 0.473082006, 0.267210573, 1.000000000],
+  "targetColorspacePayloadRgba8Approx": [68, 121, 68, 255]
+},
+{
+  "drawIndex": 5,
+  "paintHexArgb": "0xFFB33C00",
+  "paintRgba8": [179, 60, 0, 255],
+  "stroke": {
+    "width": 10.0,
+    "cap": "square",
+    "join": "bevel"
+  },
+  "bandXStart": 96.000000,
+  "bandXEnd": 192.000000,
+  "targetColorspacePayloadRgbaFloat": [0.537994981, 0.238597929, 0.051118359, 1.000000000],
+  "targetColorspacePayloadRgba8Approx": [137, 61, 13, 255]
+}
+          ],
+          "partialPixels": [
+                        {
+              "x": 92,
+              "y": 75,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "cpu-reference-source-derived-from-different-draw",
+              "classificationReason": "The CPU reference pixel already matches the CPU prefix rendered before drawIndex 3, so the reference is carrying the previous blue draw through these coordinates while the confirmed WebGPU host binding remains the green drawIndex 3 paint.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "cpuReferenceBeforeDrawIndex3Rgba": [133, 150, 214, 255],
+              "cpuReferenceEqualsPrefixBeforeDrawIndex3": true,
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625,
+                "capturedCoverageOrAaAlpha": 0.625000
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "selectedWebGpuSource": {
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+              "bestFixtureSourceCandidate": {
+                "drawIndex": 1,
+                "paintHexArgb": "0xFF0066CC",
+                "strokeCap": "butt",
+                "strokeJoin": "bevel",
+                "targetColorspacePayloadRgbaFloat": [0.232717484, 0.338138580, 0.742351830, 1.000000000],
+                "targetColorspacePayloadRgba8Approx": [59, 86, 189, 255]
+              },
+              "fixtureBlueVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+  "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+  "absoluteTotalFloat": 0.389305592,
+  "maxChannelFloat": 0.176108778,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "hostBoundGreenVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+  "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+  "absoluteTotalFloat": 0.695469141,
+  "maxChannelFloat": 0.534421206,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateDeltas": [
+                                {
+                      "drawIndex": 1,
+                      "paintHexArgb": "0xFF0066CC",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+      "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+      "absoluteTotalFloat": 0.389305592,
+      "maxChannelFloat": 0.176108778,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 3,
+                      "paintHexArgb": "0xFF008A4C",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+      "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+      "absoluteTotalFloat": 0.695469141,
+      "maxChannelFloat": 0.534421206,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 5,
+                      "paintHexArgb": "0xFFB33C00",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [0.129168719, -0.253457487, -0.750513434, 0.000000000],
+      "absoluteRgbaFloat": [0.129168719, 0.253457487, 0.750513434, 0.000000000],
+      "absoluteTotalFloat": 1.133139610,
+      "maxChannelFloat": 0.750513434,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    }
+              ],
+              "missingFields": []
+            },
+            {
+              "x": 91,
+              "y": 76,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "cpu-reference-source-derived-from-different-draw",
+              "classificationReason": "The CPU reference pixel already matches the CPU prefix rendered before drawIndex 3, so the reference is carrying the previous blue draw through these coordinates while the confirmed WebGPU host binding remains the green drawIndex 3 paint.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "cpuReferenceBeforeDrawIndex3Rgba": [133, 150, 214, 255],
+              "cpuReferenceEqualsPrefixBeforeDrawIndex3": true,
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625,
+                "capturedCoverageOrAaAlpha": 0.625000
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "selectedWebGpuSource": {
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+              "bestFixtureSourceCandidate": {
+                "drawIndex": 1,
+                "paintHexArgb": "0xFF0066CC",
+                "strokeCap": "butt",
+                "strokeJoin": "bevel",
+                "targetColorspacePayloadRgbaFloat": [0.232717484, 0.338138580, 0.742351830, 1.000000000],
+                "targetColorspacePayloadRgba8Approx": [59, 86, 189, 255]
+              },
+              "fixtureBlueVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+  "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+  "absoluteTotalFloat": 0.389305592,
+  "maxChannelFloat": 0.176108778,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "hostBoundGreenVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+  "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+  "absoluteTotalFloat": 0.695469141,
+  "maxChannelFloat": 0.534421206,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateDeltas": [
+                                {
+                      "drawIndex": 1,
+                      "paintHexArgb": "0xFF0066CC",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+      "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+      "absoluteTotalFloat": 0.389305592,
+      "maxChannelFloat": 0.176108778,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 3,
+                      "paintHexArgb": "0xFF008A4C",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+      "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+      "absoluteTotalFloat": 0.695469141,
+      "maxChannelFloat": 0.534421206,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 5,
+                      "paintHexArgb": "0xFFB33C00",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [0.129168719, -0.253457487, -0.750513434, 0.000000000],
+      "absoluteRgbaFloat": [0.129168719, 0.253457487, 0.750513434, 0.000000000],
+      "absoluteTotalFloat": 1.133139610,
+      "maxChannelFloat": 0.750513434,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    }
+              ],
+              "missingFields": []
+            },
+            {
+              "x": 90,
+              "y": 77,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "cpu-reference-source-derived-from-different-draw",
+              "classificationReason": "The CPU reference pixel already matches the CPU prefix rendered before drawIndex 3, so the reference is carrying the previous blue draw through these coordinates while the confirmed WebGPU host binding remains the green drawIndex 3 paint.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "cpuReferenceBeforeDrawIndex3Rgba": [133, 150, 214, 255],
+              "cpuReferenceEqualsPrefixBeforeDrawIndex3": true,
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625,
+                "capturedCoverageOrAaAlpha": 0.625000
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "selectedWebGpuSource": {
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+              "bestFixtureSourceCandidate": {
+                "drawIndex": 1,
+                "paintHexArgb": "0xFF0066CC",
+                "strokeCap": "butt",
+                "strokeJoin": "bevel",
+                "targetColorspacePayloadRgbaFloat": [0.232717484, 0.338138580, 0.742351830, 1.000000000],
+                "targetColorspacePayloadRgba8Approx": [59, 86, 189, 255]
+              },
+              "fixtureBlueVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+  "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+  "absoluteTotalFloat": 0.389305592,
+  "maxChannelFloat": 0.176108778,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "hostBoundGreenVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+  "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+  "absoluteTotalFloat": 0.695469141,
+  "maxChannelFloat": 0.534421206,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateDeltas": [
+                                {
+                      "drawIndex": 1,
+                      "paintHexArgb": "0xFF0066CC",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+      "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+      "absoluteTotalFloat": 0.389305592,
+      "maxChannelFloat": 0.176108778,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 3,
+                      "paintHexArgb": "0xFF008A4C",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+      "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+      "absoluteTotalFloat": 0.695469141,
+      "maxChannelFloat": 0.534421206,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 5,
+                      "paintHexArgb": "0xFFB33C00",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [0.129168719, -0.253457487, -0.750513434, 0.000000000],
+      "absoluteRgbaFloat": [0.129168719, 0.253457487, 0.750513434, 0.000000000],
+      "absoluteTotalFloat": 1.133139610,
+      "maxChannelFloat": 0.750513434,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    }
+              ],
+              "missingFields": []
+            },
+            {
+              "x": 89,
+              "y": 78,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "cpu-reference-source-derived-from-different-draw",
+              "classificationReason": "The CPU reference pixel already matches the CPU prefix rendered before drawIndex 3, so the reference is carrying the previous blue draw through these coordinates while the confirmed WebGPU host binding remains the green drawIndex 3 paint.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "cpuReferenceBeforeDrawIndex3Rgba": [133, 150, 214, 255],
+              "cpuReferenceEqualsPrefixBeforeDrawIndex3": true,
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625,
+                "capturedCoverageOrAaAlpha": 0.625000
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "selectedWebGpuSource": {
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+              "bestFixtureSourceCandidate": {
+                "drawIndex": 1,
+                "paintHexArgb": "0xFF0066CC",
+                "strokeCap": "butt",
+                "strokeJoin": "bevel",
+                "targetColorspacePayloadRgbaFloat": [0.232717484, 0.338138580, 0.742351830, 1.000000000],
+                "targetColorspacePayloadRgba8Approx": [59, 86, 189, 255]
+              },
+              "fixtureBlueVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+  "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+  "absoluteTotalFloat": 0.389305592,
+  "maxChannelFloat": 0.176108778,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "hostBoundGreenVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+  "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+  "absoluteTotalFloat": 0.695469141,
+  "maxChannelFloat": 0.534421206,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateDeltas": [
+                                {
+                      "drawIndex": 1,
+                      "paintHexArgb": "0xFF0066CC",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+      "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+      "absoluteTotalFloat": 0.389305592,
+      "maxChannelFloat": 0.176108778,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 3,
+                      "paintHexArgb": "0xFF008A4C",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+      "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+      "absoluteTotalFloat": 0.695469141,
+      "maxChannelFloat": 0.534421206,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 5,
+                      "paintHexArgb": "0xFFB33C00",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [0.129168719, -0.253457487, -0.750513434, 0.000000000],
+      "absoluteRgbaFloat": [0.129168719, 0.253457487, 0.750513434, 0.000000000],
+      "absoluteTotalFloat": 1.133139610,
+      "maxChannelFloat": 0.750513434,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    }
+              ],
+              "missingFields": []
+            },
+            {
+              "x": 88,
+              "y": 79,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "cpu-reference-source-derived-from-different-draw",
+              "classificationReason": "The CPU reference pixel already matches the CPU prefix rendered before drawIndex 3, so the reference is carrying the previous blue draw through these coordinates while the confirmed WebGPU host binding remains the green drawIndex 3 paint.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "cpuReferenceBeforeDrawIndex3Rgba": [133, 150, 214, 255],
+              "cpuReferenceEqualsPrefixBeforeDrawIndex3": true,
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625,
+                "capturedCoverageOrAaAlpha": 0.625000
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "selectedWebGpuSource": {
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+              "bestFixtureSourceCandidate": {
+                "drawIndex": 1,
+                "paintHexArgb": "0xFF0066CC",
+                "strokeCap": "butt",
+                "strokeJoin": "bevel",
+                "targetColorspacePayloadRgbaFloat": [0.232717484, 0.338138580, 0.742351830, 1.000000000],
+                "targetColorspacePayloadRgba8Approx": [59, 86, 189, 255]
+              },
+              "fixtureBlueVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+  "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+  "absoluteTotalFloat": 0.389305592,
+  "maxChannelFloat": 0.176108778,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "hostBoundGreenVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+  "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+  "absoluteTotalFloat": 0.695469141,
+  "maxChannelFloat": 0.534421206,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateDeltas": [
+                                {
+                      "drawIndex": 1,
+                      "paintHexArgb": "0xFF0066CC",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+      "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+      "absoluteTotalFloat": 0.389305592,
+      "maxChannelFloat": 0.176108778,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 3,
+                      "paintHexArgb": "0xFF008A4C",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+      "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+      "absoluteTotalFloat": 0.695469141,
+      "maxChannelFloat": 0.534421206,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 5,
+                      "paintHexArgb": "0xFFB33C00",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [0.129168719, -0.253457487, -0.750513434, 0.000000000],
+      "absoluteRgbaFloat": [0.129168719, 0.253457487, 0.750513434, 0.000000000],
+      "absoluteTotalFloat": 1.133139610,
+      "maxChannelFloat": 0.750513434,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    }
+              ],
+              "missingFields": []
+            },
+            {
+              "x": 87,
+              "y": 80,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "cpu-reference-source-derived-from-different-draw",
+              "classificationReason": "The CPU reference pixel already matches the CPU prefix rendered before drawIndex 3, so the reference is carrying the previous blue draw through these coordinates while the confirmed WebGPU host binding remains the green drawIndex 3 paint.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "cpuReferenceBeforeDrawIndex3Rgba": [133, 150, 214, 255],
+              "cpuReferenceEqualsPrefixBeforeDrawIndex3": true,
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625,
+                "capturedCoverageOrAaAlpha": 0.625000
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159]
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": [0.408826262, 0.492055416, 0.801631808, 1.000000000],
+                "rgba8Approx": [104, 125, 204, 255]
+              },
+              "selectedWebGpuSource": {
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+              "bestFixtureSourceCandidate": {
+                "drawIndex": 1,
+                "paintHexArgb": "0xFF0066CC",
+                "strokeCap": "butt",
+                "strokeJoin": "bevel",
+                "targetColorspacePayloadRgbaFloat": [0.232717484, 0.338138580, 0.742351830, 1.000000000],
+                "targetColorspacePayloadRgba8Approx": [59, 86, 189, 255]
+              },
+              "fixtureBlueVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+  "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+  "absoluteTotalFloat": 0.389305592,
+  "maxChannelFloat": 0.176108778,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "hostBoundGreenVsRequiredPaintDelta": {
+  "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+  "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+  "absoluteTotalFloat": 0.695469141,
+  "maxChannelFloat": 0.534421206,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateDeltas": [
+                                {
+                      "drawIndex": 1,
+                      "paintHexArgb": "0xFF0066CC",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.176108778, -0.153916836, -0.059279978, 0.000000000],
+      "absoluteRgbaFloat": [0.176108778, 0.153916836, 0.059279978, 0.000000000],
+      "absoluteTotalFloat": 0.389305592,
+      "maxChannelFloat": 0.176108778,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 3,
+                      "paintHexArgb": "0xFF008A4C",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [-0.142074496, -0.018973410, -0.534421206, 0.000000000],
+      "absoluteRgbaFloat": [0.142074496, 0.018973410, 0.534421206, 0.000000000],
+      "absoluteTotalFloat": 0.695469141,
+      "maxChannelFloat": 0.534421206,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    },
+                    {
+                      "drawIndex": 5,
+                      "paintHexArgb": "0xFFB33C00",
+                      "payloadVsRequiredPaintDelta": {
+      "signedRgbaFloat": [0.129168719, -0.253457487, -0.750513434, 0.000000000],
+      "absoluteRgbaFloat": [0.129168719, 0.253457487, 0.750513434, 0.000000000],
+      "absoluteTotalFloat": 1.133139610,
+      "maxChannelFloat": 0.750513434,
+      "withinTolerance": false,
+      "tolerance": 0.003921569
+    }
+                    }
+              ],
+              "missingFields": []
+            }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "for431ActivatedByDefault": false,
+            "renderingFixApplied": false
+          },
+          "classificationReason": "All six residual CPU reference pixels are already present in the CPU prefix rendered before the round/round drawIndex 3, while WebGPU traces a 10/16 drawIndex 3 green stencil-cover contribution at the same coordinates.",
+          "nextStep": "Trace why CPU reference composition leaves these edge pixels as the previous blue draw while WebGPU effective drawIndex 3 binds and contributes the green stroke; do not change coverage, thresholds, FOR-431, PipelineKey, or WGSL payload until the draw/source ordering difference is isolated.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16CpuReferenceSourceExpectationFor437.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for437_m60_f16_cpu_reference_source_expectation.py",
+            "rtk python3 scripts/validate_for436_m60_f16_host_draw_paint_binding.py",
+            "rtk python3 scripts/validate_for435_m60_f16_paint_stroke_input_trace.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for437-pycache python3 -m py_compile scripts/validate_for437_m60_f16_cpu_reference_source_expectation.py",
+            "rtk git diff --check"
+          ]
+        }
