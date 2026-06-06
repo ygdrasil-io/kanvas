@@ -1,0 +1,192 @@
+{
+  "broadSkiaGmParityClaim": false,
+  "classification": "lot1-partially-materialized-no-new-support-claims",
+  "dashboardCounters": {
+    "inventoryDerived": 45,
+    "status.expected-unsupported": 23,
+    "status.fail": 0,
+    "status.pass": 70,
+    "status.tracked-gap": 0,
+    "total": 93
+  },
+  "dashboardGate": "build/reports/wgsl-pipeline-scene-gate/scene-dashboard-gate.json",
+  "dashboardStatusChangedByFor462": false,
+  "date": "2026-06-06",
+  "fallbackPolicyChanged": false,
+  "linear": "FOR-462",
+  "lot1CandidateCount": 12,
+  "materialized": [
+    {
+      "inventoryId": "skia-gm-drawbitmaprect",
+      "rows": [
+        {
+          "derivationTask": "pipelineM66GmPromotionWave",
+          "fallbackReason": "none",
+          "id": "m66-bitmap-rect-nearest-skia",
+          "referenceKind": "skia-upstream",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "inventoryId": "skia-gm-bitmappremul",
+      "rows": [
+        {
+          "derivationTask": "pipelineM53InventoryPromotionPack",
+          "fallbackReason": "none",
+          "id": "m53-bitmap-premul-alpha",
+          "referenceKind": "skia-upstream",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "inventoryId": "skia-gm-localmatriximageshader",
+      "rows": [
+        {
+          "derivationTask": "pipelineM54HardFeatureDepthPack",
+          "fallbackReason": "none",
+          "id": "m54-local-matrix-blend-composition",
+          "referenceKind": "skia-upstream",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "inventoryId": "skia-gm-gradientsdegenerate",
+      "rows": [
+        {
+          "derivationTask": "pipelineM53InventoryPromotionPack",
+          "fallbackReason": "none",
+          "id": "m53-degenerate-gradient-linear",
+          "referenceKind": "test-oracle",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "inventoryId": "skia-gm-matriximagefilter",
+      "rows": [
+        {
+          "derivationTask": "pipelineM54HardFeatureDepthPack",
+          "fallbackReason": "none",
+          "id": "m54-matrix-imagefilter-affine",
+          "referenceKind": "test-oracle",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "inventoryId": "skia-gm-imageblur",
+      "rows": [
+        {
+          "derivationTask": "pipelineM53InventoryPromotionPack",
+          "fallbackReason": "none",
+          "id": "m53-imageblur-bounded-prepass",
+          "referenceKind": "test-oracle",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "inventoryId": "skia-gm-simpleaaclip",
+      "rows": [
+        {
+          "derivationTask": "pipelineM54HardFeatureDepthPack",
+          "fallbackReason": "none",
+          "id": "m54-simple-aa-clip",
+          "referenceKind": "cpu-oracle",
+          "status": "pass"
+        }
+      ]
+    }
+  ],
+  "materializedCandidateCount": 7,
+  "materializedReferenceKindCounts": {
+    "cpu-oracle": 1,
+    "skia-upstream": 3,
+    "test-oracle": 3
+  },
+  "materializedRowsAddedByFor462": 0,
+  "missing": [
+    {
+      "inventoryId": "skia-gm-drawminibitmaprect",
+      "requiredEvidence": [
+        "row-specific reference artifact",
+        "CPU artifact and route diagnostics",
+        "GPU artifact or stable expected-unsupported refusal",
+        "diff and stats artifacts",
+        "fallbackReason=none for support rows",
+        "unchanged dashboard thresholds and gate policy"
+      ],
+      "status": "missing-row-specific-evidence"
+    },
+    {
+      "inventoryId": "skia-gm-image",
+      "requiredEvidence": [
+        "row-specific reference artifact",
+        "CPU artifact and route diagnostics",
+        "GPU artifact or stable expected-unsupported refusal",
+        "diff and stats artifacts",
+        "fallbackReason=none for support rows",
+        "unchanged dashboard thresholds and gate policy"
+      ],
+      "status": "missing-row-specific-evidence"
+    },
+    {
+      "inventoryId": "skia-gm-imagesource",
+      "requiredEvidence": [
+        "row-specific reference artifact",
+        "CPU artifact and route diagnostics",
+        "GPU artifact or stable expected-unsupported refusal",
+        "diff and stats artifacts",
+        "fallbackReason=none for support rows",
+        "unchanged dashboard thresholds and gate policy"
+      ],
+      "status": "missing-row-specific-evidence"
+    },
+    {
+      "inventoryId": "skia-gm-offsetimagefilter",
+      "requiredEvidence": [
+        "row-specific reference artifact",
+        "CPU artifact and route diagnostics",
+        "GPU artifact or stable expected-unsupported refusal",
+        "diff and stats artifacts",
+        "fallbackReason=none for support rows",
+        "unchanged dashboard thresholds and gate policy"
+      ],
+      "status": "missing-row-specific-evidence"
+    },
+    {
+      "inventoryId": "skia-gm-pathfill",
+      "requiredEvidence": [
+        "row-specific reference artifact",
+        "CPU artifact and route diagnostics",
+        "GPU artifact or stable expected-unsupported refusal",
+        "diff and stats artifacts",
+        "fallbackReason=none for support rows",
+        "unchanged dashboard thresholds and gate policy"
+      ],
+      "status": "missing-row-specific-evidence"
+    }
+  ],
+  "missingCandidateCount": 5,
+  "nextAction": "Open row-specific evidence tickets for the five missing lot 1 candidates before any dashboard support promotion.",
+  "pipelineKeyChanged": false,
+  "productionCodeChanged": false,
+  "schemaVersion": 1,
+  "scoringChanged": false,
+  "skiaComparableClaimsAddedByFor462": 0,
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-reprise-for-462-d50-lot-1-dashboard-sans-faux-support",
+  "sourceFindingMemory": "global/kanvas/findings/for-461-integre-linventaire-d50-des-candidats-gm-dashboard",
+  "sourceInventory": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
+  "supportClaimsAddedByFor462": 0,
+  "thresholdChanged": false,
+  "upstreamSourceChanged": false,
+  "validationCommands": [
+    "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+    "rtk python3 scripts/validate_for462_d50_lot1_dashboard_integration.py",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for462-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py",
+    "rtk git diff --check"
+  ]
+}
