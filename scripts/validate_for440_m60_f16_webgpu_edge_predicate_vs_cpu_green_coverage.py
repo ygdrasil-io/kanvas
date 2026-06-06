@@ -47,9 +47,13 @@ ALLOWED_LOCAL_DIFFS = {
     "scripts/validate_for438_m60_f16_cpu_vs_webgpu_green_draw_coverage.py",
     "scripts/validate_for439_m60_f16_webgpu_stencil_cover_geometry_vs_cpu_green_mask.py",
     "scripts/validate_for440_m60_f16_webgpu_edge_predicate_vs_cpu_green_coverage.py",
+    "scripts/validate_for441_m60_f16_webgpu_exact_subsample_mask_vs_cpu_green.py",
     "reports/wgsl-pipeline/2026-06-06-for-440-m60-f16-webgpu-edge-predicate-vs-cpu-green-coverage.md",
+    "reports/wgsl-pipeline/2026-06-06-for-441-m60-f16-webgpu-exact-subsample-mask-vs-cpu-green.md",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/{SCENE_ID}.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-exact-subsample-mask-vs-cpu-green-for441",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-exact-subsample-mask-vs-cpu-green-for441/m60-f16-webgpu-exact-subsample-mask-vs-cpu-green-for441.json",
 }
 FORBIDDEN_DIFF_PREFIXES = (
     "gpu-raster/src/main/kotlin/",
