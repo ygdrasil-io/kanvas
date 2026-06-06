@@ -240,6 +240,8 @@ private const val WEBGPU_M60_F16_COVER_SOURCE_ATTRIBUTION_FOR454_FLAG: String =
     "kanvas.webgpu.m60F16CoverSourceAttributionFor454.enabled"
 private const val WEBGPU_M60_F16_ZERO_STENCIL_COVER_EMISSION_AUDIT_FOR455_FLAG: String =
     "kanvas.webgpu.m60F16ZeroStencilCoverEmissionAuditFor455.enabled"
+private const val WEBGPU_M60_F16_PRODUCTION_COVER_STENCIL_VS_DIAGNOSTIC_TEXTURE_FOR456_FLAG: String =
+    "kanvas.webgpu.m60F16ProductionCoverStencilVsDiagnosticTextureFor456.enabled"
 private const val WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG: String =
     "kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled"
 private const val WEBGPU_M60_F16_ZERO_MASK_CORRECTION_FOR447_FLAG: String =
@@ -1167,31 +1169,40 @@ public class SkWebGpuDevice(
             WEBGPU_M60_F16_ZERO_STENCIL_COVER_EMISSION_AUDIT_FOR455_FLAG,
             "false",
         ).toBoolean()
+    private val m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_PRODUCTION_COVER_STENCIL_VS_DIAGNOSTIC_TEXTURE_FOR456_FLAG,
+            "false",
+        ).toBoolean()
     private val m60F16DirectPassWriteHookEnabled: Boolean =
         System.getProperty(WEBGPU_M60_F16_DIRECT_PASS_WRITE_HOOK_FLAG, "false").toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
-            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled
+            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
     private val m60F16AaStencilCoverContributionIsolationDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_FLAG,
             "false",
         ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
-            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled
+            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
     private val m60F16AaStencilCoverPredrawDstReadbackDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_PREDRAW_DST_READBACK_FLAG,
             "false",
         ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
-            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled
+            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
     private val m60F16StencilRenderPassSplitFor451DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_STENCIL_RENDER_PASS_SPLIT_FOR451_FLAG,
             "false",
         ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
-            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled
+            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
     private val m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_STENCIL_BACKEND_READBACK_AUDIT_FOR452_FLAG,
@@ -1203,7 +1214,8 @@ public class SkWebGpuDevice(
             "false",
         ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
-            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled
+            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
     private val m60F16AaStencilCoverShaderReturnDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_DIAGNOSTIC_FLAG,
@@ -1226,14 +1238,16 @@ public class SkWebGpuDevice(
                 "false",
             ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
-            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled
+            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
     private val m60F16AaStencilCoverIsolatedColorTargetDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_ISOLATED_COLOR_TARGET_FLAG,
             "false",
         ).toBoolean() ||
             m60F16CoverSourceAttributionFor454DiagnosticsEnabled ||
-            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled
+            m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
+            m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled
     private val m60F16AaStencilCoverStorageColorTargetComparisonDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_STORAGE_COLOR_TARGET_COMPARISON_FLAG,
