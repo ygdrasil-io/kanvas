@@ -510,7 +510,30 @@ public object SkScanFillPathSubsampleTrace {
         public val mask4x4: Int,
         public val scanFillPathSamples: Int,
         public val tracedSpanCount: Int,
+        public val spanQuantizationRows: List<SpanQuantizationRow>,
         public val source: String,
+    )
+
+    public data class SpanSampleCenter(
+        public val sx: Int,
+        public val deviceX: Float,
+        public val covered: Boolean,
+    )
+
+    public data class SpanQuantizationRow(
+        public val subRow: Int,
+        public val spanLeft: Float,
+        public val spanRight: Float,
+        public val cellLeft: Float,
+        public val cellRight: Float,
+        public val intersectionLeft: Float,
+        public val intersectionRight: Float,
+        public val intersectionWidth: Float,
+        public val widthTimesSupers: Float,
+        public val roundedSamples: Int,
+        public val centerCoveredCount: Int,
+        public val roundedMinusCenter: Int,
+        public val sampleCenters: List<SpanSampleCenter>,
     )
 
     private data class MutablePixelMask(
@@ -519,6 +542,7 @@ public object SkScanFillPathSubsampleTrace {
         var mask: Int = 0,
         var scanFillPathSamples: Int = 0,
         var tracedSpanCount: Int = 0,
+        val spanQuantizationRows: MutableList<SpanQuantizationRow> = mutableListOf(),
     )
 
     private data class Session(
@@ -563,6 +587,7 @@ public object SkScanFillPathSubsampleTrace {
                     mask4x4 = pixel.mask,
                     scanFillPathSamples = pixel.scanFillPathSamples,
                     tracedSpanCount = pixel.tracedSpanCount,
+                    spanQuantizationRows = pixel.spanQuantizationRows.toList(),
                     source = "SkBitmapDevice.scanFillPath.addSpanCoverage",
                 )
             }
@@ -575,6 +600,12 @@ public object SkScanFillPathSubsampleTrace {
         supers: Int,
         spanLeft: Float,
         spanRight: Float,
+        cellLeft: Float,
+        cellRight: Float,
+        intersectionLeft: Float,
+        intersectionRight: Float,
+        intersectionWidth: Float,
+        widthTimesSupers: Float,
         samplesAddedByScanFillPath: Int,
     ) {
         val session = active.get() ?: return
@@ -583,12 +614,36 @@ public object SkScanFillPathSubsampleTrace {
         val pixel = session.pixels[target] ?: return
         pixel.scanFillPathSamples += samplesAddedByScanFillPath
         pixel.tracedSpanCount += 1
+        val sampleCenters = mutableListOf<SpanSampleCenter>()
+        var centerCoveredCount = 0
         for (sx in 0 until supers) {
             val sampleX = pixelX + (sx + 0.5f) / supers
-            if (sampleX >= spanLeft && sampleX < spanRight) {
+            val covered = sampleX >= intersectionLeft && sampleX < intersectionRight
+            if (covered) {
                 pixel.mask = pixel.mask or (1 shl (subrowY * supers + sx))
+                centerCoveredCount += 1
             }
+            sampleCenters += SpanSampleCenter(
+                sx = sx,
+                deviceX = sampleX,
+                covered = covered,
+            )
         }
+        pixel.spanQuantizationRows += SpanQuantizationRow(
+            subRow = subrowY,
+            spanLeft = spanLeft,
+            spanRight = spanRight,
+            cellLeft = cellLeft,
+            cellRight = cellRight,
+            intersectionLeft = intersectionLeft,
+            intersectionRight = intersectionRight,
+            intersectionWidth = intersectionWidth,
+            widthTimesSupers = widthTimesSupers,
+            roundedSamples = samplesAddedByScanFillPath,
+            centerCoveredCount = centerCoveredCount,
+            roundedMinusCenter = samplesAddedByScanFillPath - centerCoveredCount,
+            sampleCenters = sampleCenters,
+        )
     }
 }
 
@@ -3365,8 +3420,14 @@ public class SkBitmapDevice(public val bitmap: SkBitmap) : SkDevice {
                 pixelY = py,
                 subrowY = subrowY,
                 supers = supers,
-                spanLeft = cellL,
-                spanRight = cellR,
+                spanLeft = left,
+                spanRight = right,
+                cellLeft = px.toFloat(),
+                cellRight = (px + 1).toFloat(),
+                intersectionLeft = cellL,
+                intersectionRight = cellR,
+                intersectionWidth = width,
+                widthTimesSupers = width * supers,
                 samplesAddedByScanFillPath = samples,
             )
         }

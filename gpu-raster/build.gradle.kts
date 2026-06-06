@@ -211,6 +211,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.cpu.m60F16ScanFillSubsampleMaskFor428.enabled")?.let {
         systemProperty("kanvas.cpu.m60F16ScanFillSubsampleMaskFor428.enabled", it)
     }
+    System.getProperty("kanvas.cpu.m60F16CpuSpanQuantizationFor429.enabled")?.let {
+        systemProperty("kanvas.cpu.m60F16CpuSpanQuantizationFor429.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
