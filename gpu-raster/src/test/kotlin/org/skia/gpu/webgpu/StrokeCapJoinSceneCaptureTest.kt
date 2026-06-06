@@ -213,7 +213,8 @@ class StrokeCapJoinSceneCaptureTest {
                 }
                 val widthQuantizedColorReconstructionRequested =
                     System.getProperty(FOR432_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_PROPERTY, "false").toBoolean() ||
-                        System.getProperty(FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY, "false").toBoolean()
+                        System.getProperty(FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY, "false").toBoolean() ||
+                        System.getProperty(FOR434_STENCIL_SOURCE_PAYLOAD_TRACE_PROPERTY, "false").toBoolean()
                 val widthQuantizedColorReconstructionFor432Result =
                     if (widthQuantizedColorReconstructionRequested) {
                         withExperimentalStrokeCapJoinRender {
@@ -400,6 +401,16 @@ class StrokeCapJoinSceneCaptureTest {
             )
             if (System.getProperty(FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY, "false").toBoolean()) {
                 writeM60F16StencilSubdrawSourceColorFor433(
+                    reference = reference,
+                    currentGpu = experimentalGpu,
+                    optInGpu = widthQuantizedRenderFixFor431Gpu,
+                    shaderReturnSnapshot = result.aaStencilCoverShaderReturnDiagnosticSnapshot,
+                    predrawSnapshot = result.aaStencilCoverPredrawDstReadbackSnapshot,
+                    adapter = adapter,
+                )
+            }
+            if (System.getProperty(FOR434_STENCIL_SOURCE_PAYLOAD_TRACE_PROPERTY, "false").toBoolean()) {
+                writeM60F16StencilSourcePayloadTraceFor434(
                     reference = reference,
                     currentGpu = experimentalGpu,
                     optInGpu = widthQuantizedRenderFixFor431Gpu,
@@ -6547,6 +6558,494 @@ class StrokeCapJoinSceneCaptureTest {
                 "Add the missing FOR-432 field named in partialPixels[].missingFields before deriving a correction."
         }
 
+    private fun writeM60F16StencilSourcePayloadTraceFor434(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-stencil-source-payload-trace-for434"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16StencilSourcePayloadTraceFor434Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                optInGpu = optInGpu,
+                shaderReturnSnapshot = shaderReturnSnapshot,
+                predrawSnapshot = predrawSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16StencilSourcePayloadTraceFor434Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        adapter: String,
+    ): String {
+        val coverageAlpha = 10f / 16f
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val shaderByPoint = shaderReturnSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val predrawByPoint = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val records = partialPoints
+            .map { (x, y) -> M60F16DrawPixelKey(1, x, y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.y }.thenBy { it.x })
+            .map { key ->
+                val point = key.x to key.y
+                val sources = shaderByPoint[point].orEmpty()
+                    .sortedWith(
+                        compareBy<Pair<
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                            >> { it.first.drawIndex }
+                            .thenBy { it.second.subdrawOrdinal }
+                            .thenBy { it.second.subdrawRole },
+                    )
+                val observedSources = sources.filter { (_, sample) ->
+                    sample.shaderObserved && !sample.captureSynthetic && sample.sourceColorSentToBlend != null
+                }
+                val widthQuantizedSources = observedSources.filter { (_, sample) ->
+                    val capturedAlpha = sample.coverageOrAaAlpha
+                    capturedAlpha != null && kotlin.math.abs(capturedAlpha - coverageAlpha) <= (1f / 255f)
+                }
+                val effectiveRenderDrawIndex = widthQuantizedSources.firstOrNull()?.first?.drawIndex ?: key.drawIndex
+                val targetDrawSources = widthQuantizedSources.filter { (event, _) ->
+                    event.drawIndex == effectiveRenderDrawIndex
+                }
+                val selected = targetDrawSources.firstOrNull { (_, sample) ->
+                    sample.subdrawOrdinal == 0 && sample.subdrawRole == "inside"
+                } ?: targetDrawSources.firstOrNull()
+                val alternateSingleCandidatesShareSource = targetDrawSources.size > 1 &&
+                    selected != null &&
+                    targetDrawSources.all { (_, sample) ->
+                        val selectedSource = selected.second.sourceColorSentToBlend
+                        val candidateSource = sample.sourceColorSentToBlend
+                        selectedSource != null &&
+                            candidateSource != null &&
+                            selectedSource.contentEquals(candidateSource)
+                    }
+                val predraw = predrawByPoint[point].orEmpty()
+                    .sortedBy { it.first.drawIndex }
+                    .firstOrNull { (event, sample) ->
+                        event.drawIndex == effectiveRenderDrawIndex &&
+                            sample.targetWithinScissor &&
+                            sample.readbackAvailable &&
+                            sample.dstBeforeRgbaFloat != null
+                    }
+                val selectedSample = selected?.second
+                val referenceFloat = rgbaByteArrayToFloat(rgbaArray(reference.getPixel(key.x, key.y)))
+                val dstBefore = predraw?.second?.dstBeforeRgbaFloat
+                val requiredSource = dstBefore?.let { inverseSourceOverPremul(referenceFloat, it, coverageAlpha) }
+                val requiredPaintPayload = requiredSource?.let { source ->
+                    if (coverageAlpha > 0f) {
+                        floatArrayOf(
+                            source[0] / coverageAlpha,
+                            source[1] / coverageAlpha,
+                            source[2] / coverageAlpha,
+                            1f,
+                        )
+                    } else {
+                        null
+                    }
+                }
+                val effectivePayloadBeforeCoverage = selectedSample?.sourceColorBeforeQuantization?.let { beforeQuantization ->
+                    selectedSample.coverageOrAaAlpha?.let { coverage ->
+                        val alpha = beforeQuantization[3]
+                        floatArrayOf(
+                            beforeQuantization[0] / coverage,
+                            beforeQuantization[1] / coverage,
+                            beforeQuantization[2] / coverage,
+                            if (coverage != 0f) alpha / coverage else 0f,
+                        )
+                    }
+                }
+                val coverageAppliedSource = effectivePayloadBeforeCoverage?.let { payload ->
+                    selectedSample.coverageOrAaAlpha?.let { coverage ->
+                        val alpha = payload[3] * coverage
+                        floatArrayOf(
+                            payload[0] * alpha,
+                            payload[1] * alpha,
+                            payload[2] * alpha,
+                            alpha,
+                        )
+                    }
+                }
+                val paintPayloadDelta = if (
+                    effectivePayloadBeforeCoverage != null &&
+                    requiredPaintPayload != null
+                ) {
+                    rgbaDelta(effectivePayloadBeforeCoverage, requiredPaintPayload, 1f / 255f)
+                } else {
+                    null
+                }
+                val recordedPayloadVsEffectiveDelta = if (
+                    selectedSample?.correctedColorBeforeCoverage != null &&
+                    effectivePayloadBeforeCoverage != null
+                ) {
+                    rgbaDelta(selectedSample.correctedColorBeforeCoverage, effectivePayloadBeforeCoverage, 1f / 255f)
+                } else {
+                    null
+                }
+                val coverageDelta = coverageAppliedSource?.let { coverageSource ->
+                    rgbaDelta(selectedSample.sourceColorBeforeQuantization, coverageSource, 1f / 255f)
+                }
+                val quantizationDelta = if (
+                    selectedSample?.sourceColorSentToBlend != null &&
+                    selectedSample.sourceColorBeforeQuantization != null
+                ) {
+                    rgbaDelta(selectedSample.sourceColorSentToBlend, selectedSample.sourceColorBeforeQuantization, 1f / 255f)
+                } else {
+                    null
+                }
+                val beforeQuantizationVsRequiredDelta = if (
+                    selectedSample?.sourceColorBeforeQuantization != null &&
+                    requiredSource != null
+                ) {
+                    rgbaDelta(selectedSample.sourceColorBeforeQuantization, requiredSource, 1f / 255f)
+                } else {
+                    null
+                }
+                val sentVsRequiredDelta = if (
+                    selectedSample?.sourceColorSentToBlend != null &&
+                    requiredSource != null
+                ) {
+                    rgbaDelta(selectedSample.sourceColorSentToBlend, requiredSource, 1f / 255f)
+                } else {
+                    null
+                }
+                val missingFields = buildList {
+                    if (targetDrawSources.isEmpty()) add("for433WidthQuantizedShaderReturnSubdraws")
+                    if (selected == null) add("selectedSingleStencilCandidate")
+                    if (selectedSample?.colorAfterColorFilter == null) add("colorAfterColorFilter")
+                    if (selectedSample?.colorAfterTargetColorspaceIfNeeded == null) {
+                        add("colorAfterTargetColorspaceIfNeeded")
+                    }
+                    if (selectedSample?.correctedColorBeforeCoverage == null) add("correctedColorBeforeCoverage")
+                    if (selectedSample?.coverageOrAaAlpha == null) add("coverageOrAaAlpha")
+                    if (selectedSample?.sourceColorBeforeQuantization == null) add("sourceColorBeforeQuantization")
+                    if (selectedSample?.sourceColorSentToBlend == null) add("sourceColorSentToBlend")
+                    if (selectedSample?.sourceAlphaAfterCoverage == null) add("sourceAlphaAfterCoverage")
+                    if (selectedSample?.quantizedAlphaSentToBlend == null) add("quantizedAlphaSentToBlend")
+                    if (effectivePayloadBeforeCoverage == null) add("effectivePayloadBeforeCoverage")
+                    if (dstBefore == null) add("dstBeforeRgbaFloat")
+                    if (requiredSource == null) add("requiredPremulSourceByInverseSrcOver")
+                    if (requiredPaintPayload == null) add("requiredPaintPayloadBeforeCoverage")
+                }
+                val drawSelectionOk = effectiveRenderDrawIndex == 3 &&
+                    targetDrawSources.size == 2 &&
+                    targetDrawSources.map { it.second.subdrawRole }.toSet() == setOf("inside", "outside") &&
+                    selectedSample?.candidateBranchReached == true
+                val coverageMatches = selectedSample?.coverageOrAaAlpha?.let {
+                    kotlin.math.abs(it - coverageAlpha) <= (1f / 255f)
+                } == true
+                val sourceAlphaMatches = selectedSample?.sourceAlphaAfterCoverage?.let {
+                    kotlin.math.abs(it - coverageAlpha) <= (1f / 255f)
+                } == true
+                val coverageStageOk = coverageMatches &&
+                    sourceAlphaMatches &&
+                    coverageDelta?.withinTolerance == true
+                val quantizationOnlyWouldExplain = beforeQuantizationVsRequiredDelta?.withinTolerance == true &&
+                    quantizationDelta?.withinTolerance == false
+                val classification = when {
+                    missingFields.isNotEmpty() -> "trace-incomplete"
+                    !drawSelectionOk || !alternateSingleCandidatesShareSource -> "draw-selection-mismatch"
+                    !coverageStageOk -> "coverage-modulation-stage-mismatch"
+                    quantizationOnlyWouldExplain -> "quantization-only-mismatch"
+                    paintPayloadDelta?.withinTolerance == false &&
+                        beforeQuantizationVsRequiredDelta?.withinTolerance == false &&
+                        quantizationDelta?.withinTolerance == true -> "paint-payload-mismatch"
+                    sentVsRequiredDelta?.withinTolerance == false -> "source-payload-origin-unresolved"
+                    else -> "source-payload-origin-unresolved"
+                }
+                M60F16StencilSourcePayloadTraceRecord(
+                    key = key,
+                    effectiveRenderDrawIndex = effectiveRenderDrawIndex,
+                    selectedSource = selected,
+                    targetDrawSources = targetDrawSources,
+                    predraw = predraw,
+                    referenceRgba = rgbaArray(reference.getPixel(key.x, key.y)),
+                    currentGpuRgba = rgbaArray(currentGpu.getPixel(key.x, key.y)),
+                    optInGpuRgba = rgbaArray(optInGpu.getPixel(key.x, key.y)),
+                    requiredSourcePremul = requiredSource,
+                    requiredPaintPayload = requiredPaintPayload,
+                    effectivePayloadBeforeCoverage = effectivePayloadBeforeCoverage,
+                    coverageAppliedSource = coverageAppliedSource,
+                    paintPayloadDelta = paintPayloadDelta,
+                    recordedPayloadVsEffectiveDelta = recordedPayloadVsEffectiveDelta,
+                    coverageDelta = coverageDelta,
+                    quantizationDelta = quantizationDelta,
+                    beforeQuantizationVsRequiredDelta = beforeQuantizationVsRequiredDelta,
+                    sentVsRequiredDelta = sentVsRequiredDelta,
+                    alternateSingleCandidatesShareSource = alternateSingleCandidatesShareSource,
+                    missingFields = missingFields,
+                    classification = classification,
+                )
+            }
+        val classificationCounts = records.groupingBy { it.classification }.eachCount()
+        val globalClassification = when {
+            records.any { it.classification == "trace-incomplete" } -> "trace-incomplete"
+            records.any { it.classification == "draw-selection-mismatch" } -> "draw-selection-mismatch"
+            records.any { it.classification == "coverage-modulation-stage-mismatch" } ->
+                "coverage-modulation-stage-mismatch"
+            records.any { it.classification == "quantization-only-mismatch" } -> "quantization-only-mismatch"
+            records.any { it.classification == "paint-payload-mismatch" } -> "paint-payload-mismatch"
+            else -> "source-payload-origin-unresolved"
+        }
+        val maxPaintPayloadDelta = records.mapNotNull { it.paintPayloadDelta?.maxChannel }.maxOrNull() ?: 0f
+        val maxBeforeQuantizationVsRequiredDelta =
+            records.mapNotNull { it.beforeQuantizationVsRequiredDelta?.maxChannel }.maxOrNull() ?: 0f
+        val maxSentVsRequiredDelta = records.mapNotNull { it.sentVsRequiredDelta?.maxChannel }.maxOrNull() ?: 0f
+        val maxQuantizationDelta = records.mapNotNull { it.quantizationDelta?.maxChannel }.maxOrNull() ?: 0f
+        val maxCoverageStageDelta = records.mapNotNull { it.coverageDelta?.maxChannel }.maxOrNull() ?: 0f
+        val recordsJson = records.joinToString(",\n") { record ->
+            m60F16StencilSourcePayloadTraceFor434RecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-434",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "m60-f16-stencil-subdraw-source-color-for433",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-tracer-le-payload-couleur-source-aa-stencil-cover",
+              "sourceFindingMemory": "global/kanvas/findings/for-433-web-gpu-stencil-subdraw-source-payload-mismatch-explains-m60-f16-regression",
+              "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-subdraw-source-color-for433/m60-f16-stencil-subdraw-source-color-for433.json",
+              "sourceReport": "reports/wgsl-pipeline/2026-06-06-for-433-m60-f16-stencil-subdraw-source-color.md",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${globalClassification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR434_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "diagnosticFlag": ${FOR434_STENCIL_SOURCE_PAYLOAD_TRACE_PROPERTY.jsonString()},
+              "sourceFor433DiagnosticFlag": ${FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY.jsonString()},
+              "sourceFor432DiagnosticFlag": ${FOR432_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_PROPERTY.jsonString()},
+              "sourceFor431OptInFlag": ${FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY.jsonString()},
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixApplied": false,
+              "comparisonPolicy": {
+                "scope": "Exactly the six FOR-433 source-payload mismatch pixels.",
+                "source": "FOR-412/FOR-432 shader-return diagnostic fields for the effective drawIndex 3 stencil subdraws.",
+                "paintPayloadMath": "requiredPaintPayload.rgb = requiredPremulSource.rgb / (10/16), alpha = 1.",
+                "coverageMath": "sourceColorBeforeQuantization = correctedColorBeforeCoverage.rgb * correctedColorBeforeCoverage.a * coverage, alpha = correctedColorBeforeCoverage.a * coverage.",
+                "quantizationMath": "sourceColorSentToBlend = quantize_rgba8_if_target_blend(sourceColorBeforeQuantization).",
+                "coverageAlpha": ${m60F16JsonFloat(coverageAlpha)},
+                "noRenderingFixApplied": true,
+                "boundedToSixPixels": true
+              },
+              "summary": {
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "paintPayloadMismatchCount": ${classificationCounts["paint-payload-mismatch"] ?: 0},
+                "drawSelectionMismatchCount": ${classificationCounts["draw-selection-mismatch"] ?: 0},
+                "coverageModulationStageMismatchCount": ${classificationCounts["coverage-modulation-stage-mismatch"] ?: 0},
+                "quantizationOnlyMismatchCount": ${classificationCounts["quantization-only-mismatch"] ?: 0},
+                "traceIncompletePixelCount": ${classificationCounts["trace-incomplete"] ?: 0},
+                "sourcePayloadOriginUnresolvedCount": ${classificationCounts["source-payload-origin-unresolved"] ?: 0},
+                "maxPaintPayloadVsRequiredChannelDelta": ${String.format(Locale.US, "%.9f", maxPaintPayloadDelta)},
+                "maxBeforeQuantizationVsRequiredSourceDelta": ${String.format(Locale.US, "%.9f", maxBeforeQuantizationVsRequiredDelta)},
+                "maxSentSourceVsRequiredSourceDelta": ${String.format(Locale.US, "%.9f", maxSentVsRequiredDelta)},
+                "maxQuantizationChannelDelta": ${String.format(Locale.US, "%.9f", maxQuantizationDelta)},
+                "maxCoverageStageChannelDelta": ${String.format(Locale.US, "%.9f", maxCoverageStageDelta)}
+              },
+              "partialPixels": [
+            $recordsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "for431ActivatedByDefault": false,
+                "renderingFixApplied": false
+              },
+              "classificationReason": ${m60F16StencilSourcePayloadTraceFor434GlobalReason(globalClassification).jsonString()},
+              "nextStep": ${m60F16StencilSourcePayloadTraceFor434NextStep(globalClassification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16StencilSourcePayloadTraceFor434.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for434_m60_f16_stencil_source_payload_trace.py",
+                "rtk python3 scripts/validate_for433_m60_f16_stencil_subdraw_source_color.py",
+                "rtk python3 scripts/validate_for432_m60_f16_width_quantized_color_reconstruction.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for434-pycache python3 -m py_compile scripts/validate_for434_m60_f16_stencil_source_payload_trace.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16StencilSourcePayloadTraceFor434RecordJson(
+        record: M60F16StencilSourcePayloadTraceRecord,
+    ): String {
+        val selected = record.selectedSource?.second
+        val candidatesJson = record.targetDrawSources.joinToString(",\n") { (event, sample) ->
+            val sourceEqualsSelected = selected?.sourceColorSentToBlend?.let { selectedSource ->
+                sample.sourceColorSentToBlend?.let { candidateSource -> selectedSource.contentEquals(candidateSource) }
+            } ?: false
+            """
+                {
+                  "drawIndex": ${event.drawIndex},
+                  "subdrawOrdinal": ${sample.subdrawOrdinal},
+                  "subdrawRole": ${sample.subdrawRole.jsonString()},
+                  "shaderObserved": ${sample.shaderObserved},
+                  "candidateBranchReached": ${sample.candidateBranchReached},
+                  "coverageOrAaAlpha": ${sample.coverageOrAaAlpha?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                  "sourceColorBeforeQuantization": ${sample.sourceColorBeforeQuantization.floatArrayOrNullJson()},
+                  "sourceColorSentToBlend": ${sample.sourceColorSentToBlend.floatArrayOrNullJson()},
+                  "sourceEqualsSelected": $sourceEqualsSelected,
+                  "shaderReturnClassification": ${sample.classification.jsonString()}
+                }
+            """.trimIndent().prependIndent("        ")
+        }
+        val missingFieldsJson = record.missingFields.joinToString(", ") { it.jsonString() }
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "effectiveRenderDrawIndex": ${record.effectiveRenderDrawIndex},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16StencilSourcePayloadTraceFor434LocalReason(record).jsonString()},
+              "referenceCpuRgba": ${rgbaArrayJson(record.referenceRgba)},
+              "currentWebGpuRgba": ${rgbaArrayJson(record.currentGpuRgba)},
+              "optInFor431Rgba": ${rgbaArrayJson(record.optInGpuRgba)},
+              "destination": {
+                "dstBeforeRgbaFloat": ${record.predraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                "dstBeforeRgba8": ${record.predraw?.second?.dstBeforeRgba8.intArrayOrNullJson()}
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": ${record.requiredSourcePremul.floatArrayOrNullJson()},
+                "rgba8Approx": ${record.requiredSourcePremul?.let { floatRgbaToByteArrayJson(it) } ?: "null"}
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": ${record.requiredPaintPayload.floatArrayOrNullJson()},
+                "rgba8Approx": ${record.requiredPaintPayload?.let { floatRgbaToByteArrayJson(it) } ?: "null"}
+              },
+              "sourcePayloadComponents": {
+                "colorAfterColorFilter": ${selected?.colorAfterColorFilter.floatArrayOrNullJson()},
+                "colorAfterTargetColorspaceIfNeeded": ${selected?.colorAfterTargetColorspaceIfNeeded.floatArrayOrNullJson()},
+                "correctedColorBeforeCoverage": ${selected?.correctedColorBeforeCoverage.floatArrayOrNullJson()},
+                "effectivePayloadBeforeCoverage": ${record.effectivePayloadBeforeCoverage.floatArrayOrNullJson()},
+                "sourceFieldUsedByFOR408Replay": ${selected?.sourceFieldUsedByFOR408Replay.floatArrayOrNullJson()},
+                "effectivePayloadVsRequiredPaintDelta": ${record.paintPayloadDelta?.let { rgbaDeltaJson(it) } ?: "null"},
+                "recordedCorrectedVsEffectivePayloadDelta": ${record.recordedPayloadVsEffectiveDelta?.let { rgbaDeltaJson(it) } ?: "null"}
+              },
+              "coverageModulation": {
+                "rawPathCoverage": ${selected?.rawPathCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "clipCoverage": ${selected?.clipCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "finalCoverage": ${selected?.finalCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "coverageOrAaAlpha": ${selected?.coverageOrAaAlpha?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "sourceAlphaAfterCoverage": ${selected?.sourceAlphaAfterCoverage?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "coveredSubsamples4x4": ${selected?.coveredSubsamples4x4 ?: "null"},
+                "wgslSubsampleMask4x4": ${selected?.wgslSubsampleMask4x4 ?: "null"},
+                "computedFromCorrectedColor": ${record.coverageAppliedSource.floatArrayOrNullJson()},
+                "sourceColorBeforeQuantization": ${selected?.sourceColorBeforeQuantization.floatArrayOrNullJson()},
+                "coverageAppliedVsCapturedBeforeQuantizationDelta": ${record.coverageDelta?.let { rgbaDeltaJson(it) } ?: "null"},
+                "beforeQuantizationVsRequiredSourceDelta": ${record.beforeQuantizationVsRequiredDelta?.let { rgbaDeltaJson(it) } ?: "null"}
+              },
+              "quantization": {
+                "sourceBeforeQuantization": ${selected?.sourceColorBeforeQuantization.floatArrayOrNullJson()},
+                "sourceSentToBlend": ${selected?.sourceColorSentToBlend.floatArrayOrNullJson()},
+                "quantizedAlphaSentToBlend": ${selected?.quantizedAlphaSentToBlend?.let { String.format(Locale.US, "%.9f", it) } ?: "null"},
+                "sentMinusBeforeQuantizationDelta": ${record.quantizationDelta?.let { rgbaDeltaJson(it) } ?: "null"},
+                "sentSourceVsRequiredSourceDelta": ${record.sentVsRequiredDelta?.let { rgbaDeltaJson(it) } ?: "null"}
+              },
+              "selectedStencilCandidate": {
+                "label": ${selected?.let { "single-${it.subdrawOrdinal}-${it.subdrawRole}" }?.jsonString() ?: "null"},
+                "drawIndex": ${record.selectedSource?.first?.drawIndex ?: "null"},
+                "subdrawOrdinal": ${selected?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${selected?.subdrawRole?.jsonString() ?: "null"},
+                "candidateBranchReached": ${selected?.candidateBranchReached ?: "null"},
+                "ambiguousSingleStencilCandidateCount": ${record.targetDrawSources.size},
+                "alternateSingleCandidatesShareSource": ${record.alternateSingleCandidatesShareSource}
+              },
+              "candidateSubdraws": [
+            $candidatesJson
+              ],
+              "shaderReturn": {
+                "classification": ${selected?.classification?.jsonString() ?: "null"},
+                "reason": ${selected?.reason?.jsonString() ?: "null"}
+              },
+              "missingFields": [$missingFieldsJson]
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16StencilSourcePayloadTraceFor434LocalReason(
+        record: M60F16StencilSourcePayloadTraceRecord,
+    ): String = when (record.classification) {
+        "paint-payload-mismatch" ->
+            "The selected draw and coverage stage reproduce the captured source before quantization, and quantization is byte-sized, but the paint payload before coverage is far from the payload required by the CPU reference."
+        "draw-selection-mismatch" ->
+            "The effective draw or inside/outside candidate selection does not match the FOR-433 stencil source proof."
+        "coverage-modulation-stage-mismatch" ->
+            "The captured source before quantization is not explained by correctedColorBeforeCoverage multiplied by the captured 10/16 coverage."
+        "quantization-only-mismatch" ->
+            "The source before quantization matches the required source, but quantization alone moves the value away from the CPU reference."
+        "trace-incomplete" ->
+            "The payload-origin trace is incomplete; missing fields: ${record.missingFields.joinToString()}."
+        else ->
+            "The trace is complete but does not isolate one dominant source-payload origin."
+    }
+
+    private fun m60F16StencilSourcePayloadTraceFor434GlobalReason(classification: String): String =
+        when (classification) {
+            "paint-payload-mismatch" ->
+                "All six pixels keep the FOR-433 draw selection and 10/16 coverage. The captured source is already wrong before quantization because correctedColorBeforeCoverage is too green and far too low in blue compared with the paint payload required by the CPU reference."
+            "draw-selection-mismatch" ->
+                "The source payload cannot be trusted because the effective draw or stencil-side selection diverges from the FOR-433 proof."
+            "coverage-modulation-stage-mismatch" ->
+                "The source payload origin sits between the paint payload and coverage modulation stage."
+            "quantization-only-mismatch" ->
+                "The pre-quantization source matches the CPU-required source, so quantization is the dominant origin."
+            "trace-incomplete" ->
+                "At least one required payload component is missing from the diagnostic trace."
+            else ->
+                "The available payload components do not isolate one probable origin."
+        }
+
+    private fun m60F16StencilSourcePayloadTraceFor434NextStep(classification: String): String =
+        when (classification) {
+            "paint-payload-mismatch" ->
+                "Inspect the M60 F16 AA stencil-cover paint color input for effective drawIndex 3 before coverage modulation; the next correction should target the paint/source payload feeding correctedColorBeforeCoverage."
+            "draw-selection-mismatch" ->
+                "Narrow the drawIndex and stencil-side selector before changing paint or coverage logic."
+            "coverage-modulation-stage-mismatch" ->
+                "Trace the transfer from correctedColorBeforeCoverage to sourceColorBeforeQuantization."
+            "quantization-only-mismatch" ->
+                "Inspect quantize_rgba8_if_target_blend for this diagnostic path before changing paint payload."
+            "trace-incomplete" ->
+                "Add the exact missing field named in partialPixels[].missingFields before deriving a correction."
+            else ->
+                "Add a narrower payload trace around correctedColorBeforeCoverage and paint uniform selection."
+        }
+
     private fun m60F16SubsampleComparisonGridJson(
         key: M60F16DrawPixelKey,
         cpuMask: Int?,
@@ -9796,6 +10295,41 @@ class StrokeCapJoinSceneCaptureTest {
         val sourceDelta: RgbaFloatDelta?,
         val reconstructedDelta: RgbaFloatDelta?,
         val requiredSourcePremulConsistent: Boolean?,
+        val alternateSingleCandidatesShareSource: Boolean,
+        val missingFields: List<String>,
+        val classification: String,
+    )
+
+    private data class M60F16StencilSourcePayloadTraceRecord(
+        val key: M60F16DrawPixelKey,
+        val effectiveRenderDrawIndex: Int,
+        val selectedSource: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val targetDrawSources: List<
+            Pair<
+                SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                >,
+            >,
+        val predraw: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSample,
+            >?,
+        val referenceRgba: IntArray,
+        val currentGpuRgba: IntArray,
+        val optInGpuRgba: IntArray,
+        val requiredSourcePremul: FloatArray?,
+        val requiredPaintPayload: FloatArray?,
+        val effectivePayloadBeforeCoverage: FloatArray?,
+        val coverageAppliedSource: FloatArray?,
+        val paintPayloadDelta: RgbaFloatDelta?,
+        val recordedPayloadVsEffectiveDelta: RgbaFloatDelta?,
+        val coverageDelta: RgbaFloatDelta?,
+        val quantizationDelta: RgbaFloatDelta?,
+        val beforeQuantizationVsRequiredDelta: RgbaFloatDelta?,
+        val sentVsRequiredDelta: RgbaFloatDelta?,
         val alternateSingleCandidatesShareSource: Boolean,
         val missingFields: List<String>,
         val classification: String,
@@ -16742,6 +17276,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16WidthQuantizedColorReconstructionFor432.enabled"
         private const val FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY =
             "kanvas.webgpu.m60F16StencilSubdrawSourceColorFor433.enabled"
+        private const val FOR434_STENCIL_SOURCE_PAYLOAD_TRACE_PROPERTY =
+            "kanvas.webgpu.m60F16StencilSourcePayloadTraceFor434.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -16785,6 +17321,14 @@ class StrokeCapJoinSceneCaptureTest {
             "stencil-side-ambiguous",
             "cpu-reference-inversion-inconsistent",
             "trace-incomplete",
+        )
+        private val M60_F16_FOR434_ALLOWED_CLASSIFICATIONS = listOf(
+            "paint-payload-mismatch",
+            "draw-selection-mismatch",
+            "coverage-modulation-stage-mismatch",
+            "quantization-only-mismatch",
+            "trace-incomplete",
+            "source-payload-origin-unresolved",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",

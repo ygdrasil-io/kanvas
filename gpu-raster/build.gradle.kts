@@ -226,6 +226,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16StencilSubdrawSourceColorFor433.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16StencilSubdrawSourceColorFor433.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16StencilSourcePayloadTraceFor434.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16StencilSourcePayloadTraceFor434.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
