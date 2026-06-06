@@ -1,0 +1,534 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-433",
+          "sceneId": "m60-f16-stencil-subdraw-source-color-for433",
+          "sourceSceneId": "m60-f16-width-quantized-color-reconstruction-for432",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-isoler-source-couleur-du-sous-passage-stencil-regresse",
+          "sourceFindingMemory": "global/kanvas/findings/for-432-web-gpu-width-quantized-color-reconstruction-matches-single-stencil-gated-subdraw",
+          "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-width-quantized-color-reconstruction-for432/m60-f16-width-quantized-color-reconstruction-for432.json",
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "classification": "source-payload-mismatch",
+          "allowedClassifications": [
+            "source-payload-mismatch",
+"coverage-alpha-mismatch",
+"stencil-side-ambiguous",
+"cpu-reference-inversion-inconsistent",
+"trace-incomplete"
+          ],
+          "diagnosticFlag": "kanvas.webgpu.m60F16StencilSubdrawSourceColorFor433.enabled",
+          "sourceFor432DiagnosticFlag": "kanvas.webgpu.m60F16WidthQuantizedColorReconstructionFor432.enabled",
+          "sourceFor431OptInFlag": "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled",
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "productionWgslChanged": false,
+          "wgsl4kModified": false,
+          "renderingFixApplied": false,
+          "comparisonPolicy": {
+            "scope": "Exactly the six FOR-432 width-quantized regression pixels.",
+            "source": "FOR-432 selected single stencil-gated sourceColorSentToBlend.",
+            "inverseMath": "premultiplied SrcOver inversion: requiredSource.rgb = cpuReference.rgb - dstBefore.rgb * (1 - 10/16), requiredSource.a = 10/16.",
+            "coverageAlpha": 0.625000,
+            "noRenderingFixApplied": true,
+            "boundedToSixPixels": true
+          },
+          "summary": {
+            "partialPixelCount": 6,
+            "expectedPartialPixelCount": 6,
+            "sourcePayloadMismatchCount": 6,
+            "coverageAlphaMismatchCount": 0,
+            "stencilSideAmbiguousCount": 0,
+            "cpuReferenceInversionInconsistentCount": 0,
+            "traceIncompletePixelCount": 0,
+            "maxSourceVsRequiredChannelDelta": 0.332392454,
+            "maxCapturedCoverageAlphaDelta": 0.000000000
+          },
+          "partialPixels": [
+                        {
+              "x": 92,
+              "y": 75,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "source-payload-mismatch",
+              "classificationReason": "The selected FOR-432 stencil-gated source differs from the premultiplied source required to reach the CPU reference at 10/16 coverage.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625000,
+                "capturedCoverageOrAaAlpha": 0.625000000,
+                "capturedCoverageAlphaDelta": 0.000000000
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "source": {
+                "capturedWebGpuPremulRgbaFloat": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "capturedWebGpuPremulRgba8Approx": [43, 75, 43, 159],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159],
+                "premulConsistent": true,
+                "reconstructedCpuReferenceRgbaFloat": [0.521568656, 0.588235319, 0.839215696, 1.000000000],
+                "reconstructedVsCpuReferenceDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+              },
+              "webGpuSourceVsRequiredDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        }
+              ],
+              "missingFields": []
+            },
+            {
+              "x": 91,
+              "y": 76,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "source-payload-mismatch",
+              "classificationReason": "The selected FOR-432 stencil-gated source differs from the premultiplied source required to reach the CPU reference at 10/16 coverage.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625000,
+                "capturedCoverageOrAaAlpha": 0.625000000,
+                "capturedCoverageAlphaDelta": 0.000000000
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "source": {
+                "capturedWebGpuPremulRgbaFloat": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "capturedWebGpuPremulRgba8Approx": [43, 75, 43, 159],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159],
+                "premulConsistent": true,
+                "reconstructedCpuReferenceRgbaFloat": [0.521568656, 0.588235319, 0.839215696, 1.000000000],
+                "reconstructedVsCpuReferenceDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+              },
+              "webGpuSourceVsRequiredDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        }
+              ],
+              "missingFields": []
+            },
+            {
+              "x": 90,
+              "y": 77,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "source-payload-mismatch",
+              "classificationReason": "The selected FOR-432 stencil-gated source differs from the premultiplied source required to reach the CPU reference at 10/16 coverage.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625000,
+                "capturedCoverageOrAaAlpha": 0.625000000,
+                "capturedCoverageAlphaDelta": 0.000000000
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "source": {
+                "capturedWebGpuPremulRgbaFloat": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "capturedWebGpuPremulRgba8Approx": [43, 75, 43, 159],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159],
+                "premulConsistent": true,
+                "reconstructedCpuReferenceRgbaFloat": [0.521568656, 0.588235319, 0.839215696, 1.000000000],
+                "reconstructedVsCpuReferenceDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+              },
+              "webGpuSourceVsRequiredDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        }
+              ],
+              "missingFields": []
+            },
+            {
+              "x": 89,
+              "y": 78,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "source-payload-mismatch",
+              "classificationReason": "The selected FOR-432 stencil-gated source differs from the premultiplied source required to reach the CPU reference at 10/16 coverage.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625000,
+                "capturedCoverageOrAaAlpha": 0.625000000,
+                "capturedCoverageAlphaDelta": 0.000000000
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "source": {
+                "capturedWebGpuPremulRgbaFloat": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "capturedWebGpuPremulRgba8Approx": [43, 75, 43, 159],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159],
+                "premulConsistent": true,
+                "reconstructedCpuReferenceRgbaFloat": [0.521568656, 0.588235319, 0.839215696, 1.000000000],
+                "reconstructedVsCpuReferenceDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+              },
+              "webGpuSourceVsRequiredDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        }
+              ],
+              "missingFields": []
+            },
+            {
+              "x": 88,
+              "y": 79,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "source-payload-mismatch",
+              "classificationReason": "The selected FOR-432 stencil-gated source differs from the premultiplied source required to reach the CPU reference at 10/16 coverage.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625000,
+                "capturedCoverageOrAaAlpha": 0.625000000,
+                "capturedCoverageAlphaDelta": 0.000000000
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "source": {
+                "capturedWebGpuPremulRgbaFloat": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "capturedWebGpuPremulRgba8Approx": [43, 75, 43, 159],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159],
+                "premulConsistent": true,
+                "reconstructedCpuReferenceRgbaFloat": [0.521568656, 0.588235319, 0.839215696, 1.000000000],
+                "reconstructedVsCpuReferenceDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+              },
+              "webGpuSourceVsRequiredDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        }
+              ],
+              "missingFields": []
+            },
+            {
+              "x": 87,
+              "y": 80,
+              "drawIndex": 1,
+              "effectiveRenderDrawIndex": 3,
+              "classification": "source-payload-mismatch",
+              "classificationReason": "The selected FOR-432 stencil-gated source differs from the premultiplied source required to reach the CPU reference at 10/16 coverage.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInFor431Rgba": [111, 147, 129, 255],
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625000,
+                "capturedCoverageOrAaAlpha": 0.625000000,
+                "capturedCoverageAlphaDelta": 0.000000000
+              },
+              "destination": {
+                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+                "dstBeforeRgba8": [181, 191, 230, 255]
+              },
+              "selectedStencilCandidate": {
+                "label": "single-0-inside",
+                "drawIndex": 3,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "ambiguousSingleStencilCandidateCount": 2,
+                "alternateSingleCandidatesShareSource": true
+              },
+              "source": {
+                "capturedWebGpuPremulRgbaFloat": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+                "capturedWebGpuPremulRgba8Approx": [43, 75, 43, 159],
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000]
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": [0.255516410, 0.307534635, 0.501019895, 0.625000000],
+                "rgba8Approx": [65, 78, 128, 159],
+                "premulConsistent": true,
+                "reconstructedCpuReferenceRgbaFloat": [0.521568656, 0.588235319, 0.839215696, 1.000000000],
+                "reconstructedVsCpuReferenceDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+              },
+              "webGpuSourceVsRequiredDelta": {
+  "signedRgbaFloat": [-0.086888954, -0.013416976, -0.332392454, -0.001470566],
+  "absoluteRgbaFloat": [0.086888954, 0.013416976, 0.332392454, 0.001470566],
+  "absoluteTotalFloat": 0.434168935,
+  "maxChannelFloat": 0.332392454,
+  "withinTolerance": false,
+  "tolerance": 0.003921569
+},
+              "candidateSubdraws": [
+                    {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+        }
+              ],
+              "missingFields": []
+            }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "for431ActivatedByDefault": false,
+            "renderingFixApplied": false
+          },
+          "classificationReason": "All six pixels have matching 10/16 coverage and complete FOR-432 trace data, but the WebGPU source payload is not the premultiplied source required by the CPU reference.",
+          "nextStep": "Open the next correction ticket on the paint/source payload feeding the M60 F16 AA stencil-cover width-quantized subpass, without changing coverage thresholds or promoting FOR-431.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16StencilSubdrawSourceColorFor433.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for433_m60_f16_stencil_subdraw_source_color.py",
+            "rtk python3 scripts/validate_for432_m60_f16_width_quantized_color_reconstruction.py",
+            "rtk python3 scripts/validate_for431_m60_f16_webgpu_width_quantized_render_fix.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for433-pycache python3 -m py_compile scripts/validate_for433_m60_f16_stencil_subdraw_source_color.py",
+            "rtk git diff --check"
+          ]
+        }
