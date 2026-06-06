@@ -2,11 +2,11 @@
 
 ## Resultat
 
-Classification : `lot1-row-specific-refusal-no-new-support-claims`
+Classification : `lot1-row-specific-refusals-no-new-support-claims`
 
-FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere est deja vert avec 0 `tracked-gap` et 0 `fail`, mais seuls 7 des 12 candidats du lot 1 ont actuellement une ligne materialisee avec preuves existantes. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect` sans le compter comme support.
+FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere est deja vert avec 0 `tracked-gap` et 0 `fail`, mais seuls 7 des 12 candidats du lot 1 ont actuellement une ligne materialisee avec preuves existantes. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect`; FOR-466 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-image`. Aucun des deux refus n'est compte comme support.
 
-Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat reel et bloque les cinq candidats qui n'ont pas encore leurs preuves ligne par ligne.
+Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat reel et bloque les trois candidats qui n'ont pas encore leurs preuves ligne par ligne.
 
 ## Compteurs
 
@@ -14,8 +14,8 @@ Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat re
 |---|---:|
 | Candidats lot 1 | 12 |
 | Candidats materialises | 7 |
-| Candidats expected-unsupported row-specific | 1 |
-| Candidats sans preuve suffisante | 4 |
+| Candidats expected-unsupported row-specific | 2 |
+| Candidats sans preuve suffisante | 3 |
 | Lignes ajoutees par FOR-462 | 0 |
 | Claims support ajoutes par FOR-462 | 0 |
 | Claims Skia-comparable ajoutes par FOR-462 | 0 |
@@ -42,12 +42,12 @@ Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat re
 | Inventory id | Statut | CPU route | GPU route | Fallback |
 |---|---|---|---|---|
 | `skia-gm-drawminibitmaprect` | `expected-unsupported` | `cpu.image-rect.drawminibitmaprect.expected-unsupported` | `webgpu.image-rect.drawminibitmaprect.expected-unsupported` | `bitmap.drawminibitmaprect.row-specific-artifacts-required` |
+| `skia-gm-image` | `expected-unsupported` | `cpu.image.imagegm.expected-unsupported` | `webgpu.image.imagegm.expected-unsupported` | `image.imagegm.row-specific-artifacts-required` |
 
 ## Candidats bloques
 
 | Inventory id | Raison |
 |---|---|
-| `skia-gm-image` | preuve ligne par ligne manquante ; pas de promotion dashboard sans reference, CPU, GPU ou refus stable, diff/stat et diagnostics de route |
 | `skia-gm-imagesource` | preuve ligne par ligne manquante ; pas de promotion dashboard sans reference, CPU, GPU ou refus stable, diff/stat et diagnostics de route |
 | `skia-gm-offsetimagefilter` | preuve ligne par ligne manquante ; pas de promotion dashboard sans reference, CPU, GPU ou refus stable, diff/stat et diagnostics de route |
 | `skia-gm-pathfill` | preuve ligne par ligne manquante ; pas de promotion dashboard sans reference, CPU, GPU ou refus stable, diff/stat et diagnostics de route |
@@ -71,4 +71,4 @@ rtk git diff --check
 
 ## Suite
 
-Open row-specific evidence tickets for the four remaining diagnostic-only lot 1 candidates before any dashboard support promotion.
+Open row-specific evidence tickets for the three remaining diagnostic-only lot 1 candidates before any dashboard support promotion.
