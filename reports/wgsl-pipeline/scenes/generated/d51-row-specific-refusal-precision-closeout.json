@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-06-06",
+  "ticket": "D51-6",
+  "executionAttachment": "FOR-460",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d51-6-produire-le-closeout-pm-des-refus-row-specific-precis",
+  "classification": "pm-closeout-no-new-rendering-support",
+  "pmReport": "reports/wgsl-pipeline/2026-06-06-d51-row-specific-refusal-precision-closeout.md",
+  "sourceD50Closeout": {
+    "report": "reports/wgsl-pipeline/2026-06-06-d50-lot1-pm-closeout.md",
+    "json": "reports/wgsl-pipeline/scenes/generated/d50-lot1-pm-closeout.json",
+    "manifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json"
+  },
+  "refinedRefusals": 5,
+  "refinedRefusalsTotal": 5,
+  "refinedRefusalsPercent": 100.0,
+  "promotedRows": 0,
+  "promotedRowsTotal": 5,
+  "promotedRowsPercent": 0.0,
+  "supportScoreIncreased": false,
+  "skiaComparableScoreIncreased": false,
+  "d50ManifestChanged": false,
+  "dashboardActiveChanged": false,
+  "activeDashboardRowsChanged": 0,
+  "thresholdChanged": false,
+  "scoringChanged": false,
+  "fallbackPolicyChanged": false,
+  "pipelineKeyChanged": false,
+  "rendererChanged": false,
+  "wgslProductionChanged": false,
+  "upstreamChanged": false,
+  "skiaIntegrationTestsChanged": false,
+  "pmSummaryFr": "D51 ameliore la lecture PM et la precision des refus row-specific. D51 ne change pas le score, ne promeut aucune ligne et ne modifie pas le tableau de bord actif.",
+  "promotionRequirements": [
+    "reference row-specific comparable",
+    "artefact CPU row-specific",
+    "artefact WebGPU row-specific",
+    "payload diff/stat",
+    "diagnostics de route",
+    "fallbackReason=none"
+  ],
+  "tickets": [
+    {
+      "ticket": "D51-1",
+      "inventoryId": "skia-gm-drawminibitmaprect",
+      "status": "expected-unsupported",
+      "report": "reports/wgsl-pipeline/2026-06-06-d51-1-drawminibitmaprect-row-specific-evidence.md",
+      "json": "reports/wgsl-pipeline/scenes/generated/d51-drawminibitmaprect-row-specific-evidence.json",
+      "validator": "scripts/validate_d51_drawminibitmaprect_row_specific_evidence.py",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1562",
+      "mergeCommit": "a351466be631a96375d027e458ecd975591ce814",
+      "fallbackReason": "bitmap.drawminibitmaprect.rotated-fast-src-rect-webgpu-artifacts-required"
+    },
+    {
+      "ticket": "D51-2",
+      "inventoryId": "skia-gm-image",
+      "status": "expected-unsupported",
+      "report": "reports/wgsl-pipeline/2026-06-06-d51-2-imagegm-row-specific-evidence.md",
+      "json": "reports/wgsl-pipeline/scenes/generated/d51-imagegm-row-specific-evidence.json",
+      "validator": "scripts/validate_d51_imagegm_row_specific_evidence.py",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1563",
+      "mergeCommit": "d3832f2e0fb4ee6ec5cb4e0ed037f3ee04ac20ec",
+      "fallbackReason": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required"
+    },
+    {
+      "ticket": "D51-3",
+      "inventoryId": "skia-gm-imagesource",
+      "status": "expected-unsupported",
+      "report": "reports/wgsl-pipeline/2026-06-06-d51-3-imagesource-row-specific-evidence.md",
+      "json": "reports/wgsl-pipeline/scenes/generated/d51-imagesource-row-specific-evidence.json",
+      "validator": "scripts/validate_d51_imagesource_row_specific_evidence.py",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1564",
+      "mergeCommit": "15e0063f6b9af86657bbc543d2259f33ca85dbe4",
+      "fallbackReason": "image.imagesource.image-filter-cubic-panels-webgpu-artifacts-required"
+    },
+    {
+      "ticket": "D51-4",
+      "inventoryId": "skia-gm-offsetimagefilter",
+      "status": "expected-unsupported",
+      "report": "reports/wgsl-pipeline/2026-06-06-d51-4-offsetimagefilter-row-specific-evidence.md",
+      "json": "reports/wgsl-pipeline/scenes/generated/d51-offsetimagefilter-row-specific-evidence.json",
+      "validator": "scripts/validate_d51_offsetimagefilter_row_specific_evidence.py",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1565",
+      "mergeCommit": "0201611d16164f6cc26aecc4e44cb309f9728d53",
+      "fallbackReason": "image-filter.offset.crop-prepass-scaled-clipped-webgpu-artifacts-required"
+    },
+    {
+      "ticket": "D51-5",
+      "inventoryId": "skia-gm-pathfill",
+      "status": "expected-unsupported",
+      "report": "reports/wgsl-pipeline/2026-06-06-d51-5-pathfill-row-specific-evidence.md",
+      "json": "reports/wgsl-pipeline/scenes/generated/d51-pathfill-row-specific-evidence.json",
+      "validator": "scripts/validate_d51_pathfill_row_specific_evidence.py",
+      "pullRequest": "https://github.com/ygdrasil-io/kanvas/pull/1566",
+      "mergeCommit": "e1e9712cd404b217719ef1d8a08662d40770e921",
+      "fallbackReason": "path-aa.fill.multi-shape-conic-cubic-transform-webgpu-artifacts-required"
+    }
+  ],
+  "nonClaims": {
+    "newRenderingSupportAddedByD51_6": false,
+    "dashboardActiveRowsChangedByD51_6": 0,
+    "supportClaimsAddedByD51_6": 0,
+    "skiaComparableClaimsAddedByD51_6": 0,
+    "d50ManifestChanged": false,
+    "resultsJsonChanged": false,
+    "scenesJsonChanged": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "rendererChanged": false,
+    "wgslProductionChanged": false,
+    "upstreamChanged": false,
+    "skiaIntegrationTestsChanged": false,
+    "broadSkiaGmParityClaim": false,
+    "broadImageSupportClaim": false,
+    "broadImageFilterDagSupportClaim": false,
+    "broadPathAaSupportClaim": false
+  },
+  "expectedChangedFiles": [
+    "reports/wgsl-pipeline/2026-06-06-d51-row-specific-refusal-precision-closeout.md",
+    "reports/wgsl-pipeline/scenes/generated/d51-row-specific-refusal-precision-closeout.json",
+    "scripts/validate_d51_row_specific_refusal_precision_closeout.py"
+  ],
+  "validationCommands": [
+    "rtk python3 scripts/validate_d51_row_specific_refusal_precision_closeout.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d51-row-specific-refusal-precision-closeout.json",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-d51-closeout-pycache python3 -m py_compile scripts/validate_d51_row_specific_refusal_precision_closeout.py",
+    "rtk git diff --check"
+  ]
+}
