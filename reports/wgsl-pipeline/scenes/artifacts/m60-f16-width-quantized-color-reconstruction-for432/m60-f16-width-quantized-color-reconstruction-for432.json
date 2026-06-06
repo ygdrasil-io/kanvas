@@ -1,0 +1,1625 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-432",
+          "sceneId": "m60-f16-width-quantized-color-reconstruction-for432",
+          "sourceSceneId": "m60-f16-webgpu-width-quantized-render-fix-for431",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-reconstruire-la-couleur-finale-des-pixels-regresses-par-quantification-largeur",
+          "sourceFindingMemory": "global/kanvas/findings/for-431-web-gpu-width-quantized-opt-in-render-fix-regresses-m60-f16",
+          "sourceArtifacts": {
+            "for431": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-width-quantized-render-fix-for431/m60-f16-webgpu-width-quantized-render-fix-for431.json",
+            "for430": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-webgpu-cpu-width-quantization-alignment-for430/m60-f16-webgpu-cpu-width-quantization-alignment-for430.json",
+            "for412": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412/m60-f16-aa-stencil-cover-shader-return-diagnostic-for412.json",
+            "for410": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-predraw-dst-readback-for410/m60-f16-aa-stencil-cover-predraw-dst-readback-for410.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "classification": "reconstruction-matches-regression",
+          "allowedClassifications": [
+            "source-color-mismatch",
+"destination-before-blend-mismatch",
+"coverage-applied-to-wrong-subdraw",
+"fixed-function-blend-mismatch",
+"reconstruction-matches-regression",
+"trace-incomplete"
+          ],
+          "optInFlag": "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled",
+          "diagnosticFlag": "kanvas.webgpu.m60F16WidthQuantizedColorReconstructionFor432.enabled",
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "comparisonPolicy": {
+            "scope": "Exactly the six FOR-431 width-quantized partial pixels.",
+            "shaderReturnMeaning": "sourceColorSentToBlend is the non-synthetic vec4f returned by the FOR-432 width-quantized diagnostic shader to fixed-function blend.",
+            "dstBeforeMeaning": "dstBeforeRgbaFloat is read from the WebGPU intermediate immediately before drawIndex 1.",
+            "dstAfterMeaning": "dstAfterRgbaFloat is read from the WebGPU intermediate immediately after drawIndex 1.",
+            "replayMath": "premultiplied float SrcOver: out = sourceReturnedByShader + dstBefore * (1 - sourceReturnedByShader.a)",
+            "noRenderingFixApplied": true,
+            "boundedToSixPixels": true
+          },
+          "summary": {
+            "partialPixelCount": 6,
+            "expectedPartialPixelCount": 6,
+            "currentWgslCoveredTotal": 36,
+            "cpuWidthQuantizedCoveredTotal": 60,
+            "optInWidthQuantizedCoveredTotal": 60,
+            "currentWgslCoverageAlpha": 0.375000,
+            "cpuWidthQuantizedCoverageAlpha": 0.625000,
+            "optInWidthQuantizedCoverageAlpha": 0.625000,
+            "currentTotalResidual": 2014,
+            "optInTotalResidual": 2044,
+            "residualDeltaOptInMinusCurrent": 30,
+            "perPixelCurrentResidual": 105,
+            "perPixelOptInResidual": 110,
+            "traceIncompletePixelCount": 0,
+            "reconstructionMatchesRegressionCount": 6,
+            "classificationCounts": {
+              "source-color-mismatch": 0,
+              "destination-before-blend-mismatch": 0,
+              "coverage-applied-to-wrong-subdraw": 0,
+              "fixed-function-blend-mismatch": 0,
+              "reconstruction-matches-regression": 6,
+              "trace-incomplete": 0
+            }
+          },
+          "partialPixels": [
+                        {
+              "x": 92,
+              "y": 75,
+	              "drawIndex": 1,
+	              "effectiveRenderDrawIndex": 3,
+              "classification": "reconstruction-matches-regression",
+              "classificationReason": "A single stencil-gated width-quantized shader source and predraw destination reconstruct the opt-in regressed pixel through SrcOver.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInWebGpuRgba": [111, 147, 129, 255],
+              "optInDiagnosticWebGpuRgba": [111, 147, 129, 255],
+              "currentResidual": 105,
+              "optInResidual": 110,
+              "residualDeltaOptInMinusCurrent": 5,
+              "coverage": {
+                "currentWgslCoveredCount": 6,
+                "cpuWidthQuantizedCoveredCount": 10,
+                "optInWidthQuantizedCoveredCount": 10,
+                "currentWgslCoverageAlpha": 0.375000,
+                "cpuWidthQuantizedCoverageAlpha": 0.625000,
+                "optInWidthQuantizedCoverageAlpha": 0.625000,
+                "coverageAppliedByShader": 0.625000000
+              },
+              "sourceReturnedByShader": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+	              "destination": {
+	                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+	                "dstBeforeRgba8": [181, 191, 230, 255],
+	                "dstAfterRgbaFloat": [0.435546875, 0.575683594, 0.507812500, 1.000000000],
+	                "dstAfterRgba8": [111, 147, 129, 255]
+	              },
+		              "reconstruction": {
+		                "formula": "SrcOver(selected stencil-gated target drawIndex sourceColorSentToBlend value, dstBeforeRgbaFloat)",
+		                "targetDrawIndex": 3,
+		                "selectedCandidate": "single-0-inside",
+		                "stencilContributionPolicy": "The AA cover pipelines use opposite stencil compare ops, so one fragment is expected to contribute through one subdraw, not both.",
+		                "ambiguousSingleStencilCandidateCount": 2,
+		                "replayedSourceCount": 1,
+		                "replayedSubdraws": [
+	                  {
+        "drawIndex": 3,
+        "subdrawOrdinal": 0,
+        "subdrawRole": "inside",
+        "coverageOrAaAlpha": 0.625000000
+      }
+	                ],
+		                "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+		                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteTotalFloat": 0.000748694,
+  "maxChannelFloat": 0.000337005,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+},
+		                "reconstructedVsObservedImageDelta": {
+  "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+  "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+  "absoluteTotalFloat": 0.003247470,
+  "maxChannelFloat": 0.002267122,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+		                "candidateReconstructions": [
+	                              {
+                    "label": "single-0-inside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "single-1-outside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "all-width-quantized-subdraws",
+                    "replayedSourceCount": 2,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.332664341, 0.510934234, 0.359930784, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [-0.102882534, -0.064749360, -0.147881716, 0.000000000],
+        "absoluteRgbaFloat": [0.102882534, 0.064749360, 0.147881716, 0.000000000],
+        "absoluteTotalFloat": 0.315513611,
+        "maxChannelFloat": 0.147881716,
+        "withinTolerance": false,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [-0.102629781, -0.065536380, -0.145951599, 0.000000000],
+        "absoluteRgbaFloat": [0.102629781, 0.065536380, 0.145951599, 0.000000000],
+        "absoluteTotalFloat": 0.314117759,
+        "maxChannelFloat": 0.145951599,
+        "withinTolerance": false,
+        "tolerance": 0.003921569
+      }
+                  }
+		                ],
+	                "diagnosticImageVsOptInImageDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+	              },
+              "missingFields": [],
+              "shaderReturnSubdraws": [
+                    {
+          "drawIndex": 1,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 1,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": true,
+          "replayExclusionReason": null,
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "alternate-single-stencil-candidate",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        }
+              ]
+            },
+            {
+              "x": 91,
+              "y": 76,
+	              "drawIndex": 1,
+	              "effectiveRenderDrawIndex": 3,
+              "classification": "reconstruction-matches-regression",
+              "classificationReason": "A single stencil-gated width-quantized shader source and predraw destination reconstruct the opt-in regressed pixel through SrcOver.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInWebGpuRgba": [111, 147, 129, 255],
+              "optInDiagnosticWebGpuRgba": [111, 147, 129, 255],
+              "currentResidual": 105,
+              "optInResidual": 110,
+              "residualDeltaOptInMinusCurrent": 5,
+              "coverage": {
+                "currentWgslCoveredCount": 6,
+                "cpuWidthQuantizedCoveredCount": 10,
+                "optInWidthQuantizedCoveredCount": 10,
+                "currentWgslCoverageAlpha": 0.375000,
+                "cpuWidthQuantizedCoverageAlpha": 0.625000,
+                "optInWidthQuantizedCoverageAlpha": 0.625000,
+                "coverageAppliedByShader": 0.625000000
+              },
+              "sourceReturnedByShader": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+	              "destination": {
+	                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+	                "dstBeforeRgba8": [181, 191, 230, 255],
+	                "dstAfterRgbaFloat": [0.435546875, 0.575683594, 0.507812500, 1.000000000],
+	                "dstAfterRgba8": [111, 147, 129, 255]
+	              },
+		              "reconstruction": {
+		                "formula": "SrcOver(selected stencil-gated target drawIndex sourceColorSentToBlend value, dstBeforeRgbaFloat)",
+		                "targetDrawIndex": 3,
+		                "selectedCandidate": "single-0-inside",
+		                "stencilContributionPolicy": "The AA cover pipelines use opposite stencil compare ops, so one fragment is expected to contribute through one subdraw, not both.",
+		                "ambiguousSingleStencilCandidateCount": 2,
+		                "replayedSourceCount": 1,
+		                "replayedSubdraws": [
+	                  {
+        "drawIndex": 3,
+        "subdrawOrdinal": 0,
+        "subdrawRole": "inside",
+        "coverageOrAaAlpha": 0.625000000
+      }
+	                ],
+		                "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+		                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteTotalFloat": 0.000748694,
+  "maxChannelFloat": 0.000337005,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+},
+		                "reconstructedVsObservedImageDelta": {
+  "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+  "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+  "absoluteTotalFloat": 0.003247470,
+  "maxChannelFloat": 0.002267122,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+		                "candidateReconstructions": [
+	                              {
+                    "label": "single-0-inside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "single-1-outside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "all-width-quantized-subdraws",
+                    "replayedSourceCount": 2,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.332664341, 0.510934234, 0.359930784, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [-0.102882534, -0.064749360, -0.147881716, 0.000000000],
+        "absoluteRgbaFloat": [0.102882534, 0.064749360, 0.147881716, 0.000000000],
+        "absoluteTotalFloat": 0.315513611,
+        "maxChannelFloat": 0.147881716,
+        "withinTolerance": false,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [-0.102629781, -0.065536380, -0.145951599, 0.000000000],
+        "absoluteRgbaFloat": [0.102629781, 0.065536380, 0.145951599, 0.000000000],
+        "absoluteTotalFloat": 0.314117759,
+        "maxChannelFloat": 0.145951599,
+        "withinTolerance": false,
+        "tolerance": 0.003921569
+      }
+                  }
+		                ],
+	                "diagnosticImageVsOptInImageDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+	              },
+              "missingFields": [],
+              "shaderReturnSubdraws": [
+                    {
+          "drawIndex": 1,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 1,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": true,
+          "replayExclusionReason": null,
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "alternate-single-stencil-candidate",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        }
+              ]
+            },
+            {
+              "x": 90,
+              "y": 77,
+	              "drawIndex": 1,
+	              "effectiveRenderDrawIndex": 3,
+              "classification": "reconstruction-matches-regression",
+              "classificationReason": "A single stencil-gated width-quantized shader source and predraw destination reconstruct the opt-in regressed pixel through SrcOver.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInWebGpuRgba": [111, 147, 129, 255],
+              "optInDiagnosticWebGpuRgba": [111, 147, 129, 255],
+              "currentResidual": 105,
+              "optInResidual": 110,
+              "residualDeltaOptInMinusCurrent": 5,
+              "coverage": {
+                "currentWgslCoveredCount": 6,
+                "cpuWidthQuantizedCoveredCount": 10,
+                "optInWidthQuantizedCoveredCount": 10,
+                "currentWgslCoverageAlpha": 0.375000,
+                "cpuWidthQuantizedCoverageAlpha": 0.625000,
+                "optInWidthQuantizedCoverageAlpha": 0.625000,
+                "coverageAppliedByShader": 0.625000000
+              },
+              "sourceReturnedByShader": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+	              "destination": {
+	                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+	                "dstBeforeRgba8": [181, 191, 230, 255],
+	                "dstAfterRgbaFloat": [0.435546875, 0.575683594, 0.507812500, 1.000000000],
+	                "dstAfterRgba8": [111, 147, 129, 255]
+	              },
+		              "reconstruction": {
+		                "formula": "SrcOver(selected stencil-gated target drawIndex sourceColorSentToBlend value, dstBeforeRgbaFloat)",
+		                "targetDrawIndex": 3,
+		                "selectedCandidate": "single-0-inside",
+		                "stencilContributionPolicy": "The AA cover pipelines use opposite stencil compare ops, so one fragment is expected to contribute through one subdraw, not both.",
+		                "ambiguousSingleStencilCandidateCount": 2,
+		                "replayedSourceCount": 1,
+		                "replayedSubdraws": [
+	                  {
+        "drawIndex": 3,
+        "subdrawOrdinal": 0,
+        "subdrawRole": "inside",
+        "coverageOrAaAlpha": 0.625000000
+      }
+	                ],
+		                "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+		                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteTotalFloat": 0.000748694,
+  "maxChannelFloat": 0.000337005,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+},
+		                "reconstructedVsObservedImageDelta": {
+  "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+  "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+  "absoluteTotalFloat": 0.003247470,
+  "maxChannelFloat": 0.002267122,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+		                "candidateReconstructions": [
+	                              {
+                    "label": "single-0-inside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "single-1-outside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "all-width-quantized-subdraws",
+                    "replayedSourceCount": 2,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.332664341, 0.510934234, 0.359930784, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [-0.102882534, -0.064749360, -0.147881716, 0.000000000],
+        "absoluteRgbaFloat": [0.102882534, 0.064749360, 0.147881716, 0.000000000],
+        "absoluteTotalFloat": 0.315513611,
+        "maxChannelFloat": 0.147881716,
+        "withinTolerance": false,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [-0.102629781, -0.065536380, -0.145951599, 0.000000000],
+        "absoluteRgbaFloat": [0.102629781, 0.065536380, 0.145951599, 0.000000000],
+        "absoluteTotalFloat": 0.314117759,
+        "maxChannelFloat": 0.145951599,
+        "withinTolerance": false,
+        "tolerance": 0.003921569
+      }
+                  }
+		                ],
+	                "diagnosticImageVsOptInImageDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+	              },
+              "missingFields": [],
+              "shaderReturnSubdraws": [
+                    {
+          "drawIndex": 1,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 1,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": true,
+          "replayExclusionReason": null,
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "alternate-single-stencil-candidate",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        }
+              ]
+            },
+            {
+              "x": 89,
+              "y": 78,
+	              "drawIndex": 1,
+	              "effectiveRenderDrawIndex": 3,
+              "classification": "reconstruction-matches-regression",
+              "classificationReason": "A single stencil-gated width-quantized shader source and predraw destination reconstruct the opt-in regressed pixel through SrcOver.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInWebGpuRgba": [111, 147, 129, 255],
+              "optInDiagnosticWebGpuRgba": [111, 147, 129, 255],
+              "currentResidual": 105,
+              "optInResidual": 110,
+              "residualDeltaOptInMinusCurrent": 5,
+              "coverage": {
+                "currentWgslCoveredCount": 6,
+                "cpuWidthQuantizedCoveredCount": 10,
+                "optInWidthQuantizedCoveredCount": 10,
+                "currentWgslCoverageAlpha": 0.375000,
+                "cpuWidthQuantizedCoverageAlpha": 0.625000,
+                "optInWidthQuantizedCoverageAlpha": 0.625000,
+                "coverageAppliedByShader": 0.625000000
+              },
+              "sourceReturnedByShader": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+	              "destination": {
+	                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+	                "dstBeforeRgba8": [181, 191, 230, 255],
+	                "dstAfterRgbaFloat": [0.435546875, 0.575683594, 0.507812500, 1.000000000],
+	                "dstAfterRgba8": [111, 147, 129, 255]
+	              },
+		              "reconstruction": {
+		                "formula": "SrcOver(selected stencil-gated target drawIndex sourceColorSentToBlend value, dstBeforeRgbaFloat)",
+		                "targetDrawIndex": 3,
+		                "selectedCandidate": "single-0-inside",
+		                "stencilContributionPolicy": "The AA cover pipelines use opposite stencil compare ops, so one fragment is expected to contribute through one subdraw, not both.",
+		                "ambiguousSingleStencilCandidateCount": 2,
+		                "replayedSourceCount": 1,
+		                "replayedSubdraws": [
+	                  {
+        "drawIndex": 3,
+        "subdrawOrdinal": 0,
+        "subdrawRole": "inside",
+        "coverageOrAaAlpha": 0.625000000
+      }
+	                ],
+		                "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+		                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteTotalFloat": 0.000748694,
+  "maxChannelFloat": 0.000337005,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+},
+		                "reconstructedVsObservedImageDelta": {
+  "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+  "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+  "absoluteTotalFloat": 0.003247470,
+  "maxChannelFloat": 0.002267122,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+		                "candidateReconstructions": [
+	                              {
+                    "label": "single-0-inside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "single-1-outside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "all-width-quantized-subdraws",
+                    "replayedSourceCount": 2,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.332664341, 0.510934234, 0.359930784, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [-0.102882534, -0.064749360, -0.147881716, 0.000000000],
+        "absoluteRgbaFloat": [0.102882534, 0.064749360, 0.147881716, 0.000000000],
+        "absoluteTotalFloat": 0.315513611,
+        "maxChannelFloat": 0.147881716,
+        "withinTolerance": false,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [-0.102629781, -0.065536380, -0.145951599, 0.000000000],
+        "absoluteRgbaFloat": [0.102629781, 0.065536380, 0.145951599, 0.000000000],
+        "absoluteTotalFloat": 0.314117759,
+        "maxChannelFloat": 0.145951599,
+        "withinTolerance": false,
+        "tolerance": 0.003921569
+      }
+                  }
+		                ],
+	                "diagnosticImageVsOptInImageDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+	              },
+              "missingFields": [],
+              "shaderReturnSubdraws": [
+                    {
+          "drawIndex": 1,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 1,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": true,
+          "replayExclusionReason": null,
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "alternate-single-stencil-candidate",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        }
+              ]
+            },
+            {
+              "x": 88,
+              "y": 79,
+	              "drawIndex": 1,
+	              "effectiveRenderDrawIndex": 3,
+              "classification": "reconstruction-matches-regression",
+              "classificationReason": "A single stencil-gated width-quantized shader source and predraw destination reconstruct the opt-in regressed pixel through SrcOver.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInWebGpuRgba": [111, 147, 129, 255],
+              "optInDiagnosticWebGpuRgba": [111, 147, 129, 255],
+              "currentResidual": 105,
+              "optInResidual": 110,
+              "residualDeltaOptInMinusCurrent": 5,
+              "coverage": {
+                "currentWgslCoveredCount": 6,
+                "cpuWidthQuantizedCoveredCount": 10,
+                "optInWidthQuantizedCoveredCount": 10,
+                "currentWgslCoverageAlpha": 0.375000,
+                "cpuWidthQuantizedCoverageAlpha": 0.625000,
+                "optInWidthQuantizedCoverageAlpha": 0.625000,
+                "coverageAppliedByShader": 0.625000000
+              },
+              "sourceReturnedByShader": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+	              "destination": {
+	                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+	                "dstBeforeRgba8": [181, 191, 230, 255],
+	                "dstAfterRgbaFloat": [0.435546875, 0.575683594, 0.507812500, 1.000000000],
+	                "dstAfterRgba8": [111, 147, 129, 255]
+	              },
+		              "reconstruction": {
+		                "formula": "SrcOver(selected stencil-gated target drawIndex sourceColorSentToBlend value, dstBeforeRgbaFloat)",
+		                "targetDrawIndex": 3,
+		                "selectedCandidate": "single-0-inside",
+		                "stencilContributionPolicy": "The AA cover pipelines use opposite stencil compare ops, so one fragment is expected to contribute through one subdraw, not both.",
+		                "ambiguousSingleStencilCandidateCount": 2,
+		                "replayedSourceCount": 1,
+		                "replayedSubdraws": [
+	                  {
+        "drawIndex": 3,
+        "subdrawOrdinal": 0,
+        "subdrawRole": "inside",
+        "coverageOrAaAlpha": 0.625000000
+      }
+	                ],
+		                "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+		                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteTotalFloat": 0.000748694,
+  "maxChannelFloat": 0.000337005,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+},
+		                "reconstructedVsObservedImageDelta": {
+  "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+  "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+  "absoluteTotalFloat": 0.003247470,
+  "maxChannelFloat": 0.002267122,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+		                "candidateReconstructions": [
+	                              {
+                    "label": "single-0-inside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "single-1-outside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "all-width-quantized-subdraws",
+                    "replayedSourceCount": 2,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.332664341, 0.510934234, 0.359930784, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [-0.102882534, -0.064749360, -0.147881716, 0.000000000],
+        "absoluteRgbaFloat": [0.102882534, 0.064749360, 0.147881716, 0.000000000],
+        "absoluteTotalFloat": 0.315513611,
+        "maxChannelFloat": 0.147881716,
+        "withinTolerance": false,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [-0.102629781, -0.065536380, -0.145951599, 0.000000000],
+        "absoluteRgbaFloat": [0.102629781, 0.065536380, 0.145951599, 0.000000000],
+        "absoluteTotalFloat": 0.314117759,
+        "maxChannelFloat": 0.145951599,
+        "withinTolerance": false,
+        "tolerance": 0.003921569
+      }
+                  }
+		                ],
+	                "diagnosticImageVsOptInImageDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+	              },
+              "missingFields": [],
+              "shaderReturnSubdraws": [
+                    {
+          "drawIndex": 1,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 1,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": true,
+          "replayExclusionReason": null,
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "alternate-single-stencil-candidate",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        }
+              ]
+            },
+            {
+              "x": 87,
+              "y": 80,
+	              "drawIndex": 1,
+	              "effectiveRenderDrawIndex": 3,
+              "classification": "reconstruction-matches-regression",
+              "classificationReason": "A single stencil-gated width-quantized shader source and predraw destination reconstruct the opt-in regressed pixel through SrcOver.",
+              "referenceCpuRgba": [133, 150, 214, 255],
+              "currentWebGpuRgba": [181, 191, 230, 255],
+              "optInWebGpuRgba": [111, 147, 129, 255],
+              "optInDiagnosticWebGpuRgba": [111, 147, 129, 255],
+              "currentResidual": 105,
+              "optInResidual": 110,
+              "residualDeltaOptInMinusCurrent": 5,
+              "coverage": {
+                "currentWgslCoveredCount": 6,
+                "cpuWidthQuantizedCoveredCount": 10,
+                "optInWidthQuantizedCoveredCount": 10,
+                "currentWgslCoverageAlpha": 0.375000,
+                "cpuWidthQuantizedCoverageAlpha": 0.625000,
+                "optInWidthQuantizedCoverageAlpha": 0.625000,
+                "coverageAppliedByShader": 0.625000000
+              },
+              "sourceReturnedByShader": {
+                "available": true,
+                "subdrawOrdinal": 0,
+                "subdrawRole": "inside",
+                "candidateBranchReached": true,
+                "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+                "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434]
+              },
+	              "destination": {
+	                "dstBeforeRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+	                "dstBeforeRgba8": [181, 191, 230, 255],
+	                "dstAfterRgbaFloat": [0.435546875, 0.575683594, 0.507812500, 1.000000000],
+	                "dstAfterRgba8": [111, 147, 129, 255]
+	              },
+		              "reconstruction": {
+		                "formula": "SrcOver(selected stencil-gated target drawIndex sourceColorSentToBlend value, dstBeforeRgbaFloat)",
+		                "targetDrawIndex": 3,
+		                "selectedCandidate": "single-0-inside",
+		                "stencilContributionPolicy": "The AA cover pipelines use opposite stencil compare ops, so one fragment is expected to contribute through one subdraw, not both.",
+		                "ambiguousSingleStencilCandidateCount": 2,
+		                "replayedSourceCount": 1,
+		                "replayedSubdraws": [
+	                  {
+        "drawIndex": 3,
+        "subdrawOrdinal": 0,
+        "subdrawRole": "inside",
+        "coverageOrAaAlpha": 0.625000000
+      }
+	                ],
+		                "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+		                "reconstructedVsDstAfterDelta": {
+  "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+  "absoluteTotalFloat": 0.000748694,
+  "maxChannelFloat": 0.000337005,
+  "withinTolerance": true,
+  "tolerance": 0.000600000
+},
+		                "reconstructedVsObservedImageDelta": {
+  "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+  "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+  "absoluteTotalFloat": 0.003247470,
+  "maxChannelFloat": 0.002267122,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+},
+		                "candidateReconstructions": [
+	                              {
+                    "label": "single-0-inside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "single-1-outside",
+                    "replayedSourceCount": 1,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.435723007, 0.575919151, 0.508149505, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteRgbaFloat": [0.000176132, 0.000235558, 0.000337005, 0.000000000],
+        "absoluteTotalFloat": 0.000748694,
+        "maxChannelFloat": 0.000337005,
+        "withinTolerance": true,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [0.000428885, -0.000551462, 0.002267122, 0.000000000],
+        "absoluteRgbaFloat": [0.000428885, 0.000551462, 0.002267122, 0.000000000],
+        "absoluteTotalFloat": 0.003247470,
+        "maxChannelFloat": 0.002267122,
+        "withinTolerance": true,
+        "tolerance": 0.003921569
+      }
+                  },
+                  {
+                    "label": "all-width-quantized-subdraws",
+                    "replayedSourceCount": 2,
+                    "replayedSubdraws": [
+                {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "coverageOrAaAlpha": 0.625000000
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "coverageOrAaAlpha": 0.625000000
+        }
+                    ],
+                    "reconstructedRgbaFloat": [0.332664341, 0.510934234, 0.359930784, 1.000000000],
+                    "reconstructedVsDstAfterDelta": {
+        "signedRgbaFloat": [-0.102882534, -0.064749360, -0.147881716, 0.000000000],
+        "absoluteRgbaFloat": [0.102882534, 0.064749360, 0.147881716, 0.000000000],
+        "absoluteTotalFloat": 0.315513611,
+        "maxChannelFloat": 0.147881716,
+        "withinTolerance": false,
+        "tolerance": 0.000600000
+      },
+                    "reconstructedVsObservedImageDelta": {
+        "signedRgbaFloat": [-0.102629781, -0.065536380, -0.145951599, 0.000000000],
+        "absoluteRgbaFloat": [0.102629781, 0.065536380, 0.145951599, 0.000000000],
+        "absoluteTotalFloat": 0.314117759,
+        "maxChannelFloat": 0.145951599,
+        "withinTolerance": false,
+        "tolerance": 0.003921569
+      }
+                  }
+		                ],
+	                "diagnosticImageVsOptInImageDelta": {
+  "signedRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteRgbaFloat": [0.000000000, 0.000000000, 0.000000000, 0.000000000],
+  "absoluteTotalFloat": 0.000000000,
+  "maxChannelFloat": 0.000000000,
+  "withinTolerance": true,
+  "tolerance": 0.003921569
+}
+	              },
+              "missingFields": [],
+              "shaderReturnSubdraws": [
+                    {
+          "drawIndex": 1,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 1,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.375000000,
+          "sourceColorBeforeQuantization": [0.087296441, 0.126809865, 0.278399795, 0.375000000],
+          "sourceColorSentToBlend": [0.086274512, 0.125490203, 0.278431386, 0.376470625],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": true,
+          "replayExclusionReason": null,
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 3,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "alternate-single-stencil-candidate",
+          "shaderObserved": true,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": 0.625000000,
+          "sourceColorBeforeQuantization": [0.166697726, 0.295688272, 0.167019352, 0.625000000],
+          "sourceColorSentToBlend": [0.168627456, 0.294117659, 0.168627456, 0.623529434],
+          "classification": "shader-return-captured"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 0,
+          "subdrawRole": "inside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        },
+        {
+          "drawIndex": 5,
+          "subdrawOrdinal": 1,
+          "subdrawRole": "outside",
+          "replayedByReconstruction": false,
+          "replayExclusionReason": "different-draw-index",
+          "shaderObserved": false,
+          "captureSynthetic": false,
+          "coverageOrAaAlpha": null,
+          "sourceColorBeforeQuantization": null,
+          "sourceColorSentToBlend": null,
+          "classification": "shader-return-unavailable"
+        }
+              ]
+            }
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "activationByDefault": false,
+            "renderingFixApplied": false
+          },
+          "classificationReason": "All six FOR-431 pixels reconstruct the opt-in regressed color from one captured stencil-gated shader source, predraw destination, and SrcOver.",
+          "nextStep": "Treat the FOR-431 color as a faithful consequence of applying one stencil-gated 10/16 coverage source over the captured destination; fix work must target the coverage/source or stencil routing model, not fixed-function blend.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16WidthQuantizedColorReconstructionFor432.enabled=true -Dkanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for432_m60_f16_width_quantized_color_reconstruction.py",
+            "rtk python3 scripts/validate_for431_m60_f16_webgpu_width_quantized_render_fix.py",
+            "rtk python3 scripts/validate_for430_m60_f16_webgpu_cpu_width_quantization_alignment.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for432-pycache python3 -m py_compile scripts/validate_for432_m60_f16_width_quantized_color_reconstruction.py",
+            "rtk git diff --check"
+          ]
+        }
