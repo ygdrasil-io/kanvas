@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the FOR-466 skia-gm-image row-specific refusal evidence."""
+"""Validate the FOR-467 skia-gm-imagesource row-specific refusal evidence."""
 
 from __future__ import annotations
 
@@ -13,13 +13,13 @@ from typing import Any
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[1]
-LINEAR = "FOR-466"
-ROW_ID = "skia-gm-image"
-FALLBACK_REASON = "image.imagegm.row-specific-artifacts-required"
+LINEAR = "FOR-467"
+ROW_ID = "skia-gm-imagesource"
+FALLBACK_REASON = "image.imagesource.row-specific-artifacts-required"
 LOT1_MANIFEST = ROOT / "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json"
 LOT1_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-d50-gm-dashboard-lot1.md"
-ROW_EVIDENCE = ROOT / "reports/wgsl-pipeline/scenes/generated/for466-skia-gm-image-evidence.json"
-ROW_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-466-skia-gm-image-evidence.md"
+ROW_EVIDENCE = ROOT / "reports/wgsl-pipeline/scenes/generated/for467-skia-gm-imagesource-evidence.json"
+ROW_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-467-skia-gm-imagesource-evidence.md"
 
 EXPECTED_FILES = {
     "reports/wgsl-pipeline/2026-06-06-for-462-d50-lot1-dashboard-integration-gate.md",
@@ -41,7 +41,6 @@ FORBIDDEN_PATHS = {
     "reports/wgsl-pipeline/scenes/data/scenes.json",
     "reports/wgsl-pipeline/scenes/generated/results.json",
     "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
-    "reports/wgsl-pipeline/scenes/generated/m52-gm-feature-promotion-pack.json",
 }
 FORBIDDEN_PREFIXES = (
     ".upstream/",
@@ -51,13 +50,14 @@ FORBIDDEN_PREFIXES = (
     "skia-integration-tests/",
 )
 FEATURE_NON_CLAIMS = (
-    "codecSupportClaimAddedByFor466",
-    "yuvSupportClaimAddedByFor466",
-    "animationSupportClaimAddedByFor466",
-    "exifSupportClaimAddedByFor466",
-    "mipmapSupportClaimAddedByFor466",
-    "tileModeSupportClaimAddedByFor466",
-    "colorManagedImageSupportClaimAddedByFor466",
+    "codecSupportClaimAddedByFor467",
+    "yuvSupportClaimAddedByFor467",
+    "animationSupportClaimAddedByFor467",
+    "exifSupportClaimAddedByFor467",
+    "mipmapSupportClaimAddedByFor467",
+    "tileModeSupportClaimAddedByFor467",
+    "dynamicSourceImageSupportClaimAddedByFor467",
+    "colorManagedImageSupportClaimAddedByFor467",
 )
 
 
@@ -136,21 +136,28 @@ def require_manifest() -> None:
         "skia-gm-pathfill",
     ], "manifest order changed")
     matches = [row for row in rows if isinstance(row, dict) and row.get("inventoryId") == ROW_ID]
-    require(len(matches) == 1, "skia-gm-image row must appear exactly once")
+    require(len(matches) == 1, "skia-gm-imagesource row must appear exactly once")
     row = matches[0]
-    require(row.get("status") == "expected-unsupported", "skia-gm-image must be expected-unsupported")
-    require(row.get("dashboardRowId") is None, "skia-gm-image must not point to a dashboard row")
-    require(row.get("dashboardStatus") is None, "skia-gm-image must not claim an active dashboard status")
-    require(row.get("strictDashboardStatus") == "expected-unsupported", "skia-gm-image strict dashboard status mismatch")
-    require(row.get("referenceKind") is None, "skia-gm-image must not claim a reference kind")
-    require(row.get("fallbackReason") == FALLBACK_REASON, "skia-gm-image fallback mismatch")
-    require(row.get("supportClaimAddedByFor466") is False, "FOR-466 must not add support")
-    require(row.get("skiaComparableClaimAddedByFor466") is False, "FOR-466 must not add Skia-comparable claim")
-    require(row.get("historicalImageEvidenceInherited") is False, "historical ImageGM evidence must not be inherited")
+    require(row.get("status") == "expected-unsupported", "skia-gm-imagesource must be expected-unsupported")
+    require(row.get("dashboardRowId") is None, "skia-gm-imagesource must not point to a dashboard row")
+    require(row.get("dashboardStatus") is None, "skia-gm-imagesource must not claim an active dashboard status")
+    require(row.get("strictDashboardStatus") == "expected-unsupported", "skia-gm-imagesource strict dashboard status mismatch")
+    require(row.get("referenceKind") is None, "skia-gm-imagesource must not claim a reference kind")
+    require(row.get("fallbackReason") == FALLBACK_REASON, "skia-gm-imagesource fallback mismatch")
+    require(row.get("cpuRoute") == "cpu.image-source.imagesource.expected-unsupported", "CPU route mismatch")
+    require(row.get("gpuRoute") == "webgpu.image-source.imagesource.expected-unsupported", "GPU route mismatch")
+    require(row.get("supportClaimAddedByFor467") is False, "FOR-467 must not add support")
+    require(row.get("skiaComparableClaimAddedByFor467") is False, "FOR-467 must not add Skia-comparable claim")
+    require(row.get("imageSourceEvidenceInherited") is False, "ImageSource evidence must not be inherited")
+    provenance = row.get("sourceImageProvenance")
+    require(isinstance(provenance, dict), "source image provenance must be recorded")
+    require(provenance.get("scene") == "ImageSourceGM", "scene provenance mismatch")
+    require(provenance.get("referenceFixture") == "imagesource.png exists for historical integration testing, but is not a D50 dashboard row-specific artifact", "reference fixture provenance mismatch")
+    require(provenance.get("dynamicSourceImage") == "not claimed", "dynamic source image must not be claimed")
     non_claims = manifest.get("nonClaims", {})
-    require(non_claims.get("dashboardRowsAddedByFor466") == 0, "FOR-466 must add 0 dashboard rows")
-    require(non_claims.get("supportClaimsAddedByFor466") == 0, "FOR-466 must add 0 support claims")
-    require(non_claims.get("skiaComparableClaimsAddedByFor466") == 0, "FOR-466 must add 0 Skia-comparable claims")
+    require(non_claims.get("dashboardRowsAddedByFor467") == 0, "FOR-467 must add 0 dashboard rows")
+    require(non_claims.get("supportClaimsAddedByFor467") == 0, "FOR-467 must add 0 support claims")
+    require(non_claims.get("skiaComparableClaimsAddedByFor467") == 0, "FOR-467 must add 0 Skia-comparable claims")
     require(non_claims.get("thresholdChanged") is False, "threshold must not change")
     require(non_claims.get("scoringChanged") is False, "scoring must not change")
     require(non_claims.get("fallbackPolicyChanged") is False, "fallback policy must not change")
@@ -174,15 +181,12 @@ def require_row_evidence() -> None:
     require(row.get("cpu", {}).get("status") == "expected-unsupported", "CPU must remain expected-unsupported")
     require(row.get("gpu", {}).get("status") == "expected-unsupported", "GPU must remain expected-unsupported")
     require(row.get("diffStats", {}).get("status") == "not-computed", "diff/stat must remain not-computed")
-    provenance = row.get("decodeFixtureProvenance")
-    require(isinstance(provenance, dict), "decode/fixture provenance must be recorded")
-    require(provenance.get("imageContent") == "static synthetic 64x64 N32 premul raster surface snapshots created by ImageGM before drawImage/drawImageRect", "image content provenance mismatch")
-    require(provenance.get("externalEncodedFixture") == "none", "must not claim an external encoded fixture")
-    require("not exercised" in provenance.get("decodePath", ""), "decode path must be documented as not exercised")
+    provenance = row.get("sourceImageProvenance")
+    require(isinstance(provenance, dict), "source image provenance must be recorded")
+    require(provenance.get("kotlinSource") == "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageSourceGM.kt", "Kotlin source provenance mismatch")
+    require(provenance.get("upstreamSource") == "gm/imagesource.cpp", "upstream source provenance mismatch")
     require("no row-specific D50 reference/CPU/GPU artifacts" in provenance.get("fixtureAvailability", ""), "fixture availability mismatch")
-    require(provenance.get("kotlinSource") == "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt", "Kotlin source provenance mismatch")
-    require(provenance.get("upstreamSource") == "gm/image.cpp", "upstream source provenance mismatch")
-    require(row.get("nonClaims", {}).get("historicalImageEvidenceInherited") is False, "historical image evidence must not be inherited")
+    require(row.get("nonClaims", {}).get("imageSourceEvidenceInherited") is False, "image-source evidence must not be inherited")
     for key in FEATURE_NON_CLAIMS:
         require(row.get("nonClaims", {}).get(key) is False, f"{key} must remain false")
     require(evidence.get("scoreImpact", {}).get("supportScoreIncreased") is False, "support score must not increase")
@@ -192,21 +196,22 @@ def require_reports() -> None:
     lot_report = LOT1_REPORT.read_text(encoding="utf-8")
     row_report = ROW_REPORT.read_text(encoding="utf-8")
     for required in (
-        "FOR-466 ajoute 0 ligne dashboard",
+        "FOR-467 ajoute 0 ligne dashboard",
         "Le score de support ne monte pas",
-        "`skia-gm-image` n'herite pas",
-        "codec, YUV, animation, EXIF, mipmap, tile-mode ou image color-managed",
+        "`skia-gm-imagesource` n'herite pas",
+        "imagesource.png",
+        "source image dynamique ou image color-managed",
     ):
         require(required in lot_report, f"lot report missing: {required}")
     for required in (
         "expected-unsupported",
         "ne promeut pas la scene",
         "ne sont pas herites",
-        "Provenance decode / fixture",
-        "Aucun fichier image encode externe n'est decode",
+        "Provenance image-source",
+        "imagesource.png",
         "score de support ne monte pas",
         "0 support ajoute",
-        "codec, YUV, animation, EXIF, mipmap, tile-mode ou image color-managed",
+        "codec, YUV, animation, EXIF, mipmap, tile-mode, source image dynamique ou image color-managed",
     ):
         require(required in row_report, f"row report missing: {required}")
 
