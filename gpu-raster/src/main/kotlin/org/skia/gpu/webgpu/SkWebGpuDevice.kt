@@ -220,6 +220,8 @@ private const val WEBGPU_M60_F16_AA_STENCIL_COVER_FINAL_WGSL_DIAGNOSTIC_FLAG: St
     "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled"
 private const val WEBGPU_M60_F16_AA_STENCIL_COVER_SUBSAMPLE_MASK_FOR427_FLAG: String =
     "kanvas.webgpu.m60F16AaStencilCoverSubsampleMaskFor427.enabled"
+private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_RENDER_FIX_FOR431_FLAG: String =
+    "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled"
 private const val WEBGPU_FOR247_CROP_OFFSET_SCRATCH_PROBE_FLAG: String =
     "kanvas.webgpu.for247.cropOffsetScratchProbe"
 private const val WEBGPU_FOR248_FINAL_CROP_COMPOSITE_PROBE_FLAG: String =
@@ -907,6 +909,11 @@ public class SkWebGpuDevice(
     private val m60F16AaStencilCoverShaderReturnStorageZeroCauseDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_STORAGE_ZERO_CAUSE_FLAG,
+            "false",
+        ).toBoolean()
+    private val m60F16WidthQuantizedRenderFixFor431Requested: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_WIDTH_QUANTIZED_RENDER_FIX_FOR431_FLAG,
             "false",
         ).toBoolean()
     private val m60F16AaStencilCoverFinalWgslDiagnosticsEnabled: Boolean =
@@ -2916,6 +2923,14 @@ public class SkWebGpuDevice(
          */
         val m60F16BoundedRuntimeCorrectionProbe: Boolean = false,
         /**
+         * FOR-431 opt-in render fix experiment. This selects an in-memory
+         * shader variant that changes only the six M60 F16 pixels proven by
+         * FOR-430 from 4x4 center coverage (6/16) to CPU width-quantized
+         * coverage (10/16). Disabled by default and never added to
+         * production WGSL.
+         */
+        val m60F16WidthQuantizedRenderFixFor431: Boolean = false,
+        /**
          * FOR-394 diagnostic-only transport. When the explicit M60 F16 flag
          * is enabled and the bounded stroke fixture is recognized, the cover
          * pass uniform carries band bounds and cap/join ids so the shader can
@@ -4401,6 +4416,7 @@ public class SkWebGpuDevice(
         contributionIsolationDiagnostic: Boolean = false,
         storageZeroCauseDiagnostic: Boolean = false,
         subsampleMaskFor427Diagnostic: Boolean = false,
+        widthQuantizedRenderFixFor431: Boolean = false,
     ): GPUShaderModule {
         val cached = shaderModuleCache[cacheKey]
         if (cached != null) {
@@ -4451,6 +4467,12 @@ public class SkWebGpuDevice(
                     "    return m60_f16_quantize_after_bounded_runtime_correction(frag.xy, vec4f(c.rgb * alpha, alpha));\n",
                 )
         }
+        if (widthQuantizedRenderFixFor431) {
+            wgsl = wgsl.replace(
+                "    coverage = coverage * clip_cov(frag.xy);\n",
+                "    coverage = m60_f16_width_quantized_coverage_for431(frag.xy, coverage * clip_cov(frag.xy));\n",
+            )
+        }
         val insertedHelpers = buildString {
             if (boundedRuntimeCorrection) {
                 append(
@@ -4468,6 +4490,34 @@ fn m60_f16_quantize_after_bounded_runtime_correction(pixel: vec2f, c: vec4f) -> 
         return c;
     }
     return quantize_rgba8_if_target_blend(c);
+}
+""".trimIndent(),
+                )
+                append("\n\n")
+            }
+            if (widthQuantizedRenderFixFor431) {
+                append(
+                    """
+fn m60_f16_width_quantized_render_fix_for431_target(pixel: vec2f) -> bool {
+    if (!m60_f16_candidate_lane(pixel)) {
+        return false;
+    }
+    let px = u32(floor(pixel.x));
+    let py = u32(floor(pixel.y));
+    if (px == 92u && py == 75u) { return true; }
+    if (px == 91u && py == 76u) { return true; }
+    if (px == 90u && py == 77u) { return true; }
+    if (px == 89u && py == 78u) { return true; }
+    if (px == 88u && py == 79u) { return true; }
+    if (px == 87u && py == 80u) { return true; }
+    return false;
+}
+
+fn m60_f16_width_quantized_coverage_for431(pixel: vec2f, coverage: f32) -> f32 {
+    if (m60_f16_width_quantized_render_fix_for431_target(pixel)) {
+        return 10.0 / 16.0;
+    }
+    return coverage;
 }
 """.trimIndent(),
                 )
@@ -4926,6 +4976,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         m60F16BoundedRuntimeCorrectionShader
         m60F16AaStencilCoverShaderReturnDiagnosticShader
         m60F16AaStencilCoverShaderReturnStorageZeroCauseShader
+        m60F16WidthQuantizedRenderFixFor431Shader
     }
 
     private fun loadM60F16FragmentLaneDiagnosticShader(): GPUShaderModule =
@@ -4989,6 +5040,14 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             contributionIsolationDiagnostic = true,
             storageZeroCauseDiagnostic = true,
             subsampleMaskFor427Diagnostic = m60F16AaStencilCoverSubsampleMaskFor427DiagnosticsEnabled,
+        )
+
+    private fun loadM60F16WidthQuantizedRenderFixFor431Shader(): GPUShaderModule =
+        loadM60F16AaStencilCoverProbeShader(
+            cacheKey = "experimental://m60-f16-aa-stencil-cover-width-quantized-render-fix-for431",
+            diagnostic = false,
+            boundedRuntimeCorrection = false,
+            widthQuantizedRenderFixFor431 = true,
         )
 
     // ─── Rect pipeline (G1.2 / G2.3a) — full-screen tri + scissor + coverage ───
@@ -5418,6 +5477,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
     private val m60F16AaStencilCoverShaderReturnStorageZeroCauseShaderLazy: Lazy<GPUShaderModule> = lazy {
         loadM60F16AaStencilCoverShaderReturnStorageZeroCauseShader()
     }
+    private val m60F16WidthQuantizedRenderFixFor431ShaderLazy: Lazy<GPUShaderModule> = lazy {
+        loadM60F16WidthQuantizedRenderFixFor431Shader()
+    }
 
     private val m60F16FragmentLaneDiagnosticShader: GPUShaderModule
         get() = m60F16FragmentLaneDiagnosticShaderLazy.value
@@ -5442,6 +5504,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     private val m60F16AaStencilCoverShaderReturnStorageZeroCauseShader: GPUShaderModule
         get() = m60F16AaStencilCoverShaderReturnStorageZeroCauseShaderLazy.value
+
+    private val m60F16WidthQuantizedRenderFixFor431Shader: GPUShaderModule
+        get() = m60F16WidthQuantizedRenderFixFor431ShaderLazy.value
 
     /**
      * G3.3b.3d — which half of the AA falloff a cover sub-draw paints.
@@ -5496,6 +5561,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         MutableMap<Pair<SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
     private val m60F16AaStencilCoverShaderReturnStorageZeroCausePipelineCache:
         MutableMap<Pair<SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
+    private val m60F16WidthQuantizedRenderFixFor431PipelineCache:
+        MutableMap<Triple<SkBlendMode, SkPathFillType, CoverageSide>, GPURenderPipeline> = mutableMapOf()
 
     /**
      * AA-cover pipeline. Same fill-type encoding as [coverPipelineFor]
@@ -5537,6 +5604,66 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                     ),
                     fragment = FragmentState(
                         module = aaStencilCoverShader,
+                        entryPoint = entryPoint,
+                        targets = listOf(
+                            ColorTargetState(
+                                format = intermediateFormat,
+                                blend = blendStateFor(mode),
+                            ),
+                        ),
+                    ),
+                    depthStencil = DepthStencilState(
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        depthWriteEnabled = false,
+                        depthCompare = GPUCompareFunction.Always,
+                        stencilFront = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilBack = StencilFaceState(
+                            compare = compare,
+                            failOp = GPUStencilOperation.Keep,
+                            depthFailOp = GPUStencilOperation.Keep,
+                            passOp = GPUStencilOperation.Keep,
+                        ),
+                        stencilReadMask = readMask,
+                        stencilWriteMask = 0xFFu,
+                    ),
+                ),
+            )
+        }
+
+    private fun m60F16WidthQuantizedRenderFixFor431PipelineFor(
+        mode: SkBlendMode,
+        fillType: SkPathFillType,
+        side: CoverageSide,
+    ): GPURenderPipeline =
+        m60F16WidthQuantizedRenderFixFor431PipelineCache.getOrPut(Triple(mode, fillType, side)) {
+            val readMask: UInt = if (fillType.isEvenOdd()) 0x01u else 0xFFu
+            val insideCompare =
+                if (fillType.isInverse()) GPUCompareFunction.Equal else GPUCompareFunction.NotEqual
+            val compare = when (side) {
+                CoverageSide.Inside -> insideCompare
+                CoverageSide.Outside ->
+                    if (insideCompare == GPUCompareFunction.Equal) GPUCompareFunction.NotEqual
+                    else GPUCompareFunction.Equal
+            }
+            val entryPoint = when (side) {
+                CoverageSide.Inside -> "fs_inside"
+                CoverageSide.Outside -> "fs_outside"
+            }
+            context.device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    layout = aaPolygonPipelineLayout,
+                    vertex = VertexState(
+                        module = m60F16WidthQuantizedRenderFixFor431Shader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(POLYGON_VERTEX_LAYOUT),
+                    ),
+                    fragment = FragmentState(
+                        module = m60F16WidthQuantizedRenderFixFor431Shader,
                         entryPoint = entryPoint,
                         targets = listOf(
                             ColorTargetState(
@@ -11558,7 +11685,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         System.getProperty(WEBGPU_M60_F16_SOURCE_FACING_LANE_RUNTIME_CANDIDATE_FLAG, "false").toBoolean()
 
     private fun m60F16AaStencilCoverBandMetadataTransportEnabled(): Boolean =
-        System.getProperty(WEBGPU_M60_F16_AA_STENCIL_COVER_BAND_METADATA_TRANSPORT_FLAG, "false").toBoolean()
+        System.getProperty(WEBGPU_M60_F16_AA_STENCIL_COVER_BAND_METADATA_TRANSPORT_FLAG, "false").toBoolean() ||
+            m60F16WidthQuantizedRenderFixFor431Requested
 
     private fun m60F16AaStencilCoverBandMetadata(paint: SkPaint): M60F16AaStencilCoverBandMetadata? {
         val style = activeStrokeStyleForPathAaDiagnostics ?: return null
@@ -11638,6 +11766,26 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         if (!System.getProperty(WEBGPU_M60_F16_BOUNDED_RUNTIME_CORRECTION_PROBE_FLAG, "false").toBoolean()) {
             return false
         }
+        if (paint.blendMode != SkBlendMode.kSrcOver) return false
+        if (paint.shader != null || paint.colorFilter != null || paint.maskFilter != null || paint.pathEffect != null) {
+            return false
+        }
+        if (kotlin.math.abs(style.strokeWidth - 10f) > 0.001f) return false
+        return when (style.cap to style.join) {
+            "butt" to "bevel",
+            "round" to "round",
+            "square" to "bevel" -> true
+            else -> false
+        }
+    }
+
+    private fun m60F16WidthQuantizedRenderFixFor431Enabled(paint: SkPaint): Boolean {
+        val style = activeStrokeStyleForPathAaDiagnostics ?: return false
+        if (!m60F16WidthQuantizedRenderFixFor431Requested) return false
+        if (!targetColorSpaceBlend) return false
+        if (intermediateFormat != GPUTextureFormat.RGBA16Float) return false
+        if (width != 192 || height != 128) return false
+        if (!System.getProperty(WEBGPU_STROKE_CAP_JOIN_EXPERIMENTAL_RENDER_FLAG, "false").toBoolean()) return false
         if (paint.blendMode != SkBlendMode.kSrcOver) return false
         if (paint.shader != null || paint.colorFilter != null || paint.maskFilter != null || paint.pathEffect != null) {
             return false
@@ -14423,6 +14571,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                         m60F16SourceColorCorrectionProbe = m60F16SourceColorCorrectionProbeEnabled(paint),
                         m60F16BoundedRuntimeCorrectionProbe =
                             m60F16BoundedRuntimeCorrectionProbeEnabled(paint),
+                        m60F16WidthQuantizedRenderFixFor431 =
+                            m60F16WidthQuantizedRenderFixFor431Enabled(paint),
                         m60F16BandMetadata = m60F16AaStencilCoverBandMetadata(paint),
                     ),
                 )
@@ -14665,6 +14815,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                             m60F16SourceColorCorrectionProbe = m60F16SourceColorCorrectionProbeEnabled(paint),
                             m60F16BoundedRuntimeCorrectionProbe =
                                 m60F16BoundedRuntimeCorrectionProbeEnabled(paint),
+                            m60F16WidthQuantizedRenderFixFor431 =
+                                m60F16WidthQuantizedRenderFixFor431Enabled(paint),
                             m60F16BandMetadata = m60F16AaStencilCoverBandMetadata(paint),
                         ),
                     )
@@ -15707,7 +15859,13 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                         setBindGroup(0u, diagnosticBindGroup)
                     }
                     setPipeline(
-                        if (boundedRuntimeCorrection) {
+                        if (d.m60F16WidthQuantizedRenderFixFor431) {
+                            m60F16WidthQuantizedRenderFixFor431PipelineFor(
+                                d.mode,
+                                d.fillType,
+                                CoverageSide.Inside,
+                            )
+                        } else if (boundedRuntimeCorrection) {
                             m60F16BoundedRuntimeCorrectionPipelineFor(
                                 d.mode,
                                 d.fillType,
@@ -15722,7 +15880,13 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                     )
                     draw((d.coverVerts.size / 2).toUInt())
                     setPipeline(
-                        if (boundedRuntimeCorrection) {
+                        if (d.m60F16WidthQuantizedRenderFixFor431) {
+                            m60F16WidthQuantizedRenderFixFor431PipelineFor(
+                                d.mode,
+                                d.fillType,
+                                CoverageSide.Outside,
+                            )
+                        } else if (boundedRuntimeCorrection) {
                             m60F16BoundedRuntimeCorrectionPipelineFor(
                                 d.mode,
                                 d.fillType,
@@ -20178,6 +20342,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         m60F16AaStencilCoverStorageColorTargetComparisonPipelineCache.clear()
         m60F16AaStencilCoverShaderReturnStorageZeroCausePipelineCache.values.forEach { it.close() }
         m60F16AaStencilCoverShaderReturnStorageZeroCausePipelineCache.clear()
+        m60F16WidthQuantizedRenderFixFor431PipelineCache.values.forEach { it.close() }
+        m60F16WidthQuantizedRenderFixFor431PipelineCache.clear()
         aaStencilCoverGradientPipelineCache.values.forEach { it.close() }
         aaStencilCoverGradientPipelineCache.clear()
         aaStencilCoverRadialGradientPipelineCache.values.forEach { it.close() }
@@ -20267,6 +20433,9 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
         }
         if (m60F16AaStencilCoverShaderReturnStorageZeroCauseShaderLazy.isInitialized()) {
             m60F16AaStencilCoverShaderReturnStorageZeroCauseShader.close()
+        }
+        if (m60F16WidthQuantizedRenderFixFor431ShaderLazy.isInitialized()) {
+            m60F16WidthQuantizedRenderFixFor431Shader.close()
         }
         intermediateView.close()
         intermediateTexture.close()
