@@ -16,7 +16,8 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_LINEAR = "FOR-462"
 FORMALIZATION_LINEAR = "FOR-464"
-ROW_EVIDENCE_LINEAR = "FOR-465"
+FOR465_LINEAR = "FOR-465"
+FOR466_LINEAR = "FOR-466"
 INVENTORY = ROOT / "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json"
 DASHBOARD = ROOT / "build/reports/wgsl-pipeline-scenes/data/scenes.json"
 GATE_JSON = ROOT / "build/reports/wgsl-pipeline-scene-gate/scene-dashboard-gate.json"
@@ -26,6 +27,8 @@ LOT1_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-d50-gm-dashboard-lot1.md"
 LOT1_MANIFEST = ROOT / "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json"
 FOR465_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-465-drawminibitmaprect-evidence.md"
 FOR465_EVIDENCE = ROOT / "reports/wgsl-pipeline/scenes/generated/for465-drawminibitmaprect-evidence.json"
+FOR466_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-466-skia-gm-image-evidence.md"
+FOR466_EVIDENCE = ROOT / "reports/wgsl-pipeline/scenes/generated/for466-skia-gm-image-evidence.json"
 
 EXPECTED_LOT1 = [
     "skia-gm-drawbitmaprect",
@@ -51,36 +54,79 @@ EXPECTED_MATERIALIZED = {
     "skia-gm-simpleaaclip": ["m54-simple-aa-clip"],
 }
 EXPECTED_MISSING = [
-    "skia-gm-image",
     "skia-gm-imagesource",
     "skia-gm-offsetimagefilter",
     "skia-gm-pathfill",
 ]
-ROW_REFUSAL_ID = "skia-gm-drawminibitmaprect"
+FOR465_ROW_ID = "skia-gm-drawminibitmaprect"
+FOR466_ROW_ID = "skia-gm-image"
 ROW_REFUSALS = {
-    ROW_REFUSAL_ID: {
+    FOR465_ROW_ID: {
+        "linear": FOR465_LINEAR,
         "status": "expected-unsupported",
         "reason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
         "fallbackReason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
         "cpuRoute": "cpu.image-rect.drawminibitmaprect.expected-unsupported",
         "gpuRoute": "webgpu.image-rect.drawminibitmaprect.expected-unsupported",
+        "sourceFindingMemory": "global/kanvas/findings/for-464-formalise-le-manifeste-strict-du-lot-1-d50",
+        "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-4-produire-preuve-drawminibitmaprect",
         "policy": (
             "The existing drawbitmaprect nearest evidence is not row-specific for "
             "DrawMiniBitmapRectGM. The row stays unsupported until a candidate-specific "
             "Skia reference capture, CPU artifact, GPU artifact, diff/stat payload, and "
             "route diagnostics exist without threshold changes."
         ),
+        "neighborEvidenceFlag": "drawbitmaprectEvidenceInherited",
+        "neighborEvidencePolicy": "The existing drawbitmaprect nearest evidence is not row-specific for DrawMiniBitmapRectGM.",
+    },
+    FOR466_ROW_ID: {
+        "linear": FOR466_LINEAR,
+        "status": "expected-unsupported",
+        "reason": "image.imagegm.row-specific-artifacts-required",
+        "fallbackReason": "image.imagegm.row-specific-artifacts-required",
+        "cpuRoute": "cpu.image.imagegm.expected-unsupported",
+        "gpuRoute": "webgpu.image.imagegm.expected-unsupported",
+        "sourceFindingMemory": "global/kanvas/findings/for-465-formalise-le-refus-drawminibitmaprect-d50-lot-1",
+        "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-5-traiter-skia-gm-image",
+        "policy": (
+            "Historical ImageGM similarity and adjacent bitmap/image rows are not a D50 "
+            "dashboard row-specific proof. The row stays unsupported until a candidate-specific "
+            "Skia reference capture, CPU artifact, WebGPU artifact, diff/stat payload, route "
+            "diagnostics, and fallbackReason=none exist without threshold or scoring changes."
+        ),
+        "neighborEvidenceFlag": "historicalImageEvidenceInherited",
+        "neighborEvidencePolicy": "Historical ImageGM similarity and adjacent bitmap/image rows are not inherited as D50 support.",
+        "decodeFixtureProvenance": {
+            "imageContent": "static synthetic 64x64 N32 premul raster surface snapshots created by ImageGM before drawImage/drawImageRect",
+            "externalEncodedFixture": "none",
+            "decodePath": "not exercised; ImageGM creates SkSurface raster snapshots, not codec-decoded input",
+            "fixtureAvailability": "Kotlin source fixture exists, but no row-specific D50 reference/CPU/GPU artifacts are generated",
+            "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt",
+            "upstreamSource": "gm/image.cpp",
+            "unsupportedBroadClaims": [
+                "codec",
+                "YUV",
+                "animation",
+                "EXIF",
+                "mipmap",
+                "tile-mode",
+                "color-managed image decode",
+            ],
+        },
     }
 }
 EXPECTED_FILES = {
     "reports/wgsl-pipeline/2026-06-06-for-462-d50-lot1-dashboard-integration-gate.md",
     "reports/wgsl-pipeline/2026-06-06-d50-gm-dashboard-lot1.md",
     "reports/wgsl-pipeline/2026-06-06-for-465-drawminibitmaprect-evidence.md",
+    "reports/wgsl-pipeline/2026-06-06-for-466-skia-gm-image-evidence.md",
     "reports/wgsl-pipeline/scenes/generated/d50-lot1-dashboard-integration-for462.json",
     "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
     "reports/wgsl-pipeline/scenes/generated/for465-drawminibitmaprect-evidence.json",
+    "reports/wgsl-pipeline/scenes/generated/for466-skia-gm-image-evidence.json",
     "scripts/validate_for462_d50_lot1_dashboard_integration.py",
     "scripts/validate_for465_drawminibitmaprect_evidence.py",
+    "scripts/validate_for466_skia_gm_image_evidence.py",
 }
 FORBIDDEN_PATHS = {
     "reports/wgsl-pipeline/scenes/data/scenes.json",
@@ -174,8 +220,9 @@ def dashboard_rows_by_inventory(scenes: list[dict[str, Any]]) -> dict[str, list[
 
 def build_row_refusal(candidate: dict[str, Any]) -> dict[str, Any]:
     refusal = ROW_REFUSALS[candidate["inventoryId"]]
+    inherited_flag = refusal["neighborEvidenceFlag"]
     return {
-        "linear": ROW_EVIDENCE_LINEAR,
+        "linear": refusal["linear"],
         "inventoryId": candidate["inventoryId"],
         "rank": candidate["rank"],
         "displayName": candidate["displayName"],
@@ -187,8 +234,8 @@ def build_row_refusal(candidate: dict[str, Any]) -> dict[str, Any]:
             "candidateInventory": rel(INVENTORY),
             "kotlinSource": candidate["kotlinSource"],
             "upstreamSource": candidate["upstreamSource"],
-            "findingMemory": "global/kanvas/findings/for-464-formalise-le-manifeste-strict-du-lot-1-d50",
-            "draftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-4-produire-preuve-drawminibitmaprect",
+            "findingMemory": refusal["sourceFindingMemory"],
+            "draftMemory": refusal["sourceDraftMemory"],
         },
         "reference": {
             "status": "not-generated",
@@ -224,12 +271,17 @@ def build_row_refusal(candidate: dict[str, Any]) -> dict[str, Any]:
             "fallbackReason": refusal["fallbackReason"],
             "policy": refusal["policy"],
         },
+        **({"decodeFixtureProvenance": refusal["decodeFixtureProvenance"]} if "decodeFixtureProvenance" in refusal else {}),
         "nonClaims": {
             "supportClaimAddedByFor465": False,
+            "supportClaimAddedByFor466": False,
             "skiaComparableClaimAddedByFor465": False,
+            "skiaComparableClaimAddedByFor466": False,
             "dashboardRowAddedByFor465": False,
+            "dashboardRowAddedByFor466": False,
             "dashboardStatusChangedByFor465": False,
-            "drawbitmaprectEvidenceInherited": False,
+            "dashboardStatusChangedByFor466": False,
+            inherited_flag: False,
             "thresholdChanged": False,
             "scoringChanged": False,
             "fallbackPolicyChanged": False,
@@ -237,6 +289,13 @@ def build_row_refusal(candidate: dict[str, Any]) -> dict[str, Any]:
             "productionCodeChanged": False,
             "wgslProductionChanged": False,
             "upstreamSourceChanged": False,
+            "codecSupportClaimAddedByFor466": False,
+            "yuvSupportClaimAddedByFor466": False,
+            "animationSupportClaimAddedByFor466": False,
+            "exifSupportClaimAddedByFor466": False,
+            "mipmapSupportClaimAddedByFor466": False,
+            "tileModeSupportClaimAddedByFor466": False,
+            "colorManagedImageSupportClaimAddedByFor466": False,
         },
     }
 
@@ -370,6 +429,7 @@ def build_evidence() -> dict[str, Any]:
                 }
             )
         elif refusal_item is not None:
+            refusal_contract = ROW_REFUSALS[inventory_id]
             strict_rows.append(
                 {
                     "inventoryId": inventory_id,
@@ -386,11 +446,18 @@ def build_evidence() -> dict[str, Any]:
                     "gpuRoute": refusal_item["gpu"]["route"],
                     "diffStats": refusal_item["diffStats"],
                     "routeDiagnostics": refusal_item["routeDiagnostics"],
+                    **(
+                        {"decodeFixtureProvenance": refusal_item["decodeFixtureProvenance"]}
+                        if "decodeFixtureProvenance" in refusal_item
+                        else {}
+                    ),
                     "supportClaimAddedByFor464": False,
                     "skiaComparableClaimAddedByFor464": False,
                     "supportClaimAddedByFor465": False,
                     "skiaComparableClaimAddedByFor465": False,
-                    "drawbitmaprectEvidenceInherited": False,
+                    "supportClaimAddedByFor466": False,
+                    "skiaComparableClaimAddedByFor466": False,
+                    refusal_contract["neighborEvidenceFlag"]: False,
                 }
             )
         elif missing_item is not None:
@@ -422,15 +489,17 @@ def build_evidence() -> dict[str, Any]:
         "schemaVersion": 1,
         "linear": SOURCE_LINEAR,
         "strictManifestFormalizedBy": FORMALIZATION_LINEAR,
-        "rowEvidenceUpdatedBy": ROW_EVIDENCE_LINEAR,
+        "rowEvidenceUpdatedBy": [FOR465_LINEAR, FOR466_LINEAR],
         "date": "2026-06-06",
         "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-3-formaliser-le-manifeste-strict-du-lot-1-dashboard",
         "rowEvidenceSourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-4-produire-preuve-drawminibitmaprect",
+        "rowEvidenceSourceDraftMemoryFor466": "global/kanvas/tickets/drafts/brouillon-ticket-d50-5-traiter-skia-gm-image",
         "sourceInventory": rel(INVENTORY),
         "sourceFindingMemory": "global/kanvas/findings/for-462-verrouille-le-lot-1-d50-sans-faux-support",
         "rowEvidenceSourceFindingMemory": "global/kanvas/findings/for-464-formalise-le-manifeste-strict-du-lot-1-d50",
+        "rowEvidenceSourceFindingMemoryFor466": "global/kanvas/findings/for-465-formalise-le-refus-drawminibitmaprect-d50-lot-1",
         "dashboardGate": rel(GATE_JSON),
-        "classification": "lot1-row-specific-refusal-no-new-support-claims",
+        "classification": "lot1-row-specific-refusals-no-new-support-claims",
         "lot1CandidateCount": len(EXPECTED_LOT1),
         "materializedCandidateCount": len(materialized),
         "expectedUnsupportedCandidateCount": len(refusals),
@@ -444,11 +513,16 @@ def build_evidence() -> dict[str, Any]:
         "dashboardRowsAddedByFor465": 0,
         "supportClaimsAddedByFor465": 0,
         "skiaComparableClaimsAddedByFor465": 0,
+        "dashboardRowsAddedByFor466": 0,
+        "supportClaimsAddedByFor466": 0,
+        "skiaComparableClaimsAddedByFor466": 0,
         "visualSupportAbove50PercentClaimByFor464": False,
         "visualSupportAbove50PercentClaimByFor465": False,
+        "visualSupportAbove50PercentClaimByFor466": False,
         "dashboardStatusChangedByFor462": False,
         "dashboardStatusChangedByFor464": False,
         "dashboardStatusChangedByFor465": False,
+        "dashboardStatusChangedByFor466": False,
         "thresholdChanged": False,
         "scoringChanged": False,
         "fallbackPolicyChanged": False,
@@ -457,6 +531,13 @@ def build_evidence() -> dict[str, Any]:
         "wgslProductionChanged": False,
         "upstreamSourceChanged": False,
         "broadSkiaGmParityClaim": False,
+        "codecSupportClaimAddedByFor466": False,
+        "yuvSupportClaimAddedByFor466": False,
+        "animationSupportClaimAddedByFor466": False,
+        "exifSupportClaimAddedByFor466": False,
+        "mipmapSupportClaimAddedByFor466": False,
+        "tileModeSupportClaimAddedByFor466": False,
+        "colorManagedImageSupportClaimAddedByFor466": False,
         "dashboardCounters": gate_counters,
         "beforeCounters": {
             "source": rel(INVENTORY),
@@ -480,13 +561,14 @@ def build_evidence() -> dict[str, Any]:
         "materialized": materialized,
         "refusals": refusals,
         "missing": missing,
-        "nextAction": "Open row-specific evidence tickets for the four remaining diagnostic-only lot 1 candidates before any dashboard support promotion.",
+        "nextAction": "Open row-specific evidence tickets for the three remaining diagnostic-only lot 1 candidates before any dashboard support promotion.",
         "validationCommands": [
             "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
             "rtk python3 scripts/validate_for462_d50_lot1_dashboard_integration.py",
             "rtk python3 scripts/validate_for465_drawminibitmaprect_evidence.py",
+            "rtk python3 scripts/validate_for466_skia_gm_image_evidence.py",
             "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
-            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for464-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for466-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py scripts/validate_for465_drawminibitmaprect_evidence.py scripts/validate_for466_skia_gm_image_evidence.py",
             "rtk git diff --check",
         ],
     }
@@ -501,15 +583,17 @@ def build_lot1_manifest(evidence: dict[str, Any]) -> dict[str, Any]:
         "date": "2026-06-06",
         "sourceDraftMemory": evidence["sourceDraftMemory"],
         "rowEvidenceSourceDraftMemory": evidence["rowEvidenceSourceDraftMemory"],
+        "rowEvidenceSourceDraftMemoryFor466": evidence["rowEvidenceSourceDraftMemoryFor466"],
         "sourceFindingMemory": evidence["sourceFindingMemory"],
         "rowEvidenceSourceFindingMemory": evidence["rowEvidenceSourceFindingMemory"],
+        "rowEvidenceSourceFindingMemoryFor466": evidence["rowEvidenceSourceFindingMemoryFor466"],
         "sourceInventory": evidence["sourceInventory"],
         "dashboardGate": evidence["dashboardGate"],
         "classification": evidence["classification"],
         "dashboardConsumesLotDirectly": False,
         "dashboardConsumptionReason": (
             "Only rows with existing dashboard evidence are recognized as supported; "
-            "one row has a stable expected-unsupported refusal; missing candidates remain "
+            "two rows have stable expected-unsupported refusals; missing candidates remain "
             "diagnostic-only until row-specific renderer artifacts exist."
         ),
         "lot": 1,
@@ -523,11 +607,15 @@ def build_lot1_manifest(evidence: dict[str, Any]) -> dict[str, Any]:
             "dashboardRowsAddedByFor465": 0,
             "supportClaimsAddedByFor465": 0,
             "skiaComparableClaimsAddedByFor465": 0,
+            "dashboardRowsAddedByFor466": 0,
+            "supportClaimsAddedByFor466": 0,
+            "skiaComparableClaimsAddedByFor466": 0,
             "supportClaimsAddedByFor462": 0,
             "skiaComparableClaimsAddedByFor462": 0,
             "dashboardStatusChangedByFor462": False,
             "dashboardStatusChangedByFor464": False,
             "dashboardStatusChangedByFor465": False,
+            "dashboardStatusChangedByFor466": False,
             "broadSkiaGmParityClaim": False,
             "visualSupportAbove50PercentClaim": False,
             "thresholdChanged": False,
@@ -536,6 +624,13 @@ def build_lot1_manifest(evidence: dict[str, Any]) -> dict[str, Any]:
             "pipelineKeyChanged": False,
             "productionCodeChanged": False,
             "wgslProductionChanged": False,
+            "codecSupportClaimAddedByFor466": False,
+            "yuvSupportClaimAddedByFor466": False,
+            "animationSupportClaimAddedByFor466": False,
+            "exifSupportClaimAddedByFor466": False,
+            "mipmapSupportClaimAddedByFor466": False,
+            "tileModeSupportClaimAddedByFor466": False,
+            "colorManagedImageSupportClaimAddedByFor466": False,
         },
         "beforeCounters": evidence["beforeCounters"],
         "afterCounters": evidence["afterCounters"],
@@ -550,9 +645,9 @@ def write_report(evidence: dict[str, Any]) -> None:
         "",
         f"Classification : `{evidence['classification']}`",
         "",
-        "FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere est deja vert avec 0 `tracked-gap` et 0 `fail`, mais seuls 7 des 12 candidats du lot 1 ont actuellement une ligne materialisee avec preuves existantes. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect` sans le compter comme support.",
+        "FOR-462 verifie le premier lot D50 sans ajouter de faux support. Le tableau de bord genere est deja vert avec 0 `tracked-gap` et 0 `fail`, mais seuls 7 des 12 candidats du lot 1 ont actuellement une ligne materialisee avec preuves existantes. FOR-465 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-drawminibitmaprect`; FOR-466 ajoute un refus `expected-unsupported` row-specific pour `skia-gm-image`. Aucun des deux refus n'est compte comme support.",
         "",
-        "Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat reel et bloque les cinq candidats qui n'ont pas encore leurs preuves ligne par ligne.",
+        "Aucune ligne dashboard n'est ajoutee par FOR-462 : le ticket documente l'etat reel et bloque les trois candidats qui n'ont pas encore leurs preuves ligne par ligne.",
         "",
         "## Compteurs",
         "",
@@ -649,21 +744,21 @@ def write_lot1_report(evidence: dict[str, Any]) -> None:
     after = evidence["afterCounters"]
     status_counts = evidence["strictLot1StatusCounts"]
     lines = [
-        "# FOR-465 - D50 GM Dashboard Lot 1 drawminibitmaprect evidence",
+        "# FOR-466 - D50 GM Dashboard Lot 1 image evidence",
         "",
         "Date: 2026-06-06",
-        "Linear: FOR-465",
-        "Source: FOR-464 finding `global/kanvas/findings/for-464-formalise-le-manifeste-strict-du-lot-1-d50`",
+        "Linear: FOR-466",
+        "Source: FOR-465 finding `global/kanvas/findings/for-465-formalise-le-refus-drawminibitmaprect-d50-lot-1`",
         "Manifest: `reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json`",
-        "Row evidence: `reports/wgsl-pipeline/scenes/generated/for465-drawminibitmaprect-evidence.json`",
+        "Row evidence: `reports/wgsl-pipeline/scenes/generated/for466-skia-gm-image-evidence.json`",
         "",
         "## Resultat",
         "",
-        "FOR-464 a formalise un manifeste PM strict pour le lot 1 D50 dans l'ordre FOR-461. FOR-465 traite uniquement `skia-gm-drawminibitmaprect` et le classe en refus stable `expected-unsupported` parce que les artefacts row-specific requis ne sont pas encore disponibles.",
+        "FOR-464 a formalise un manifeste PM strict pour le lot 1 D50 dans l'ordre FOR-461. FOR-465 traite `skia-gm-drawminibitmaprect` en refus stable. FOR-466 traite uniquement `skia-gm-image` et le classe en refus stable `expected-unsupported` parce que les artefacts row-specific D50 requis ne sont pas encore disponibles.",
         "",
-        "Sept lignes restent `supported` uniquement parce qu'elles pointent vers des lignes dashboard existantes avec `status=pass`, `gpu.status=pass` et `fallbackReason=none`. Quatre lignes restent `diagnostic-only` et exigent des preuves ligne par ligne avant promotion: reference, CPU, GPU ou refus stable, diff/stat, diagnostics de route et politique de seuil inchangee.",
+        "Sept lignes restent `supported` uniquement parce qu'elles pointent vers des lignes dashboard existantes avec `status=pass`, `gpu.status=pass` et `fallbackReason=none`. Trois lignes restent `diagnostic-only` et exigent des preuves ligne par ligne avant promotion: reference, CPU, GPU ou refus stable, diff/stat, diagnostics de route et politique de seuil inchangee.",
         "",
-        "FOR-465 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. Le score de support ne monte pas: le changement ameliore la visibilite du refus, pas le rendu.",
+        "FOR-465 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. FOR-466 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. Le score de support ne monte pas: le changement ameliore la visibilite du refus, pas le rendu.",
         "",
         "## Statuts Lot 1",
         "",
@@ -683,7 +778,7 @@ def write_lot1_report(evidence: dict[str, Any]) -> None:
         f"| Lignes diagnostic-only | {before['diagnosticOnlyRows']} | {after['diagnosticOnlyRows']} | {after['diagnosticOnlyRows'] - before['diagnosticOnlyRows']} |",
         f"| Lignes Skia-comparable | {before['skiaComparableRows']} | {after['skiaComparableRows']} | {after['skiaComparableRows'] - before['skiaComparableRows']} |",
         "",
-        "Ces compteurs avant/apres donnent le contexte dashboard existant. Les deltas ne sont pas des nouvelles revendications FOR-464.",
+        "Ces compteurs avant/apres donnent le contexte dashboard existant. Les deltas ne sont pas des nouvelles revendications FOR-464, FOR-465 ou FOR-466.",
         "",
         "## Lignes",
         "",
@@ -699,15 +794,25 @@ def write_lot1_report(evidence: dict[str, Any]) -> None:
         )
     lines += [
         "",
+        "## Provenance FOR-466",
+        "",
+        "`skia-gm-image` vient de `ImageGM`: des snapshots 64x64 de surfaces raster N32 premul sont crees dans la scene statique, puis redessines. Aucun fichier image encode externe n'est decode dans cette preuve, et la fixture source ne suffit pas a promouvoir la ligne sans artefacts D50 reference/CPU/GPU/diff-stat.",
+        "",
         "## Non-Claims",
         "",
         "- Aucun statut dashboard n'est change par FOR-465.",
+        "- Aucun statut dashboard n'est change par FOR-466.",
         "- Aucune ligne dashboard n'est ajoutee par FOR-465.",
+        "- Aucune ligne dashboard n'est ajoutee par FOR-466.",
         "- Aucune nouvelle ligne de support n'est ajoutee par FOR-465.",
+        "- Aucune nouvelle ligne de support n'est ajoutee par FOR-466.",
         "- Aucune nouvelle fidelite Skia-comparable n'est ajoutee par FOR-465.",
+        "- Aucune nouvelle fidelite Skia-comparable n'est ajoutee par FOR-466.",
         "- Aucun seuil global, calcul de score, politique de fallback, `PipelineKey`, WGSL de production, code renderer ou source upstream n'est modifie.",
         "- `skia-gm-drawminibitmaprect` n'herite pas de la preuve `skia-gm-drawbitmaprect`; il reste un refus attendu row-specific.",
-        "- Les quatre lignes `diagnostic-only` ne sont pas du support cache; elles sont bloquees jusqu'a l'arrivee de preuves ligne par ligne.",
+        "- `skia-gm-image` n'herite pas des tests historiques ImageGM ni des preuves bitmap/image voisines; il reste un refus attendu row-specific.",
+        "- FOR-466 ne revendique aucun support codec, YUV, animation, EXIF, mipmap, tile-mode ou image color-managed.",
+        "- Les trois lignes `diagnostic-only` ne sont pas du support cache; elles sont bloquees jusqu'a l'arrivee de preuves ligne par ligne.",
         "- Les 7 correspondances `supported` sont des preuves existantes, pas une revendication de support visuel superieur a 50% ni une broad Skia GM parity.",
         "",
         "## Validation",
@@ -722,12 +827,12 @@ def write_lot1_report(evidence: dict[str, Any]) -> None:
 
 
 def build_for465_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
-    require(len(evidence["refusals"]) == 1, "FOR-465 must own exactly one refusal row")
-    refusal = evidence["refusals"][0]
-    require(refusal["inventoryId"] == ROW_REFUSAL_ID, "FOR-465 refusal row mismatch")
+    matches = [item for item in evidence["refusals"] if item["inventoryId"] == FOR465_ROW_ID]
+    require(len(matches) == 1, "FOR-465 must own exactly one refusal row")
+    refusal = matches[0]
     return {
         "schemaVersion": 1,
-        "linear": ROW_EVIDENCE_LINEAR,
+        "linear": FOR465_LINEAR,
         "date": "2026-06-06",
         "classification": "row-specific-expected-unsupported-no-support-claim",
         "sourceFindingMemory": evidence["rowEvidenceSourceFindingMemory"],
@@ -735,6 +840,30 @@ def build_for465_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
         "sourceManifest": rel(LOT1_MANIFEST),
         "row": refusal,
         "statusCountsAfterFor465": evidence["strictLot1StatusCounts"],
+        "dashboardCountersUnchanged": evidence["dashboardCounters"],
+        "scoreImpact": {
+            "supportScoreIncreased": False,
+            "reason": "The row is a visible expected-unsupported refusal, not a supported rendering row.",
+        },
+        "nonClaims": refusal["nonClaims"],
+        "validationCommands": evidence["validationCommands"],
+    }
+
+
+def build_for466_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
+    matches = [item for item in evidence["refusals"] if item["inventoryId"] == FOR466_ROW_ID]
+    require(len(matches) == 1, "FOR-466 must own exactly one refusal row")
+    refusal = matches[0]
+    return {
+        "schemaVersion": 1,
+        "linear": FOR466_LINEAR,
+        "date": "2026-06-06",
+        "classification": "row-specific-expected-unsupported-no-support-claim",
+        "sourceFindingMemory": evidence["rowEvidenceSourceFindingMemoryFor466"],
+        "sourceDraftMemory": evidence["rowEvidenceSourceDraftMemoryFor466"],
+        "sourceManifest": rel(LOT1_MANIFEST),
+        "row": refusal,
+        "statusCountsAfterFor466": evidence["strictLot1StatusCounts"],
         "dashboardCountersUnchanged": evidence["dashboardCounters"],
         "scoreImpact": {
             "supportScoreIncreased": False,
@@ -797,40 +926,116 @@ def write_for465_report(evidence: dict[str, Any]) -> None:
     write_json(FOR465_EVIDENCE, for465)
 
 
+def write_for466_report(evidence: dict[str, Any]) -> None:
+    for466 = build_for466_evidence(evidence)
+    row = for466["row"]
+    lines = [
+        "# FOR-466 - skia-gm-image row evidence",
+        "",
+        "Date: 2026-06-06",
+        "Linear: FOR-466",
+        "Evidence JSON: `reports/wgsl-pipeline/scenes/generated/for466-skia-gm-image-evidence.json`",
+        "",
+        "## Resultat",
+        "",
+        "`skia-gm-image` est traite comme `expected-unsupported` row-specific. Le ticket ne promeut pas la scene: il formalise un refus stable parce que les artefacts D50 propres a `ImageGM` manquent encore.",
+        "",
+        "Les resultats historiques `ImageGM` et les lignes bitmap/image voisines ne sont pas herites comme support D50. Ils ne fournissent pas, pour ce ticket, la combinaison reference, CPU, GPU, diff/stat et diagnostics de route avec `fallbackReason=none`.",
+        "",
+        "## Provenance decode / fixture",
+        "",
+        "`ImageGM` est une scene statique issue de `skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt`, portee de `gm/image.cpp`. Elle fabrique des snapshots 64x64 de surfaces raster N32 premul dans le GM, puis les redessine. Aucun fichier image encode externe n'est decode par cette preuve, et FOR-466 ne revendique donc aucun support codec, YUV, animation, EXIF, mipmap, tile-mode ou image color-managed.",
+        "",
+        "La fixture source est identifiable, mais les artefacts D50 propres a la ligne restent manquants: reference Skia candidate-specific, rendu CPU, rendu GPU, diff/stat et diagnostics de route avec `fallbackReason=none`.",
+        "",
+        "## Contrat de refus",
+        "",
+        "| Champ | Valeur |",
+        "|---|---|",
+        f"| Inventory id | `{row['inventoryId']}` |",
+        f"| Statut strict | `{row['status']}` |",
+        f"| Fallback | `{row['fallbackReason']}` |",
+        f"| Route CPU | `{row['cpu']['route']}` |",
+        f"| Route GPU | `{row['gpu']['route']}` |",
+        f"| Diff/stat | `{row['diffStats']['status']}` |",
+        "",
+        "## Artefacts manquants requis pour une future promotion",
+        "",
+        "- Reference Skia candidate-specific pour `ImageGM`.",
+        "- Artefact CPU et diagnostics de route.",
+        "- Artefact GPU et diagnostics de route.",
+        "- Payload diff/stat.",
+        "- `fallbackReason=none` uniquement si la ligne devient vraiment supportee.",
+        "",
+        "## Impact score",
+        "",
+        "Le score de support ne monte pas. Le manifeste passe a 7 `supported`, 2 `expected-unsupported`, 3 `diagnostic-only`; le changement rend le refus visible sans ajouter de support.",
+        "",
+        "## Non-claims",
+        "",
+        "- 0 ligne dashboard ajoutee.",
+        "- 0 support ajoute.",
+        "- 0 revendication Skia-comparable ajoutee.",
+        "- Aucun support codec, YUV, animation, EXIF, mipmap, tile-mode ou image color-managed n'est revendique.",
+        "- Aucun changement de seuil, scoring, politique fallback, `PipelineKey`, code production, WGSL production ou source upstream.",
+        "",
+    ]
+    FOR466_REPORT.parent.mkdir(parents=True, exist_ok=True)
+    FOR466_REPORT.write_text("\n".join(lines), encoding="utf-8")
+    write_json(FOR466_EVIDENCE, for466)
+
+
 def require_report_and_evidence(evidence: dict[str, Any]) -> None:
     write_json(EVIDENCE, evidence)
     write_json(LOT1_MANIFEST, build_lot1_manifest(evidence))
     write_report(evidence)
     write_lot1_report(evidence)
     write_for465_report(evidence)
+    write_for466_report(evidence)
     written = load_json(EVIDENCE)
     manifest = load_json(LOT1_MANIFEST)
     for465 = load_json(FOR465_EVIDENCE)
-    require(written["classification"] == "lot1-row-specific-refusal-no-new-support-claims", "classification mismatch")
+    for466 = load_json(FOR466_EVIDENCE)
+    require(written["classification"] == "lot1-row-specific-refusals-no-new-support-claims", "classification mismatch")
     require(written["strictManifestFormalizedBy"] == FORMALIZATION_LINEAR, "formalization linear mismatch")
-    require(written["rowEvidenceUpdatedBy"] == ROW_EVIDENCE_LINEAR, "row evidence linear mismatch")
+    require(written["rowEvidenceUpdatedBy"] == [FOR465_LINEAR, FOR466_LINEAR], "row evidence linear mismatch")
     require(written["materializedCandidateCount"] == 7, "materialized count must be 7")
-    require(written["expectedUnsupportedCandidateCount"] == 1, "expected-unsupported count must be 1")
-    require(written["missingCandidateCount"] == 4, "missing count must be 4")
+    require(written["expectedUnsupportedCandidateCount"] == 2, "expected-unsupported count must be 2")
+    require(written["missingCandidateCount"] == 3, "missing count must be 3")
     require(written["dashboardRowsAddedByFor464"] == 0, "FOR-464 must not add dashboard rows")
     require(written["supportClaimsAddedByFor464"] == 0, "FOR-464 must not add support claims")
     require(written["skiaComparableClaimsAddedByFor464"] == 0, "FOR-464 must not add Skia-comparable claims")
     require(written["dashboardRowsAddedByFor465"] == 0, "FOR-465 must not add dashboard rows")
     require(written["supportClaimsAddedByFor465"] == 0, "FOR-465 must not add support claims")
     require(written["skiaComparableClaimsAddedByFor465"] == 0, "FOR-465 must not add Skia-comparable claims")
+    require(written["dashboardRowsAddedByFor466"] == 0, "FOR-466 must not add dashboard rows")
+    require(written["supportClaimsAddedByFor466"] == 0, "FOR-466 must not add support claims")
+    require(written["skiaComparableClaimsAddedByFor466"] == 0, "FOR-466 must not add Skia-comparable claims")
     require(written["visualSupportAbove50PercentClaimByFor464"] is False, "FOR-464 must not claim >50% visual support")
     require(written["visualSupportAbove50PercentClaimByFor465"] is False, "FOR-465 must not claim >50% visual support")
+    require(written["visualSupportAbove50PercentClaimByFor466"] is False, "FOR-466 must not claim >50% visual support")
     require(written["dashboardStatusChangedByFor464"] is False, "FOR-464 must not change dashboard status")
     require(written["dashboardStatusChangedByFor465"] is False, "FOR-465 must not change dashboard status")
+    require(written["dashboardStatusChangedByFor466"] is False, "FOR-466 must not change dashboard status")
     require(written["thresholdChanged"] is False, "threshold must not change")
     require(written["scoringChanged"] is False, "scoring must not change")
     require(written["fallbackPolicyChanged"] is False, "fallback policy must not change")
     require(written["pipelineKeyChanged"] is False, "PipelineKey must not change")
     require(written["productionCodeChanged"] is False, "production code must not change")
+    for key in (
+        "codecSupportClaimAddedByFor466",
+        "yuvSupportClaimAddedByFor466",
+        "animationSupportClaimAddedByFor466",
+        "exifSupportClaimAddedByFor466",
+        "mipmapSupportClaimAddedByFor466",
+        "tileModeSupportClaimAddedByFor466",
+        "colorManagedImageSupportClaimAddedByFor466",
+    ):
+        require(written[key] is False, f"{key} must remain false")
     require(manifest["linear"] == FORMALIZATION_LINEAR, "lot 1 manifest linear mismatch")
     require(manifest["candidateCount"] == 12, "lot 1 manifest candidate count must be 12")
     require(
-        manifest["statusCounts"] == {"diagnostic-only": 4, "expected-unsupported": 1, "supported": 7},
+        manifest["statusCounts"] == {"diagnostic-only": 3, "expected-unsupported": 2, "supported": 7},
         "lot 1 manifest status counts mismatch",
     )
     require([row["inventoryId"] for row in manifest["rows"]] == EXPECTED_LOT1, "lot 1 manifest order mismatch")
@@ -842,8 +1047,8 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
     expected_unsupported_rows = [row for row in manifest["rows"] if row["status"] == "expected-unsupported"]
     diagnostic_rows = [row for row in manifest["rows"] if row["status"] == "diagnostic-only"]
     require(len(supported_rows) == 7, "supported strict row count must be 7")
-    require(len(expected_unsupported_rows) == 1, "expected-unsupported strict row count must be 1")
-    require(len(diagnostic_rows) == 4, "diagnostic-only strict row count must be 4")
+    require(len(expected_unsupported_rows) == 2, "expected-unsupported strict row count must be 2")
+    require(len(diagnostic_rows) == 3, "diagnostic-only strict row count must be 3")
     for row in supported_rows:
         require(row["inventoryId"] in EXPECTED_MATERIALIZED, f"{row['inventoryId']} is not expected as supported")
         require(row["dashboardRowId"] in EXPECTED_MATERIALIZED[row["inventoryId"]], f"{row['inventoryId']} dashboard row mismatch")
@@ -851,18 +1056,24 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
         require(row["fallbackReason"] == "none", f"{row['inventoryId']} supported row must have fallbackReason=none")
         require(row["supportClaimAddedByFor464"] is False, f"{row['inventoryId']} must not add support claim")
         require(row["skiaComparableClaimAddedByFor464"] is False, f"{row['inventoryId']} must not add Skia-comparable claim")
-    refusal_row = expected_unsupported_rows[0]
-    require(refusal_row["inventoryId"] == ROW_REFUSAL_ID, "FOR-465 expected-unsupported row mismatch")
-    require(refusal_row["dashboardRowId"] is None, "FOR-465 refusal must not point to dashboard row")
-    require(refusal_row["dashboardStatus"] is None, "FOR-465 refusal must not claim an active dashboard status")
-    require(refusal_row["strictDashboardStatus"] == "expected-unsupported", "FOR-465 refusal strict status mismatch")
-    require(refusal_row["referenceKind"] is None, "FOR-465 refusal must not claim reference kind")
-    require(refusal_row["fallbackReason"] == ROW_REFUSALS[ROW_REFUSAL_ID]["fallbackReason"], "FOR-465 fallback mismatch")
-    require(refusal_row["cpuRoute"] == ROW_REFUSALS[ROW_REFUSAL_ID]["cpuRoute"], "FOR-465 CPU route mismatch")
-    require(refusal_row["gpuRoute"] == ROW_REFUSALS[ROW_REFUSAL_ID]["gpuRoute"], "FOR-465 GPU route mismatch")
-    require(refusal_row["supportClaimAddedByFor465"] is False, "FOR-465 must not add support claim")
-    require(refusal_row["skiaComparableClaimAddedByFor465"] is False, "FOR-465 must not add Skia-comparable claim")
-    require(refusal_row["drawbitmaprectEvidenceInherited"] is False, "FOR-465 must not inherit drawbitmaprect proof")
+    refusal_by_id = {row["inventoryId"]: row for row in expected_unsupported_rows}
+    require(set(refusal_by_id) == {FOR465_ROW_ID, FOR466_ROW_ID}, "expected-unsupported row set mismatch")
+    for refusal_id, linear, claim_suffix in (
+        (FOR465_ROW_ID, FOR465_LINEAR, "For465"),
+        (FOR466_ROW_ID, FOR466_LINEAR, "For466"),
+    ):
+        refusal_row = refusal_by_id[refusal_id]
+        contract = ROW_REFUSALS[refusal_id]
+        require(refusal_row["dashboardRowId"] is None, f"{linear} refusal must not point to dashboard row")
+        require(refusal_row["dashboardStatus"] is None, f"{linear} refusal must not claim an active dashboard status")
+        require(refusal_row["strictDashboardStatus"] == "expected-unsupported", f"{linear} refusal strict status mismatch")
+        require(refusal_row["referenceKind"] is None, f"{linear} refusal must not claim reference kind")
+        require(refusal_row["fallbackReason"] == contract["fallbackReason"], f"{linear} fallback mismatch")
+        require(refusal_row["cpuRoute"] == contract["cpuRoute"], f"{linear} CPU route mismatch")
+        require(refusal_row["gpuRoute"] == contract["gpuRoute"], f"{linear} GPU route mismatch")
+        require(refusal_row[f"supportClaimAddedBy{claim_suffix}"] is False, f"{linear} must not add support claim")
+        require(refusal_row[f"skiaComparableClaimAddedBy{claim_suffix}"] is False, f"{linear} must not add Skia-comparable claim")
+        require(refusal_row[contract["neighborEvidenceFlag"]] is False, f"{linear} must not inherit adjacent proof")
     require([row["inventoryId"] for row in diagnostic_rows] == EXPECTED_MISSING, "diagnostic-only row order mismatch")
     for row in diagnostic_rows:
         require(row["dashboardRowId"] is None, f"{row['inventoryId']} diagnostic row must not point to dashboard")
@@ -878,15 +1089,29 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
     require(non_claims["dashboardRowsAddedByFor465"] == 0, "manifest must say 0 FOR-465 dashboard rows added")
     require(non_claims["supportClaimsAddedByFor465"] == 0, "manifest must say 0 FOR-465 support claims")
     require(non_claims["skiaComparableClaimsAddedByFor465"] == 0, "manifest must say 0 FOR-465 Skia-comparable claims")
+    require(non_claims["dashboardRowsAddedByFor466"] == 0, "manifest must say 0 FOR-466 dashboard rows added")
+    require(non_claims["supportClaimsAddedByFor466"] == 0, "manifest must say 0 FOR-466 support claims")
+    require(non_claims["skiaComparableClaimsAddedByFor466"] == 0, "manifest must say 0 FOR-466 Skia-comparable claims")
     require(non_claims["visualSupportAbove50PercentClaim"] is False, "manifest must reject >50% visual support claim")
     require([item["inventoryId"] for item in written["missing"]] == EXPECTED_MISSING, "missing candidate order mismatch")
-    require([item["inventoryId"] for item in written["refusals"]] == [ROW_REFUSAL_ID], "refusal candidate mismatch")
-    require(for465["linear"] == ROW_EVIDENCE_LINEAR, "FOR-465 evidence linear mismatch")
-    require(for465["row"]["inventoryId"] == ROW_REFUSAL_ID, "FOR-465 evidence row mismatch")
+    require([item["inventoryId"] for item in written["refusals"]] == [FOR465_ROW_ID, FOR466_ROW_ID], "refusal candidate mismatch")
+    require(for465["linear"] == FOR465_LINEAR, "FOR-465 evidence linear mismatch")
+    require(for465["row"]["inventoryId"] == FOR465_ROW_ID, "FOR-465 evidence row mismatch")
     require(for465["row"]["status"] == "expected-unsupported", "FOR-465 evidence status mismatch")
-    require(for465["row"]["fallbackReason"] == ROW_REFUSALS[ROW_REFUSAL_ID]["fallbackReason"], "FOR-465 evidence fallback mismatch")
+    require(for465["row"]["fallbackReason"] == ROW_REFUSALS[FOR465_ROW_ID]["fallbackReason"], "FOR-465 evidence fallback mismatch")
     require(for465["row"]["nonClaims"]["drawbitmaprectEvidenceInherited"] is False, "FOR-465 evidence must not inherit drawbitmaprect")
     require(for465["scoreImpact"]["supportScoreIncreased"] is False, "FOR-465 must not increase support score")
+    require(for466["linear"] == FOR466_LINEAR, "FOR-466 evidence linear mismatch")
+    require(for466["row"]["inventoryId"] == FOR466_ROW_ID, "FOR-466 evidence row mismatch")
+    require(for466["row"]["status"] == "expected-unsupported", "FOR-466 evidence status mismatch")
+    require(for466["row"]["fallbackReason"] == ROW_REFUSALS[FOR466_ROW_ID]["fallbackReason"], "FOR-466 evidence fallback mismatch")
+    require(for466["row"]["nonClaims"]["historicalImageEvidenceInherited"] is False, "FOR-466 evidence must not inherit historical image proof")
+    provenance = for466["row"].get("decodeFixtureProvenance")
+    require(isinstance(provenance, dict), "FOR-466 evidence must record decode/fixture provenance")
+    require(provenance.get("externalEncodedFixture") == "none", "FOR-466 must not claim an external encoded fixture")
+    require("not exercised" in provenance.get("decodePath", ""), "FOR-466 must document decode path as not exercised")
+    require("no row-specific D50 reference/CPU/GPU artifacts" in provenance.get("fixtureAvailability", ""), "FOR-466 fixture availability mismatch")
+    require(for466["scoreImpact"]["supportScoreIncreased"] is False, "FOR-466 must not increase support score")
     report = REPORT.read_text(encoding="utf-8")
     for required in (
         "0 `tracked-gap` et 0 `fail`",
@@ -899,6 +1124,7 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
     lot_report = LOT1_REPORT.read_text(encoding="utf-8")
     for required in (
         "FOR-465 ajoute 0 ligne dashboard",
+        "FOR-466 ajoute 0 ligne dashboard",
         "0 revendication de support",
         "0 revendication Skia-comparable",
         "score de support ne monte pas",
@@ -906,6 +1132,7 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
         "`diagnostic-only`",
         "Compteurs Avant / Apres",
         "Ces compteurs avant/apres donnent le contexte dashboard existant",
+        "codec, YUV, animation, EXIF, mipmap, tile-mode ou image color-managed",
         "broad Skia GM parity",
     ):
         require(required in lot_report, f"lot 1 report missing: {required}")
@@ -918,6 +1145,18 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
         "score de support ne monte pas",
     ):
         require(required in for465_report, f"FOR-465 report missing: {required}")
+    for466_report = FOR466_REPORT.read_text(encoding="utf-8")
+    for required in (
+        "expected-unsupported",
+        "ne promeut pas la scene",
+        "ne sont pas herites",
+        "Provenance decode / fixture",
+        "Aucun fichier image encode externe n'est decode",
+        "0 support ajoute",
+        "score de support ne monte pas",
+        "codec, YUV, animation, EXIF, mipmap, tile-mode ou image color-managed",
+    ):
+        require(required in for466_report, f"FOR-466 report missing: {required}")
 
 
 def main() -> None:
@@ -926,7 +1165,7 @@ def main() -> None:
     require_report_and_evidence(evidence)
     require_scope()
     print(
-        f"{ROW_EVIDENCE_LINEAR} validation passed: "
+        f"{FOR466_LINEAR} validation passed: "
         f"materialized={evidence['materializedCandidateCount']} "
         f"expectedUnsupported={evidence['expectedUnsupportedCandidateCount']} "
         f"missing={evidence['missingCandidateCount']} "
