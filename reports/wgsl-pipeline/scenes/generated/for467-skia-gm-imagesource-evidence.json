@@ -9,7 +9,7 @@
     "total": 93
   },
   "date": "2026-06-06",
-  "linear": "FOR-466",
+  "linear": "FOR-467",
   "nonClaims": {
     "animationSupportClaimAddedByFor466": false,
     "animationSupportClaimAddedByFor467": false,
@@ -27,7 +27,7 @@
     "exifSupportClaimAddedByFor466": false,
     "exifSupportClaimAddedByFor467": false,
     "fallbackPolicyChanged": false,
-    "historicalImageEvidenceInherited": false,
+    "imageSourceEvidenceInherited": false,
     "mipmapSupportClaimAddedByFor466": false,
     "mipmapSupportClaimAddedByFor467": false,
     "pipelineKeyChanged": false,
@@ -50,48 +50,31 @@
   "row": {
     "cpu": {
       "artifact": "not-generated",
-      "expectation": "CPU image draw oracle after decode, with decode provenance recorded.",
+      "expectation": "CPU image-source oracle with fixture path and color type recorded.",
       "refusalReason": "row-specific CPU bitmap oracle artifact is missing",
       "required": true,
-      "route": "cpu.image.imagegm.expected-unsupported",
+      "route": "cpu.image-source.imagesource.expected-unsupported",
       "status": "expected-unsupported"
-    },
-    "decodeFixtureProvenance": {
-      "decodePath": "not exercised; ImageGM creates SkSurface raster snapshots, not codec-decoded input",
-      "externalEncodedFixture": "none",
-      "fixtureAvailability": "Kotlin source fixture exists, but no row-specific D50 reference/CPU/GPU artifacts are generated",
-      "imageContent": "static synthetic 64x64 N32 premul raster surface snapshots created by ImageGM before drawImage/drawImageRect",
-      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt",
-      "unsupportedBroadClaims": [
-        "codec",
-        "YUV",
-        "animation",
-        "EXIF",
-        "mipmap",
-        "tile-mode",
-        "color-managed image decode"
-      ],
-      "upstreamSource": "gm/image.cpp"
     },
     "diffStats": {
       "reason": "diff/stat payload cannot be computed without row-specific reference, CPU, and GPU artifacts",
       "required": true,
       "status": "not-computed"
     },
-    "displayName": "Image",
-    "fallbackReason": "image.imagegm.row-specific-artifacts-required",
+    "displayName": "Image Source",
+    "fallbackReason": "image.imagesource.row-specific-artifacts-required",
     "family": "bitmap/image",
     "gpu": {
       "artifact": "not-generated",
-      "expectation": "WebGPU upload plus sampler route for bounded image draw.",
-      "fallbackReason": "image.imagegm.row-specific-artifacts-required",
+      "expectation": "WebGPU image sampling route when resource upload is deterministic.",
+      "fallbackReason": "image.imagesource.row-specific-artifacts-required",
       "refusalReason": "row-specific WebGPU artifact is missing",
       "required": true,
-      "route": "webgpu.image.imagegm.expected-unsupported",
+      "route": "webgpu.image-source.imagesource.expected-unsupported",
       "status": "expected-unsupported"
     },
-    "inventoryId": "skia-gm-image",
-    "linear": "FOR-466",
+    "inventoryId": "skia-gm-imagesource",
+    "linear": "FOR-467",
     "nonClaims": {
       "animationSupportClaimAddedByFor466": false,
       "animationSupportClaimAddedByFor467": false,
@@ -109,7 +92,7 @@
       "exifSupportClaimAddedByFor466": false,
       "exifSupportClaimAddedByFor467": false,
       "fallbackPolicyChanged": false,
-      "historicalImageEvidenceInherited": false,
+      "imageSourceEvidenceInherited": false,
       "mipmapSupportClaimAddedByFor466": false,
       "mipmapSupportClaimAddedByFor467": false,
       "pipelineKeyChanged": false,
@@ -129,26 +112,44 @@
       "yuvSupportClaimAddedByFor466": false,
       "yuvSupportClaimAddedByFor467": false
     },
-    "rank": 4,
-    "reason": "image.imagegm.row-specific-artifacts-required",
+    "rank": 5,
+    "reason": "image.imagesource.row-specific-artifacts-required",
     "reference": {
-      "plan": "Skia GM capture for a static decoded image cell already available to the test.",
+      "plan": "Skia GM capture for static image-source subset.",
       "refusalReason": "candidate-specific Skia GM reference capture is missing",
       "required": true,
       "status": "not-generated"
     },
     "routeDiagnostics": {
-      "cpu": "cpu.image.imagegm.expected-unsupported",
-      "fallbackReason": "image.imagegm.row-specific-artifacts-required",
-      "gpu": "webgpu.image.imagegm.expected-unsupported",
-      "policy": "Historical ImageGM similarity and adjacent bitmap/image rows are not a D50 dashboard row-specific proof. The row stays unsupported until a candidate-specific Skia reference capture, CPU artifact, WebGPU artifact, diff/stat payload, route diagnostics, and fallbackReason=none exist without threshold or scoring changes."
+      "cpu": "cpu.image-source.imagesource.expected-unsupported",
+      "fallbackReason": "image.imagesource.row-specific-artifacts-required",
+      "gpu": "webgpu.image-source.imagesource.expected-unsupported",
+      "policy": "Existing ImageSourceGM similarity reports and adjacent image evidence are not a D50 dashboard row-specific proof. The row stays unsupported until a candidate-specific Skia reference capture, CPU image-source route artifact, WebGPU image-source route artifact, diff/stat payload, and fallbackReason=none exist without threshold or scoring changes."
     },
     "source": {
       "candidateInventory": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
-      "draftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-5-traiter-skia-gm-image",
-      "findingMemory": "global/kanvas/findings/for-465-formalise-le-refus-drawminibitmaprect-d50-lot-1",
-      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt",
-      "upstreamSource": "gm/image.cpp"
+      "draftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-6-traiter-skia-gm-imagesource",
+      "findingMemory": "global/kanvas/findings/for-466-formalise-le-refus-skia-gm-image-d50-lot-1",
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageSourceGM.kt",
+      "upstreamSource": "gm/imagesource.cpp"
+    },
+    "sourceImageProvenance": {
+      "dynamicSourceImage": "not claimed",
+      "fixtureAvailability": "ported Kotlin GM and historical similarity report exist, but no row-specific D50 reference/CPU/GPU artifacts are generated",
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageSourceGM.kt",
+      "referenceFixture": "imagesource.png exists for historical integration testing, but is not a D50 dashboard row-specific artifact",
+      "scene": "ImageSourceGM",
+      "unsupportedBroadClaims": [
+        "codec",
+        "YUV",
+        "animation",
+        "EXIF",
+        "mipmap",
+        "tile-mode",
+        "dynamic source image",
+        "color-managed image"
+      ],
+      "upstreamSource": "gm/imagesource.cpp"
     },
     "status": "expected-unsupported"
   },
@@ -157,10 +158,10 @@
     "reason": "The row is a visible expected-unsupported refusal, not a supported rendering row.",
     "supportScoreIncreased": false
   },
-  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-5-traiter-skia-gm-image",
-  "sourceFindingMemory": "global/kanvas/findings/for-465-formalise-le-refus-drawminibitmaprect-d50-lot-1",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-6-traiter-skia-gm-imagesource",
+  "sourceFindingMemory": "global/kanvas/findings/for-466-formalise-le-refus-skia-gm-image-d50-lot-1",
   "sourceManifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
-  "statusCountsAfterFor466": {
+  "statusCountsAfterFor467": {
     "diagnostic-only": 2,
     "expected-unsupported": 3,
     "supported": 7
