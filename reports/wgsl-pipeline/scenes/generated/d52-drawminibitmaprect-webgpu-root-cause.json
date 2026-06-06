@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-06-06",
+  "ticket": "D52-3",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d52-3-diagnostiquer-et-corriger-l-ecart-web-gpu-draw-mini-bitmap-rect",
+  "classification": "root-cause-diagnosed-local-webgpu-fix-refused",
+  "inventoryId": "skia-gm-drawminibitmaprect",
+  "sceneId": "d52-drawminibitmaprect",
+  "status": "expected-unsupported",
+  "fallbackReason": "bitmap.drawminibitmaprect.rotated-fast-src-rect-webgpu-artifacts-required",
+  "inputEvidence": {
+    "ticket": "D52-2",
+    "report": "reports/wgsl-pipeline/2026-06-06-d52-2-drawminibitmaprect-artifact-harness.md",
+    "json": "reports/wgsl-pipeline/scenes/generated/d52-drawminibitmaprect-artifact-harness.json",
+    "validator": "scripts/validate_d52_drawminibitmaprect_artifact_harness.py",
+    "artifactDir": "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect"
+  },
+  "measurements": {
+    "before": {
+      "backend": "WebGPU",
+      "status": "expected-unsupported",
+      "similarity": 94.9305,
+      "threshold": 99.95,
+      "fallbackReason": "bitmap.drawminibitmaprect.rotated-fast-src-rect-webgpu-artifacts-required",
+      "matchingPixels": 995418,
+      "totalPixels": 1048576,
+      "maxChannelDelta": 242
+    },
+    "after": {
+      "backend": "WebGPU",
+      "status": "expected-unsupported",
+      "similarity": 94.9305,
+      "threshold": 99.95,
+      "fallbackReason": "bitmap.drawminibitmaprect.rotated-fast-src-rect-webgpu-artifacts-required",
+      "matchingPixels": 995418,
+      "totalPixels": 1048576,
+      "maxChannelDelta": 242
+    },
+    "correctionApplied": false,
+    "fallbackReasonNoneAllowed": false
+  },
+  "rootCause": {
+    "summary": "Rotated drawImageRect calls are rewritten into drawPath with an internal SkBitmapShader(kClamp), losing the original source-rect/image-bounds clipping contract before SkWebGpuDevice sees the draw.",
+    "gmSourceImageSize": {
+      "width": 2048,
+      "height": 2048
+    },
+    "sourceRectSizes": [
+      1,
+      3,
+      9,
+      27,
+      81,
+      243,
+      729,
+      2187,
+      6561
+    ],
+    "totalDraws": 81,
+    "outOfImageBoundsDraws": 32,
+    "webgpuBehavior": "Normal kClamp bitmap shader behavior extends edge texels over the full destination rect.",
+    "skiaReferenceBehavior": "The sampled footprint is clipped to the intersection between the requested source rect and the source image bounds.",
+    "affectedRoute": "SkCanvas.drawImageRect rotated path -> drawPath(SkPath.Rect(dst)) -> SkBitmapShader(kClamp) -> SkWebGpuDevice bitmap shader path"
+  },
+  "correctionDecision": {
+    "decision": "refused",
+    "reason": "No safe WebGPU-only correction was identified: after SkCanvas rewrites the draw into a plain SkBitmapShader(kClamp), SkWebGpuDevice cannot reliably distinguish the internal drawImageRect case from user-authored kClamp bitmap shader fills.",
+    "unsafeLocalFixesRejected": [
+      "Forcing kDecal for kClamp bitmap shader rect paths when the image footprint is smaller than the path.",
+      "Clipping WebGPU kClamp bitmap shader cover geometry to the source image footprint without drawImageRect provenance.",
+      "Changing thresholds or clearing fallbackReason while the artifact run remains below 99.95%."
+    ],
+    "requiredFutureBoundary": "Preserve drawImageRect provenance or carry a source-image intersection/clipped-destination contract from SkCanvas into CPU and WebGPU shader routing."
+  },
+  "scoreImpact": {
+    "supportScoreIncreased": false,
+    "skiaComparableScoreIncreased": false,
+    "readinessScoreIncreased": false,
+    "reason": "D52-3 is diagnostic only. WebGPU remains expected-unsupported with the stable D51/D52 fallback reason."
+  },
+  "nonClaims": {
+    "supportClaimAddedByD52_3": false,
+    "fallbackReasonCleared": false,
+    "resultsJsonChanged": false,
+    "scenesJsonChanged": false,
+    "d50ManifestChanged": false,
+    "d51EvidenceChanged": false,
+    "d52_1EvidenceChanged": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "productionWebGpuChanged": false,
+    "m66EvidenceInherited": false,
+    "ganeshOrGraphitePorted": false,
+    "skslCompilerIrVmRebuilt": false
+  },
+  "expectedChangedFiles": [
+    "reports/wgsl-pipeline/2026-06-06-d52-3-drawminibitmaprect-webgpu-root-cause.md",
+    "reports/wgsl-pipeline/scenes/generated/d52-drawminibitmaprect-webgpu-root-cause.json",
+    "scripts/validate_d52_drawminibitmaprect_webgpu_root_cause.py"
+  ],
+    "validationCommands": [
+        "rtk python3 scripts/validate_d52_drawminibitmaprect_webgpu_root_cause.py",
+        "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d52-drawminibitmaprect-webgpu-root-cause.json",
+        "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-d52-3-pycache python3 -m py_compile scripts/validate_d52_drawminibitmaprect_webgpu_root_cause.py",
+        "rtk ./gradlew --no-daemon --rerun-tasks :gpu-raster:test --tests org.skia.gpu.webgpu.DrawMiniBitmapRectSceneCaptureTest",
+        "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.DrawMiniBitmapRectSceneCaptureTest",
+        "rtk git diff --check"
+    ],
+    "d52_2ValidatorCompatibility": {
+        "command": "rtk python3 scripts/validate_d52_drawminibitmaprect_artifact_harness.py --require-artifacts",
+        "notFinalD52_3Validation": true,
+        "reason": "The D52-2 validator is a D52-2 scope guard and intentionally rejects the new D52-3 report, evidence JSON, and validator. D52-3 validates the checked-in D52-2 artifacts through its own root-cause validator."
+    }
+}
