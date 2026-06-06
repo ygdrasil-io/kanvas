@@ -5,6 +5,7 @@ import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorGREEN
 import org.graphiks.math.SK_ColorRED
 import org.graphiks.math.SK_ColorWHITE
+import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assumptions
@@ -292,6 +293,51 @@ class BitmapShaderPaintRectTest {
         assertEquals(listOf(0, 0, 0, 255), pixels.rgbaAt(W - 1, H - 1), "tile (W/SIDE-1, H/SIDE-1) black")
     }
 
+    @Test
+    fun `drawImageRect source outside image clips but user kClamp shader extends edge`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val image = makeRightBlueImage()
+        val src = SkRect.MakeLTRB(1f, 0f, 3f, 2f)
+        val imageRectDst = SkRect.MakeXYWH(4f, 4f, 20f, 20f)
+        val shaderDst = SkRect.MakeXYWH(4f, 32f, 20f, 20f)
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                canvas.drawImageRect(
+                    image,
+                    src,
+                    imageRectDst,
+                    SkSamplingOptions.nearest(),
+                )
+
+                val localMatrix = SkMatrix.MakeRectToRect(
+                    src,
+                    shaderDst,
+                    SkMatrix.ScaleToFit.kFill_ScaleToFit,
+                )!!
+                val paint = SkPaint().apply {
+                    shader = image.makeShader(
+                        tileX = SkTileMode.kClamp,
+                        tileY = SkTileMode.kClamp,
+                        sampling = SkSamplingOptions.nearest(),
+                        localMatrix = localMatrix,
+                    )
+                }
+                canvas.drawRect(shaderDst, paint)
+                device.flush()
+            }
+        }
+
+        assertEquals(listOf(0, 0, 255, 255), pixels.rgbaAt(8, 14), "drawImageRect intersected source")
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(20, 14), "drawImageRect clipped destination")
+        assertEquals(listOf(0, 0, 255, 255), pixels.rgbaAt(8, 42), "kClamp shader samples the image")
+        assertEquals(listOf(0, 0, 255, 255), pixels.rgbaAt(20, 42), "user kClamp shader keeps edge extension")
+    }
+
     /**
      * 4x4 image split into 4 quadrants : R / G / B / Bk. Same helper
      * as [ImageRectTest.makeQuadrantImage] -- duplicated here to keep
@@ -311,6 +357,13 @@ class BitmapShaderPaintRectTest {
                 bitmap.setPixel(x, y, color)
             }
         }
+        return SkImage.Make(bitmap)
+    }
+
+    private fun makeRightBlueImage(): SkImage {
+        val bitmap = SkBitmap(2, 2).also { it.eraseColor(SK_ColorGREEN) }
+        bitmap.setPixel(1, 0, SK_ColorBLUE)
+        bitmap.setPixel(1, 1, SK_ColorBLUE)
         return SkImage.Make(bitmap)
     }
 

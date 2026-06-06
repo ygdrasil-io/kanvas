@@ -24,6 +24,7 @@ import org.graphiks.math.SkColorSetARGB
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPath
 import org.skia.foundation.SkSamplingOptions
+import org.skia.foundation.SkTileMode
 import org.graphiks.math.SkIRect
 import org.graphiks.math.SkMatrix
 import org.graphiks.math.SkRect
@@ -386,6 +387,43 @@ class SkCanvasInternalsTest {
         // And we should distinguish from no-saveLayer-at-all (sanity check).
         val baseline = render(8, 8) { /* no draw */ }
         assertNotEquals(a.pixels[0], baseline.pixels[0])
+    }
+
+    @Test
+    fun `drawImageRect clips source outside image without changing user kClamp shader`() {
+        val image = twoByTwoRightBlueImage()
+        val src = SkRect.MakeLTRB(1f, 0f, 3f, 2f)
+        val dst = SkRect.MakeXYWH(0f, 0f, 20f, 20f)
+
+        val imageRect = render(24, 20, bg = SK_ColorRED) {
+            drawImageRect(image, src, dst, SkSamplingOptions.nearest())
+        }
+
+        assertEquals(SK_ColorBLUE, imageRect.getPixel(5, 10), "drawImageRect intersected source")
+        assertEquals(SK_ColorRED, imageRect.getPixel(15, 10), "drawImageRect clipped destination")
+
+        val shaderClamp = render(24, 20, bg = SK_ColorRED) {
+            val localMatrix = SkMatrix.MakeRectToRect(src, dst, SkMatrix.ScaleToFit.kFill_ScaleToFit)!!
+            val paint = SkPaint().apply {
+                shader = image.makeShader(
+                    tileX = SkTileMode.kClamp,
+                    tileY = SkTileMode.kClamp,
+                    sampling = SkSamplingOptions.nearest(),
+                    localMatrix = localMatrix,
+                )
+            }
+            drawPath(SkPath.Rect(dst), paint)
+        }
+
+        assertEquals(SK_ColorBLUE, shaderClamp.getPixel(5, 10), "kClamp shader samples the image")
+        assertEquals(SK_ColorBLUE, shaderClamp.getPixel(15, 10), "user kClamp shader keeps edge extension")
+    }
+
+    private fun twoByTwoRightBlueImage(): SkImage {
+        val bitmap = SkBitmap(2, 2).also { it.eraseColor(SK_ColorGREEN) }
+        bitmap.setPixel(1, 0, SK_ColorBLUE)
+        bitmap.setPixel(1, 1, SK_ColorBLUE)
+        return SkImage.Make(bitmap)
     }
 }
 
