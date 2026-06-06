@@ -224,6 +224,8 @@ private const val WEBGPU_M60_F16_RUNTIME_EXACT_MASK_PROBE_FOR442_FLAG: String =
     "kanvas.webgpu.m60F16RuntimeExactMaskProbeFor442.enabled"
 private const val WEBGPU_M60_F16_LOW_LEVEL_EXACT_MASK_PROBE_FOR443_FLAG: String =
     "kanvas.webgpu.m60F16LowLevelExactMaskProbeFor443.enabled"
+private const val WEBGPU_M60_F16_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROBE_FOR444_FLAG: String =
+    "kanvas.webgpu.m60F16RuntimeMaskPackingVsLowLevelProbeFor444.enabled"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_RENDER_FIX_FOR431_FLAG: String =
     "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_FOR432_FLAG: String =
@@ -1023,12 +1025,20 @@ public class SkWebGpuDevice(
         System.getProperty(
             WEBGPU_M60_F16_RUNTIME_EXACT_MASK_PROBE_FOR442_FLAG,
             "false",
-        ).toBoolean()
+        ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROBE_FOR444_FLAG,
+                "false",
+            ).toBoolean()
     private val m60F16LowLevelExactMaskProbeFor443DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_LOW_LEVEL_EXACT_MASK_PROBE_FOR443_FLAG,
             "false",
-        ).toBoolean()
+        ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_RUNTIME_MASK_PACKING_VS_LOW_LEVEL_PROBE_FOR444_FLAG,
+                "false",
+            ).toBoolean()
     private val m60F16HostDrawPaintBindingFor436DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_HOST_DRAW_PAINT_BINDING_FOR436_FLAG,

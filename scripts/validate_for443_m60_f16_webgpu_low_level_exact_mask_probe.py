@@ -45,9 +45,13 @@ ALLOWED_LOCAL_DIFFS = {
     "scripts/validate_for441_m60_f16_webgpu_exact_subsample_mask_vs_cpu_green.py",
     "scripts/validate_for442_m60_f16_webgpu_runtime_exact_mask_probe.py",
     "scripts/validate_for443_m60_f16_webgpu_low_level_exact_mask_probe.py",
+    "scripts/validate_for444_m60_f16_runtime_mask_packing_vs_low_level_probe.py",
     "reports/wgsl-pipeline/2026-06-06-for-443-m60-f16-webgpu-low-level-exact-mask-probe.md",
+    "reports/wgsl-pipeline/2026-06-06-for-444-m60-f16-runtime-mask-packing-vs-low-level-probe.md",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/{SCENE_ID}.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-runtime-mask-packing-vs-low-level-probe-for444",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-runtime-mask-packing-vs-low-level-probe-for444/m60-f16-runtime-mask-packing-vs-low-level-probe-for444.json",
 }
 FORBIDDEN_DIFF_PREFIXES = (
     "gpu-raster/src/main/resources/shaders/",
