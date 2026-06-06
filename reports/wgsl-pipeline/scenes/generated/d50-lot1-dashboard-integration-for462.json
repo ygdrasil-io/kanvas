@@ -39,6 +39,7 @@
     "total": 93
   },
   "dashboardGate": "build/reports/wgsl-pipeline-scene-gate/scene-dashboard-gate.json",
+  "dashboardRowsAddedByD50Visibility": 0,
   "dashboardRowsAddedByFor464": 0,
   "dashboardRowsAddedByFor465": 0,
   "dashboardRowsAddedByFor466": 0,
@@ -52,6 +53,7 @@
   "dashboardStatusChangedByFor467": false,
   "dashboardStatusChangedByFor468": false,
   "dashboardStatusChangedByFor469": false,
+  "dashboardSupportStatusChangedByD50Visibility": false,
   "date": "2026-06-06",
   "dynamicSourceImageSupportClaimAddedByFor467": false,
   "edgeBudgetSupportClaimAddedByFor469": false,
