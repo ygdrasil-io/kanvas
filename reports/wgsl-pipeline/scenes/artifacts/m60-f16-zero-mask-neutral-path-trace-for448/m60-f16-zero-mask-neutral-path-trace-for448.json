@@ -1,0 +1,460 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-448",
+          "sceneId": "m60-f16-zero-mask-neutral-path-trace-for448",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-tracer-le-passage-reel-apres-correction-zero-mask-neutre-for-447",
+          "sourceFindingMemory": "global/kanvas/findings/for-447-zero-mask-opt-in-correction-is-neutral-on-m60-f16",
+          "sourceArtifacts": {
+            "for447": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-opt-in-correction-for447/m60-f16-zero-mask-opt-in-correction-for447.json",
+            "for446": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-for442-float-mask-field-audit-for446/m60-f16-for442-float-mask-field-audit-for446.json",
+            "for445": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-runtime-integer-lane-mask-probe-for445/m60-f16-runtime-integer-lane-mask-probe-for445.json",
+            "for443": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-low-level-exact-mask-probe-for443/m60-f16-low-level-exact-mask-probe-for443.json",
+            "referenceCpuPng": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/reference-cpu.png",
+            "currentWebGpuPng": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/current-webgpu.png",
+            "insideFor447Png": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/inside-webgpu-for447.png",
+            "outsideFor448Png": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/outside-webgpu-for448.png",
+            "bothFor448Png": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-neutral-path-trace-for448/both-webgpu-for448.png"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "optInFlag": "kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled",
+          "modeProperty": "kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.mode",
+          "testedModes": ["inside-via-FOR-447", "outside", "both"],
+          "classification": "zero-mask-neutral-path-trace-inconclusive",
+          "allowedClassifications": [
+            "zero-mask-neutral-caused-by-wrong-subpass-target",
+"zero-mask-neutral-caused-by-later-pass-overwrite",
+"zero-mask-neutral-caused-by-preexisting-destination",
+"zero-mask-neutral-caused-by-stencil-selection",
+"zero-mask-neutral-path-trace-inconclusive"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "productionWgslChanged": false,
+          "wgsl4kModified": false,
+          "renderingFixAppliedByDefault": false,
+          "for442UsedAsDecisionSource": false,
+          "for448TraceOptInOnly": true,
+          "for448TraceDefaultActive": false,
+          "comparisonPolicy": {
+            "scope": "Full M60 F16 bounded stroke-cap/join scene plus exactly the six FOR-447 zero-mask pixels.",
+            "defaultRender": "captured with kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled=false",
+            "insideRender": "FOR-447 inside discard retained as the known neutral baseline",
+            "outsideRender": "captured with kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled=true and kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.mode=outside",
+            "bothRender": "captured with kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled=true and kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.mode=both",
+            "webgpuRenderModel": "in-memory shader variants; production aa_stencil_cover.wgsl is unchanged",
+            "decisionSource": "FOR-447 neutral finding plus FOR-445/FOR-443 zero-mask targets; FOR-442 float field is explicitly excluded"
+          },
+          "summary": {
+            "fullScenePixels": 24576,
+            "currentSimilarity": 95.914714,
+            "insideSimilarity": 95.914714,
+            "outsideSimilarity": 95.914714,
+            "bothSimilarity": 95.914714,
+            "currentTotalResidual": 2014,
+            "insideTotalResidual": 2014,
+            "outsideTotalResidual": 2014,
+            "bothTotalResidual": 2014,
+            "insideResidualDeltaMinusCurrent": 0,
+            "outsideResidualDeltaMinusCurrent": 0,
+            "bothResidualDeltaMinusCurrent": 0,
+            "insideChangedPixels": 0,
+            "outsideChangedPixels": 0,
+            "bothChangedPixels": 0,
+            "insideChangedTargetPixels": 0,
+            "outsideChangedTargetPixels": 0,
+            "bothChangedTargetPixels": 0,
+            "insideChangedOutsideTargetPixels": 0,
+            "outsideChangedOutsideTargetPixels": 0,
+            "bothChangedOutsideTargetPixels": 0,
+            "currentGreaterThanEightPixels": 10,
+            "insideGreaterThanEightPixels": 10,
+            "outsideGreaterThanEightPixels": 10,
+            "bothGreaterThanEightPixels": 10,
+            "zeroMaskPixelCount": 6,
+            "predrawDstObservedTargetCount": 6,
+            "postPassObservedTargetCount": 6,
+            "for442DecisionSourceUsedCount": 0
+          },
+          "subpassTrace": {
+            "traceKind": "final-image-variant-differential",
+            "directSubpassFragmentWriteTraceAvailable": false,
+            "directSubpassFragmentWriteTraceMissingReason": "The artifact compares final-image effects of inside/outside/both discard variants but does not expose per-fragment subpass write events.",
+            "insideDiscardChangedTargetPixels": 0,
+            "outsideDiscardChangedTargetPixels": 0,
+            "bothDiscardChangedTargetPixels": 0,
+            "insideDiscardChangedOutsideTargetPixels": 0,
+            "outsideDiscardChangedOutsideTargetPixels": 0,
+            "bothDiscardChangedOutsideTargetPixels": 0
+          },
+          "stencilWriteTrace": {
+            "available": false,
+            "status": "stencil-write-not-observed-by-for448",
+            "missingReason": "FOR-448 cannot identify stencil-write behavior without adding a separate stencil-pass probe, so this artifact refuses to name a correction candidate.",
+            "fallbackClassification": "zero-mask-neutral-path-trace-inconclusive"
+          },
+          "traceCompleteness": {
+            "insideOutsideSubpassTraceComplete": false,
+            "stencilWriteTraceComplete": false,
+            "destinationBeforeAfterTraceComplete": true,
+            "finalImageTraceComplete": true,
+            "incompleteTracePolicy": "classify zero-mask-neutral-path-trace-inconclusive and refuse to name a correction candidate"
+          },
+          "destinationTrace": {
+            "predrawProperty": "kanvas.webgpu.m60F16AaStencilCoverPredrawDstReadback.enabled",
+            "predrawEnabled": true,
+            "predrawObservedTargetCount": 6,
+            "postPassProperty": "kanvas.webgpu.m60F16DirectPassWriteHook.enabled",
+            "postPassEnabled": true,
+            "postPassObservedTargetCount": 6
+          },
+          "partialPixels": [
+            {
+  "x": 92,
+  "y": 75,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "insideDiscardFor447Rgba": [181, 191, 230, 255],
+  "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+  "bothDiscardFor448Rgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "insideResidual": 105,
+  "outsideResidual": 105,
+  "bothResidual": 105,
+  "insideChangedPixel": false,
+  "outsideChangedPixel": false,
+  "bothChangedPixel": false,
+  "for442DecisionSourceUsed": false,
+  "subpassTrace": {
+    "traceKind": "final-image-variant-differential",
+    "insideVariantChangedPixel": false,
+    "outsideVariantChangedPixel": false,
+    "bothVariantChangedPixel": false,
+    "observedInsideFragmentWrite": null,
+    "observedOutsideFragmentWrite": null,
+    "missingDirectObservationReason": "FOR-448 compares final images for inside/outside/both discard variants; it does not expose per-fragment writes for each subpass."
+  },
+  "stencilWriteTrace": {
+    "available": false,
+    "status": "stencil-write-not-observed-by-for448",
+    "missingReason": "FOR-448 does not instrument the stencil write pass directly. The ticket therefore keeps the classification inconclusive instead of inferring stencil-write behavior from post-pass color."
+  },
+  "stencilSelectionTrace": {
+    "postPassSampleCount": 3,
+    "postPassObservedCount": 3,
+    "postPassClassifications": [
+      "aa-stencil-cover-post-pass-color-observed"
+    ]
+  },
+  "destinationBeforeTrace": {
+    "sampleCount": 3,
+    "observedCount": 3,
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "selectedRgba8": [255, 255, 255, 255],
+    "classifications": [
+      "predraw-dst-observed"
+    ]
+  },
+  "destinationAfterTrace": {
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "selectedRgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 91,
+  "y": 76,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "insideDiscardFor447Rgba": [181, 191, 230, 255],
+  "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+  "bothDiscardFor448Rgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "insideResidual": 105,
+  "outsideResidual": 105,
+  "bothResidual": 105,
+  "insideChangedPixel": false,
+  "outsideChangedPixel": false,
+  "bothChangedPixel": false,
+  "for442DecisionSourceUsed": false,
+  "subpassTrace": {
+    "traceKind": "final-image-variant-differential",
+    "insideVariantChangedPixel": false,
+    "outsideVariantChangedPixel": false,
+    "bothVariantChangedPixel": false,
+    "observedInsideFragmentWrite": null,
+    "observedOutsideFragmentWrite": null,
+    "missingDirectObservationReason": "FOR-448 compares final images for inside/outside/both discard variants; it does not expose per-fragment writes for each subpass."
+  },
+  "stencilWriteTrace": {
+    "available": false,
+    "status": "stencil-write-not-observed-by-for448",
+    "missingReason": "FOR-448 does not instrument the stencil write pass directly. The ticket therefore keeps the classification inconclusive instead of inferring stencil-write behavior from post-pass color."
+  },
+  "stencilSelectionTrace": {
+    "postPassSampleCount": 3,
+    "postPassObservedCount": 3,
+    "postPassClassifications": [
+      "aa-stencil-cover-post-pass-color-observed"
+    ]
+  },
+  "destinationBeforeTrace": {
+    "sampleCount": 3,
+    "observedCount": 3,
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "selectedRgba8": [255, 255, 255, 255],
+    "classifications": [
+      "predraw-dst-observed"
+    ]
+  },
+  "destinationAfterTrace": {
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "selectedRgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 90,
+  "y": 77,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "insideDiscardFor447Rgba": [181, 191, 230, 255],
+  "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+  "bothDiscardFor448Rgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "insideResidual": 105,
+  "outsideResidual": 105,
+  "bothResidual": 105,
+  "insideChangedPixel": false,
+  "outsideChangedPixel": false,
+  "bothChangedPixel": false,
+  "for442DecisionSourceUsed": false,
+  "subpassTrace": {
+    "traceKind": "final-image-variant-differential",
+    "insideVariantChangedPixel": false,
+    "outsideVariantChangedPixel": false,
+    "bothVariantChangedPixel": false,
+    "observedInsideFragmentWrite": null,
+    "observedOutsideFragmentWrite": null,
+    "missingDirectObservationReason": "FOR-448 compares final images for inside/outside/both discard variants; it does not expose per-fragment writes for each subpass."
+  },
+  "stencilWriteTrace": {
+    "available": false,
+    "status": "stencil-write-not-observed-by-for448",
+    "missingReason": "FOR-448 does not instrument the stencil write pass directly. The ticket therefore keeps the classification inconclusive instead of inferring stencil-write behavior from post-pass color."
+  },
+  "stencilSelectionTrace": {
+    "postPassSampleCount": 3,
+    "postPassObservedCount": 3,
+    "postPassClassifications": [
+      "aa-stencil-cover-post-pass-color-observed"
+    ]
+  },
+  "destinationBeforeTrace": {
+    "sampleCount": 3,
+    "observedCount": 3,
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "selectedRgba8": [255, 255, 255, 255],
+    "classifications": [
+      "predraw-dst-observed"
+    ]
+  },
+  "destinationAfterTrace": {
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "selectedRgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 89,
+  "y": 78,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "insideDiscardFor447Rgba": [181, 191, 230, 255],
+  "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+  "bothDiscardFor448Rgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "insideResidual": 105,
+  "outsideResidual": 105,
+  "bothResidual": 105,
+  "insideChangedPixel": false,
+  "outsideChangedPixel": false,
+  "bothChangedPixel": false,
+  "for442DecisionSourceUsed": false,
+  "subpassTrace": {
+    "traceKind": "final-image-variant-differential",
+    "insideVariantChangedPixel": false,
+    "outsideVariantChangedPixel": false,
+    "bothVariantChangedPixel": false,
+    "observedInsideFragmentWrite": null,
+    "observedOutsideFragmentWrite": null,
+    "missingDirectObservationReason": "FOR-448 compares final images for inside/outside/both discard variants; it does not expose per-fragment writes for each subpass."
+  },
+  "stencilWriteTrace": {
+    "available": false,
+    "status": "stencil-write-not-observed-by-for448",
+    "missingReason": "FOR-448 does not instrument the stencil write pass directly. The ticket therefore keeps the classification inconclusive instead of inferring stencil-write behavior from post-pass color."
+  },
+  "stencilSelectionTrace": {
+    "postPassSampleCount": 3,
+    "postPassObservedCount": 3,
+    "postPassClassifications": [
+      "aa-stencil-cover-post-pass-color-observed"
+    ]
+  },
+  "destinationBeforeTrace": {
+    "sampleCount": 3,
+    "observedCount": 3,
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "selectedRgba8": [255, 255, 255, 255],
+    "classifications": [
+      "predraw-dst-observed"
+    ]
+  },
+  "destinationAfterTrace": {
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "selectedRgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 88,
+  "y": 79,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "insideDiscardFor447Rgba": [181, 191, 230, 255],
+  "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+  "bothDiscardFor448Rgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "insideResidual": 105,
+  "outsideResidual": 105,
+  "bothResidual": 105,
+  "insideChangedPixel": false,
+  "outsideChangedPixel": false,
+  "bothChangedPixel": false,
+  "for442DecisionSourceUsed": false,
+  "subpassTrace": {
+    "traceKind": "final-image-variant-differential",
+    "insideVariantChangedPixel": false,
+    "outsideVariantChangedPixel": false,
+    "bothVariantChangedPixel": false,
+    "observedInsideFragmentWrite": null,
+    "observedOutsideFragmentWrite": null,
+    "missingDirectObservationReason": "FOR-448 compares final images for inside/outside/both discard variants; it does not expose per-fragment writes for each subpass."
+  },
+  "stencilWriteTrace": {
+    "available": false,
+    "status": "stencil-write-not-observed-by-for448",
+    "missingReason": "FOR-448 does not instrument the stencil write pass directly. The ticket therefore keeps the classification inconclusive instead of inferring stencil-write behavior from post-pass color."
+  },
+  "stencilSelectionTrace": {
+    "postPassSampleCount": 3,
+    "postPassObservedCount": 3,
+    "postPassClassifications": [
+      "aa-stencil-cover-post-pass-color-observed"
+    ]
+  },
+  "destinationBeforeTrace": {
+    "sampleCount": 3,
+    "observedCount": 3,
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "selectedRgba8": [255, 255, 255, 255],
+    "classifications": [
+      "predraw-dst-observed"
+    ]
+  },
+  "destinationAfterTrace": {
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "selectedRgba8": [181, 191, 230, 255]
+  }
+},
+{
+  "x": 87,
+  "y": 80,
+  "referenceCpuRgba": [133, 150, 214, 255],
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "insideDiscardFor447Rgba": [181, 191, 230, 255],
+  "outsideDiscardFor448Rgba": [181, 191, 230, 255],
+  "bothDiscardFor448Rgba": [181, 191, 230, 255],
+  "currentResidual": 105,
+  "insideResidual": 105,
+  "outsideResidual": 105,
+  "bothResidual": 105,
+  "insideChangedPixel": false,
+  "outsideChangedPixel": false,
+  "bothChangedPixel": false,
+  "for442DecisionSourceUsed": false,
+  "subpassTrace": {
+    "traceKind": "final-image-variant-differential",
+    "insideVariantChangedPixel": false,
+    "outsideVariantChangedPixel": false,
+    "bothVariantChangedPixel": false,
+    "observedInsideFragmentWrite": null,
+    "observedOutsideFragmentWrite": null,
+    "missingDirectObservationReason": "FOR-448 compares final images for inside/outside/both discard variants; it does not expose per-fragment writes for each subpass."
+  },
+  "stencilWriteTrace": {
+    "available": false,
+    "status": "stencil-write-not-observed-by-for448",
+    "missingReason": "FOR-448 does not instrument the stencil write pass directly. The ticket therefore keeps the classification inconclusive instead of inferring stencil-write behavior from post-pass color."
+  },
+  "stencilSelectionTrace": {
+    "postPassSampleCount": 3,
+    "postPassObservedCount": 3,
+    "postPassClassifications": [
+      "aa-stencil-cover-post-pass-color-observed"
+    ]
+  },
+  "destinationBeforeTrace": {
+    "sampleCount": 3,
+    "observedCount": 3,
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [1.000000000, 1.000000000, 1.000000000, 1.000000000],
+    "selectedRgba8": [255, 255, 255, 255],
+    "classifications": [
+      "predraw-dst-observed"
+    ]
+  },
+  "destinationAfterTrace": {
+    "selectedDrawIndex": 1,
+    "selectedRgbaFloat": [0.709472656, 0.748535156, 0.901855469, 1.000000000],
+    "selectedRgba8": [181, 191, 230, 255]
+  }
+}
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "activationByDefault": false,
+            "for442UsedAsDecisionSource": false
+          },
+          "classificationReason": "The inside, outside, both-pass and destination traces do not identify one exclusive cause without widening instrumentation.",
+          "nextCorrectionCandidate": "Refuse to name a correction candidate: the trace is incomplete or all tested discard variants are neutral.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
+            "rtk python3 scripts/validate_for447_m60_f16_zero_mask_opt_in_correction.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for448-pycache python3 -m py_compile scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py scripts/validate_for447_m60_f16_zero_mask_opt_in_correction.py",
+            "rtk git diff --check"
+          ]
+        }

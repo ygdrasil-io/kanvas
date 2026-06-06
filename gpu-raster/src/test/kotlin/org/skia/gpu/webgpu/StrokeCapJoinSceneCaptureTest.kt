@@ -133,6 +133,28 @@ class StrokeCapJoinSceneCaptureTest {
                     WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
                 }
             }
+            val zeroMaskNeutralPathTraceFor448Enabled =
+                System.getProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY, "false").toBoolean()
+            val zeroMaskNeutralPathTraceFor448OutsideGpu =
+                if (zeroMaskNeutralPathTraceFor448Enabled) {
+                    withExperimentalStrokeCapJoinRender {
+                        withM60F16ZeroMaskNeutralPathTraceFor448(true, "outside") {
+                            WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
+                        }
+                    }
+                } else {
+                    null
+                }
+            val zeroMaskNeutralPathTraceFor448BothGpu =
+                if (zeroMaskNeutralPathTraceFor448Enabled) {
+                    withExperimentalStrokeCapJoinRender {
+                        withM60F16ZeroMaskNeutralPathTraceFor448(true, "both") {
+                            WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
+                        }
+                    }
+                } else {
+                    null
+                }
             val boundedRuntimeCorrectionGpu = boundedRuntimeCorrectionResult.bitmap
             val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = 0)
             val experimentalGpuCmp = TestUtils.compareBitmapsDetailed(experimentalGpu, reference, tolerance = 0)
@@ -144,6 +166,14 @@ class StrokeCapJoinSceneCaptureTest {
                 TestUtils.compareBitmapsDetailed(widthQuantizedRenderFixFor431Gpu, reference, tolerance = 0)
             val zeroMaskCorrectionFor447GpuCmp =
                 TestUtils.compareBitmapsDetailed(zeroMaskCorrectionFor447Gpu, reference, tolerance = 0)
+            val zeroMaskNeutralPathTraceFor448OutsideGpuCmp =
+                zeroMaskNeutralPathTraceFor448OutsideGpu?.let {
+                    TestUtils.compareBitmapsDetailed(it, reference, tolerance = 0)
+                }
+            val zeroMaskNeutralPathTraceFor448BothGpuCmp =
+                zeroMaskNeutralPathTraceFor448BothGpu?.let {
+                    TestUtils.compareBitmapsDetailed(it, reference, tolerance = 0)
+                }
             val experimentalGpuToleranceProfile = toleranceProfile(experimentalGpu, reference)
             val regionStats = strokeRegionStats(experimentalGpu, reference)
             val residualStats = strokeResidualStats(experimentalGpu, reference)
@@ -154,6 +184,10 @@ class StrokeCapJoinSceneCaptureTest {
                 strokeResidualStats(widthQuantizedRenderFixFor431Gpu, reference)
             val zeroMaskCorrectionFor447ResidualStats =
                 strokeResidualStats(zeroMaskCorrectionFor447Gpu, reference)
+            val zeroMaskNeutralPathTraceFor448OutsideResidualStats =
+                zeroMaskNeutralPathTraceFor448OutsideGpu?.let { strokeResidualStats(it, reference) }
+            val zeroMaskNeutralPathTraceFor448BothResidualStats =
+                zeroMaskNeutralPathTraceFor448BothGpu?.let { strokeResidualStats(it, reference) }
             val adapter = ctx.adapterInfo ?: "unknown-adapter"
 
             println(
@@ -392,6 +426,8 @@ class StrokeCapJoinSceneCaptureTest {
                     boundedRuntimeCorrectionGpu = boundedRuntimeCorrectionGpu,
                     widthQuantizedRenderFixFor431Gpu = widthQuantizedRenderFixFor431Gpu,
                     zeroMaskCorrectionFor447Gpu = zeroMaskCorrectionFor447Gpu,
+                    zeroMaskNeutralPathTraceFor448OutsideGpu = zeroMaskNeutralPathTraceFor448OutsideGpu,
+                    zeroMaskNeutralPathTraceFor448BothGpu = zeroMaskNeutralPathTraceFor448BothGpu,
                     boundedCorrectionApplicationPointGpu = boundedCorrectionApplicationPointResult.bitmap,
                     coverageStencilContributionMapGpu = coverageStencilContributionMapResult.bitmap,
                     cpuCmp = cpuCmp,
@@ -400,6 +436,10 @@ class StrokeCapJoinSceneCaptureTest {
                     boundedRuntimeCorrectionGpuCmp = boundedRuntimeCorrectionGpuCmp,
                     widthQuantizedRenderFixFor431GpuCmp = widthQuantizedRenderFixFor431GpuCmp,
                     zeroMaskCorrectionFor447GpuCmp = zeroMaskCorrectionFor447GpuCmp,
+                    zeroMaskNeutralPathTraceFor448OutsideGpuCmp =
+                        zeroMaskNeutralPathTraceFor448OutsideGpuCmp,
+                    zeroMaskNeutralPathTraceFor448BothGpuCmp =
+                        zeroMaskNeutralPathTraceFor448BothGpuCmp,
                     experimentalGpuToleranceProfile = experimentalGpuToleranceProfile,
                     regionStats = regionStats,
                     residualStats = residualStats,
@@ -407,6 +447,10 @@ class StrokeCapJoinSceneCaptureTest {
                     boundedRuntimeCorrectionResidualStats = boundedRuntimeCorrectionResidualStats,
                     widthQuantizedRenderFixFor431ResidualStats = widthQuantizedRenderFixFor431ResidualStats,
                     zeroMaskCorrectionFor447ResidualStats = zeroMaskCorrectionFor447ResidualStats,
+                    zeroMaskNeutralPathTraceFor448OutsideResidualStats =
+                        zeroMaskNeutralPathTraceFor448OutsideResidualStats,
+                    zeroMaskNeutralPathTraceFor448BothResidualStats =
+                        zeroMaskNeutralPathTraceFor448BothResidualStats,
                     fragmentLaneRuntimeSnapshot = fragmentLaneRuntimeSnapshot,
                     boundedRuntimeCorrectionSnapshot = boundedRuntimeCorrectionResult.snapshot,
                     boundedCorrectionApplicationPointSnapshot =
@@ -464,6 +508,8 @@ class StrokeCapJoinSceneCaptureTest {
         boundedRuntimeCorrectionGpu: SkBitmap,
         widthQuantizedRenderFixFor431Gpu: SkBitmap,
         zeroMaskCorrectionFor447Gpu: SkBitmap,
+        zeroMaskNeutralPathTraceFor448OutsideGpu: SkBitmap?,
+        zeroMaskNeutralPathTraceFor448BothGpu: SkBitmap?,
         boundedCorrectionApplicationPointGpu: SkBitmap,
         coverageStencilContributionMapGpu: SkBitmap,
         cpuCmp: BitmapComparison,
@@ -472,6 +518,8 @@ class StrokeCapJoinSceneCaptureTest {
         boundedRuntimeCorrectionGpuCmp: BitmapComparison,
         widthQuantizedRenderFixFor431GpuCmp: BitmapComparison,
         zeroMaskCorrectionFor447GpuCmp: BitmapComparison,
+        zeroMaskNeutralPathTraceFor448OutsideGpuCmp: BitmapComparison?,
+        zeroMaskNeutralPathTraceFor448BothGpuCmp: BitmapComparison?,
         experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
         residualStats: StrokeResidualStats,
@@ -479,6 +527,8 @@ class StrokeCapJoinSceneCaptureTest {
         boundedRuntimeCorrectionResidualStats: StrokeResidualStats,
         widthQuantizedRenderFixFor431ResidualStats: StrokeResidualStats,
         zeroMaskCorrectionFor447ResidualStats: StrokeResidualStats,
+        zeroMaskNeutralPathTraceFor448OutsideResidualStats: StrokeResidualStats?,
+        zeroMaskNeutralPathTraceFor448BothResidualStats: StrokeResidualStats?,
         fragmentLaneRuntimeSnapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         boundedRuntimeCorrectionSnapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         boundedCorrectionApplicationPointSnapshot:
@@ -552,6 +602,26 @@ class StrokeCapJoinSceneCaptureTest {
                 optInGpuCmp = zeroMaskCorrectionFor447GpuCmp,
                 currentResidualStats = residualStats,
                 optInResidualStats = zeroMaskCorrectionFor447ResidualStats,
+                adapter = adapter,
+            )
+        }
+        if (System.getProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY, "false").toBoolean()) {
+            writeM60F16ZeroMaskNeutralPathTraceFor448(
+                reference = reference,
+                currentGpu = experimentalGpu,
+                insideGpu = zeroMaskCorrectionFor447Gpu,
+                outsideGpu = requireNotNull(zeroMaskNeutralPathTraceFor448OutsideGpu),
+                bothGpu = requireNotNull(zeroMaskNeutralPathTraceFor448BothGpu),
+                currentGpuCmp = experimentalGpuCmp,
+                insideGpuCmp = zeroMaskCorrectionFor447GpuCmp,
+                outsideGpuCmp = requireNotNull(zeroMaskNeutralPathTraceFor448OutsideGpuCmp),
+                bothGpuCmp = requireNotNull(zeroMaskNeutralPathTraceFor448BothGpuCmp),
+                currentResidualStats = residualStats,
+                insideResidualStats = zeroMaskCorrectionFor447ResidualStats,
+                outsideResidualStats = requireNotNull(zeroMaskNeutralPathTraceFor448OutsideResidualStats),
+                bothResidualStats = requireNotNull(zeroMaskNeutralPathTraceFor448BothResidualStats),
+                predrawSnapshot = aaStencilCoverPredrawDstReadbackSnapshot,
+                postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
                 adapter = adapter,
             )
         }
@@ -1424,6 +1494,31 @@ class StrokeCapJoinSceneCaptureTest {
                 System.clearProperty(FOR447_ZERO_MASK_CORRECTION_PROPERTY)
             } else {
                 System.setProperty(FOR447_ZERO_MASK_CORRECTION_PROPERTY, previous)
+            }
+        }
+    }
+
+    private fun <T> withM60F16ZeroMaskNeutralPathTraceFor448(
+        enabled: Boolean,
+        mode: String,
+        block: () -> T,
+    ): T {
+        val previousEnabled = System.getProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY)
+        val previousMode = System.getProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_MODE_PROPERTY)
+        System.setProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY, enabled.toString())
+        System.setProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_MODE_PROPERTY, mode)
+        return try {
+            block()
+        } finally {
+            if (previousEnabled == null) {
+                System.clearProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY)
+            } else {
+                System.setProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY, previousEnabled)
+            }
+            if (previousMode == null) {
+                System.clearProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_MODE_PROPERTY)
+            } else {
+                System.setProperty(FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_MODE_PROPERTY, previousMode)
             }
         }
     }
@@ -6295,6 +6390,359 @@ class StrokeCapJoinSceneCaptureTest {
             }
         """.trimIndent() + "\n"
     }
+
+    private fun writeM60F16ZeroMaskNeutralPathTraceFor448(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        insideGpu: SkBitmap,
+        outsideGpu: SkBitmap,
+        bothGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        insideGpuCmp: BitmapComparison,
+        outsideGpuCmp: BitmapComparison,
+        bothGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        insideResidualStats: StrokeResidualStats,
+        outsideResidualStats: StrokeResidualStats,
+        bothResidualStats: StrokeResidualStats,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-zero-mask-neutral-path-trace-for448"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        writePng(File(dir, "reference-cpu.png"), reference)
+        writePng(File(dir, "current-webgpu.png"), currentGpu)
+        writePng(File(dir, "current-webgpu-diff.png"), CrossBackendHarness.pixelDiff(reference, currentGpu))
+        writePng(File(dir, "inside-webgpu-for447.png"), insideGpu)
+        writePng(File(dir, "inside-webgpu-for447-diff.png"), CrossBackendHarness.pixelDiff(reference, insideGpu))
+        writePng(File(dir, "outside-webgpu-for448.png"), outsideGpu)
+        writePng(File(dir, "outside-webgpu-for448-diff.png"), CrossBackendHarness.pixelDiff(reference, outsideGpu))
+        writePng(File(dir, "both-webgpu-for448.png"), bothGpu)
+        writePng(File(dir, "both-webgpu-for448-diff.png"), CrossBackendHarness.pixelDiff(reference, bothGpu))
+        File(dir, "$sceneId.json").writeText(
+            m60F16ZeroMaskNeutralPathTraceFor448Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                insideGpu = insideGpu,
+                outsideGpu = outsideGpu,
+                bothGpu = bothGpu,
+                currentGpuCmp = currentGpuCmp,
+                insideGpuCmp = insideGpuCmp,
+                outsideGpuCmp = outsideGpuCmp,
+                bothGpuCmp = bothGpuCmp,
+                currentResidualStats = currentResidualStats,
+                insideResidualStats = insideResidualStats,
+                outsideResidualStats = outsideResidualStats,
+                bothResidualStats = bothResidualStats,
+                predrawSnapshot = predrawSnapshot,
+                postPassSnapshot = postPassSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16ZeroMaskNeutralPathTraceFor448Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        insideGpu: SkBitmap,
+        outsideGpu: SkBitmap,
+        bothGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        insideGpuCmp: BitmapComparison,
+        outsideGpuCmp: BitmapComparison,
+        bothGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        insideResidualStats: StrokeResidualStats,
+        outsideResidualStats: StrokeResidualStats,
+        bothResidualStats: StrokeResidualStats,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        postPassSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPostPassReadbackSnapshot,
+        adapter: String,
+    ): String {
+        val targetPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val insideChanged = changedPixels(currentGpu, insideGpu)
+        val outsideChanged = changedPixels(currentGpu, outsideGpu)
+        val bothChanged = changedPixels(currentGpu, bothGpu)
+        val insideOutsideTargets = insideChanged.filter { it !in targetPoints }
+        val outsideOutsideTargets = outsideChanged.filter { it !in targetPoints }
+        val bothOutsideTargets = bothChanged.filter { it !in targetPoints }
+        val currentResidual = imageResidual(currentGpu, reference)
+        val insideResidual = imageResidual(insideGpu, reference)
+        val outsideResidual = imageResidual(outsideGpu, reference)
+        val bothResidual = imageResidual(bothGpu, reference)
+        val postPassByPixel = postPassSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val predrawByPixel = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val targetInsideChanged = insideChanged.count { it in targetPoints }
+        val targetOutsideChanged = outsideChanged.count { it in targetPoints }
+        val targetBothChanged = bothChanged.count { it in targetPoints }
+        val observedPostPassTargets = targetPoints.count { point ->
+            postPassByPixel[point].orEmpty().any { it.second.readbackAvailable && it.second.observedRgbaFloat != null }
+        }
+        val observedPredrawTargets = targetPoints.count { point ->
+            predrawByPixel[point].orEmpty().any { it.second.readbackAvailable && it.second.dstBeforeRgbaFloat != null }
+        }
+        val classification = when {
+            outsideOutsideTargets.isNotEmpty() || bothOutsideTargets.isNotEmpty() ->
+                "zero-mask-neutral-path-trace-inconclusive"
+            targetInsideChanged == 0 && (targetOutsideChanged > 0 || targetBothChanged > 0) ->
+                "zero-mask-neutral-caused-by-wrong-subpass-target"
+            observedPostPassTargets == 0 ->
+                "zero-mask-neutral-caused-by-stencil-selection"
+            targetInsideChanged == 0 && targetOutsideChanged == 0 && targetBothChanged == 0 ->
+                "zero-mask-neutral-path-trace-inconclusive"
+            else ->
+                "zero-mask-neutral-path-trace-inconclusive"
+        }
+        val partialJson = targetPoints
+            .sortedWith(compareBy<Pair<Int, Int>> { it.second }.thenBy { it.first })
+            .joinToString(",\n") { (x, y) ->
+                val point = x to y
+                val referencePixel = reference.getPixel(x, y)
+                val currentPixel = currentGpu.getPixel(x, y)
+                val insidePixel = insideGpu.getPixel(x, y)
+                val outsidePixel = outsideGpu.getPixel(x, y)
+                val bothPixel = bothGpu.getPixel(x, y)
+                val predrawSamples = predrawByPixel[point].orEmpty()
+                val postPassSamples = postPassByPixel[point].orEmpty()
+                val selectedPredraw = predrawSamples.firstOrNull {
+                    it.second.targetWithinScissor && it.second.readbackAvailable && it.second.dstBeforeRgbaFloat != null
+                }
+                val selectedPostPass = postPassSamples.firstOrNull {
+                    it.second.targetWithinScissor && it.second.readbackAvailable && it.second.observedRgbaFloat != null
+                }
+                """
+                    {
+                      "x": $x,
+                      "y": $y,
+                      "referenceCpuRgba": ${rgbaArrayJson(rgbaArray(referencePixel))},
+                      "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentPixel))},
+                      "insideDiscardFor447Rgba": ${rgbaArrayJson(rgbaArray(insidePixel))},
+                      "outsideDiscardFor448Rgba": ${rgbaArrayJson(rgbaArray(outsidePixel))},
+                      "bothDiscardFor448Rgba": ${rgbaArrayJson(rgbaArray(bothPixel))},
+                      "currentResidual": ${sampleResidual(referencePixel, currentPixel)},
+                      "insideResidual": ${sampleResidual(referencePixel, insidePixel)},
+                      "outsideResidual": ${sampleResidual(referencePixel, outsidePixel)},
+                      "bothResidual": ${sampleResidual(referencePixel, bothPixel)},
+                      "insideChangedPixel": ${currentPixel != insidePixel},
+                      "outsideChangedPixel": ${currentPixel != outsidePixel},
+                      "bothChangedPixel": ${currentPixel != bothPixel},
+                      "for442DecisionSourceUsed": false,
+                      "subpassTrace": {
+                        "traceKind": "final-image-variant-differential",
+                        "insideVariantChangedPixel": ${currentPixel != insidePixel},
+                        "outsideVariantChangedPixel": ${currentPixel != outsidePixel},
+                        "bothVariantChangedPixel": ${currentPixel != bothPixel},
+                        "observedInsideFragmentWrite": null,
+                        "observedOutsideFragmentWrite": null,
+                        "missingDirectObservationReason": "FOR-448 compares final images for inside/outside/both discard variants; it does not expose per-fragment writes for each subpass."
+                      },
+                      "stencilWriteTrace": {
+                        "available": false,
+                        "status": "stencil-write-not-observed-by-for448",
+                        "missingReason": "FOR-448 does not instrument the stencil write pass directly. The ticket therefore keeps the classification inconclusive instead of inferring stencil-write behavior from post-pass color."
+                      },
+                      "stencilSelectionTrace": {
+                        "postPassSampleCount": ${postPassSamples.size},
+                        "postPassObservedCount": ${postPassSamples.count { it.second.readbackAvailable && it.second.observedRgbaFloat != null }},
+                        "postPassClassifications": [
+            ${postPassSamples.map { it.second.classification }.distinct().joinToString(",\n") { it.jsonString().prependIndent("              ") }}
+                        ]
+                      },
+                      "destinationBeforeTrace": {
+                        "sampleCount": ${predrawSamples.size},
+                        "observedCount": ${predrawSamples.count { it.second.readbackAvailable && it.second.dstBeforeRgbaFloat != null }},
+                        "selectedDrawIndex": ${selectedPredraw?.first?.drawIndex ?: "null"},
+                        "selectedRgbaFloat": ${selectedPredraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                        "selectedRgba8": ${selectedPredraw?.second?.dstBeforeRgba8.intArrayOrNullJson()},
+                        "classifications": [
+            ${predrawSamples.map { it.second.classification }.distinct().joinToString(",\n") { it.jsonString().prependIndent("              ") }}
+                        ]
+                      },
+                      "destinationAfterTrace": {
+                        "selectedDrawIndex": ${selectedPostPass?.first?.drawIndex ?: "null"},
+                        "selectedRgbaFloat": ${selectedPostPass?.second?.observedRgbaFloat.floatArrayOrNullJson()},
+                        "selectedRgba8": ${selectedPostPass?.second?.observedRgba8.intArrayOrNullJson()}
+                      }
+                    }
+                """.trimIndent().prependIndent("    ")
+            }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-448",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-tracer-le-passage-reel-apres-correction-zero-mask-neutre-for-447",
+              "sourceFindingMemory": "global/kanvas/findings/for-447-zero-mask-opt-in-correction-is-neutral-on-m60-f16",
+              "sourceArtifacts": {
+                "for447": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-zero-mask-opt-in-correction-for447/m60-f16-zero-mask-opt-in-correction-for447.json",
+                "for446": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-for442-float-mask-field-audit-for446/m60-f16-for442-float-mask-field-audit-for446.json",
+                "for445": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-runtime-integer-lane-mask-probe-for445/m60-f16-runtime-integer-lane-mask-probe-for445.json",
+                "for443": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-low-level-exact-mask-probe-for443/m60-f16-low-level-exact-mask-probe-for443.json",
+                "referenceCpuPng": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/reference-cpu.png",
+                "currentWebGpuPng": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/current-webgpu.png",
+                "insideFor447Png": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/inside-webgpu-for447.png",
+                "outsideFor448Png": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/outside-webgpu-for448.png",
+                "bothFor448Png": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/both-webgpu-for448.png"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "optInFlag": ${FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY.jsonString()},
+              "modeProperty": ${FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_MODE_PROPERTY.jsonString()},
+              "testedModes": ["inside-via-FOR-447", "outside", "both"],
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR448_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixAppliedByDefault": false,
+              "for442UsedAsDecisionSource": false,
+              "for448TraceOptInOnly": true,
+              "for448TraceDefaultActive": false,
+              "comparisonPolicy": {
+                "scope": "Full M60 F16 bounded stroke-cap/join scene plus exactly the six FOR-447 zero-mask pixels.",
+                "defaultRender": "captured with ${FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY}=false",
+                "insideRender": "FOR-447 inside discard retained as the known neutral baseline",
+                "outsideRender": "captured with ${FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY}=true and ${FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_MODE_PROPERTY}=outside",
+                "bothRender": "captured with ${FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY}=true and ${FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_MODE_PROPERTY}=both",
+                "webgpuRenderModel": "in-memory shader variants; production aa_stencil_cover.wgsl is unchanged",
+                "decisionSource": "FOR-447 neutral finding plus FOR-445/FOR-443 zero-mask targets; FOR-442 float field is explicitly excluded"
+              },
+              "summary": {
+                "fullScenePixels": ${reference.width * reference.height},
+                "currentSimilarity": ${String.format(Locale.US, "%.6f", currentGpuCmp.similarity)},
+                "insideSimilarity": ${String.format(Locale.US, "%.6f", insideGpuCmp.similarity)},
+                "outsideSimilarity": ${String.format(Locale.US, "%.6f", outsideGpuCmp.similarity)},
+                "bothSimilarity": ${String.format(Locale.US, "%.6f", bothGpuCmp.similarity)},
+                "currentTotalResidual": $currentResidual,
+                "insideTotalResidual": $insideResidual,
+                "outsideTotalResidual": $outsideResidual,
+                "bothTotalResidual": $bothResidual,
+                "insideResidualDeltaMinusCurrent": ${insideResidual - currentResidual},
+                "outsideResidualDeltaMinusCurrent": ${outsideResidual - currentResidual},
+                "bothResidualDeltaMinusCurrent": ${bothResidual - currentResidual},
+                "insideChangedPixels": ${insideChanged.size},
+                "outsideChangedPixels": ${outsideChanged.size},
+                "bothChangedPixels": ${bothChanged.size},
+                "insideChangedTargetPixels": $targetInsideChanged,
+                "outsideChangedTargetPixels": $targetOutsideChanged,
+                "bothChangedTargetPixels": $targetBothChanged,
+                "insideChangedOutsideTargetPixels": ${insideOutsideTargets.size},
+                "outsideChangedOutsideTargetPixels": ${outsideOutsideTargets.size},
+                "bothChangedOutsideTargetPixels": ${bothOutsideTargets.size},
+                "currentGreaterThanEightPixels": ${currentResidualStats.greaterThanEightPixels},
+                "insideGreaterThanEightPixels": ${insideResidualStats.greaterThanEightPixels},
+                "outsideGreaterThanEightPixels": ${outsideResidualStats.greaterThanEightPixels},
+                "bothGreaterThanEightPixels": ${bothResidualStats.greaterThanEightPixels},
+                "zeroMaskPixelCount": ${targetPoints.size},
+                "predrawDstObservedTargetCount": $observedPredrawTargets,
+                "postPassObservedTargetCount": $observedPostPassTargets,
+                "for442DecisionSourceUsedCount": 0
+              },
+              "subpassTrace": {
+                "traceKind": "final-image-variant-differential",
+                "directSubpassFragmentWriteTraceAvailable": false,
+                "directSubpassFragmentWriteTraceMissingReason": "The artifact compares final-image effects of inside/outside/both discard variants but does not expose per-fragment subpass write events.",
+                "insideDiscardChangedTargetPixels": $targetInsideChanged,
+                "outsideDiscardChangedTargetPixels": $targetOutsideChanged,
+                "bothDiscardChangedTargetPixels": $targetBothChanged,
+                "insideDiscardChangedOutsideTargetPixels": ${insideOutsideTargets.size},
+                "outsideDiscardChangedOutsideTargetPixels": ${outsideOutsideTargets.size},
+                "bothDiscardChangedOutsideTargetPixels": ${bothOutsideTargets.size}
+              },
+              "stencilWriteTrace": {
+                "available": false,
+                "status": "stencil-write-not-observed-by-for448",
+                "missingReason": "FOR-448 cannot identify stencil-write behavior without adding a separate stencil-pass probe, so this artifact refuses to name a correction candidate.",
+                "fallbackClassification": "zero-mask-neutral-path-trace-inconclusive"
+              },
+              "traceCompleteness": {
+                "insideOutsideSubpassTraceComplete": false,
+                "stencilWriteTraceComplete": false,
+                "destinationBeforeAfterTraceComplete": true,
+                "finalImageTraceComplete": true,
+                "incompleteTracePolicy": "classify zero-mask-neutral-path-trace-inconclusive and refuse to name a correction candidate"
+              },
+              "destinationTrace": {
+                "predrawProperty": ${predrawSnapshot.propertyName.jsonString()},
+                "predrawEnabled": ${predrawSnapshot.enabled},
+                "predrawObservedTargetCount": $observedPredrawTargets,
+                "postPassProperty": ${postPassSnapshot.propertyName.jsonString()},
+                "postPassEnabled": ${postPassSnapshot.enabled},
+                "postPassObservedTargetCount": $observedPostPassTargets
+              },
+              "partialPixels": [
+            $partialJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "activationByDefault": false,
+                "for442UsedAsDecisionSource": false
+              },
+              "classificationReason": ${m60F16ZeroMaskNeutralPathTraceFor448Reason(classification).jsonString()},
+              "nextCorrectionCandidate": ${m60F16ZeroMaskNeutralPathTraceFor448NextStep(classification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py",
+                "rtk python3 scripts/validate_for447_m60_f16_zero_mask_opt_in_correction.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for448-pycache python3 -m py_compile scripts/validate_for448_m60_f16_zero_mask_neutral_path_trace.py scripts/validate_for447_m60_f16_zero_mask_opt_in_correction.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16ZeroMaskNeutralPathTraceFor448Reason(classification: String): String =
+        when (classification) {
+            "zero-mask-neutral-caused-by-wrong-subpass-target" ->
+                "The FOR-447 inside discard is neutral, while an outside or both-pass discard changes at least one target pixel without changing non-target pixels."
+            "zero-mask-neutral-caused-by-stencil-selection" ->
+                "The existing post-pass readback did not observe the target pixels in the bounded AA stencil-cover pass, so the neutral result is attributed to stencil/pass selection."
+            "zero-mask-neutral-caused-by-later-pass-overwrite" ->
+                "The trace indicates that a later pass overwrites the candidate mutation before final readback."
+            "zero-mask-neutral-caused-by-preexisting-destination" ->
+                "The trace indicates that the final visible value is already present before the candidate mutation."
+            else ->
+                "The inside, outside, both-pass and destination traces do not identify one exclusive cause without widening instrumentation."
+        }
+
+    private fun m60F16ZeroMaskNeutralPathTraceFor448NextStep(classification: String): String =
+        when (classification) {
+            "zero-mask-neutral-caused-by-wrong-subpass-target" ->
+                "Next candidate: test a targeted outside-subpass correction in a separate opt-in ticket, still without promoting FOR-447."
+            "zero-mask-neutral-caused-by-stencil-selection" ->
+                "Next candidate: isolate stencil compare and pass targeting for the six pixels before applying another correction."
+            "zero-mask-neutral-caused-by-later-pass-overwrite" ->
+                "Next candidate: trace the later writer before any correction attempt."
+            "zero-mask-neutral-caused-by-preexisting-destination" ->
+                "Next candidate: trace the earlier writer that establishes the visible destination before AA stencil-cover."
+            else ->
+                "Refuse to name a correction candidate: the trace is incomplete or all tested discard variants are neutral."
+        }
 
     private fun m60F16ZeroMaskOptInCorrectionFor447Reason(classification: String): String =
         when (classification) {
@@ -22922,6 +23370,10 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled"
         private const val FOR447_ZERO_MASK_CORRECTION_PROPERTY =
             "kanvas.webgpu.m60F16ZeroMaskCorrectionFor447.enabled"
+        private const val FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_PROPERTY =
+            "kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.enabled"
+        private const val FOR448_ZERO_MASK_NEUTRAL_PATH_TRACE_MODE_PROPERTY =
+            "kanvas.webgpu.m60F16ZeroMaskNeutralPathTraceFor448.mode"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -23078,6 +23530,13 @@ class StrokeCapJoinSceneCaptureTest {
             "zero-mask-opt-in-correction-regresses-scene",
             "zero-mask-opt-in-correction-neutral",
             "zero-mask-opt-in-correction-inconclusive",
+        )
+        private val M60_F16_FOR448_ALLOWED_CLASSIFICATIONS = listOf(
+            "zero-mask-neutral-caused-by-wrong-subpass-target",
+            "zero-mask-neutral-caused-by-later-pass-overwrite",
+            "zero-mask-neutral-caused-by-preexisting-destination",
+            "zero-mask-neutral-caused-by-stencil-selection",
+            "zero-mask-neutral-path-trace-inconclusive",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
