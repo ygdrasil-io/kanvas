@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and report FOR-462 D50 lot 1 dashboard integration status."""
+"""Validate FOR-462 evidence and formalize the FOR-464 strict D50 lot 1 manifest."""
 
 from __future__ import annotations
 
@@ -14,11 +14,15 @@ from typing import Any
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE_LINEAR = "FOR-462"
+FORMALIZATION_LINEAR = "FOR-464"
 INVENTORY = ROOT / "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json"
 DASHBOARD = ROOT / "build/reports/wgsl-pipeline-scenes/data/scenes.json"
 GATE_JSON = ROOT / "build/reports/wgsl-pipeline-scene-gate/scene-dashboard-gate.json"
 REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-462-d50-lot1-dashboard-integration-gate.md"
 EVIDENCE = ROOT / "reports/wgsl-pipeline/scenes/generated/d50-lot1-dashboard-integration-for462.json"
+LOT1_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-d50-gm-dashboard-lot1.md"
+LOT1_MANIFEST = ROOT / "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json"
 
 EXPECTED_LOT1 = [
     "skia-gm-drawbitmaprect",
@@ -52,7 +56,9 @@ EXPECTED_MISSING = [
 ]
 EXPECTED_FILES = {
     "reports/wgsl-pipeline/2026-06-06-for-462-d50-lot1-dashboard-integration-gate.md",
+    "reports/wgsl-pipeline/2026-06-06-d50-gm-dashboard-lot1.md",
     "reports/wgsl-pipeline/scenes/generated/d50-lot1-dashboard-integration-for462.json",
+    "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
     "scripts/validate_for462_d50_lot1_dashboard_integration.py",
 }
 FORBIDDEN_PATHS = {
@@ -70,7 +76,7 @@ FORBIDDEN_PREFIXES = (
 
 
 def fail(message: str) -> None:
-    raise SystemExit(f"FOR-462 validation failed: {message}")
+    raise SystemExit(f"{FORMALIZATION_LINEAR} validation failed: {message}")
 
 
 def require(condition: bool, message: str) -> None:
@@ -122,7 +128,7 @@ def git_changed_paths() -> set[str]:
 def require_scope() -> None:
     changed = git_changed_paths()
     unexpected = sorted(path for path in changed if path not in EXPECTED_FILES)
-    require(not unexpected, f"unexpected local diffs for FOR-462: {unexpected}")
+    require(not unexpected, f"unexpected local diffs for {FORMALIZATION_LINEAR}: {unexpected}")
     forbidden_paths = sorted(path for path in changed if path in FORBIDDEN_PATHS)
     require(not forbidden_paths, f"active dashboard/inventory inputs changed: {forbidden_paths}")
     forbidden_prefixes = sorted(path for path in changed if path.startswith(FORBIDDEN_PREFIXES))
@@ -201,7 +207,7 @@ def build_evidence() -> dict[str, Any]:
                 )
             materialized.append({"inventoryId": inventory_id, "rows": row_payloads})
         else:
-            require(not rows, f"{inventory_id} unexpectedly materialized without FOR-462 proof")
+            require(not rows, f"{inventory_id} unexpectedly materialized without row-specific proof")
             missing.append(
                 {
                     "inventoryId": inventory_id,
@@ -222,13 +228,77 @@ def build_evidence() -> dict[str, Any]:
         for row in item["rows"]:
             reference_counts[row["referenceKind"]] += 1
 
+    dashboard_reference_counts = Counter(
+        scene.get("referenceKind")
+        for scene in scene_dicts
+        if isinstance(scene.get("referenceKind"), str)
+    )
+    dashboard_status_counts = Counter(
+        scene.get("status")
+        for scene in scene_dicts
+        if isinstance(scene.get("status"), str)
+    )
+
+    strict_rows: list[dict[str, Any]] = []
+    materialized_by_inventory = {item["inventoryId"]: item for item in materialized}
+    missing_by_inventory = {item["inventoryId"]: item for item in missing}
+    for candidate in inventory["candidates"]:
+        inventory_id = candidate["inventoryId"]
+        if inventory_id not in EXPECTED_LOT1:
+            continue
+        materialized_item = materialized_by_inventory.get(inventory_id)
+        missing_item = missing_by_inventory.get(inventory_id)
+        if materialized_item is not None:
+            row = materialized_item["rows"][0]
+            strict_rows.append(
+                {
+                    "inventoryId": inventory_id,
+                    "rank": candidate["rank"],
+                    "family": candidate["family"],
+                    "status": "supported",
+                    "reason": "already-materialized-dashboard-evidence",
+                    "dashboardRowId": row["id"],
+                    "dashboardStatus": row["status"],
+                    "referenceKind": row["referenceKind"],
+                    "derivationTask": row["derivationTask"],
+                    "fallbackReason": row["fallbackReason"],
+                    "supportClaimAddedByFor464": False,
+                    "skiaComparableClaimAddedByFor464": False,
+                }
+            )
+        elif missing_item is not None:
+            strict_rows.append(
+                {
+                    "inventoryId": inventory_id,
+                    "rank": candidate["rank"],
+                    "family": candidate["family"],
+                    "status": "diagnostic-only",
+                    "reason": "diagnostic.missing-row-specific-evidence",
+                    "dashboardRowId": None,
+                    "dashboardStatus": None,
+                    "referenceKind": None,
+                    "requiredEvidence": missing_item["requiredEvidence"],
+                    "supportClaimAddedByFor464": False,
+                    "skiaComparableClaimAddedByFor464": False,
+                }
+            )
+        else:
+            fail(f"{inventory_id}: lot 1 row was neither materialized nor diagnostic-only")
+
+    require(len(strict_rows) == len(EXPECTED_LOT1), "strict lot 1 row count mismatch")
+    require(
+        all(row["status"] in {"supported", "expected-unsupported", "diagnostic-only"} for row in strict_rows),
+        "strict lot 1 rows must use only supported/expected-unsupported/diagnostic-only",
+    )
+
     evidence = {
         "schemaVersion": 1,
-        "linear": "FOR-462",
+        "linear": SOURCE_LINEAR,
+        "strictManifestFormalizedBy": FORMALIZATION_LINEAR,
         "date": "2026-06-06",
-        "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-reprise-for-462-d50-lot-1-dashboard-sans-faux-support",
+        "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-3-formaliser-le-manifeste-strict-du-lot-1-dashboard",
         "sourceInventory": rel(INVENTORY),
-        "sourceFindingMemory": "global/kanvas/findings/for-461-integre-linventaire-d50-des-candidats-gm-dashboard",
+        "sourceFindingMemory": "global/kanvas/findings/for-462-verrouille-le-lot-1-d50-sans-faux-support",
         "dashboardGate": rel(GATE_JSON),
         "classification": "lot1-partially-materialized-no-new-support-claims",
         "lot1CandidateCount": len(EXPECTED_LOT1),
@@ -237,7 +307,12 @@ def build_evidence() -> dict[str, Any]:
         "materializedRowsAddedByFor462": 0,
         "supportClaimsAddedByFor462": 0,
         "skiaComparableClaimsAddedByFor462": 0,
+        "dashboardRowsAddedByFor464": 0,
+        "supportClaimsAddedByFor464": 0,
+        "skiaComparableClaimsAddedByFor464": 0,
+        "visualSupportAbove50PercentClaimByFor464": False,
         "dashboardStatusChangedByFor462": False,
+        "dashboardStatusChangedByFor464": False,
         "thresholdChanged": False,
         "scoringChanged": False,
         "fallbackPolicyChanged": False,
@@ -246,18 +321,78 @@ def build_evidence() -> dict[str, Any]:
         "upstreamSourceChanged": False,
         "broadSkiaGmParityClaim": False,
         "dashboardCounters": gate_counters,
+        "beforeCounters": {
+            "source": rel(INVENTORY),
+            "selectedRows": inventory["currentCounters"]["localMaterializedDashboardRows"],
+            "supportedRows": inventory["currentCounters"]["localMaterializedSupportedRows"],
+            "expectedUnsupportedRows": inventory["currentCounters"]["localMaterializedExpectedUnsupportedRows"],
+            "diagnosticOnlyRows": inventory["currentCounters"]["localMaterializedDiagnosticOnlyRows"],
+            "skiaComparableRows": inventory["currentCounters"]["localMaterializedSkiaComparableRows"],
+        },
+        "afterCounters": {
+            "source": rel(DASHBOARD),
+            "selectedRows": gate_counters["total"],
+            "supportedRows": gate_counters["status.pass"],
+            "expectedUnsupportedRows": gate_counters["status.expected-unsupported"],
+            "diagnosticOnlyRows": int(dashboard_status_counts.get("diagnostic-only", 0)),
+            "skiaComparableRows": int(dashboard_reference_counts.get("skia-upstream", 0)),
+        },
         "materializedReferenceKindCounts": dict(sorted(reference_counts.items())),
+        "strictLot1StatusCounts": dict(Counter(row["status"] for row in strict_rows)),
+        "strictLot1Rows": strict_rows,
         "materialized": materialized,
         "missing": missing,
         "nextAction": "Open row-specific evidence tickets for the five missing lot 1 candidates before any dashboard support promotion.",
         "validationCommands": [
             "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
             "rtk python3 scripts/validate_for462_d50_lot1_dashboard_integration.py",
-            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for462-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py",
+            "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for464-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py",
             "rtk git diff --check",
         ],
     }
     return evidence
+
+
+def build_lot1_manifest(evidence: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schemaVersion": 1,
+        "linear": FORMALIZATION_LINEAR,
+        "sourceLinear": SOURCE_LINEAR,
+        "date": "2026-06-06",
+        "sourceDraftMemory": evidence["sourceDraftMemory"],
+        "sourceFindingMemory": evidence["sourceFindingMemory"],
+        "sourceInventory": evidence["sourceInventory"],
+        "dashboardGate": evidence["dashboardGate"],
+        "classification": evidence["classification"],
+        "dashboardConsumesLotDirectly": False,
+        "dashboardConsumptionReason": (
+            "Only rows with existing dashboard evidence are recognized as supported; "
+            "missing candidates remain diagnostic-only until row-specific renderer artifacts exist."
+        ),
+        "lot": 1,
+        "candidateCount": evidence["lot1CandidateCount"],
+        "statusCounts": evidence["strictLot1StatusCounts"],
+        "rows": evidence["strictLot1Rows"],
+        "nonClaims": {
+            "dashboardRowsAddedByFor464": 0,
+            "supportClaimsAddedByFor464": 0,
+            "skiaComparableClaimsAddedByFor464": 0,
+            "supportClaimsAddedByFor462": 0,
+            "skiaComparableClaimsAddedByFor462": 0,
+            "dashboardStatusChangedByFor462": False,
+            "dashboardStatusChangedByFor464": False,
+            "broadSkiaGmParityClaim": False,
+            "visualSupportAbove50PercentClaim": False,
+            "thresholdChanged": False,
+            "scoringChanged": False,
+            "fallbackPolicyChanged": False,
+            "pipelineKeyChanged": False,
+            "productionCodeChanged": False,
+        },
+        "beforeCounters": evidence["beforeCounters"],
+        "afterCounters": evidence["afterCounters"],
+    }
 
 
 def write_report(evidence: dict[str, Any]) -> None:
@@ -329,7 +464,10 @@ def write_report(evidence: dict[str, Any]) -> None:
         "## Validation",
         "",
         "```bash",
-        *evidence["validationCommands"],
+        "rtk ./gradlew --no-daemon pipelineSceneDashboardGate",
+        "rtk python3 scripts/validate_for462_d50_lot1_dashboard_integration.py",
+        "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for462-pycache python3 -m py_compile scripts/validate_for462_d50_lot1_dashboard_integration.py",
+        "rtk git diff --check",
         "```",
         "",
         "## Suite",
@@ -341,13 +479,133 @@ def write_report(evidence: dict[str, Any]) -> None:
     REPORT.write_text("\n".join(lines), encoding="utf-8")
 
 
+def write_lot1_report(evidence: dict[str, Any]) -> None:
+    before = evidence["beforeCounters"]
+    after = evidence["afterCounters"]
+    status_counts = evidence["strictLot1StatusCounts"]
+    lines = [
+        "# FOR-464 - D50 GM Dashboard Lot 1 Strict Manifest",
+        "",
+        "Date: 2026-06-06",
+        "Linear: FOR-464",
+        "Source: FOR-462 finding `global/kanvas/findings/for-462-verrouille-le-lot-1-d50-sans-faux-support`",
+        "Manifest: `reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json`",
+        "",
+        "## Resultat",
+        "",
+        "FOR-464 formalise un manifeste PM strict pour le lot 1 D50 dans l'ordre FOR-461. Sept lignes sont `supported` uniquement parce qu'elles pointent vers des lignes dashboard existantes avec `status=pass`, `gpu.status=pass` et `fallbackReason=none`.",
+        "",
+        "Cinq lignes restent `diagnostic-only` et exigent des preuves ligne par ligne avant promotion: reference, CPU, GPU ou refus stable, diff/stat, diagnostics de route et politique de seuil inchangee.",
+        "",
+        "FOR-464 ajoute 0 ligne dashboard, 0 revendication de support et 0 revendication Skia-comparable. Il ne declare pas de support visuel superieur a 50%.",
+        "",
+        "## Statuts Lot 1",
+        "",
+        "| Statut | Nombre |",
+        "|---|---:|",
+        f"| `supported` | {status_counts.get('supported', 0)} |",
+        f"| `expected-unsupported` | {status_counts.get('expected-unsupported', 0)} |",
+        f"| `diagnostic-only` | {status_counts.get('diagnostic-only', 0)} |",
+        "",
+        "## Compteurs Avant / Apres",
+        "",
+        "| Compteur | Avant inventaire FOR-461 | Apres porte dashboard courante | Delta |",
+        "|---|---:|---:|---:|",
+        f"| Lignes selectionnees | {before['selectedRows']} | {after['selectedRows']} | {after['selectedRows'] - before['selectedRows']} |",
+        f"| Lignes supportees | {before['supportedRows']} | {after['supportedRows']} | {after['supportedRows'] - before['supportedRows']} |",
+        f"| Lignes expected-unsupported | {before['expectedUnsupportedRows']} | {after['expectedUnsupportedRows']} | {after['expectedUnsupportedRows'] - before['expectedUnsupportedRows']} |",
+        f"| Lignes diagnostic-only | {before['diagnosticOnlyRows']} | {after['diagnosticOnlyRows']} | {after['diagnosticOnlyRows'] - before['diagnosticOnlyRows']} |",
+        f"| Lignes Skia-comparable | {before['skiaComparableRows']} | {after['skiaComparableRows']} | {after['skiaComparableRows'] - before['skiaComparableRows']} |",
+        "",
+        "Ces compteurs avant/apres donnent le contexte dashboard existant. Les deltas ne sont pas des nouvelles revendications FOR-464.",
+        "",
+        "## Lignes",
+        "",
+        "| Inventory id | Statut strict | Ligne dashboard | Reference | Raison |",
+        "|---|---|---|---|---|",
+    ]
+    for row in evidence["strictLot1Rows"]:
+        dashboard_row = row["dashboardRowId"] or "-"
+        reference = row["referenceKind"] or "-"
+        lines.append(
+            f"| `{row['inventoryId']}` | `{row['status']}` | `{dashboard_row}` | `{reference}` | `{row['reason']}` |"
+        )
+    lines += [
+        "",
+        "## Non-Claims",
+        "",
+        "- Aucun statut dashboard n'est change par FOR-464.",
+        "- Aucune ligne dashboard n'est ajoutee par FOR-464.",
+        "- Aucune nouvelle ligne de support n'est ajoutee par FOR-464.",
+        "- Aucune nouvelle fidelite Skia-comparable n'est ajoutee par FOR-464.",
+        "- Aucun seuil global, calcul de score, politique de fallback, `PipelineKey`, WGSL de production, code renderer ou source upstream n'est modifie.",
+        "- Les cinq lignes `diagnostic-only` ne sont pas du support cache; elles sont bloquees jusqu'a l'arrivee de preuves ligne par ligne.",
+        "- Les 7 correspondances `supported` sont des preuves existantes, pas une revendication de support visuel superieur a 50% ni une broad Skia GM parity.",
+        "",
+        "## Validation",
+        "",
+        "```bash",
+        *evidence["validationCommands"],
+        "```",
+        "",
+    ]
+    LOT1_REPORT.parent.mkdir(parents=True, exist_ok=True)
+    LOT1_REPORT.write_text("\n".join(lines), encoding="utf-8")
+
+
 def require_report_and_evidence(evidence: dict[str, Any]) -> None:
     write_json(EVIDENCE, evidence)
+    write_json(LOT1_MANIFEST, build_lot1_manifest(evidence))
     write_report(evidence)
+    write_lot1_report(evidence)
     written = load_json(EVIDENCE)
+    manifest = load_json(LOT1_MANIFEST)
     require(written["classification"] == "lot1-partially-materialized-no-new-support-claims", "classification mismatch")
+    require(written["strictManifestFormalizedBy"] == FORMALIZATION_LINEAR, "formalization linear mismatch")
     require(written["materializedCandidateCount"] == 7, "materialized count must be 7")
     require(written["missingCandidateCount"] == 5, "missing count must be 5")
+    require(written["dashboardRowsAddedByFor464"] == 0, "FOR-464 must not add dashboard rows")
+    require(written["supportClaimsAddedByFor464"] == 0, "FOR-464 must not add support claims")
+    require(written["skiaComparableClaimsAddedByFor464"] == 0, "FOR-464 must not add Skia-comparable claims")
+    require(written["visualSupportAbove50PercentClaimByFor464"] is False, "FOR-464 must not claim >50% visual support")
+    require(written["dashboardStatusChangedByFor464"] is False, "FOR-464 must not change dashboard status")
+    require(written["thresholdChanged"] is False, "threshold must not change")
+    require(written["scoringChanged"] is False, "scoring must not change")
+    require(written["fallbackPolicyChanged"] is False, "fallback policy must not change")
+    require(written["pipelineKeyChanged"] is False, "PipelineKey must not change")
+    require(written["productionCodeChanged"] is False, "production code must not change")
+    require(manifest["linear"] == FORMALIZATION_LINEAR, "lot 1 manifest linear mismatch")
+    require(manifest["candidateCount"] == 12, "lot 1 manifest candidate count must be 12")
+    require(manifest["statusCounts"] == {"diagnostic-only": 5, "supported": 7}, "lot 1 manifest status counts mismatch")
+    require([row["inventoryId"] for row in manifest["rows"]] == EXPECTED_LOT1, "lot 1 manifest order mismatch")
+    require(
+        all(row["status"] in {"supported", "expected-unsupported", "diagnostic-only"} for row in manifest["rows"]),
+        "lot 1 manifest has non-strict status",
+    )
+    supported_rows = [row for row in manifest["rows"] if row["status"] == "supported"]
+    diagnostic_rows = [row for row in manifest["rows"] if row["status"] == "diagnostic-only"]
+    require(len(supported_rows) == 7, "supported strict row count must be 7")
+    require(len(diagnostic_rows) == 5, "diagnostic-only strict row count must be 5")
+    for row in supported_rows:
+        require(row["inventoryId"] in EXPECTED_MATERIALIZED, f"{row['inventoryId']} is not expected as supported")
+        require(row["dashboardRowId"] in EXPECTED_MATERIALIZED[row["inventoryId"]], f"{row['inventoryId']} dashboard row mismatch")
+        require(row["dashboardStatus"] == "pass", f"{row['inventoryId']} supported row must be pass")
+        require(row["fallbackReason"] == "none", f"{row['inventoryId']} supported row must have fallbackReason=none")
+        require(row["supportClaimAddedByFor464"] is False, f"{row['inventoryId']} must not add support claim")
+        require(row["skiaComparableClaimAddedByFor464"] is False, f"{row['inventoryId']} must not add Skia-comparable claim")
+    require([row["inventoryId"] for row in diagnostic_rows] == EXPECTED_MISSING, "diagnostic-only row order mismatch")
+    for row in diagnostic_rows:
+        require(row["dashboardRowId"] is None, f"{row['inventoryId']} diagnostic row must not point to dashboard")
+        require(row["dashboardStatus"] is None, f"{row['inventoryId']} diagnostic row must not have dashboard status")
+        require(row["referenceKind"] is None, f"{row['inventoryId']} diagnostic row must not claim reference kind")
+        require(row["supportClaimAddedByFor464"] is False, f"{row['inventoryId']} must not add support claim")
+        require(row["skiaComparableClaimAddedByFor464"] is False, f"{row['inventoryId']} must not add Skia-comparable claim")
+        require(len(row["requiredEvidence"]) >= 6, f"{row['inventoryId']} diagnostic row lacks required evidence")
+    non_claims = manifest["nonClaims"]
+    require(non_claims["dashboardRowsAddedByFor464"] == 0, "manifest must say 0 dashboard rows added")
+    require(non_claims["supportClaimsAddedByFor464"] == 0, "manifest must say 0 support claims")
+    require(non_claims["skiaComparableClaimsAddedByFor464"] == 0, "manifest must say 0 Skia-comparable claims")
+    require(non_claims["visualSupportAbove50PercentClaim"] is False, "manifest must reject >50% visual support claim")
     require([item["inventoryId"] for item in written["missing"]] == EXPECTED_MISSING, "missing candidate order mismatch")
     report = REPORT.read_text(encoding="utf-8")
     for required in (
@@ -358,6 +616,18 @@ def require_report_and_evidence(evidence: dict[str, Any]) -> None:
         "preuve ligne par ligne manquante",
     ):
         require(required in report, f"report missing: {required}")
+    lot_report = LOT1_REPORT.read_text(encoding="utf-8")
+    for required in (
+        "FOR-464 ajoute 0 ligne dashboard",
+        "0 revendication de support",
+        "0 revendication Skia-comparable",
+        "support visuel superieur a 50%",
+        "`diagnostic-only`",
+        "Compteurs Avant / Apres",
+        "Ces compteurs avant/apres donnent le contexte dashboard existant",
+        "broad Skia GM parity",
+    ):
+        require(required in lot_report, f"lot 1 report missing: {required}")
 
 
 def main() -> None:
@@ -366,7 +636,7 @@ def main() -> None:
     require_report_and_evidence(evidence)
     require_scope()
     print(
-        "FOR-462 validation passed: "
+        f"{FORMALIZATION_LINEAR} validation passed: "
         f"materialized={evidence['materializedCandidateCount']} "
         f"missing={evidence['missingCandidateCount']} "
         f"dashboardTotal={evidence['dashboardCounters']['total']}"
