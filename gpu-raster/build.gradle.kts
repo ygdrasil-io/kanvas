@@ -220,6 +220,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16WidthQuantizedColorReconstructionFor432.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16WidthQuantizedColorReconstructionFor432.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
