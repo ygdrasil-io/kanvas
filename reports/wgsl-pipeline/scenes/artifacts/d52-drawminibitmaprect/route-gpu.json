@@ -1,0 +1,22 @@
+{
+  "sceneId": "d52-drawminibitmaprect",
+  "inventoryId": "skia-gm-drawminibitmaprect",
+  "backend": "WebGPU",
+  "adapter": "Apple M2 Max",
+  "drawKind": "DrawMiniBitmapRectGM",
+  "status": "expected-unsupported",
+  "selectedRoute": "webgpu.refusal.drawminibitmaprect.fast-src-rotated-grid",
+  "pipelineKey": "not-promoted-by-D52-2",
+  "referenceKind": "skia-upstream-png",
+  "fallbackReason": "bitmap.drawminibitmaprect.rotated-fast-src-rect-webgpu-artifacts-required",
+  "similarity": 94.9305,
+  "threshold": 99.95,
+  "tolerance": 8,
+  "matchingPixels": 995418,
+  "totalPixels": 1048576,
+  "maxChannelDelta": 242,
+  "supportClaim": false,
+  "globalThresholdChanged": false,
+  "m66EvidenceInherited": false,
+  "test": "org.skia.gpu.webgpu.DrawMiniBitmapRectSceneCaptureTest#drawminibitmaprect captures row specific reference cpu and webgpu evidence"
+}
