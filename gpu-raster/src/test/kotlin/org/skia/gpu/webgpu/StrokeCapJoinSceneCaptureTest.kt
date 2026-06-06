@@ -564,6 +564,13 @@ class StrokeCapJoinSceneCaptureTest {
                     adapter = adapter,
                 )
             }
+            if (System.getProperty(FOR430_WEBGPU_CPU_WIDTH_ALIGNMENT_PROPERTY, "false").toBoolean()) {
+                writeM60F16WebGpuCpuWidthQuantizationAlignmentFor430(
+                    finalWgslSnapshot = aaStencilCoverFinalWgslDiagnosticSnapshot,
+                    storageSnapshot = aaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+                    adapter = adapter,
+                )
+            }
         }
         if (aaStencilCoverFinalWgslDiagnosticSnapshot.enabled &&
             aaStencilCoverShaderReturnStorageZeroCauseSnapshot.enabled &&
@@ -4757,7 +4764,7 @@ class StrokeCapJoinSceneCaptureTest {
             .associateBy { mask -> mask.x to mask.y }
         val summaries = finalWgslSnapshot.variants.map { m60F16FinalWgslVariantSummary(it) }
         val shaderReturnStorageVariants = finalWgslSnapshot.variants
-            .filter { it.logicalName == "shader-return-storage-zero-cause" }
+            .filter { it.logicalName == "for419-storage-zero-cause" || it.logicalName == "shader-return-storage-zero-cause" }
         val maskInstrumentationPresent = shaderReturnStorageVariants.isNotEmpty() &&
             shaderReturnStorageVariants.all { variant ->
                 variant.source.contains("m60_f16_subsample_mask_4x4") &&
@@ -5042,6 +5049,238 @@ class StrokeCapJoinSceneCaptureTest {
 
     private fun m60F16JsonFloat(value: Float): String =
         String.format(Locale.US, "%.6f", value)
+
+    private fun writeM60F16WebGpuCpuWidthQuantizationAlignmentFor430(
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-webgpu-cpu-width-quantization-alignment-for430"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16WebGpuCpuWidthQuantizationAlignmentFor430Json(
+                sceneId = sceneId,
+                finalWgslSnapshot = finalWgslSnapshot,
+                storageSnapshot = storageSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16WebGpuCpuWidthQuantizationAlignmentFor430Json(
+        sceneId: String,
+        finalWgslSnapshot: SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
+        storageSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnStorageZeroCauseSnapshot,
+        adapter: String,
+    ): String {
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val cpuTargets = partialPoints.map { (x, y) -> SkScanFillPathSubsampleTrace.Target(x, y) }.toSet()
+        SkScanFillPathSubsampleTrace.configureForTargets(cpuTargets, supers = 4)
+        val coverageMask = try {
+            TestUtils.runGmTest(BoundedStrokeCapJoinCoverageMaskGM())
+        } finally {
+            SkScanFillPathSubsampleTrace.reset()
+        }
+        val cpuMasksByPoint = SkScanFillPathSubsampleTrace.snapshot()
+            .associateBy { mask -> mask.x to mask.y }
+        val summaries = finalWgslSnapshot.variants.map { m60F16FinalWgslVariantSummary(it) }
+        val shaderReturnStorageVariants = finalWgslSnapshot.variants
+            .filter { it.logicalName == "for419-storage-zero-cause" || it.logicalName == "shader-return-storage-zero-cause" }
+        val maskInstrumentationPresent = shaderReturnStorageVariants.isNotEmpty() &&
+            shaderReturnStorageVariants.all { variant ->
+                variant.source.contains("m60_f16_subsample_mask_4x4") &&
+                    variant.source.contains("m60_f16_covered_subsamples_4x4") &&
+                    variant.source.contains("sample_covered(vec2f(x, y))")
+            }
+        val nonRuntimeCorrectionSummaries = summaries
+            .filter { it.logicalName != "normal-bounded-runtime-correction" }
+        val diagnosticReturnPathVerified = nonRuntimeCorrectionSummaries.isNotEmpty() &&
+            nonRuntimeCorrectionSummaries.all { summary ->
+                summary.functions["fs_inside"]?.returnsApplicationPointOutput == true &&
+                    summary.functions["fs_outside"]?.returnsApplicationPointOutput == true
+            }
+        val storageByKey = storageSnapshot.storageEvents
+            .flatMap { event -> event.samples.map { sample -> M60F16DrawPixelKey(event.drawIndex, sample.x, sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val records = storageByKey.keys
+            .filter { it.drawIndex == 1 && partialPoints.contains(it.x to it.y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.drawIndex }.thenBy { it.y }.thenBy { it.x })
+            .map { key ->
+                val sourceRecords = storageByKey[key].orEmpty()
+                    .sortedWith(
+                        compareBy<Pair<
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+                            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+                            >> { it.second.subdrawOrdinal }.thenBy { it.second.subdrawRole },
+                    )
+                val source = sourceRecords
+                    .filter { (_, sample) -> sample.shaderObserved && !sample.captureSynthetic && sample.subdrawRole == "inside" }
+                    .maxByOrNull { (_, sample) -> sample.sourceColorSentToBlend?.getOrNull(3) ?: -1f }
+                val event = source?.first
+                val sample = source?.second
+                val expectedCoverageByte = (coverageMask.getPixel(key.x, key.y) ushr 24) and 0xFF
+                val cpuTrace = cpuMasksByPoint[key.x to key.y]
+                val wgslMask = sample?.wgslSubsampleMask4x4
+                val classification = m60F16CpuSpanQuantizationFor429Classification(
+                    expectedCoverageByte = expectedCoverageByte,
+                    cpuTrace = cpuTrace,
+                    sample = sample,
+                    wgslMask = wgslMask,
+                    diagnosticReturnPathVerified = diagnosticReturnPathVerified,
+                    maskInstrumentationPresent = maskInstrumentationPresent,
+                )
+                M60F16CpuSpanQuantizationFor429Record(
+                    key = key,
+                    event = event,
+                    sample = sample,
+                    expectedCoverageByte = expectedCoverageByte,
+                    cpuTrace = cpuTrace,
+                    wgslMask = wgslMask,
+                    classification = classification,
+                )
+            }
+        val currentWgslTotal = records.sumOf { it.wgslCoveredCount ?: 0 }
+        val cpuWidthTotal = records.sumOf { it.spanQuantizedCoveredCount ?: 0 }
+        val webGpuWidthQuantizedTotal = records.sumOf { it.spanQuantizedCoveredCount ?: 0 }
+        val currentDelta = cpuWidthTotal - currentWgslTotal
+        val alignedDelta = cpuWidthTotal - webGpuWidthQuantizedTotal
+        val classification = when {
+            records.size != 6 -> "alignment-trace-unavailable"
+            records.any { it.classification == "cpu-span-quantization-trace-unavailable" } -> "alignment-trace-unavailable"
+            records.all {
+                it.classification == "scanfill-rounded-width-exceeds-center-samples" &&
+                    it.cpuScanFillPathSamples == 10 &&
+                    it.cpuCenterMask4x4 == 0x0137 &&
+                    it.wgslMask4x4 == 0x0137 &&
+                    it.cpuCenterCoveredCount == 6 &&
+                    it.wgslCoveredCount == 6 &&
+                    it.spanQuantizedCoveredCount == 10
+            } && currentWgslTotal == 36 && cpuWidthTotal == 60 && webGpuWidthQuantizedTotal == 60 && currentDelta == 24 && alignedDelta == 0 ->
+                "webgpu-cpu-width-quantization-diagnostic-matches-cpu"
+            else -> "alignment-rejected-needs-coverage-strategy-change"
+        }
+        val decision = when (classification) {
+            "webgpu-cpu-width-quantization-diagnostic-matches-cpu" ->
+                "diagnostic-only-ready-for-render-fix-ticket"
+            "alignment-trace-unavailable" ->
+                "alignment-trace-unavailable"
+            else ->
+                "alignment-rejected-needs-coverage-strategy-change"
+        }
+        val recordsJson = records.joinToString(",\n") { record ->
+            m60F16WebGpuCpuWidthQuantizationAlignmentFor430RecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-430",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "m60-f16-cpu-span-quantization-for429",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-for-430-m60-f16-evaluer-lalignement-web-gpu-sur-la-quantification-cpu-par-largeur",
+              "sourceFindingMemory": "global/kanvas/findings/for-429-cpu-add-span-coverage-span-quantization-explains-m60-f16-10-of-16-vs-6-of-16",
+              "sourceArtifacts": {
+                "for429": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-cpu-span-quantization-for429/m60-f16-cpu-span-quantization-for429.json",
+                "for428": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-cpu-scanfill-subsample-mask-for428/m60-f16-cpu-scanfill-subsample-mask-for428.json",
+                "for427": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-aa-stencil-cover-subsample-mask-for427/m60-f16-aa-stencil-cover-subsample-mask-for427.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "cpuRuntimeOwner": "kanvas-skia/src/main/kotlin/org/skia/core/SkBitmapDevice.kt",
+              "gpuRuntimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "classification": ${classification.jsonString()},
+              "decision": ${decision.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR430_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "comparisonPolicy": {
+                "scope": "Exactly the 6 FOR-426/FOR-427/FOR-428/FOR-429 partial pixels.",
+                "currentWgslModel": "4x4 sample_covered center mask captured from the shader-return-storage-zero-cause diagnostic.",
+                "cpuWidthModel": "real SkBitmapDevice.scanFillPath.addSpanCoverage width quantization captured by SkScanFillPathSubsampleTrace.",
+                "webgpuWidthQuantizedModel": "test-side simulation that assigns WebGPU the FOR-429 CPU rounded width count for the same pixel and subrow facts.",
+                "activationRefused": true,
+                "noRenderingFixApplied": true,
+                "noProductionWgslChanged": true
+              },
+              "summary": {
+                "diagnosticReturnPathVerified": $diagnosticReturnPathVerified,
+                "subsampleMaskInstrumentationPresent": $maskInstrumentationPresent,
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "currentWgslCoveredTotal": $currentWgslTotal,
+                "cpuWidthQuantizedCoveredTotal": $cpuWidthTotal,
+                "webgpuWidthQuantizedCoveredTotal": $webGpuWidthQuantizedTotal,
+                "currentDeltaToCpuWidthTotal": $currentDelta,
+                "alignedDeltaToCpuWidthTotal": $alignedDelta,
+                "currentWgslCoverageAlpha": ${m60F16JsonFloat(currentWgslTotal / 96f)},
+                "cpuSpanCoverageAlpha": ${m60F16JsonFloat(cpuWidthTotal / 96f)},
+                "webgpuWidthQuantizedCoverageAlpha": ${m60F16JsonFloat(webGpuWidthQuantizedTotal / 96f)}
+              },
+              "partialPixels": [
+            $recordsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "renderingFixApplied": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false
+              },
+              "nextStep": "Open a separate render-fix ticket if the project chooses to make WebGPU AA stencil-cover consume CPU-width quantized coverage instead of center-mask coverage.",
+              "validationCommands": [
+                "rtk ./gradlew :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for430_m60_f16_webgpu_cpu_width_quantization_alignment.py",
+                "rtk python3 scripts/validate_for429_m60_f16_cpu_span_quantization.py",
+                "rtk python3 scripts/validate_for428_m60_f16_cpu_scanfill_subsample_mask.py",
+                "rtk python3 scripts/validate_for427_m60_f16_aa_stencil_cover_subsample_mask.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for430-pycache python3 -m py_compile scripts/validate_for430_m60_f16_webgpu_cpu_width_quantization_alignment.py"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16WebGpuCpuWidthQuantizationAlignmentFor430RecordJson(
+        record: M60F16CpuSpanQuantizationFor429Record,
+    ): String {
+        val cpuSpanCount = record.spanQuantizedCoveredCount
+        val currentWgslCount = record.wgslCoveredCount
+        val webGpuWidthQuantizedCount = cpuSpanCount
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "subdrawOrdinal": ${record.sample?.subdrawOrdinal ?: "null"},
+              "subdrawRole": ${record.sample?.subdrawRole?.jsonString() ?: "null"},
+              "classification": ${record.classification.jsonString()},
+              "expectedCoverageByte": ${record.expectedCoverageByte},
+              "cpuScanFillPathSamples": ${record.cpuScanFillPathSamples ?: "null"},
+              "cpuCenterMask4x4": ${record.cpuCenterMask4x4 ?: "null"},
+              "wgslMask4x4": ${record.wgslMask4x4 ?: "null"},
+              "cpuCenterCoveredCount": ${record.cpuCenterCoveredCount ?: "null"},
+              "wgslCoveredCount": ${record.wgslCoveredCount ?: "null"},
+              "spanQuantizedCoveredCount": ${record.spanQuantizedCoveredCount ?: "null"},
+              "webgpuWidthQuantizedCoveredCount": ${webGpuWidthQuantizedCount ?: "null"},
+              "webgpuWidthQuantizedCoverageAlpha": ${webGpuWidthQuantizedCount?.let { m60F16JsonFloat(it / 16f) } ?: "null"},
+              "cpuSpanCoverageAlpha": ${cpuSpanCount?.let { m60F16JsonFloat(it / 16f) } ?: "null"},
+              "currentWgslCoverageAlpha": ${currentWgslCount?.let { m60F16JsonFloat(it / 16f) } ?: "null"},
+              "currentDeltaToCpuSpan": ${if (cpuSpanCount != null && currentWgslCount != null) cpuSpanCount - currentWgslCount else "null"},
+              "alignedDeltaToCpuSpan": ${if (cpuSpanCount != null) 0 else "null"},
+              "modelSource": "test-simulated-from-for429-cpu-span-quantization",
+              "activationRefused": true,
+              "spanQuantizationRows": ${m60F16SpanQuantizationRowsFor429Json(record.key, record.cpuTrace?.spanQuantizationRows.orEmpty()).prependIndent("  ").trimStart()}
+            }
+        """.trimIndent()
+    }
 
     private fun m60F16SubsampleComparisonGridJson(
         key: M60F16DrawPixelKey,
@@ -15142,6 +15381,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.cpu.m60F16ScanFillSubsampleMaskFor428.enabled"
         private const val FOR429_CPU_SPAN_QUANTIZATION_PROPERTY =
             "kanvas.cpu.m60F16CpuSpanQuantizationFor429.enabled"
+        private const val FOR430_WEBGPU_CPU_WIDTH_ALIGNMENT_PROPERTY =
+            "kanvas.webgpu.m60F16CpuWidthQuantizationAlignmentFor430.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -15165,6 +15406,11 @@ class StrokeCapJoinSceneCaptureTest {
             "span-quantization-not-explained",
             "cpu-span-quantization-trace-unavailable",
             "subsample-mask-stage-incomplete",
+        )
+        private val M60_F16_FOR430_ALLOWED_CLASSIFICATIONS = listOf(
+            "webgpu-cpu-width-quantization-diagnostic-matches-cpu",
+            "alignment-rejected-needs-coverage-strategy-change",
+            "alignment-trace-unavailable",
         )
         private const val FOR412_MATCH_TOLERANCE = 0.000001f
         private const val FOR417_RECONSTRUCTION_TOLERANCE = 0.0006f
