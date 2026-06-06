@@ -50,6 +50,8 @@ public object WebGpuSink {
             SkWebGpuDevice.M60F16ProductionBoundCoverStencilDiagnosticFor457Snapshot,
         val productionCoverStateVsShaderEmissionFor458Snapshot:
             SkWebGpuDevice.M60F16ProductionCoverStateVsShaderEmissionFor458Snapshot,
+        val productionCoverColorAttachmentAcceptanceFor459Snapshot:
+            SkWebGpuDevice.M60F16ProductionCoverColorAttachmentAcceptanceFor459Snapshot,
         val aaStencilCoverContributionIsolationSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
         val aaStencilCoverShaderReturnDiagnosticSnapshot:
@@ -141,6 +143,8 @@ public object WebGpuSink {
                     device.m60F16ProductionBoundCoverStencilDiagnosticFor457Snapshot(),
                 productionCoverStateVsShaderEmissionFor458Snapshot =
                     device.m60F16ProductionCoverStateVsShaderEmissionFor458Snapshot(),
+                productionCoverColorAttachmentAcceptanceFor459Snapshot =
+                    device.m60F16ProductionCoverColorAttachmentAcceptanceFor459Snapshot(),
                 aaStencilCoverContributionIsolationSnapshot =
                     device.m60F16AaStencilCoverContributionIsolationSnapshot(),
                 aaStencilCoverShaderReturnDiagnosticSnapshot =
