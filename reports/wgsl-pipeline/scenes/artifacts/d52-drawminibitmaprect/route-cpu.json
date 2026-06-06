@@ -1,0 +1,18 @@
+{
+  "sceneId": "d52-drawminibitmaprect",
+  "inventoryId": "skia-gm-drawminibitmaprect",
+  "backend": "CPU",
+  "drawKind": "DrawMiniBitmapRectGM",
+  "status": "pass",
+  "selectedRoute": "cpu.raster.dm-reference-colorspace.draw-image-rect-fast-src",
+  "referenceKind": "skia-upstream-png",
+  "referencePath": "skia-integration-tests/src/test/resources/original-888/drawminibitmaprect.png",
+  "fallbackReason": "none",
+  "similarity": 93.9580,
+  "threshold": 40.0,
+  "tolerance": 1,
+  "matchingPixels": 985221,
+  "totalPixels": 1048576,
+  "maxChannelDelta": 242,
+  "test": "org.skia.gpu.webgpu.DrawMiniBitmapRectSceneCaptureTest#drawminibitmaprect captures row specific reference cpu and webgpu evidence"
+}
