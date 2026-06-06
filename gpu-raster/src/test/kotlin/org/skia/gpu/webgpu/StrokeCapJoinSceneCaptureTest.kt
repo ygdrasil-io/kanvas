@@ -476,6 +476,8 @@ class StrokeCapJoinSceneCaptureTest {
                         contributionIsolationResult.productionBoundCoverStencilDiagnosticFor457Snapshot,
                     productionCoverStateVsShaderEmissionFor458Snapshot =
                         contributionIsolationResult.productionCoverStateVsShaderEmissionFor458Snapshot,
+                    productionCoverColorAttachmentAcceptanceFor459Snapshot =
+                        contributionIsolationResult.productionCoverColorAttachmentAcceptanceFor459Snapshot,
                     aaStencilCoverContributionIsolationSnapshot =
                         contributionIsolationResult.aaStencilCoverContributionIsolationSnapshot,
                     aaStencilCoverShaderReturnDiagnosticSnapshot =
@@ -564,6 +566,8 @@ class StrokeCapJoinSceneCaptureTest {
             SkWebGpuDevice.M60F16ProductionBoundCoverStencilDiagnosticFor457Snapshot,
         productionCoverStateVsShaderEmissionFor458Snapshot:
             SkWebGpuDevice.M60F16ProductionCoverStateVsShaderEmissionFor458Snapshot,
+        productionCoverColorAttachmentAcceptanceFor459Snapshot:
+            SkWebGpuDevice.M60F16ProductionCoverColorAttachmentAcceptanceFor459Snapshot,
         aaStencilCoverContributionIsolationSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
         aaStencilCoverShaderReturnDiagnosticSnapshot:
@@ -774,6 +778,19 @@ class StrokeCapJoinSceneCaptureTest {
                 shaderReturnSnapshot = aaStencilCoverShaderReturnDiagnosticSnapshot,
                 isolatedColorTargetSnapshot = aaStencilCoverIsolatedColorTargetSnapshot,
                 postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
+                adapter = adapter,
+            )
+        }
+        if (System.getProperty(FOR459_PRODUCTION_COVER_COLOR_ATTACHMENT_ACCEPTANCE_PROPERTY, "false").toBoolean()) {
+            writeM60F16ProductionCoverColorAttachmentAcceptanceFor459(
+                currentGpu = experimentalGpu,
+                currentGpuCmp = experimentalGpuCmp,
+                currentResidualStats = residualStats,
+                diagnosticStencilSnapshot = diagnosticStencilTextureFor453Snapshot,
+                productionBoundSnapshot = productionBoundCoverStencilDiagnosticFor457Snapshot,
+                productionCoverStateSnapshot = productionCoverStateVsShaderEmissionFor458Snapshot,
+                colorAttachmentSnapshot = productionCoverColorAttachmentAcceptanceFor459Snapshot,
+                shaderReturnSnapshot = aaStencilCoverShaderReturnDiagnosticSnapshot,
                 adapter = adapter,
             )
         }
@@ -9313,6 +9330,333 @@ class StrokeCapJoinSceneCaptureTest {
             ),
         )
     }
+
+    private fun writeM60F16ProductionCoverColorAttachmentAcceptanceFor459(
+        currentGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        diagnosticStencilSnapshot: SkWebGpuDevice.M60F16DiagnosticStencilTextureFor453Snapshot,
+        productionBoundSnapshot:
+            SkWebGpuDevice.M60F16ProductionBoundCoverStencilDiagnosticFor457Snapshot,
+        productionCoverStateSnapshot:
+            SkWebGpuDevice.M60F16ProductionCoverStateVsShaderEmissionFor458Snapshot,
+        colorAttachmentSnapshot:
+            SkWebGpuDevice.M60F16ProductionCoverColorAttachmentAcceptanceFor459Snapshot,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-production-cover-color-attachment-acceptance-for459"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459Json(
+                sceneId = sceneId,
+                currentGpu = currentGpu,
+                currentGpuCmp = currentGpuCmp,
+                currentResidualStats = currentResidualStats,
+                diagnosticStencilSnapshot = diagnosticStencilSnapshot,
+                productionBoundSnapshot = productionBoundSnapshot,
+                productionCoverStateSnapshot = productionCoverStateSnapshot,
+                colorAttachmentSnapshot = colorAttachmentSnapshot,
+                shaderReturnSnapshot = shaderReturnSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16ProductionCoverColorAttachmentAcceptanceFor459Json(
+        sceneId: String,
+        currentGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        diagnosticStencilSnapshot: SkWebGpuDevice.M60F16DiagnosticStencilTextureFor453Snapshot,
+        productionBoundSnapshot:
+            SkWebGpuDevice.M60F16ProductionBoundCoverStencilDiagnosticFor457Snapshot,
+        productionCoverStateSnapshot:
+            SkWebGpuDevice.M60F16ProductionCoverStateVsShaderEmissionFor458Snapshot,
+        colorAttachmentSnapshot:
+            SkWebGpuDevice.M60F16ProductionCoverColorAttachmentAcceptanceFor459Snapshot,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        adapter: String,
+    ): String {
+        val targetPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6)
+        val diagnosticByPixel = diagnosticStencilSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val productionBoundByPixel = productionBoundSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val stateEventsByDraw = productionCoverStateSnapshot.events.groupBy { it.drawIndex }
+        val colorByPixel = colorAttachmentSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val shaderByPixel = shaderReturnSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        fun rgbaNonZero(rgba: FloatArray?): Boolean =
+            rgba != null && rgba.take(3).any { kotlin.math.abs(it) > 0.000001f }
+        fun diagnosticSample(point: Pair<Int, Int>) =
+            diagnosticByPixel[point].orEmpty().firstOrNull {
+                it.second.readbackAvailable && it.second.stencilValue != null
+            } ?: diagnosticByPixel[point].orEmpty().firstOrNull()
+        fun productionBoundSample(point: Pair<Int, Int>) =
+            productionBoundByPixel[point].orEmpty().firstOrNull {
+                it.second.readbackAvailable && it.second.stencilValue != null
+            } ?: productionBoundByPixel[point].orEmpty().firstOrNull()
+        fun stateEvent(pointIndex: Int, drawIndex: Int?) =
+            stateEventsByDraw[drawIndex].orEmpty().firstOrNull {
+                it.targetPixelsWithinScissor.getOrNull(pointIndex) == true
+            } ?: stateEventsByDraw[drawIndex].orEmpty().firstOrNull()
+        fun colorSample(point: Pair<Int, Int>, drawIndex: Int?) =
+            colorByPixel[point].orEmpty().firstOrNull { (event, sample) ->
+                event.drawIndex == drawIndex &&
+                    sample.beforeReadbackAvailable &&
+                    sample.afterReadbackAvailable
+            } ?: colorByPixel[point].orEmpty().firstOrNull()
+        fun expectedInsideRejectState(
+            event: SkWebGpuDevice.M60F16ProductionCoverStateVsShaderEmissionFor458Event?,
+        ): Boolean =
+            event?.insideCompare == "GPUCompareFunction.NotEqual" &&
+                event.stencilReference == 0 &&
+                event.stencilReadMask == 255 &&
+                event.stencilWriteMask == 255 &&
+                event.usesProductionDepthStencilAttachment &&
+                !event.usesDiagnosticDepthStencilAttachment &&
+                event.fixedFunctionStencilRejectExpectedForZero
+        val for453DiagnosticZeroCount = targetPoints.count { point ->
+            val sample = diagnosticSample(point)?.second
+            sample?.readbackAvailable == true &&
+                sample.stencilValue == 0 &&
+                sample.stencilCovered == false
+        }
+        val productionBoundZeroCount = targetPoints.count { point ->
+            val diagnostic = diagnosticSample(point)?.second
+            val productionBound = productionBoundSample(point)?.second
+            diagnostic?.readbackAvailable == true &&
+                diagnostic.stencilValue == 0 &&
+                productionBound?.readbackAvailable == true &&
+                productionBound.stencilValue == 0 &&
+                productionBound.stencilValue == diagnostic.stencilValue
+        }
+        val expectedInsideRejectStateCount = targetPoints.withIndex().count { (index, point) ->
+            val drawIndex = diagnosticSample(point)?.first?.drawIndex
+            expectedInsideRejectState(stateEvent(index, drawIndex))
+        }
+        val colorReadbackAvailableCount = targetPoints.count { point ->
+            val drawIndex = diagnosticSample(point)?.first?.drawIndex
+            val sample = colorSample(point, drawIndex)?.second
+            sample?.beforeReadbackAvailable == true && sample.afterReadbackAvailable
+        }
+        val colorChangedCount = targetPoints.count { point ->
+            val drawIndex = diagnosticSample(point)?.first?.drawIndex
+            colorSample(point, drawIndex)?.second?.colorChangedByCover == true
+        }
+        val colorUnchangedCount = targetPoints.count { point ->
+            val drawIndex = diagnosticSample(point)?.first?.drawIndex
+            colorSample(point, drawIndex)?.second?.colorChangedByCover == false
+        }
+        val insideShaderEmissionCount = targetPoints.count { point ->
+            val stencilDraw = diagnosticSample(point)?.first?.drawIndex
+            shaderByPixel[point].orEmpty().any { (event, sample) ->
+                event.drawIndex == stencilDraw &&
+                    sample.shaderObserved &&
+                    !sample.captureSynthetic &&
+                    sample.subdrawRole == "inside" &&
+                    rgbaNonZero(sample.sourceColorSentToBlend)
+            }
+        }
+        val colorEvents = colorAttachmentSnapshot.events
+        val globalClassification = when {
+            colorReadbackAvailableCount < targetPoints.size ||
+                colorEvents.isEmpty() ->
+                "production-cover-color-attachment-observation-unavailable"
+            for453DiagnosticZeroCount == targetPoints.size &&
+                productionBoundZeroCount == targetPoints.size &&
+                expectedInsideRejectStateCount == targetPoints.size &&
+                colorChangedCount > 0 ->
+                "production-cover-color-attachment-accepts-zero-stencil-targets"
+            for453DiagnosticZeroCount == targetPoints.size &&
+                productionBoundZeroCount == targetPoints.size &&
+                expectedInsideRejectStateCount == targetPoints.size &&
+                colorUnchangedCount == targetPoints.size ->
+                "production-cover-color-attachment-rejects-zero-stencil-targets"
+            else ->
+                "production-cover-color-attachment-acceptance-inconclusive"
+        }
+        val pixelsJson = targetPoints.withIndex().joinToString(",\n") { (index, point) ->
+            val (x, y) = point
+            val diagnostic = diagnosticSample(point)
+            val productionBound = productionBoundSample(point)
+            val stencilDraw = diagnostic?.first?.drawIndex
+            val state = stateEvent(index, stencilDraw)
+            val color = colorSample(point, stencilDraw)
+            val matchesFor453 =
+                if (diagnostic?.second?.stencilValue != null &&
+                    productionBound?.second?.stencilValue != null
+                ) {
+                    productionBound.second.stencilValue == diagnostic.second.stencilValue
+                } else {
+                    null
+                }
+            """
+                {
+                  "x": $x,
+                  "y": $y,
+                  "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentGpu.getPixel(x, y)))},
+                  "classification": ${globalClassification.jsonString()},
+                  "diagnosticStencilTextureFor453": {
+                    "drawIndex": ${diagnostic?.first?.drawIndex ?: "null"},
+                    "readbackAvailable": ${diagnostic?.second?.readbackAvailable ?: false},
+                    "stencilValue": ${diagnostic?.second?.stencilValue ?: "null"},
+                    "stencilCovered": ${diagnostic?.second?.stencilCovered ?: "null"}
+                  },
+                  "productionBoundCoverStencilDiagnosticFor457": {
+                    "drawIndex": ${productionBound?.first?.drawIndex ?: "null"},
+                    "readbackAvailable": ${productionBound?.second?.readbackAvailable ?: false},
+                    "stencilValue": ${productionBound?.second?.stencilValue ?: "null"},
+                    "stencilCovered": ${productionBound?.second?.stencilCovered ?: "null"},
+                    "matchesFor453Diagnostic": ${matchesFor453 ?: "null"}
+                  },
+                  "productionCoverInsideStateFor458": {
+                    "drawIndex": ${state?.drawIndex ?: "null"},
+                    "renderPassEncoding": ${state?.renderPassEncoding?.jsonString() ?: "null"},
+                    "stencilReference": ${state?.stencilReference ?: "null"},
+                    "stencilReadMask": ${state?.stencilReadMask ?: "null"},
+                    "insideCompare": ${state?.insideCompare?.jsonString() ?: "null"},
+                    "usesProductionDepthStencilAttachment": ${state?.usesProductionDepthStencilAttachment ?: false},
+                    "usesDiagnosticDepthStencilAttachment": ${state?.usesDiagnosticDepthStencilAttachment ?: false},
+                    "fixedFunctionStencilRejectExpectedForZero": ${state?.fixedFunctionStencilRejectExpectedForZero ?: false},
+                    "targetWithinScissor": ${state?.targetPixelsWithinScissor?.getOrNull(index) ?: false}
+                  },
+                  "productionCoverColorAttachmentFor459": {
+                    "drawIndex": ${color?.first?.drawIndex ?: "null"},
+                    "renderPassEncoding": ${color?.first?.renderPassEncoding?.jsonString() ?: "null"},
+                    "beforeCoverReadbackEncoded": ${color?.first?.beforeCoverReadbackEncoded ?: false},
+                    "afterCoverReadbackEncoded": ${color?.first?.afterCoverReadbackEncoded ?: false},
+                    "beforeReadbackAvailable": ${color?.second?.beforeReadbackAvailable ?: false},
+                    "afterReadbackAvailable": ${color?.second?.afterReadbackAvailable ?: false},
+                    "beforeCoverRgbaFloat": ${color?.second?.beforeCoverRgbaFloat.floatArrayOrNullJson()},
+                    "beforeCoverRgba8": ${color?.second?.beforeCoverRgba8.intArrayOrNullJson()},
+                    "afterCoverRgbaFloat": ${color?.second?.afterCoverRgbaFloat.floatArrayOrNullJson()},
+                    "afterCoverRgba8": ${color?.second?.afterCoverRgba8.intArrayOrNullJson()},
+                    "colorChangedByCover": ${color?.second?.colorChangedByCover ?: "null"},
+                    "sampleClassification": ${color?.second?.classification?.jsonString() ?: "null"}
+                  }
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-459",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-sonde-color-attachment-cover-production-apres-for-458",
+              "sourceFindingMemory": "global/kanvas/findings/for-458-classe-l-emission-shader-inside-comme-capture-avant-rejet-fixed-function-stencil",
+              "sourceArtifacts": {
+                "for453": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-diagnostic-stencil-texture-for453/m60-f16-diagnostic-stencil-texture-for453.json",
+                "for457": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-production-bound-cover-stencil-diagnostic-for457/m60-f16-production-bound-cover-stencil-diagnostic-for457.json",
+                "for458": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-production-cover-state-vs-shader-emission-for458/m60-f16-production-cover-state-vs-shader-emission-for458.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "optInFlag": ${FOR459_PRODUCTION_COVER_COLOR_ATTACHMENT_ACCEPTANCE_PROPERTY.jsonString()},
+              "classification": ${globalClassification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR459_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixAppliedByDefault": false,
+              "for442UsedAsDecisionSource": false,
+              "for447Promoted": false,
+              "colorAttachmentAudit": {
+                "requestedBoundary": ${colorAttachmentSnapshot.requestedBoundary.jsonString()},
+                "observedBoundary": ${colorAttachmentSnapshot.observedBoundary.jsonString()},
+                "colorAttachmentFormat": ${colorAttachmentSnapshot.colorAttachmentFormat.jsonString()},
+                "colorAttachmentUsage": ${colorAttachmentSnapshot.colorAttachmentUsage.jsonString()},
+                "depthStencilFormat": ${colorAttachmentSnapshot.depthStencilFormat.jsonString()},
+                "normalRenderingUsesDiagnosticColorAttachment": ${colorAttachmentSnapshot.normalRenderingUsesDiagnosticColorAttachment},
+                "normalRenderingUsesDiagnosticDepthStencil": ${colorAttachmentSnapshot.normalRenderingUsesDiagnosticDepthStencil},
+                "productionWgslChanged": ${colorAttachmentSnapshot.productionWgslChanged},
+                "eventCount": ${colorAttachmentSnapshot.events.size}
+              },
+              "boundarySummary": {
+                "zeroMaskPixelCount": ${targetPoints.size},
+                "currentSimilarity": ${String.format(Locale.US, "%.6f", currentGpuCmp.similarity)},
+                "currentMismatchPixels": ${currentResidualStats.mismatchPixels},
+                "for453DiagnosticStencilZeroTargetCount": $for453DiagnosticZeroCount,
+                "productionBoundFor457MatchingZeroTargetCount": $productionBoundZeroCount,
+                "productionCoverInsideExpectedRejectStateCount": $expectedInsideRejectStateCount,
+                "insideShaderEmissionOnDiagnosticZeroStencilCount": $insideShaderEmissionCount,
+                "colorAttachmentBeforeAfterAvailableTargetCount": $colorReadbackAvailableCount,
+                "colorAttachmentChangedTargetCount": $colorChangedCount,
+                "colorAttachmentUnchangedTargetCount": $colorUnchangedCount,
+                "for442DecisionSourceUsedCount": 0
+              },
+              "partialPixels": [
+            $pixelsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "activationByDefault": false,
+                "for442UsedAsDecisionSource": false,
+                "for447Promoted": false,
+                "renderingFixAppliedByDefault": false,
+                "normalRenderingUsesDiagnosticColorAttachment": false,
+                "normalRenderingUsesDiagnosticDepthStencil": false
+              },
+              "classificationReason": ${m60F16ProductionCoverColorAttachmentAcceptanceFor459Reason(globalClassification).jsonString()},
+              "nextAction": ${m60F16ProductionCoverColorAttachmentAcceptanceFor459NextAction(globalClassification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16ProductionCoverColorAttachmentAcceptanceFor459.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for459_m60_f16_production_cover_color_attachment_acceptance.py",
+                "rtk python3 scripts/validate_for458_m60_f16_production_cover_state_vs_shader_emission.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16ProductionCoverColorAttachmentAcceptanceFor459Reason(classification: String): String =
+        when (classification) {
+            "production-cover-color-attachment-rejects-zero-stencil-targets" ->
+                "FOR-459 observes matching zero stencil in FOR-453/FOR-457, expected rejection state in FOR-458, and unchanged diagnostic color attachment samples before/after production cover replay."
+            "production-cover-color-attachment-accepts-zero-stencil-targets" ->
+                "FOR-459 observes matching zero stencil and expected rejection state, but the diagnostic color attachment changed after production cover replay."
+            "production-cover-color-attachment-observation-unavailable" ->
+                "FOR-459 could not obtain before/after diagnostic color attachment samples for every target pixel."
+            else ->
+                "FOR-459 could not make a clean acceptance decision from the available stencil, state, and color attachment evidence."
+        }
+
+    private fun m60F16ProductionCoverColorAttachmentAcceptanceFor459NextAction(classification: String): String =
+        when (classification) {
+            "production-cover-color-attachment-rejects-zero-stencil-targets" ->
+                "Open a focused ticket to simplify the evidence chain around shader-capture-before-reject and stop treating shader emission alone as cover acceptance."
+            "production-cover-color-attachment-accepts-zero-stencil-targets" ->
+                "Open a focused ticket to isolate the stencil/cover state that lets zero-stencil pixels reach the color attachment."
+            "production-cover-color-attachment-observation-unavailable" ->
+                "Open a focused ticket to add a stronger diagnostic observation point for the production cover color attachment."
+            else ->
+                "Open a focused ticket to reduce the inconclusive fields before attempting any rendering correction."
+        }
 
     private fun m60F16ProductionCoverStateVsShaderEmissionFor458Json(
         sceneId: String,
@@ -26332,6 +26676,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16ProductionBoundCoverStencilDiagnosticFor457.enabled"
         private const val FOR458_PRODUCTION_COVER_STATE_VS_SHADER_EMISSION_PROPERTY =
             "kanvas.webgpu.m60F16ProductionCoverStateVsShaderEmissionFor458.enabled"
+        private const val FOR459_PRODUCTION_COVER_COLOR_ATTACHMENT_ACCEPTANCE_PROPERTY =
+            "kanvas.webgpu.m60F16ProductionCoverColorAttachmentAcceptanceFor459.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -26570,6 +26916,12 @@ class StrokeCapJoinSceneCaptureTest {
             "production-cover-render-pass-attachment-state-mismatch",
             "production-cover-replay-order-or-scissor-mismatch",
             "production-cover-state-vs-shader-emission-inconclusive",
+        )
+        private val M60_F16_FOR459_ALLOWED_CLASSIFICATIONS = listOf(
+            "production-cover-color-attachment-rejects-zero-stencil-targets",
+            "production-cover-color-attachment-accepts-zero-stencil-targets",
+            "production-cover-color-attachment-observation-unavailable",
+            "production-cover-color-attachment-acceptance-inconclusive",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
