@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-06-06",
+  "ticket": "D51-4",
+  "executionAttachment": {
+    "linearParent": "FOR-460",
+    "dedicatedLinearIssueCreated": false,
+    "reason": "Linear dedicated issue creation is blocked by the free issue limit."
+  },
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d51-4-convertir-skia-gm-offsetimagefilter-en-preuve-row-specific-precise",
+  "sourceFor468Evidence": {
+    "report": "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
+    "json": "reports/wgsl-pipeline/scenes/generated/for468-skia-gm-offsetimagefilter-evidence.json",
+    "findingMemory": "global/kanvas/findings/for-468-formalise-le-refus-skia-gm-offsetimagefilter-d50-lot-1"
+  },
+  "classification": "row-specific-expected-unsupported-precise-refusal",
+  "inventoryId": "skia-gm-offsetimagefilter",
+  "status": "expected-unsupported",
+  "fallbackReason": "image-filter.offset.crop-prepass-scaled-clipped-webgpu-artifacts-required",
+  "previousFallbackReason": "image-filter.offset.row-specific-artifacts-required",
+  "fallbackReasonImproved": true,
+  "d50ManifestChanged": false,
+  "scoreImpact": {
+    "supportScoreIncreased": false,
+    "skiaComparableScoreIncreased": false,
+    "reason": "D51-4 is an audit/refusal evidence update. It does not add a dashboard WebGPU artifact, diff/stat payload, or route diagnostics with fallbackReason=none."
+  },
+  "rowSpecificAudit": {
+    "historicalOffsetImageFilterEvidencePromotesRow": false,
+    "simpleOffsetImageFilterEvidenceInherited": false,
+    "offsetImageFilterGmSource": {
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/OffsetImageFilterGM.kt",
+      "upstreamSource": "gm/offsetimagefilter.cpp",
+      "gmName": "offsetimagefilter",
+      "gmDimensions": {
+        "width": 600,
+        "height": 100
+      },
+      "background": "black",
+      "sourceImages": [
+        {
+          "cellPattern": "cells 0 and 2",
+          "kind": "string image",
+          "dimensions": {
+            "width": 80,
+            "height": 80
+          },
+          "colorType": "N32 premul",
+          "content": "single letter e drawn at x=15 y=65 with text size 96"
+        },
+        {
+          "cellPattern": "cells 1 and 3",
+          "kind": "checkerboard image",
+          "dimensions": {
+            "width": 80,
+            "height": 80
+          },
+          "colors": [
+            "0xFFA0A0A0",
+            "0xFF404040"
+          ],
+          "tileSizePx": 8
+        }
+      ],
+      "cells": [
+        {
+          "cell": 0,
+          "source": "string image",
+          "offset": {
+            "dx": 0,
+            "dy": 0
+          },
+          "cropRect": "SkIRect.MakeXYWH(0, 0, 80, 80)",
+          "scale": 1
+        },
+        {
+          "cell": 1,
+          "source": "checkerboard image",
+          "offset": {
+            "dx": 5,
+            "dy": 10
+          },
+          "cropRect": "SkIRect.MakeXYWH(12, 8, 72, 68)",
+          "scale": 1
+        },
+        {
+          "cell": 2,
+          "source": "string image",
+          "offset": {
+            "dx": 10,
+            "dy": 20
+          },
+          "cropRect": "SkIRect.MakeXYWH(24, 16, 64, 56)",
+          "scale": 1
+        },
+        {
+          "cell": 3,
+          "source": "checkerboard image",
+          "offset": {
+            "dx": 15,
+            "dy": 30
+          },
+          "cropRect": "SkIRect.MakeXYWH(36, 24, 56, 44)",
+          "scale": 1
+        },
+        {
+          "cell": 4,
+          "source": "string image",
+          "offset": {
+            "dx": -5,
+            "dy": -10
+          },
+          "cropRect": "SkIRect.MakeXYWH(0, 0, 100, 100)",
+          "scale": 2,
+          "tileInput": null
+        }
+      ],
+      "filterChain": {
+        "tileInput": "SkImageFilters.Image(image, SkSamplingOptions.nearest())",
+        "offset": "SkImageFilters.Offset(dx, dy, tileInput)",
+        "crop": "SkImageFilters.Crop(cropRectF, SkTileMode.kDecal, offset)"
+      },
+      "perCellApplication": {
+        "helper": "drawClippedImage",
+        "paintField": "paint.imageFilter",
+        "clipRect": "SkRect.MakeIWH(image.width, image.height)",
+        "draw": "canvas.drawImage(image, 0f, 0f, SkSamplingOptions.Default, paint)",
+        "debugOverlay": "red 2-pixel stroke rectangle on clipRect when clipRect intersects scaled crop rect",
+        "translationAfterFirstFourCellsPx": 92
+      }
+    },
+    "whyNotPromotable": [
+      "No D51 row-specific WebGPU dashboard artifact exists for OffsetImageFilterGM.",
+      "No D51 diff/stat payload exists for OffsetImageFilterGM.",
+      "No OffsetImageFilterGM route diagnostics with fallbackReason=none exist.",
+      "The historical CPU similarity score does not prove the WebGPU offset/crop/clip/scale image-filter path.",
+      "SimpleOffsetImageFilterGM evidence does not cover the 5-cell OffsetImageFilterGM with alternating source images, crop wrapper, clipped drawImage calls, and one scaled 2x cell."
+    ],
+    "adjacentEvidenceNotInherited": [
+      "SimpleOffsetImageFilterGM",
+      "crop-image-filter-nonnull-prepass evidence",
+      "simple-offsetimagefilter residual audits",
+      "image-filter DAG V2 evidence",
+      "ImageGM",
+      "ImageSourceGM"
+    ]
+  },
+  "artifacts": {
+    "reference": {
+      "status": "available-historical-skia-integration-reference",
+      "path": "skia-integration-tests/src/test/resources/original-888/offsetimagefilter.png",
+      "dimensions": {
+        "width": 600,
+        "height": 100
+      },
+      "format": "PNG 16-bit/color RGBA",
+      "promotableAsDashboardReference": false,
+      "reason": "The historical PNG is a useful audit input, but D51-4 does not generate the PM/dashboard reference package required for support."
+    },
+    "cpu": {
+      "status": "available-historical-cpu-similarity-score",
+      "test": "skia-integration-tests/src/test/kotlin/org/skia/tests/OffsetImageFilterTest.kt",
+      "historicalSimilarity": {
+        "OffsetImageFilterGM": 84.515
+      },
+      "promotableAsDashboardCpuArtifact": false,
+      "reason": "The CPU similarity data is historical and not paired with D51 reference, WebGPU, diff/stat, and route diagnostics."
+    },
+    "webgpu": {
+      "status": "missing",
+      "required": true,
+      "route": "webgpu.image-filter.offset.expected-unsupported",
+      "artifact": "not-generated",
+      "reason": "No row-specific OffsetImageFilterGM WebGPU artifact or route diagnostics exist under reports/wgsl-pipeline."
+    },
+    "diffStats": {
+      "status": "not-computed",
+      "required": true,
+      "reason": "Diff/stat cannot be computed for promotion without a D51 reference, CPU artifact, WebGPU artifact, and route diagnostics produced as one row-specific evidence set."
+    }
+  },
+  "routeDiagnostics": {
+    "cpu": "cpu.image-filter.offset.historical-cpu-similarity-only",
+    "gpu": "webgpu.image-filter.offset.expected-unsupported",
+    "fallbackReason": "image-filter.offset.crop-prepass-scaled-clipped-webgpu-artifacts-required",
+    "policy": "Keep OffsetImageFilterGM expected-unsupported until a row-specific WebGPU route renders the offset image-filter crop/prepass cells, clipped drawImage helper, and scaled 2x cell with generated reference/CPU/GPU/diff artifacts and fallbackReason=none."
+  },
+  "d50Guard": {
+    "manifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
+    "status": "expected-unsupported",
+    "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+    "strictDashboardStatus": "expected-unsupported",
+    "dashboardRowId": null
+  },
+  "nonClaims": {
+    "supportClaimAddedByD51_4": false,
+    "skiaComparableClaimAddedByD51_4": false,
+    "dashboardRowAddedByD51_4": false,
+    "d50ManifestChanged": false,
+    "resultsJsonChanged": false,
+    "scenesJsonChanged": false,
+    "defaultRenderingChanged": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "productionCodeChanged": false,
+    "wgslProductionChanged": false,
+    "wgsl4kChanged": false,
+    "upstreamSourceChanged": false,
+    "skiaIntegrationTestsChanged": false,
+    "webgpuOffsetImageFilterGmSupportClaim": false,
+    "broadImageFilterDagSupportClaim": false,
+    "cropImageFilterDagSupportClaim": false,
+    "picturePrepassSupportClaim": false,
+    "arbitraryLayerPrepassSupportClaim": false,
+    "colorPipelineGlobalSupportClaim": false,
+    "simpleOffsetImageFilterInheritanceClaim": false
+  },
+  "expectedChangedFiles": [
+    "reports/wgsl-pipeline/2026-06-06-d51-4-offsetimagefilter-row-specific-evidence.md",
+    "reports/wgsl-pipeline/scenes/generated/d51-offsetimagefilter-row-specific-evidence.json",
+    "scripts/validate_d51_offsetimagefilter_row_specific_evidence.py"
+  ],
+  "validationCommands": [
+    "rtk python3 scripts/validate_d51_offsetimagefilter_row_specific_evidence.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d51-offsetimagefilter-row-specific-evidence.json",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-d51-offsetimagefilter-pycache python3 -m py_compile scripts/validate_d51_offsetimagefilter_row_specific_evidence.py",
+    "rtk git diff --check"
+  ]
+}
