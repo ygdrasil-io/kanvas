@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate FOR-457 production-bound cover stencil diagnostic evidence."""
+"""Validate FOR-458 production cover state vs shader emission evidence."""
 
 from __future__ import annotations
 
@@ -13,24 +13,24 @@ from typing import Any
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[1]
-SCENE_ID = "m60-f16-production-bound-cover-stencil-diagnostic-for457"
+SCENE_ID = "m60-f16-production-cover-state-vs-shader-emission-for458"
 ARTIFACT = ROOT / "reports/wgsl-pipeline/scenes/artifacts" / SCENE_ID / f"{SCENE_ID}.json"
-REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-457-m60-f16-production-bound-cover-stencil-diagnostic.md"
+REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-458-m60-f16-production-cover-state-vs-shader-emission.md"
 DEVICE = ROOT / "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
 CAPTURE_TEST = ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt"
 WEBGPU_SINK = ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt"
 BUILD = ROOT / "gpu-raster/build.gradle.kts"
 PRODUCTION_SHADER = ROOT / "gpu-raster/src/main/resources/shaders/aa_stencil_cover.wgsl"
 
-FLAG = "kanvas.webgpu.m60F16ProductionBoundCoverStencilDiagnosticFor457.enabled"
-EXPECTED_CLASSIFICATION = "production-bound-cover-stencil-matches-for453-diagnostic-zero"
+FLAG = "kanvas.webgpu.m60F16ProductionCoverStateVsShaderEmissionFor458.enabled"
+EXPECTED_CLASSIFICATION = "production-cover-shader-capture-before-fixed-function-stencil-reject"
 EXPECTED_POINTS = {(92, 75), (91, 76), (90, 77), (89, 78), (88, 79), (87, 80)}
 ALLOWED_CLASSIFICATIONS = {
-    "production-bound-cover-stencil-matches-for453-diagnostic-zero",
-    "production-bound-cover-stencil-differs-from-for453-diagnostic",
-    "production-bound-cover-stencil-resource-unavailable",
-    "production-bound-cover-stencil-replay-not-equivalent",
-    "production-bound-cover-stencil-diagnostic-inconclusive",
+    "production-cover-shader-capture-before-fixed-function-stencil-reject",
+    "production-cover-fixed-function-stencil-state-mismatch",
+    "production-cover-render-pass-attachment-state-mismatch",
+    "production-cover-replay-order-or-scissor-mismatch",
+    "production-cover-state-vs-shader-emission-inconclusive",
 }
 ARTIFACT_FILES = {
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}",
@@ -41,13 +41,9 @@ ALLOWED_LOCAL_DIFFS = {
     "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuSink.kt",
-    "scripts/validate_for456_m60_f16_production_cover_stencil_vs_diagnostic_texture.py",
     "scripts/validate_for457_m60_f16_production_bound_cover_stencil_diagnostic.py",
     "scripts/validate_for458_m60_f16_production_cover_state_vs_shader_emission.py",
-    "reports/wgsl-pipeline/2026-06-06-for-457-m60-f16-production-bound-cover-stencil-diagnostic.md",
     "reports/wgsl-pipeline/2026-06-06-for-458-m60-f16-production-cover-state-vs-shader-emission.md",
-    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-production-cover-state-vs-shader-emission-for458",
-    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-production-cover-state-vs-shader-emission-for458/m60-f16-production-cover-state-vs-shader-emission-for458.json",
     *ARTIFACT_FILES,
 }
 FORBIDDEN_DIFF_PREFIXES = (
@@ -59,7 +55,7 @@ FORBIDDEN_DIFF_PREFIXES = (
 
 
 def fail(message: str) -> None:
-    raise SystemExit(f"FOR-457 validation failed: {message}")
+    raise SystemExit(f"FOR-458 validation failed: {message}")
 
 
 def require(condition: bool, message: str) -> None:
@@ -110,11 +106,12 @@ def source_audit() -> None:
     checks = {
         "flagRelayed": FLAG in device and FLAG in build and FLAG in capture,
         "snapshotTransported": (
-            "M60F16ProductionBoundCoverStencilDiagnosticFor457Snapshot" in sink
-            and "productionBoundCoverStencilDiagnosticFor457Snapshot" in capture
+            "M60F16ProductionCoverStateVsShaderEmissionFor458Snapshot" in sink
+            and "productionCoverStateVsShaderEmissionFor458Snapshot" in capture
         ),
-        "compositeFlag": "m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled" in device,
-        "writerCalled": "writeM60F16ProductionBoundCoverStencilDiagnosticFor457(" in capture,
+        "compositeFlag": "m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled" in device,
+        "writerCalled": "writeM60F16ProductionCoverStateVsShaderEmissionFor458(" in capture,
+        "stateRecorder": "recordM60F16ProductionCoverStateVsShaderEmissionFor458Event(" in device,
         "allowedClassifications": all(token in capture for token in ALLOWED_CLASSIFICATIONS),
         "for442Excluded": '"for442UsedAsDecisionSource": false' in capture,
         "for447NotPromoted": '"for447Promoted": false' in capture,
@@ -123,17 +120,16 @@ def source_audit() -> None:
             and "format = GPUTextureFormat.Depth24PlusStencil8" in device
             and "usage = GPUTextureUsage.RenderAttachment" in device
         ),
-        "diagnosticUsesCopySrc": "GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc" in device,
         "normalRenderingDoesNotUseDiagnosticTexture": '"normalRenderingUsesDiagnosticTexture": false' in capture,
-        "productionShaderDoesNotContainFor457": "for457" not in shader.lower()
-        and "production_bound_cover_stencil" not in shader,
+        "productionShaderDoesNotContainFor458": "for458" not in shader.lower()
+        and "production_cover_state" not in shader,
     }
     missing = [name for name, ok in checks.items() if not ok]
     require(not missing, f"source audit failed: {missing}")
 
     changed = git_changed_paths()
     unexpected = sorted(path for path in changed if path not in ALLOWED_LOCAL_DIFFS)
-    require(not unexpected, f"unexpected local diffs for FOR-457: {unexpected}")
+    require(not unexpected, f"unexpected local diffs for FOR-458: {unexpected}")
     forbidden = sorted(path for path in changed if path.startswith(FORBIDDEN_DIFF_PREFIXES))
     require(not forbidden, f"forbidden spec/external/production-shader diffs: {forbidden}")
 
@@ -175,11 +171,11 @@ def source_audit() -> None:
 def require_artifact() -> dict[str, Any]:
     data = load_json(ARTIFACT)
     require(data.get("schemaVersion") == 1, "schemaVersion must be 1")
-    require(data.get("linear") == "FOR-457", "linear must be FOR-457")
+    require(data.get("linear") == "FOR-458", "linear must be FOR-458")
     require(data.get("sceneId") == SCENE_ID, "sceneId mismatch")
     require(data.get("optInFlag") == FLAG, "opt-in flag mismatch")
     require(data.get("classification") in ALLOWED_CLASSIFICATIONS, "classification not allowed")
-    require(data.get("classification") == EXPECTED_CLASSIFICATION, "unexpected FOR-457 classification")
+    require(data.get("classification") == EXPECTED_CLASSIFICATION, "unexpected FOR-458 classification")
 
     for field in (
         "supportClaim",
@@ -197,47 +193,30 @@ def require_artifact() -> dict[str, Any]:
     ):
         require(data.get(field) is False, f"{field} must be false")
 
-    audit = data.get("productionBoundDiagnosticAudit")
-    require(isinstance(audit, dict), "productionBoundDiagnosticAudit must be object")
+    audit = data.get("productionCoverStateAudit")
+    require(isinstance(audit, dict), "productionCoverStateAudit must be object")
     expected_audit = {
-        "bindingMode": "separate-diagnostic-depth-stencil-resource-replayed-with-production-cover-pipelines",
-        "productionDepthStencilFormat": "Depth24PlusStencil8",
         "productionDepthStencilTextureLabel": "SkWebGpuDevice.depthStencil",
         "productionDepthStencilUsage": "GPUTextureUsage.RenderAttachment",
         "productionDepthStencilUsageHasCopySrc": False,
-        "diagnosticDepthStencilUsage": "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
-        "diagnosticTextureUsageHasCopySrc": True,
-        "stencilTextureAspect": "GPUTextureAspect.StencilOnly",
-        "bytesPerStencilPixel": 1,
-        "scratchColorTargetUsed": True,
         "normalRenderingUsesDiagnosticTexture": False,
-        "productionDepthStencilTextureModified": False,
-        "stencilPassReplayed": True,
-        "coverPassReplayedWithProductionPipelines": True,
-        "copyFromDiagnosticAttempted": True,
-        "copyFromDiagnosticSucceeded": True,
-        "for453ComparisonAvailable": True,
+        "productionWgslChanged": False,
+        "shaderCapturePipelineEventCount": 3,
+        "productionEquivalentStencilState": True,
+        "fixedFunctionStencilRejectExpectedForZero": True,
     }
     for key, expected in expected_audit.items():
-        require(audit.get(key) == expected, f"productionBoundDiagnosticAudit.{key} mismatch")
-
-    pipeline = data.get("coverPipelineAudit")
-    require(isinstance(pipeline, dict), "coverPipelineAudit must be object")
-    require(pipeline.get("insideCompare") == "GPUCompareFunction.NotEqual", "inside compare mismatch")
-    require(pipeline.get("outsideCompare") == "GPUCompareFunction.Equal", "outside compare mismatch")
-    require(pipeline.get("stencilReference") == 0, "stencil reference mismatch")
-    require(pipeline.get("stencilLoadOpForDiagnosticReplay") == "GPULoadOp.Clear", "diagnostic replay load op mismatch")
-    require(pipeline.get("stencilStoreOpForDiagnosticReplay") == "GPUStoreOp.Store", "diagnostic replay store op mismatch")
+        require(audit.get(key) == expected, f"productionCoverStateAudit.{key} mismatch")
 
     summary = data.get("boundarySummary")
     require(isinstance(summary, dict), "boundarySummary must be object")
     expected_summary = {
         "zeroMaskPixelCount": 6,
         "for453DiagnosticStencilZeroTargetCount": 6,
-        "productionBoundDiagnosticStencilAvailableTargetCount": 6,
-        "for453ComparisonAvailableTargetCount": 6,
-        "matchingFor453DiagnosticZeroTargetCount": 6,
-        "differingStencilTargetCount": 0,
+        "productionBoundFor457MatchingZeroTargetCount": 6,
+        "productionCoverInsideExpectedRejectStateCount": 6,
+        "productionCoverRenderPassAttachmentMismatchCount": 0,
+        "productionCoverReplayOrderOrScissorMismatchCount": 0,
         "insideShaderEmissionOnDiagnosticZeroStencilCount": 6,
         "isolatedColorTargetEmissionCount": 6,
         "postCoverAvailableTargetCount": 6,
@@ -257,18 +236,36 @@ def require_artifact() -> dict[str, Any]:
         require(diagnostic.get("stencilValue") == 0, "FOR-453 stencilValue must be 0")
         require(diagnostic.get("stencilCovered") is False, "FOR-453 stencilCovered must be false")
 
-        production_bound = pixel.get("productionBoundCoverStencilDiagnostic")
-        require(isinstance(production_bound, dict), "productionBoundCoverStencilDiagnostic must be object")
+        production_bound = pixel.get("productionBoundCoverStencilDiagnosticFor457")
+        require(isinstance(production_bound, dict), "productionBoundCoverStencilDiagnosticFor457 must be object")
         require(production_bound.get("readbackAvailable") is True, "FOR-457 readback must be available")
         require(production_bound.get("stencilValue") == 0, "FOR-457 stencilValue must be 0")
-        require(production_bound.get("stencilCovered") is False, "FOR-457 stencilCovered must be false")
         require(production_bound.get("matchesFor453Diagnostic") is True, "FOR-457 must match FOR-453")
 
-        cover = pixel.get("coverSubdraw")
-        require(isinstance(cover, dict), "coverSubdraw must be object")
-        require(cover.get("subdrawRole") == "inside", "coverSubdraw role must be inside")
-        require(cover.get("shaderObserved") is True, "shaderReturn must be observed")
-        source_color = cover.get("sourceColorSentToBlend")
+        state = pixel.get("productionCoverInsideState")
+        require(isinstance(state, dict), "productionCoverInsideState must be object")
+        require(state.get("usesProductionDepthStencilAttachment") is True, "production attachment must be used")
+        require(state.get("usesDiagnosticDepthStencilAttachment") is False, "diagnostic attachment must not be used")
+        require(state.get("stencilReference") == 0, "stencil reference mismatch")
+        require(state.get("stencilReadMask") == 255, "stencil read mask mismatch")
+        require(state.get("stencilWriteMask") == 255, "stencil write mask mismatch")
+        require(state.get("insideCompare") == "GPUCompareFunction.NotEqual", "inside compare mismatch")
+        require(state.get("outsideCompare") == "GPUCompareFunction.Equal", "outside compare mismatch")
+        require(state.get("insidePipelineEntryPoint") == "fs_inside", "inside entry point mismatch")
+        require(state.get("insideDrawOrdinal") == 0, "inside draw ordinal mismatch")
+        require(state.get("targetWithinScissor") is True, "target must be in scissor")
+        require(state.get("productionEquivalentStencilState") is True, "production-equivalent stencil state required")
+        require(
+            state.get("fixedFunctionStencilRejectExpectedForZero") is True,
+            "zero-stencil reject expectation required",
+        )
+
+        shader = pixel.get("coverShaderEmission")
+        require(isinstance(shader, dict), "coverShaderEmission must be object")
+        require(shader.get("subdrawRole") == "inside", "shader role must be inside")
+        require(shader.get("shaderObserved") is True, "shader emission must be observed")
+        require(shader.get("shaderCaptureSynthetic") is False, "shader capture must not be synthetic")
+        source_color = shader.get("sourceColorSentToBlend")
         require(isinstance(source_color, list) and any(abs(float(value)) > 0 for value in source_color[:3]), "source color must be non-zero")
 
         isolated = pixel.get("isolatedColorTarget")
@@ -285,8 +282,10 @@ def require_artifact() -> dict[str, Any]:
         require(value is False, f"non-goal {key} must be false")
 
     next_action = data.get("nextAction", "")
-    require("production cover pass emits inside-source color" in next_action, "nextAction must name cover emission")
-    require("FOR-453 zero-stencil texture" in next_action, "nextAction must name FOR-453 zero-stencil texture")
+    require("shader-return" in next_action or "shader return" in next_action, "nextAction must name shader-return")
+    require("color-attachment-only" in next_action, "nextAction must name color-attachment-only probe")
+    for forbidden in (" if ", "otherwise", "sinon"):
+        require(forbidden not in next_action.lower(), f"nextAction must not contain conditional route: {forbidden}")
     require("FOR-442" not in data.get("classificationReason", ""), "classification must not depend on FOR-442")
     return data
 
@@ -296,13 +295,13 @@ def require_report(data: dict[str, Any]) -> None:
     text = REPORT.read_text(encoding="utf-8")
     lower = text.lower()
     require(data["classification"] in text, "report must include artifact classification")
-    require(FLAG in text, "report must include FOR-457 flag")
-    require("FOR-456" in text and "FOR-453" in text, "report must cite source artifacts")
+    require(FLAG in text, "report must include FOR-458 flag")
+    require("FOR-453" in text and "FOR-457" in text, "report must cite source diagnostics")
     require("FOR-442" in text and "FOR-447" in text, "report must cite exclusions")
     require("exclu" in lower, "report must state FOR-442 is excluded")
     require("suite unique" in lower, "report must name a single follow-up")
-    require("pas un correctif de rendu" in lower, "report must reject support/fix promotion")
-    require("production-bound" in lower or "production" in lower, "report must name production-bound diagnostic scope")
+    require("pas un correctif de rendu" in lower or "n'est pas un correctif de rendu" in lower, "report must reject support/fix promotion")
+    require("color-attachment-only" in lower, "report must name the color attachment follow-up")
 
 
 def main() -> None:
@@ -310,11 +309,11 @@ def main() -> None:
     data = require_artifact()
     require_report(data)
     print(
-        "FOR-457 validation passed: "
+        "FOR-458 validation passed: "
         f"classification={data['classification']} "
         f"for453Zero={data['boundarySummary']['for453DiagnosticStencilZeroTargetCount']} "
-        f"productionBound={data['boundarySummary']['productionBoundDiagnosticStencilAvailableTargetCount']} "
-        f"matching={data['boundarySummary']['matchingFor453DiagnosticZeroTargetCount']}"
+        f"for457Match={data['boundarySummary']['productionBoundFor457MatchingZeroTargetCount']} "
+        f"insideEmission={data['boundarySummary']['insideShaderEmissionOnDiagnosticZeroStencilCount']}"
     )
 
 
