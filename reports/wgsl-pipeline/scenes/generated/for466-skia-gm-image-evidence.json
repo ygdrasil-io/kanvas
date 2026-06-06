@@ -9,7 +9,7 @@
     "total": 93
   },
   "date": "2026-06-06",
-  "linear": "FOR-465",
+  "linear": "FOR-466",
   "nonClaims": {
     "animationSupportClaimAddedByFor466": false,
     "codecSupportClaimAddedByFor466": false,
@@ -18,9 +18,9 @@
     "dashboardRowAddedByFor466": false,
     "dashboardStatusChangedByFor465": false,
     "dashboardStatusChangedByFor466": false,
-    "drawbitmaprectEvidenceInherited": false,
     "exifSupportClaimAddedByFor466": false,
     "fallbackPolicyChanged": false,
+    "historicalImageEvidenceInherited": false,
     "mipmapSupportClaimAddedByFor466": false,
     "pipelineKeyChanged": false,
     "productionCodeChanged": false,
@@ -38,31 +38,48 @@
   "row": {
     "cpu": {
       "artifact": "not-generated",
-      "expectation": "CPU bitmap oracle for bounded source/destination rect sampling.",
+      "expectation": "CPU image draw oracle after decode, with decode provenance recorded.",
       "refusalReason": "row-specific CPU bitmap oracle artifact is missing",
       "required": true,
-      "route": "cpu.image-rect.drawminibitmaprect.expected-unsupported",
+      "route": "cpu.image.imagegm.expected-unsupported",
       "status": "expected-unsupported"
+    },
+    "decodeFixtureProvenance": {
+      "decodePath": "not exercised; ImageGM creates SkSurface raster snapshots, not codec-decoded input",
+      "externalEncodedFixture": "none",
+      "fixtureAvailability": "Kotlin source fixture exists, but no row-specific D50 reference/CPU/GPU artifacts are generated",
+      "imageContent": "static synthetic 64x64 N32 premul raster surface snapshots created by ImageGM before drawImage/drawImageRect",
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt",
+      "unsupportedBroadClaims": [
+        "codec",
+        "YUV",
+        "animation",
+        "EXIF",
+        "mipmap",
+        "tile-mode",
+        "color-managed image decode"
+      ],
+      "upstreamSource": "gm/image.cpp"
     },
     "diffStats": {
       "reason": "diff/stat payload cannot be computed without row-specific reference, CPU, and GPU artifacts",
       "required": true,
       "status": "not-computed"
     },
-    "displayName": "Draw Mini Bitmap Rect",
-    "fallbackReason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
+    "displayName": "Image",
+    "fallbackReason": "image.imagegm.row-specific-artifacts-required",
     "family": "bitmap/image",
     "gpu": {
       "artifact": "not-generated",
-      "expectation": "WebGPU texture sampling route with nearest/linear cells only.",
-      "fallbackReason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
+      "expectation": "WebGPU upload plus sampler route for bounded image draw.",
+      "fallbackReason": "image.imagegm.row-specific-artifacts-required",
       "refusalReason": "row-specific WebGPU artifact is missing",
       "required": true,
-      "route": "webgpu.image-rect.drawminibitmaprect.expected-unsupported",
+      "route": "webgpu.image.imagegm.expected-unsupported",
       "status": "expected-unsupported"
     },
-    "inventoryId": "skia-gm-drawminibitmaprect",
-    "linear": "FOR-465",
+    "inventoryId": "skia-gm-image",
+    "linear": "FOR-466",
     "nonClaims": {
       "animationSupportClaimAddedByFor466": false,
       "codecSupportClaimAddedByFor466": false,
@@ -71,9 +88,9 @@
       "dashboardRowAddedByFor466": false,
       "dashboardStatusChangedByFor465": false,
       "dashboardStatusChangedByFor466": false,
-      "drawbitmaprectEvidenceInherited": false,
       "exifSupportClaimAddedByFor466": false,
       "fallbackPolicyChanged": false,
+      "historicalImageEvidenceInherited": false,
       "mipmapSupportClaimAddedByFor466": false,
       "pipelineKeyChanged": false,
       "productionCodeChanged": false,
@@ -88,26 +105,26 @@
       "wgslProductionChanged": false,
       "yuvSupportClaimAddedByFor466": false
     },
-    "rank": 2,
-    "reason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
+    "rank": 4,
+    "reason": "image.imagegm.row-specific-artifacts-required",
     "reference": {
-      "plan": "Candidate-specific Skia GM capture for small bitmap rect draw.",
+      "plan": "Skia GM capture for a static decoded image cell already available to the test.",
       "refusalReason": "candidate-specific Skia GM reference capture is missing",
       "required": true,
       "status": "not-generated"
     },
     "routeDiagnostics": {
-      "cpu": "cpu.image-rect.drawminibitmaprect.expected-unsupported",
-      "fallbackReason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
-      "gpu": "webgpu.image-rect.drawminibitmaprect.expected-unsupported",
-      "policy": "The existing drawbitmaprect nearest evidence is not row-specific for DrawMiniBitmapRectGM. The row stays unsupported until a candidate-specific Skia reference capture, CPU artifact, GPU artifact, diff/stat payload, and route diagnostics exist without threshold changes."
+      "cpu": "cpu.image.imagegm.expected-unsupported",
+      "fallbackReason": "image.imagegm.row-specific-artifacts-required",
+      "gpu": "webgpu.image.imagegm.expected-unsupported",
+      "policy": "Historical ImageGM similarity and adjacent bitmap/image rows are not a D50 dashboard row-specific proof. The row stays unsupported until a candidate-specific Skia reference capture, CPU artifact, WebGPU artifact, diff/stat payload, route diagnostics, and fallbackReason=none exist without threshold or scoring changes."
     },
     "source": {
       "candidateInventory": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
-      "draftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-4-produire-preuve-drawminibitmaprect",
-      "findingMemory": "global/kanvas/findings/for-464-formalise-le-manifeste-strict-du-lot-1-d50",
-      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/DrawMiniBitmapRectGM.kt",
-      "upstreamSource": "gm/drawminibitmaprect.cpp"
+      "draftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-5-traiter-skia-gm-image",
+      "findingMemory": "global/kanvas/findings/for-465-formalise-le-refus-drawminibitmaprect-d50-lot-1",
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt",
+      "upstreamSource": "gm/image.cpp"
     },
     "status": "expected-unsupported"
   },
@@ -116,10 +133,10 @@
     "reason": "The row is a visible expected-unsupported refusal, not a supported rendering row.",
     "supportScoreIncreased": false
   },
-  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-4-produire-preuve-drawminibitmaprect",
-  "sourceFindingMemory": "global/kanvas/findings/for-464-formalise-le-manifeste-strict-du-lot-1-d50",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d50-5-traiter-skia-gm-image",
+  "sourceFindingMemory": "global/kanvas/findings/for-465-formalise-le-refus-drawminibitmaprect-d50-lot-1",
   "sourceManifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json",
-  "statusCountsAfterFor465": {
+  "statusCountsAfterFor466": {
     "diagnostic-only": 3,
     "expected-unsupported": 2,
     "supported": 7
