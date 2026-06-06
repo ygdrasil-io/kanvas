@@ -1,0 +1,193 @@
+        {
+          "schemaVersion": 1,
+          "linear": "FOR-453",
+          "sceneId": "m60-f16-diagnostic-stencil-texture-for453",
+          "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+          "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-texture-stencil-diagnostique-separee-apres-for-452",
+          "sourceFindingMemory": "global/kanvas/findings/for-452-backend-stencil-readback-audit-conclut-texture-diagnostique-separee",
+          "sourceArtifacts": {
+            "for452": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-backend-readback-audit-for452/m60-f16-stencil-backend-readback-audit-for452.json",
+            "for451": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-render-pass-split-boundary-for451/m60-f16-stencil-render-pass-split-boundary-for451.json"
+          },
+          "adapter": "Apple M2 Max",
+          "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+          "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+          "optInFlag": "kanvas.webgpu.m60F16DiagnosticStencilTextureFor453.enabled",
+          "classification": "diagnostic-stencil-texture-direct-copy-available",
+          "allowedClassifications": [
+            "diagnostic-stencil-texture-direct-copy-available",
+"diagnostic-stencil-texture-shader-read-available",
+"diagnostic-stencil-texture-usage-combination-unsupported",
+"diagnostic-stencil-texture-copy-aspect-rejected",
+"diagnostic-stencil-texture-ordering-unsafe",
+"diagnostic-stencil-texture-audit-inconclusive"
+          ],
+          "supportClaim": false,
+          "promoted": false,
+          "defaultRenderingChanged": false,
+          "thresholdChanged": false,
+          "scoringChanged": false,
+          "fallbackPolicyChanged": false,
+          "pipelineKeyChanged": false,
+          "productionWgslChanged": false,
+          "wgsl4kModified": false,
+          "renderingFixAppliedByDefault": false,
+          "for442UsedAsDecisionSource": false,
+          "diagnosticTextureAudit": {
+            "enabled": true,
+            "requestedBoundary": "after replaying the M60 F16 stencil pass into a separate diagnostic depth/stencil texture",
+            "observedBoundary": "copyTextureToBuffer from the diagnostic texture stencil aspect after the replay pass",
+            "depthStencilFormat": "Depth24PlusStencil8",
+            "diagnosticTextureUsage": "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
+            "diagnosticTextureUsageHasCopySrc": true,
+            "diagnosticTextureUsageHasTextureBinding": false,
+            "mainDepthStencilTextureLabel": "SkWebGpuDevice.depthStencil",
+            "mainDepthStencilUsage": "GPUTextureUsage.RenderAttachment",
+            "mainDepthStencilUsageHasCopySrc": false,
+            "mainDepthStencilUsageHasTextureBinding": false,
+            "stencilTextureAspectName": "GPUTextureAspect.StencilOnly",
+            "bytesPerStencilPixel": 1,
+            "eventCount": 3,
+            "diagnosticTextureCreatedEventCount": 3,
+            "copyAttemptedEventCount": 3,
+            "copySucceededEventCount": 3,
+            "events": [
+            {
+  "drawIndex": 1,
+  "diagnosticTextureCreated": true,
+  "diagnosticTextureUsage": "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
+  "stencilPassReplayed": true,
+  "copyAttempted": true,
+  "copySucceeded": true,
+  "copyFailureReason": null
+},
+{
+  "drawIndex": 3,
+  "diagnosticTextureCreated": true,
+  "diagnosticTextureUsage": "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
+  "stencilPassReplayed": true,
+  "copyAttempted": true,
+  "copySucceeded": true,
+  "copyFailureReason": null
+},
+{
+  "drawIndex": 5,
+  "diagnosticTextureCreated": true,
+  "diagnosticTextureUsage": "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
+  "stencilPassReplayed": true,
+  "copyAttempted": true,
+  "copySucceeded": true,
+  "copyFailureReason": null
+}
+            ]
+          },
+          "boundarySummary": {
+            "zeroMaskPixelCount": 6,
+            "currentSimilarity": 95.914714,
+            "currentMismatchPixels": 1004,
+            "directStencilReadbackAvailable": true,
+            "stencilValuesAvailableTargetCount": 6,
+            "for442DecisionSourceUsedCount": 0
+          },
+          "partialPixels": [
+            {
+  "x": 92,
+  "y": 75,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "stencilValue": 0,
+  "stencilCovered": false,
+  "sampleClassification": "diagnostic-stencil-texture-direct-copy-sample",
+  "sampleReason": "FOR-453 replayed this draw's stencil pass into a separate diagnostic texture and copied the StencilOnly aspect to a staging buffer."
+},
+{
+  "x": 91,
+  "y": 76,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "stencilValue": 0,
+  "stencilCovered": false,
+  "sampleClassification": "diagnostic-stencil-texture-direct-copy-sample",
+  "sampleReason": "FOR-453 replayed this draw's stencil pass into a separate diagnostic texture and copied the StencilOnly aspect to a staging buffer."
+},
+{
+  "x": 90,
+  "y": 77,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "stencilValue": 0,
+  "stencilCovered": false,
+  "sampleClassification": "diagnostic-stencil-texture-direct-copy-sample",
+  "sampleReason": "FOR-453 replayed this draw's stencil pass into a separate diagnostic texture and copied the StencilOnly aspect to a staging buffer."
+},
+{
+  "x": 89,
+  "y": 78,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "stencilValue": 0,
+  "stencilCovered": false,
+  "sampleClassification": "diagnostic-stencil-texture-direct-copy-sample",
+  "sampleReason": "FOR-453 replayed this draw's stencil pass into a separate diagnostic texture and copied the StencilOnly aspect to a staging buffer."
+},
+{
+  "x": 88,
+  "y": 79,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "stencilValue": 0,
+  "stencilCovered": false,
+  "sampleClassification": "diagnostic-stencil-texture-direct-copy-sample",
+  "sampleReason": "FOR-453 replayed this draw's stencil pass into a separate diagnostic texture and copied the StencilOnly aspect to a staging buffer."
+},
+{
+  "x": 87,
+  "y": 80,
+  "currentWebGpuRgba": [181, 191, 230, 255],
+  "targetWithinScissor": true,
+  "readbackAttempted": true,
+  "readbackAvailable": true,
+  "stencilValue": 0,
+  "stencilCovered": false,
+  "sampleClassification": "diagnostic-stencil-texture-direct-copy-sample",
+  "sampleReason": "FOR-453 replayed this draw's stencil pass into a separate diagnostic texture and copied the StencilOnly aspect to a staging buffer."
+}
+          ],
+          "nonGoalsPreserved": {
+            "defaultRenderingChanged": false,
+            "supportClaimRaised": false,
+            "promoted": false,
+            "thresholdChanged": false,
+            "scoringChanged": false,
+            "fallbackChanged": false,
+            "pipelineKeyChanged": false,
+            "productionWgslChanged": false,
+            "wgsl4kModified": false,
+            "activationByDefault": false,
+            "for442UsedAsDecisionSource": false,
+            "for447Promoted": false,
+            "renderingFixAppliedByDefault": false,
+            "mainDepthStencilTextureModified": false
+          },
+          "classificationReason": "FOR-453 keeps the production depth/stencil texture render-attachment-only and attempts direct stencil evidence only through a separate opt-in diagnostic texture.",
+          "nextAction": "Open a cover-source attribution ticket that uses the six zero stencil values to identify which pass or color contribution still lights the M60 F16 residual pixels.",
+          "validationCommands": [
+            "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+            "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16DiagnosticStencilTextureFor453.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+            "rtk python3 scripts/validate_for453_m60_f16_diagnostic_stencil_texture.py",
+            "rtk python3 scripts/validate_for452_m60_f16_stencil_backend_readback_audit.py",
+            "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for453-pycache python3 -m py_compile scripts/validate_for453_m60_f16_diagnostic_stencil_texture.py scripts/validate_for452_m60_f16_stencil_backend_readback_audit.py",
+            "rtk git diff --check"
+          ]
+        }
