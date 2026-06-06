@@ -220,7 +220,8 @@ class StrokeCapJoinSceneCaptureTest {
                         System.getProperty(FOR434_STENCIL_SOURCE_PAYLOAD_TRACE_PROPERTY, "false").toBoolean() ||
                         System.getProperty(FOR435_PAINT_STROKE_INPUT_TRACE_PROPERTY, "false").toBoolean() ||
                         System.getProperty(FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY, "false").toBoolean() ||
-                        System.getProperty(FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY, "false").toBoolean()
+                        System.getProperty(FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY, "false").toBoolean() ||
+                        System.getProperty(FOR438_CPU_VS_WEBGPU_GREEN_DRAW_COVERAGE_PROPERTY, "false").toBoolean()
                 val widthQuantizedColorReconstructionFor432Result =
                     if (widthQuantizedColorReconstructionRequested) {
                         withExperimentalStrokeCapJoinRender {
@@ -237,6 +238,10 @@ class StrokeCapJoinSceneCaptureTest {
                                                         ).toBoolean() ||
                                                             System.getProperty(
                                                                 FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY,
+                                                                "false",
+                                                            ).toBoolean() ||
+                                                            System.getProperty(
+                                                                FOR438_CPU_VS_WEBGPU_GREEN_DRAW_COVERAGE_PROPERTY,
                                                                 "false",
                                                             ).toBoolean(),
                                                     ) {
@@ -457,6 +462,17 @@ class StrokeCapJoinSceneCaptureTest {
             }
             if (System.getProperty(FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY, "false").toBoolean()) {
                 writeM60F16CpuReferenceSourceExpectationFor437(
+                    reference = reference,
+                    currentGpu = experimentalGpu,
+                    optInGpu = widthQuantizedRenderFixFor431Gpu,
+                    shaderReturnSnapshot = result.aaStencilCoverShaderReturnDiagnosticSnapshot,
+                    predrawSnapshot = result.aaStencilCoverPredrawDstReadbackSnapshot,
+                    hostSnapshot = result.hostDrawPaintBindingFor436Snapshot,
+                    adapter = adapter,
+                )
+            }
+            if (System.getProperty(FOR438_CPU_VS_WEBGPU_GREEN_DRAW_COVERAGE_PROPERTY, "false").toBoolean()) {
+                writeM60F16CpuVsWebGpuGreenDrawCoverageFor438(
                     reference = reference,
                     currentGpu = experimentalGpu,
                     optInGpu = widthQuantizedRenderFixFor431Gpu,
@@ -1404,6 +1420,78 @@ class StrokeCapJoinSceneCaptureTest {
             }
             c.drawPath(path, paint)
             c.drawRect(org.graphiks.math.SkRect.MakeXYWH(10f, 28f, 88f, 64f), outlinePaint)
+        }
+    }
+
+    private class BoundedStrokeCapJoinThroughGreenFor438GM : GM() {
+        override fun getName(): String = "m60_bounded_stroke_cap_join_through_green_for438"
+        override fun getISize(): SkISize = SkISize.Make(192, 128)
+
+        override fun onDraw(canvas: SkCanvas?) {
+            val c = canvas ?: return
+            c.drawColor(SK_ColorWHITE)
+            val path = SkPathBuilder()
+                .moveTo(18f, 78f)
+                .lineTo(54f, 42f)
+                .lineTo(90f, 78f)
+                .detach()
+            val outlinePaint = SkPaint().apply {
+                color = SK_ColorBLACK
+                style = SkPaint.Style.kStroke_Style
+                strokeWidth = 0f
+                isAntiAlias = true
+            }
+            val cases = listOf(
+                StrokeCase(0f, SkPaint.Cap.kButt_Cap, SkPaint.Join.kBevel_Join, 0xFF0066CC.toInt()),
+                StrokeCase(48f, SkPaint.Cap.kRound_Cap, SkPaint.Join.kRound_Join, 0xFF008A4C.toInt()),
+            )
+            for (case in cases) {
+                c.save()
+                c.translate(case.dx, 0f)
+                val paint = SkPaint().apply {
+                    color = case.color
+                    isAntiAlias = true
+                    style = SkPaint.Style.kStroke_Style
+                    strokeWidth = 10f
+                    strokeCap = case.cap
+                    strokeJoin = case.join
+                    strokeMiter = 4f
+                }
+                c.drawPath(path, paint)
+                c.drawRect(org.graphiks.math.SkRect.MakeXYWH(10f, 28f, 88f, 64f), outlinePaint)
+                c.restore()
+            }
+        }
+    }
+
+    private class BoundedStrokeCapJoinGreenCoverageFor438GM : GM() {
+        init {
+            setBGColor(0x00000000)
+        }
+
+        override fun getName(): String = "m60_bounded_stroke_cap_join_green_coverage_for438"
+        override fun getISize(): SkISize = SkISize.Make(192, 128)
+
+        override fun onDraw(canvas: SkCanvas?) {
+            val c = canvas ?: return
+            val path = SkPathBuilder()
+                .moveTo(18f, 78f)
+                .lineTo(54f, 42f)
+                .lineTo(90f, 78f)
+                .detach()
+            c.save()
+            c.translate(48f, 0f)
+            val paint = SkPaint().apply {
+                color = SK_ColorWHITE
+                isAntiAlias = true
+                style = SkPaint.Style.kStroke_Style
+                strokeWidth = 10f
+                strokeCap = SkPaint.Cap.kRound_Cap
+                strokeJoin = SkPaint.Join.kRound_Join
+                strokeMiter = 4f
+            }
+            c.drawPath(path, paint)
+            c.restore()
         }
     }
 
@@ -8238,6 +8326,329 @@ class StrokeCapJoinSceneCaptureTest {
                 "Add a narrower CPU draw/source trace around these six pixels."
         }
 
+    private fun writeM60F16CpuVsWebGpuGreenDrawCoverageFor438(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        hostSnapshot: SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-cpu-vs-webgpu-green-draw-coverage-for438"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16CpuVsWebGpuGreenDrawCoverageFor438Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                optInGpu = optInGpu,
+                shaderReturnSnapshot = shaderReturnSnapshot,
+                predrawSnapshot = predrawSnapshot,
+                hostSnapshot = hostSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16CpuVsWebGpuGreenDrawCoverageFor438Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        hostSnapshot: SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        adapter: String,
+    ): String {
+        val coverageAlpha = 10f / 16f
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val cpuBeforeGreen = TestUtils.runGmTest(BoundedStrokeCapJoinPrefixFor437GM())
+        val cpuThroughGreen = TestUtils.runGmTest(BoundedStrokeCapJoinThroughGreenFor438GM())
+        val cpuGreenCoverageMask = TestUtils.runGmTest(BoundedStrokeCapJoinGreenCoverageFor438GM())
+        val shaderByPoint = shaderReturnSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val predrawByPoint = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val hostBinding = hostSnapshot.events.firstOrNull { it.drawIndex == 3 }
+        val records = partialPoints
+            .map { (x, y) -> M60F16DrawPixelKey(3, x, y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.y }.thenBy { it.x })
+            .map { key ->
+                val point = key.x to key.y
+                val sources = shaderByPoint[point].orEmpty()
+                    .filter { (event, sample) ->
+                        event.drawIndex == 3 &&
+                            sample.shaderObserved &&
+                            !sample.captureSynthetic &&
+                            sample.sourceColorSentToBlend != null
+                    }
+                val selected = sources
+                    .firstOrNull { (_, sample) -> sample.subdrawOrdinal == 0 && sample.subdrawRole == "inside" }
+                    ?: sources.firstOrNull()
+                val predraw = predrawByPoint[point].orEmpty()
+                    .sortedBy { it.first.drawIndex }
+                    .firstOrNull { (event, sample) ->
+                        event.drawIndex == 3 &&
+                            sample.targetWithinScissor &&
+                            sample.readbackAvailable &&
+                            sample.dstBeforeRgbaFloat != null
+                    }
+                val beforeRgba = rgbaArray(cpuBeforeGreen.getPixel(key.x, key.y))
+                val throughGreenRgba = rgbaArray(cpuThroughGreen.getPixel(key.x, key.y))
+                val referenceRgba = rgbaArray(reference.getPixel(key.x, key.y))
+                val cpuGreenCoverageByte = (cpuGreenCoverageMask.getPixel(key.x, key.y) ushr 24) and 0xFF
+                val cpuGreenDrawCovers = cpuGreenCoverageByte > 0
+                val cpuGreenDrawMutates = !throughGreenRgba.contentEquals(beforeRgba)
+                val cpuBeforeEqualsReference = beforeRgba.contentEquals(referenceRgba)
+                val cpuThroughGreenEqualsReference = throughGreenRgba.contentEquals(referenceRgba)
+                val webGpuCoverageAlpha = selected?.second?.coverageOrAaAlpha
+                val webGpuCoverageNumerator = webGpuCoverageAlpha?.let { ((it * 16f) + 0.5f).toInt() }
+                val webGpuStencilCoverCovers = selected != null &&
+                    (webGpuCoverageAlpha ?: 0f) > 0f &&
+                    selected.second.subdrawRole == "inside"
+                val classification = when {
+                    selected == null || hostBinding == null || predraw == null ->
+                        "trace-incomplete"
+                    !cpuGreenDrawCovers && webGpuStencilCoverCovers ->
+                        "webgpu-stencil-cover-overcovers-green-draw"
+                    !cpuGreenDrawCovers ->
+                        "cpu-green-draw-does-not-cover-pixels"
+                    cpuGreenDrawCovers && !cpuGreenDrawMutates ->
+                        "cpu-green-draw-covers-but-does-not-mutate"
+                    !cpuThroughGreenEqualsReference || !cpuBeforeEqualsReference ->
+                        "draw-order-or-prefix-fixture-mismatch"
+                    else ->
+                        "cpu-webgpu-green-draw-coverage-unresolved"
+                }
+                M60F16CpuVsWebGpuGreenDrawCoverageFor438Record(
+                    key = key,
+                    selectedSource = selected,
+                    predraw = predraw,
+                    referenceRgba = referenceRgba,
+                    currentGpuRgba = rgbaArray(currentGpu.getPixel(key.x, key.y)),
+                    optInGpuRgba = rgbaArray(optInGpu.getPixel(key.x, key.y)),
+                    cpuBeforeGreenRgba = beforeRgba,
+                    cpuThroughGreenRgba = throughGreenRgba,
+                    cpuGreenCoverageByte = cpuGreenCoverageByte,
+                    cpuGreenDrawCovers = cpuGreenDrawCovers,
+                    cpuGreenDrawMutates = cpuGreenDrawMutates,
+                    cpuBeforeEqualsReference = cpuBeforeEqualsReference,
+                    cpuThroughGreenEqualsReference = cpuThroughGreenEqualsReference,
+                    webGpuCoverageAlpha = webGpuCoverageAlpha,
+                    webGpuCoverageNumerator = webGpuCoverageNumerator,
+                    webGpuStencilCoverCovers = webGpuStencilCoverCovers,
+                    missingFields = buildList {
+                        if (selected == null) add("webGpuDrawIndex3InsideStencilCoverSample")
+                        if (hostBinding == null) add("hostDrawIndex3PaintBinding")
+                        if (predraw == null) add("webGpuDrawIndex3PredrawDstReadback")
+                    },
+                    classification = classification,
+                )
+            }
+        val classification = when {
+            records.any { it.classification == "trace-incomplete" } -> "trace-incomplete"
+            records.all { it.classification == "webgpu-stencil-cover-overcovers-green-draw" } ->
+                "webgpu-stencil-cover-overcovers-green-draw"
+            records.all { it.classification == "cpu-green-draw-does-not-cover-pixels" } ->
+                "cpu-green-draw-does-not-cover-pixels"
+            records.all { it.classification == "cpu-green-draw-covers-but-does-not-mutate" } ->
+                "cpu-green-draw-covers-but-does-not-mutate"
+            records.any { it.classification == "draw-order-or-prefix-fixture-mismatch" } ->
+                "draw-order-or-prefix-fixture-mismatch"
+            else ->
+                "cpu-webgpu-green-draw-coverage-unresolved"
+        }
+        val pixelsJson = records.joinToString(",\n") { record ->
+            m60F16CpuVsWebGpuGreenDrawCoverageFor438RecordJson(record).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-438",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "m60-f16-cpu-reference-source-expectation-for437",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-isoler-divergence-draw-coverage-cpu-conserve-bleu-web-gpu-applique-vert",
+              "sourceFindingMemory": "global/kanvas/findings/for-437-cpu-reference-six-m60-f16-pixels-come-from-pre-draw-index-3-blue-prefix",
+              "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-cpu-reference-source-expectation-for437/m60-f16-cpu-reference-source-expectation-for437.json",
+              "sourceReport": "reports/wgsl-pipeline/2026-06-06-for-437-m60-f16-cpu-reference-source-expectation.md",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR438_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "diagnosticFlag": ${FOR438_CPU_VS_WEBGPU_GREEN_DRAW_COVERAGE_PROPERTY.jsonString()},
+              "sourceFor437DiagnosticFlag": ${FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY.jsonString()},
+              "sourceFor436DiagnosticFlag": ${FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY.jsonString()},
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixApplied": false,
+              "comparisonPolicy": {
+                "scope": "Exactly the six FOR-437 pixels. Compare CPU prefix before drawIndex 3, CPU through the green round/round draw, CPU green-only coverage mask, and the WebGPU drawIndex 3 stencil-cover shader-return sample.",
+                "cpuReferenceSink": "RasterSinkF16(DM_REFERENCE_COLOR_SPACE)",
+                "cpuBeforeGreenFixture": "BoundedStrokeCapJoinPrefixFor437GM",
+                "cpuThroughGreenFixture": "BoundedStrokeCapJoinThroughGreenFor438GM",
+                "cpuGreenCoverageFixture": "BoundedStrokeCapJoinGreenCoverageFor438GM",
+                "webGpuBoundary": "drawIndex 3 StencilCoverAaPolygonDraw inside subdraw, fragment return before fixed-function blend",
+                "coverageNumerator": 10,
+                "coverageDenominator": 16,
+                "coverageAlpha": ${m60F16JsonFloat(coverageAlpha)},
+                "noRenderingFixApplied": true,
+                "boundedToSixPixels": true
+              },
+              "hostDrawIndex3": {
+                "paintHexArgb": ${hostBinding?.sourcePaintHexArgb?.jsonString() ?: "null"},
+                "strokeWidth": ${hostBinding?.strokeWidth?.let { m60F16JsonFloat(it) } ?: "null"},
+                "strokeCap": ${hostBinding?.strokeCap?.jsonString() ?: "null"},
+                "strokeJoin": ${hostBinding?.strokeJoin?.jsonString() ?: "null"},
+                "bandXStart": ${hostBinding?.let { m60F16JsonFloat(it.bandXStart) } ?: "null"},
+                "bandXEnd": ${hostBinding?.let { m60F16JsonFloat(it.bandXEnd) } ?: "null"}
+              },
+              "summary": {
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "cpuGreenCoverageZeroCount": ${records.count { !it.cpuGreenDrawCovers }},
+                "cpuGreenMutationCount": ${records.count { it.cpuGreenDrawMutates }},
+                "cpuBeforeEqualsReferenceCount": ${records.count { it.cpuBeforeEqualsReference }},
+                "cpuThroughGreenEqualsReferenceCount": ${records.count { it.cpuThroughGreenEqualsReference }},
+                "webGpuStencilCoverCount": ${records.count { it.webGpuStencilCoverCovers }},
+                "webGpuCoverage10Of16Count": ${records.count { it.webGpuCoverageNumerator == 10 }},
+                "hostBoundDrawIndex": ${hostBinding?.drawIndex ?: "null"},
+                "hostBoundPaintHexArgb": ${hostBinding?.sourcePaintHexArgb?.jsonString() ?: "null"},
+                "traceComplete": ${records.all { it.missingFields.isEmpty() }}
+              },
+              "partialPixels": [
+            $pixelsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "for431ActivatedByDefault": false,
+                "renderingFixApplied": false
+              },
+              "classificationReason": ${m60F16CpuVsWebGpuGreenDrawCoverageFor438GlobalReason(classification).jsonString()},
+              "nextStep": ${m60F16CpuVsWebGpuGreenDrawCoverageFor438NextStep(classification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16CpuVsWebGpuGreenDrawCoverageFor438.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for438_m60_f16_cpu_vs_webgpu_green_draw_coverage.py",
+                "rtk python3 scripts/validate_for437_m60_f16_cpu_reference_source_expectation.py",
+                "rtk python3 scripts/validate_for436_m60_f16_host_draw_paint_binding.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for438-pycache python3 -m py_compile scripts/validate_for438_m60_f16_cpu_vs_webgpu_green_draw_coverage.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16CpuVsWebGpuGreenDrawCoverageFor438RecordJson(
+        record: M60F16CpuVsWebGpuGreenDrawCoverageFor438Record,
+    ): String =
+        """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16CpuVsWebGpuGreenDrawCoverageFor438LocalReason(record).jsonString()},
+              "referenceCpuRgba": ${intArrayJson(record.referenceRgba)},
+              "currentWebGpuRgba": ${intArrayJson(record.currentGpuRgba)},
+              "optInFor431Rgba": ${intArrayJson(record.optInGpuRgba)},
+              "cpuDecision": {
+                "beforeGreenRgba": ${intArrayJson(record.cpuBeforeGreenRgba)},
+                "throughGreenRgba": ${intArrayJson(record.cpuThroughGreenRgba)},
+                "greenCoverageAlphaByte": ${record.cpuGreenCoverageByte},
+                "greenCoverageAlpha": ${m60F16JsonFloat(record.cpuGreenCoverageByte / 255f)},
+                "greenDrawCoversPixel": ${record.cpuGreenDrawCovers},
+                "greenDrawMutatesPixel": ${record.cpuGreenDrawMutates},
+                "beforeGreenEqualsReference": ${record.cpuBeforeEqualsReference},
+                "throughGreenEqualsReference": ${record.cpuThroughGreenEqualsReference}
+              },
+              "webGpuStencilCoverDecision": {
+                "drawIndex": ${record.selectedSource?.first?.drawIndex ?: "null"},
+                "subdrawOrdinal": ${record.selectedSource?.second?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${record.selectedSource?.second?.subdrawRole?.jsonString() ?: "null"},
+                "shaderObserved": ${record.selectedSource?.second?.shaderObserved ?: "null"},
+                "targetWithinScissor": ${record.selectedSource?.second?.targetWithinScissor ?: "null"},
+                "coverageOrAaAlpha": ${record.webGpuCoverageAlpha?.let { m60F16JsonFloat(it) } ?: "null"},
+                "coverageNumeratorOf16": ${record.webGpuCoverageNumerator ?: "null"},
+                "stencilCoverCoversPixel": ${record.webGpuStencilCoverCovers},
+                "sourceColorSentToBlend": ${record.selectedSource?.second?.sourceColorSentToBlend.floatArrayOrNullJson()}
+              },
+              "webGpuPredraw": {
+                "dstBeforeRgbaFloat": ${record.predraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                "dstBeforeRgba8": ${record.predraw?.second?.dstBeforeRgbaFloat?.let { floatRgbaToByteArrayJson(it) } ?: "null"}
+              },
+              "missingFields": [${record.missingFields.joinToString(", ") { it.jsonString() }}]
+            }
+        """.trimIndent()
+
+    private fun m60F16CpuVsWebGpuGreenDrawCoverageFor438LocalReason(
+        record: M60F16CpuVsWebGpuGreenDrawCoverageFor438Record,
+    ): String = when (record.classification) {
+        "webgpu-stencil-cover-overcovers-green-draw" ->
+            "The CPU green-only coverage mask is empty and the CPU image remains the blue prefix, while WebGPU records an inside stencil-cover drawIndex 3 contribution for the same pixel."
+        "cpu-green-draw-does-not-cover-pixels" ->
+            "The CPU green-only coverage mask is empty for this pixel."
+        "cpu-green-draw-covers-but-does-not-mutate" ->
+            "The CPU green-only coverage mask is nonzero, but the CPU through-green image still matches the blue prefix at this pixel."
+        "draw-order-or-prefix-fixture-mismatch" ->
+            "The CPU prefix or through-green fixture no longer matches the full CPU reference expectation used by FOR-437."
+        "trace-incomplete" ->
+            "The trace is missing the WebGPU drawIndex 3 inside sample, the host draw binding, or the predraw destination."
+        else ->
+            "CPU and WebGPU green draw coverage evidence was captured, but it does not match a narrower accepted classification."
+    }
+
+    private fun m60F16CpuVsWebGpuGreenDrawCoverageFor438GlobalReason(classification: String): String =
+        when (classification) {
+            "webgpu-stencil-cover-overcovers-green-draw" ->
+                "For all six FOR-437 pixels, the CPU green-only coverage mask is zero and the CPU through-green rendering remains the blue prefix, while WebGPU records a drawIndex 3 inside stencil-cover contribution."
+            "cpu-green-draw-does-not-cover-pixels" ->
+                "The CPU green round/round draw does not cover the six pixels."
+            "cpu-green-draw-covers-but-does-not-mutate" ->
+                "The CPU green round/round draw reports coverage but does not mutate these pixels."
+            "draw-order-or-prefix-fixture-mismatch" ->
+                "The CPU prefix/through-green fixtures no longer line up with the full CPU reference, so draw order or fixture assumptions must be rechecked."
+            "trace-incomplete" ->
+                "A required CPU or WebGPU field is missing from the diagnostic."
+            else ->
+                "The CPU-vs-WebGPU green draw coverage divergence is still unresolved."
+        }
+
+    private fun m60F16CpuVsWebGpuGreenDrawCoverageFor438NextStep(classification: String): String =
+        when (classification) {
+            "webgpu-stencil-cover-overcovers-green-draw" ->
+                "Audit WebGPU stencil-cover geometry/scissor coverage for drawIndex 3 against the CPU green-only coverage mask before changing paint payload, thresholds, FOR-431, PipelineKey, or WGSL production code."
+            "cpu-green-draw-does-not-cover-pixels" ->
+                "Reduce the next ticket to the CPU path geometry decision that excludes the six pixels from the green round/round draw."
+            "cpu-green-draw-covers-but-does-not-mutate" ->
+                "Trace CPU composition/write policy for the green draw at these pixels."
+            "draw-order-or-prefix-fixture-mismatch" ->
+                "Revalidate the bounded fixture draw order before deriving a renderer correction."
+            "trace-incomplete" ->
+                "Add the exact missing field named in partialPixels[].missingFields before deriving a correction."
+            else ->
+                "Add a narrower geometry/scissor comparison for the green draw."
+        }
+
     private fun m60F16SubsampleComparisonGridJson(
         key: M60F16DrawPixelKey,
         cpuMask: Int?,
@@ -11594,6 +12005,33 @@ class StrokeCapJoinSceneCaptureTest {
         val fixtureBlueDelta: RgbaFloatDelta?,
         val hostBoundDelta: RgbaFloatDelta?,
         val candidateDeltas: List<Pair<M60F16FixtureSourceCandidateFor437, RgbaFloatDelta?>>,
+        val missingFields: List<String>,
+        val classification: String,
+    )
+
+    private data class M60F16CpuVsWebGpuGreenDrawCoverageFor438Record(
+        val key: M60F16DrawPixelKey,
+        val selectedSource: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val predraw: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSample,
+            >?,
+        val referenceRgba: IntArray,
+        val currentGpuRgba: IntArray,
+        val optInGpuRgba: IntArray,
+        val cpuBeforeGreenRgba: IntArray,
+        val cpuThroughGreenRgba: IntArray,
+        val cpuGreenCoverageByte: Int,
+        val cpuGreenDrawCovers: Boolean,
+        val cpuGreenDrawMutates: Boolean,
+        val cpuBeforeEqualsReference: Boolean,
+        val cpuThroughGreenEqualsReference: Boolean,
+        val webGpuCoverageAlpha: Float?,
+        val webGpuCoverageNumerator: Int?,
+        val webGpuStencilCoverCovers: Boolean,
         val missingFields: List<String>,
         val classification: String,
     )
@@ -18547,6 +18985,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16HostDrawPaintBindingFor436.enabled"
         private const val FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY =
             "kanvas.webgpu.m60F16CpuReferenceSourceExpectationFor437.enabled"
+        private const val FOR438_CPU_VS_WEBGPU_GREEN_DRAW_COVERAGE_PROPERTY =
+            "kanvas.webgpu.m60F16CpuVsWebGpuGreenDrawCoverageFor438.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -18622,6 +19062,14 @@ class StrokeCapJoinSceneCaptureTest {
             "fixture-expectation-mismatch",
             "trace-incomplete",
             "cpu-reference-source-expectation-unresolved",
+        )
+        private val M60_F16_FOR438_ALLOWED_CLASSIFICATIONS = listOf(
+            "cpu-green-draw-does-not-cover-pixels",
+            "cpu-green-draw-covers-but-does-not-mutate",
+            "webgpu-stencil-cover-overcovers-green-draw",
+            "draw-order-or-prefix-fixture-mismatch",
+            "trace-incomplete",
+            "cpu-webgpu-green-draw-coverage-unresolved",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
