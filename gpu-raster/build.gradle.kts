@@ -250,6 +250,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.webgpu.m60F16ExactSubsampleMaskVsCpuGreenFor441.enabled")?.let {
         systemProperty("kanvas.webgpu.m60F16ExactSubsampleMaskVsCpuGreenFor441.enabled", it)
     }
+    System.getProperty("kanvas.webgpu.m60F16RuntimeExactMaskProbeFor442.enabled")?.let {
+        systemProperty("kanvas.webgpu.m60F16RuntimeExactMaskProbeFor442.enabled", it)
+    }
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }

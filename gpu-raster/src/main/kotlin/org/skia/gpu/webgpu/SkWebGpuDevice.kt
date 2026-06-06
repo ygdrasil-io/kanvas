@@ -220,6 +220,8 @@ private const val WEBGPU_M60_F16_AA_STENCIL_COVER_FINAL_WGSL_DIAGNOSTIC_FLAG: St
     "kanvas.webgpu.m60F16AaStencilCoverFinalWgslDiagnostic.enabled"
 private const val WEBGPU_M60_F16_AA_STENCIL_COVER_SUBSAMPLE_MASK_FOR427_FLAG: String =
     "kanvas.webgpu.m60F16AaStencilCoverSubsampleMaskFor427.enabled"
+private const val WEBGPU_M60_F16_RUNTIME_EXACT_MASK_PROBE_FOR442_FLAG: String =
+    "kanvas.webgpu.m60F16RuntimeExactMaskProbeFor442.enabled"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_RENDER_FIX_FOR431_FLAG: String =
     "kanvas.webgpu.m60F16WidthQuantizedRenderFixFor431.enabled"
 private const val WEBGPU_M60_F16_WIDTH_QUANTIZED_COLOR_RECONSTRUCTION_FOR432_FLAG: String =
@@ -974,6 +976,11 @@ public class SkWebGpuDevice(
     private val m60F16AaStencilCoverSubsampleMaskFor427DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_SUBSAMPLE_MASK_FOR427_FLAG,
+            "false",
+        ).toBoolean()
+    private val m60F16RuntimeExactMaskProbeFor442DiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_RUNTIME_EXACT_MASK_PROBE_FOR442_FLAG,
             "false",
         ).toBoolean()
     private val m60F16HostDrawPaintBindingFor436DiagnosticsEnabled: Boolean =
@@ -5191,10 +5198,15 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     private fun loadM60F16AaStencilCoverShaderReturnDiagnosticShader(): GPUShaderModule =
         loadM60F16AaStencilCoverProbeShader(
-            cacheKey = "diagnostic://m60-f16-aa-stencil-cover-shader-return-for412",
+            cacheKey = if (m60F16RuntimeExactMaskProbeFor442DiagnosticsEnabled) {
+                "diagnostic://m60-f16-aa-stencil-cover-shader-return-runtime-exact-mask-for442"
+            } else {
+                "diagnostic://m60-f16-aa-stencil-cover-shader-return-for412"
+            },
             diagnostic = true,
             boundedRuntimeCorrection = true,
             contributionIsolationDiagnostic = true,
+            subsampleMaskFor427Diagnostic = m60F16RuntimeExactMaskProbeFor442DiagnosticsEnabled,
         )
 
     private fun loadM60F16AaStencilCoverShaderReturnStorageZeroCauseShader(): GPUShaderModule =
@@ -19694,6 +19706,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                 (applicationPointDiagnosticForDraw && d.m60F16BandMetadata != null) ||
                 (coverageStencilContributionMapDiagnosticForDraw && d.m60F16BandMetadata != null)
         val diagnosticBufferSize = when {
+            shaderReturnDiagnosticForDraw && m60F16RuntimeExactMaskProbeFor442DiagnosticsEnabled ->
+                M60_F16_SUBSAMPLE_MASK_FOR427_BUFFER_SIZE
             shaderReturnDiagnosticForDraw || contributionIsolationDiagnosticForDraw ->
                 M60_F16_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_BUFFER_SIZE
             coverageStencilContributionMapDiagnosticForDraw ->
