@@ -49,6 +49,9 @@ ALLOWED_LOCAL_DIFFS = {
     f"reports/wgsl-pipeline/scenes/artifacts/{SCENE_ID}/opt-in-webgpu-width-quantized-diff.png",
     "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-width-quantized-render-fix-for431.png",
     "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-width-quantized-render-fix-for431-diff.png",
+    "scripts/validate_for432_m60_f16_width_quantized_color_reconstruction.py",
+    "reports/wgsl-pipeline/2026-06-06-for-432-m60-f16-width-quantized-color-reconstruction.md",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-f16-width-quantized-color-reconstruction-for432",
 }
 
 
