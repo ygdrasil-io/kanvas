@@ -18,7 +18,7 @@
   "candidateCount": 12,
   "classification": "lot1-row-specific-refusals-no-new-support-claims",
   "dashboardConsumesLotDirectly": false,
-  "dashboardConsumptionReason": "Only rows with existing dashboard evidence are recognized as supported; four rows have stable expected-unsupported refusals; missing candidates remain diagnostic-only until row-specific renderer artifacts exist.",
+  "dashboardConsumptionReason": "Only rows with existing dashboard evidence are recognized as supported; five rows have stable expected-unsupported refusals; no lot 1 candidate remains diagnostic-only after FOR-469.",
   "dashboardGate": "build/reports/wgsl-pipeline-scene-gate/scene-dashboard-gate.json",
   "date": "2026-06-06",
   "linear": "FOR-464",
@@ -28,28 +28,35 @@
     "animationSupportClaimAddedByFor467": false,
     "arbitraryLayerPrepassSupportClaimAddedByFor468": false,
     "broadImageFilterDagSupportClaimAddedByFor468": false,
+    "broadPathAaSupportClaimAddedByFor469": false,
     "broadSkiaGmParityClaim": false,
+    "capJoinDashSupportClaimAddedByFor469": false,
     "codecSupportClaimAddedByFor466": false,
     "codecSupportClaimAddedByFor467": false,
     "colorManagedImageSupportClaimAddedByFor466": false,
     "colorManagedImageSupportClaimAddedByFor467": false,
     "colorPipelineGlobalSupportClaimAddedByFor468": false,
+    "convexPathSupportClaimAddedByFor469": false,
     "cropImageFilterDagSupportClaimAddedByFor468": false,
     "dashboardRowsAddedByFor464": 0,
     "dashboardRowsAddedByFor465": 0,
     "dashboardRowsAddedByFor466": 0,
     "dashboardRowsAddedByFor467": 0,
     "dashboardRowsAddedByFor468": 0,
+    "dashboardRowsAddedByFor469": 0,
     "dashboardStatusChangedByFor462": false,
     "dashboardStatusChangedByFor464": false,
     "dashboardStatusChangedByFor465": false,
     "dashboardStatusChangedByFor466": false,
     "dashboardStatusChangedByFor467": false,
     "dashboardStatusChangedByFor468": false,
+    "dashboardStatusChangedByFor469": false,
     "dynamicSourceImageSupportClaimAddedByFor467": false,
+    "edgeBudgetSupportClaimAddedByFor469": false,
     "exifSupportClaimAddedByFor466": false,
     "exifSupportClaimAddedByFor467": false,
     "fallbackPolicyChanged": false,
+    "historicalPathSceneSupportClaimAddedByFor469": false,
     "mipmapSupportClaimAddedByFor466": false,
     "mipmapSupportClaimAddedByFor467": false,
     "picturePrepassSupportClaimAddedByFor468": false,
@@ -62,12 +69,15 @@
     "skiaComparableClaimsAddedByFor466": 0,
     "skiaComparableClaimsAddedByFor467": 0,
     "skiaComparableClaimsAddedByFor468": 0,
+    "skiaComparableClaimsAddedByFor469": 0,
+    "strokeSupportClaimAddedByFor469": false,
     "supportClaimsAddedByFor462": 0,
     "supportClaimsAddedByFor464": 0,
     "supportClaimsAddedByFor465": 0,
     "supportClaimsAddedByFor466": 0,
     "supportClaimsAddedByFor467": 0,
     "supportClaimsAddedByFor468": 0,
+    "supportClaimsAddedByFor469": 0,
     "thresholdChanged": false,
     "tileModeSupportClaimAddedByFor466": false,
     "tileModeSupportClaimAddedByFor467": false,
@@ -80,10 +90,12 @@
   "rowEvidenceSourceDraftMemoryFor466": "global/kanvas/tickets/drafts/brouillon-ticket-d50-5-traiter-skia-gm-image",
   "rowEvidenceSourceDraftMemoryFor467": "global/kanvas/tickets/drafts/brouillon-ticket-d50-6-traiter-skia-gm-imagesource",
   "rowEvidenceSourceDraftMemoryFor468": "global/kanvas/tickets/drafts/brouillon-ticket-d50-7-traiter-skia-gm-offsetimagefilter",
+  "rowEvidenceSourceDraftMemoryFor469": "global/kanvas/tickets/drafts/brouillon-ticket-d50-8-traiter-skia-gm-pathfill",
   "rowEvidenceSourceFindingMemory": "global/kanvas/findings/for-464-formalise-le-manifeste-strict-du-lot-1-d50",
   "rowEvidenceSourceFindingMemoryFor466": "global/kanvas/findings/for-465-formalise-le-refus-drawminibitmaprect-d50-lot-1",
   "rowEvidenceSourceFindingMemoryFor467": "global/kanvas/findings/for-466-formalise-le-refus-skia-gm-image-d50-lot-1",
   "rowEvidenceSourceFindingMemoryFor468": "global/kanvas/findings/for-467-formalise-le-refus-skia-gm-imagesource-d50-lot-1",
+  "rowEvidenceSourceFindingMemoryFor469": "global/kanvas/findings/for-468-formalise-le-refus-skia-gm-offsetimagefilter-d50-lot-1",
   "rows": [
     {
       "dashboardRowId": "m66-bitmap-rect-nearest-skia",
@@ -127,13 +139,15 @@
       "skiaComparableClaimAddedByFor466": false,
       "skiaComparableClaimAddedByFor467": false,
       "skiaComparableClaimAddedByFor468": false,
+      "skiaComparableClaimAddedByFor469": false,
       "status": "expected-unsupported",
       "strictDashboardStatus": "expected-unsupported",
       "supportClaimAddedByFor464": false,
       "supportClaimAddedByFor465": false,
       "supportClaimAddedByFor466": false,
       "supportClaimAddedByFor467": false,
-      "supportClaimAddedByFor468": false
+      "supportClaimAddedByFor468": false,
+      "supportClaimAddedByFor469": false
     },
     {
       "dashboardRowId": "m53-bitmap-premul-alpha",
@@ -194,13 +208,15 @@
       "skiaComparableClaimAddedByFor466": false,
       "skiaComparableClaimAddedByFor467": false,
       "skiaComparableClaimAddedByFor468": false,
+      "skiaComparableClaimAddedByFor469": false,
       "status": "expected-unsupported",
       "strictDashboardStatus": "expected-unsupported",
       "supportClaimAddedByFor464": false,
       "supportClaimAddedByFor465": false,
       "supportClaimAddedByFor466": false,
       "supportClaimAddedByFor467": false,
-      "supportClaimAddedByFor468": false
+      "supportClaimAddedByFor468": false,
+      "supportClaimAddedByFor469": false
     },
     {
       "cpuRoute": "cpu.image-source.imagesource.expected-unsupported",
@@ -230,6 +246,7 @@
       "skiaComparableClaimAddedByFor466": false,
       "skiaComparableClaimAddedByFor467": false,
       "skiaComparableClaimAddedByFor468": false,
+      "skiaComparableClaimAddedByFor469": false,
       "sourceImageProvenance": {
         "dynamicSourceImage": "not claimed",
         "fixtureAvailability": "ported Kotlin GM and historical similarity report exist, but no row-specific D50 reference/CPU/GPU artifacts are generated",
@@ -254,7 +271,8 @@
       "supportClaimAddedByFor465": false,
       "supportClaimAddedByFor466": false,
       "supportClaimAddedByFor467": false,
-      "supportClaimAddedByFor468": false
+      "supportClaimAddedByFor468": false,
+      "supportClaimAddedByFor469": false
     },
     {
       "dashboardRowId": "m54-local-matrix-blend-composition",
@@ -329,13 +347,15 @@
       "skiaComparableClaimAddedByFor466": false,
       "skiaComparableClaimAddedByFor467": false,
       "skiaComparableClaimAddedByFor468": false,
+      "skiaComparableClaimAddedByFor469": false,
       "status": "expected-unsupported",
       "strictDashboardStatus": "expected-unsupported",
       "supportClaimAddedByFor464": false,
       "supportClaimAddedByFor465": false,
       "supportClaimAddedByFor466": false,
       "supportClaimAddedByFor467": false,
-      "supportClaimAddedByFor468": false
+      "supportClaimAddedByFor468": false,
+      "supportClaimAddedByFor469": false
     },
     {
       "dashboardRowId": "m54-matrix-imagefilter-affine",
@@ -380,24 +400,59 @@
       "supportClaimAddedByFor464": false
     },
     {
+      "cpuRoute": "cpu.path-aa.fill.expected-unsupported",
       "dashboardRowId": null,
       "dashboardStatus": null,
+      "diffStats": {
+        "reason": "diff/stat payload cannot be computed without row-specific reference, CPU, and GPU artifacts",
+        "required": true,
+        "status": "not-computed"
+      },
+      "fallbackReason": "path-aa.fill.row-specific-artifacts-required",
       "family": "clip/transform/path-aa",
+      "gpuRoute": "webgpu.path-aa.fill.expected-unsupported",
       "inventoryId": "skia-gm-pathfill",
+      "pathFillEvidenceInherited": false,
+      "pathFillProvenance": {
+        "boundedFillUnderEdgeBudget": "not claimed as supported",
+        "fillRule": "not claimed as supported",
+        "fixtureAvailability": "ported Kotlin GM and upstream source exist, but no row-specific D50 reference/CPU/GPU artifacts are generated",
+        "historicalEvidence": "Path AA, stroke, cap/join/dash, convex path, edge-budget, and historical scene signals are not D50 row-specific dashboard artifacts",
+        "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/PathFillGM.kt",
+        "scene": "PathFillGM",
+        "unsupportedBroadClaims": [
+          "broad Path AA",
+          "stroke",
+          "cap/join/dash",
+          "convex path",
+          "edge-budget promotion",
+          "historical path scene support inheritance"
+        ],
+        "upstreamSource": "gm/pathfill.cpp"
+      },
       "rank": 12,
-      "reason": "diagnostic.missing-row-specific-evidence",
+      "reason": "path-aa.fill.row-specific-artifacts-required",
       "referenceKind": null,
-      "requiredEvidence": [
-        "row-specific reference artifact",
-        "CPU artifact and route diagnostics",
-        "GPU artifact or stable expected-unsupported refusal",
-        "diff and stats artifacts",
-        "fallbackReason=none for support rows",
-        "unchanged dashboard thresholds and gate policy"
-      ],
+      "routeDiagnostics": {
+        "cpu": "cpu.path-aa.fill.expected-unsupported",
+        "fallbackReason": "path-aa.fill.row-specific-artifacts-required",
+        "gpu": "webgpu.path-aa.fill.expected-unsupported",
+        "policy": "Historical PathFillGM, Path AA, stroke, cap/join/dash, convex path, and edge-budget signals are not a D50 dashboard row-specific proof for skia-gm-pathfill. The row stays unsupported until a candidate-specific Skia reference capture, CPU Path AA fill artifact, WebGPU bounded coverage artifact, diff/stat payload, and fallbackReason=none exist without threshold, scoring, edge-budget, or fallback policy changes."
+      },
       "skiaComparableClaimAddedByFor464": false,
-      "status": "diagnostic-only",
-      "supportClaimAddedByFor464": false
+      "skiaComparableClaimAddedByFor465": false,
+      "skiaComparableClaimAddedByFor466": false,
+      "skiaComparableClaimAddedByFor467": false,
+      "skiaComparableClaimAddedByFor468": false,
+      "skiaComparableClaimAddedByFor469": false,
+      "status": "expected-unsupported",
+      "strictDashboardStatus": "expected-unsupported",
+      "supportClaimAddedByFor464": false,
+      "supportClaimAddedByFor465": false,
+      "supportClaimAddedByFor466": false,
+      "supportClaimAddedByFor467": false,
+      "supportClaimAddedByFor468": false,
+      "supportClaimAddedByFor469": false
     }
   ],
   "schemaVersion": 1,
@@ -406,8 +461,8 @@
   "sourceInventory": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
   "sourceLinear": "FOR-462",
   "statusCounts": {
-    "diagnostic-only": 1,
-    "expected-unsupported": 4,
+    "diagnostic-only": 0,
+    "expected-unsupported": 5,
     "supported": 7
   }
 }
