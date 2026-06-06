@@ -470,6 +470,8 @@ class StrokeCapJoinSceneCaptureTest {
                         contributionIsolationResult.stencilRenderPassSplitBoundarySnapshot,
                     stencilBackendReadbackAuditFor452Snapshot =
                         contributionIsolationResult.stencilBackendReadbackAuditFor452Snapshot,
+                    diagnosticStencilTextureFor453Snapshot =
+                        contributionIsolationResult.diagnosticStencilTextureFor453Snapshot,
                     aaStencilCoverContributionIsolationSnapshot =
                         contributionIsolationResult.aaStencilCoverContributionIsolationSnapshot,
                     aaStencilCoverShaderReturnDiagnosticSnapshot =
@@ -552,6 +554,8 @@ class StrokeCapJoinSceneCaptureTest {
             SkWebGpuDevice.M60F16StencilRenderPassSplitBoundarySnapshot,
         stencilBackendReadbackAuditFor452Snapshot:
             SkWebGpuDevice.M60F16StencilBackendReadbackAuditSnapshot,
+        diagnosticStencilTextureFor453Snapshot:
+            SkWebGpuDevice.M60F16DiagnosticStencilTextureFor453Snapshot,
         aaStencilCoverContributionIsolationSnapshot:
             SkWebGpuDevice.M60F16AaStencilCoverContributionIsolationSnapshot,
         aaStencilCoverShaderReturnDiagnosticSnapshot:
@@ -688,6 +692,15 @@ class StrokeCapJoinSceneCaptureTest {
                 splitSnapshot = stencilRenderPassSplitBoundarySnapshot,
                 postPassSnapshot = aaStencilCoverContributionIsolationPostPassSnapshot,
                 backendSnapshot = stencilBackendReadbackAuditFor452Snapshot,
+                adapter = adapter,
+            )
+        }
+        if (System.getProperty(FOR453_DIAGNOSTIC_STENCIL_TEXTURE_PROPERTY, "false").toBoolean()) {
+            writeM60F16DiagnosticStencilTextureFor453(
+                currentGpu = experimentalGpu,
+                currentGpuCmp = experimentalGpuCmp,
+                currentResidualStats = residualStats,
+                diagnosticSnapshot = diagnosticStencilTextureFor453Snapshot,
                 adapter = adapter,
             )
         }
@@ -7779,6 +7792,179 @@ class StrokeCapJoinSceneCaptureTest {
                 "rtk python3 scripts/validate_for452_m60_f16_stencil_backend_readback_audit.py",
                 "rtk python3 scripts/validate_for451_m60_f16_stencil_render_pass_split_boundary.py",
                 "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for452-pycache python3 -m py_compile scripts/validate_for452_m60_f16_stencil_backend_readback_audit.py scripts/validate_for451_m60_f16_stencil_render_pass_split_boundary.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun writeM60F16DiagnosticStencilTextureFor453(
+        currentGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        diagnosticSnapshot: SkWebGpuDevice.M60F16DiagnosticStencilTextureFor453Snapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-diagnostic-stencil-texture-for453"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16DiagnosticStencilTextureFor453Json(
+                sceneId = sceneId,
+                currentGpu = currentGpu,
+                currentGpuCmp = currentGpuCmp,
+                currentResidualStats = currentResidualStats,
+                diagnosticSnapshot = diagnosticSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16DiagnosticStencilTextureFor453Json(
+        sceneId: String,
+        currentGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        diagnosticSnapshot: SkWebGpuDevice.M60F16DiagnosticStencilTextureFor453Snapshot,
+        adapter: String,
+    ): String {
+        val targetPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6)
+        val byPixel = diagnosticSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val observedTargets = targetPoints.count { point ->
+            byPixel[point].orEmpty().any { it.second.readbackAvailable && it.second.stencilValue != null }
+        }
+        val anyCreated = diagnosticSnapshot.events.any { it.diagnosticTextureCreated }
+        val anyCopyAttempted = diagnosticSnapshot.events.any { it.copyAttempted }
+        val anyCopySucceeded = diagnosticSnapshot.events.any { it.copySucceeded }
+        val classification = when {
+            observedTargets == targetPoints.size -> "diagnostic-stencil-texture-direct-copy-available"
+            !anyCreated -> "diagnostic-stencil-texture-usage-combination-unsupported"
+            anyCopyAttempted && !anyCopySucceeded -> "diagnostic-stencil-texture-copy-aspect-rejected"
+            else -> "diagnostic-stencil-texture-audit-inconclusive"
+        }
+        val eventsJson = diagnosticSnapshot.events.joinToString(",\n") { event ->
+            """
+                {
+                  "drawIndex": ${event.drawIndex},
+                  "diagnosticTextureCreated": ${event.diagnosticTextureCreated},
+                  "diagnosticTextureUsage": ${event.diagnosticTextureUsage.jsonString()},
+                  "stencilPassReplayed": ${event.stencilPassReplayed},
+                  "copyAttempted": ${event.copyAttempted},
+                  "copySucceeded": ${event.copySucceeded},
+                  "copyFailureReason": ${event.copyFailureReason?.jsonString() ?: "null"}
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        val pixelsJson = targetPoints.joinToString(",\n") { (x, y) ->
+            val selected = byPixel[x to y].orEmpty().firstOrNull {
+                it.second.targetWithinScissor && it.second.readbackAvailable
+            } ?: byPixel[x to y].orEmpty().firstOrNull()
+            val sample = selected?.second
+            """
+                {
+                  "x": $x,
+                  "y": $y,
+                  "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentGpu.getPixel(x, y)))},
+                  "targetWithinScissor": ${sample?.targetWithinScissor ?: false},
+                  "readbackAttempted": ${sample?.readbackAttempted ?: false},
+                  "readbackAvailable": ${sample?.readbackAvailable ?: false},
+                  "stencilValue": ${sample?.stencilValue ?: "null"},
+                  "stencilCovered": ${sample?.stencilCovered ?: "null"},
+                  "sampleClassification": ${(sample?.classification ?: "diagnostic-stencil-texture-sample-unavailable").jsonString()},
+                  "sampleReason": ${(sample?.reason ?: "FOR-453 did not produce a diagnostic stencil sample for this pixel.").jsonString()}
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-453",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "non-arc-m60-bounded-stroke-cap-join-target-colorspace-blend",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-texture-stencil-diagnostique-separee-apres-for-452",
+              "sourceFindingMemory": "global/kanvas/findings/for-452-backend-stencil-readback-audit-conclut-texture-diagnostique-separee",
+              "sourceArtifacts": {
+                "for452": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-backend-readback-audit-for452/m60-f16-stencil-backend-readback-audit-for452.json",
+                "for451": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-stencil-render-pass-split-boundary-for451/m60-f16-stencil-render-pass-split-boundary-for451.json"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "optInFlag": ${FOR453_DIAGNOSTIC_STENCIL_TEXTURE_PROPERTY.jsonString()},
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR453_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixAppliedByDefault": false,
+              "for442UsedAsDecisionSource": false,
+              "diagnosticTextureAudit": {
+                "enabled": ${diagnosticSnapshot.enabled},
+                "requestedBoundary": ${diagnosticSnapshot.requestedBoundary.jsonString()},
+                "observedBoundary": ${diagnosticSnapshot.observedBoundary.jsonString()},
+                "depthStencilFormat": ${diagnosticSnapshot.depthStencilFormat.jsonString()},
+                "diagnosticTextureUsage": ${diagnosticSnapshot.diagnosticTextureUsage.jsonString()},
+                "diagnosticTextureUsageHasCopySrc": ${diagnosticSnapshot.diagnosticTextureUsageHasCopySrc},
+                "diagnosticTextureUsageHasTextureBinding": ${diagnosticSnapshot.diagnosticTextureUsageHasTextureBinding},
+                "mainDepthStencilTextureLabel": ${diagnosticSnapshot.mainDepthStencilTextureLabel.jsonString()},
+                "mainDepthStencilUsage": ${diagnosticSnapshot.mainDepthStencilUsage.jsonString()},
+                "mainDepthStencilUsageHasCopySrc": ${diagnosticSnapshot.mainDepthStencilUsageHasCopySrc},
+                "mainDepthStencilUsageHasTextureBinding": ${diagnosticSnapshot.mainDepthStencilUsageHasTextureBinding},
+                "stencilTextureAspectName": ${diagnosticSnapshot.stencilTextureAspectName.jsonString()},
+                "bytesPerStencilPixel": ${diagnosticSnapshot.bytesPerStencilPixel},
+                "eventCount": ${diagnosticSnapshot.events.size},
+                "diagnosticTextureCreatedEventCount": ${diagnosticSnapshot.events.count { it.diagnosticTextureCreated }},
+                "copyAttemptedEventCount": ${diagnosticSnapshot.events.count { it.copyAttempted }},
+                "copySucceededEventCount": ${diagnosticSnapshot.events.count { it.copySucceeded }},
+                "events": [
+            $eventsJson
+                ]
+              },
+              "boundarySummary": {
+                "zeroMaskPixelCount": ${targetPoints.size},
+                "currentSimilarity": ${String.format(Locale.US, "%.6f", currentGpuCmp.similarity)},
+                "currentMismatchPixels": ${currentResidualStats.mismatchPixels},
+                "directStencilReadbackAvailable": ${observedTargets == targetPoints.size},
+                "stencilValuesAvailableTargetCount": $observedTargets,
+                "for442DecisionSourceUsedCount": 0
+              },
+              "partialPixels": [
+            $pixelsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "activationByDefault": false,
+                "for442UsedAsDecisionSource": false,
+                "for447Promoted": false,
+                "renderingFixAppliedByDefault": false,
+                "mainDepthStencilTextureModified": false
+              },
+              "classificationReason": "FOR-453 keeps the production depth/stencil texture render-attachment-only and attempts direct stencil evidence only through a separate opt-in diagnostic texture.",
+              "nextAction": "Open a cover-source attribution ticket that uses the six zero stencil values to identify which pass or color contribution still lights the M60 F16 residual pixels.",
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon :gpu-raster:compileKotlin :gpu-raster:compileTestKotlin",
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16DiagnosticStencilTextureFor453.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for453_m60_f16_diagnostic_stencil_texture.py",
+                "rtk python3 scripts/validate_for452_m60_f16_stencil_backend_readback_audit.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for453-pycache python3 -m py_compile scripts/validate_for453_m60_f16_diagnostic_stencil_texture.py scripts/validate_for452_m60_f16_stencil_backend_readback_audit.py",
                 "rtk git diff --check"
               ]
             }
@@ -24423,6 +24609,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16StencilRenderPassSplitFor451.enabled"
         private const val FOR452_STENCIL_BACKEND_READBACK_AUDIT_PROPERTY =
             "kanvas.webgpu.m60F16StencilBackendReadbackAuditFor452.enabled"
+        private const val FOR453_DIAGNOSTIC_STENCIL_TEXTURE_PROPERTY =
+            "kanvas.webgpu.m60F16DiagnosticStencilTextureFor453.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -24615,6 +24803,14 @@ class StrokeCapJoinSceneCaptureTest {
             "stencil-backend-diagnostic-texture-required",
             "stencil-backend-readback-unsafe-for-production-ordering",
             "stencil-backend-readback-audit-inconclusive",
+        )
+        private val M60_F16_FOR453_ALLOWED_CLASSIFICATIONS = listOf(
+            "diagnostic-stencil-texture-direct-copy-available",
+            "diagnostic-stencil-texture-shader-read-available",
+            "diagnostic-stencil-texture-usage-combination-unsupported",
+            "diagnostic-stencil-texture-copy-aspect-rejected",
+            "diagnostic-stencil-texture-ordering-unsafe",
+            "diagnostic-stencil-texture-audit-inconclusive",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
