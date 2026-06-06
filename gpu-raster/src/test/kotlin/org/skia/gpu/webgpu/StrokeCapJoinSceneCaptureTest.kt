@@ -128,6 +128,11 @@ class StrokeCapJoinSceneCaptureTest {
                     WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
                 }
             }
+            val zeroMaskCorrectionFor447Gpu = withExperimentalStrokeCapJoinRender {
+                withM60F16ZeroMaskCorrectionFor447(true) {
+                    WebGpuSink.draw(ctx, gm, targetColorSpaceBlend = true)
+                }
+            }
             val boundedRuntimeCorrectionGpu = boundedRuntimeCorrectionResult.bitmap
             val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = 0)
             val experimentalGpuCmp = TestUtils.compareBitmapsDetailed(experimentalGpu, reference, tolerance = 0)
@@ -137,6 +142,8 @@ class StrokeCapJoinSceneCaptureTest {
                 TestUtils.compareBitmapsDetailed(boundedRuntimeCorrectionGpu, reference, tolerance = 0)
             val widthQuantizedRenderFixFor431GpuCmp =
                 TestUtils.compareBitmapsDetailed(widthQuantizedRenderFixFor431Gpu, reference, tolerance = 0)
+            val zeroMaskCorrectionFor447GpuCmp =
+                TestUtils.compareBitmapsDetailed(zeroMaskCorrectionFor447Gpu, reference, tolerance = 0)
             val experimentalGpuToleranceProfile = toleranceProfile(experimentalGpu, reference)
             val regionStats = strokeRegionStats(experimentalGpu, reference)
             val residualStats = strokeResidualStats(experimentalGpu, reference)
@@ -145,6 +152,8 @@ class StrokeCapJoinSceneCaptureTest {
                 strokeResidualStats(boundedRuntimeCorrectionGpu, reference)
             val widthQuantizedRenderFixFor431ResidualStats =
                 strokeResidualStats(widthQuantizedRenderFixFor431Gpu, reference)
+            val zeroMaskCorrectionFor447ResidualStats =
+                strokeResidualStats(zeroMaskCorrectionFor447Gpu, reference)
             val adapter = ctx.adapterInfo ?: "unknown-adapter"
 
             println(
@@ -382,6 +391,7 @@ class StrokeCapJoinSceneCaptureTest {
                     correctedExperimentalGpu = correctedExperimentalGpu,
                     boundedRuntimeCorrectionGpu = boundedRuntimeCorrectionGpu,
                     widthQuantizedRenderFixFor431Gpu = widthQuantizedRenderFixFor431Gpu,
+                    zeroMaskCorrectionFor447Gpu = zeroMaskCorrectionFor447Gpu,
                     boundedCorrectionApplicationPointGpu = boundedCorrectionApplicationPointResult.bitmap,
                     coverageStencilContributionMapGpu = coverageStencilContributionMapResult.bitmap,
                     cpuCmp = cpuCmp,
@@ -389,12 +399,14 @@ class StrokeCapJoinSceneCaptureTest {
                     correctedExperimentalGpuCmp = correctedExperimentalGpuCmp,
                     boundedRuntimeCorrectionGpuCmp = boundedRuntimeCorrectionGpuCmp,
                     widthQuantizedRenderFixFor431GpuCmp = widthQuantizedRenderFixFor431GpuCmp,
+                    zeroMaskCorrectionFor447GpuCmp = zeroMaskCorrectionFor447GpuCmp,
                     experimentalGpuToleranceProfile = experimentalGpuToleranceProfile,
                     regionStats = regionStats,
                     residualStats = residualStats,
                     correctedResidualStats = correctedResidualStats,
                     boundedRuntimeCorrectionResidualStats = boundedRuntimeCorrectionResidualStats,
                     widthQuantizedRenderFixFor431ResidualStats = widthQuantizedRenderFixFor431ResidualStats,
+                    zeroMaskCorrectionFor447ResidualStats = zeroMaskCorrectionFor447ResidualStats,
                     fragmentLaneRuntimeSnapshot = fragmentLaneRuntimeSnapshot,
                     boundedRuntimeCorrectionSnapshot = boundedRuntimeCorrectionResult.snapshot,
                     boundedCorrectionApplicationPointSnapshot =
@@ -451,6 +463,7 @@ class StrokeCapJoinSceneCaptureTest {
         correctedExperimentalGpu: SkBitmap,
         boundedRuntimeCorrectionGpu: SkBitmap,
         widthQuantizedRenderFixFor431Gpu: SkBitmap,
+        zeroMaskCorrectionFor447Gpu: SkBitmap,
         boundedCorrectionApplicationPointGpu: SkBitmap,
         coverageStencilContributionMapGpu: SkBitmap,
         cpuCmp: BitmapComparison,
@@ -458,12 +471,14 @@ class StrokeCapJoinSceneCaptureTest {
         correctedExperimentalGpuCmp: BitmapComparison,
         boundedRuntimeCorrectionGpuCmp: BitmapComparison,
         widthQuantizedRenderFixFor431GpuCmp: BitmapComparison,
+        zeroMaskCorrectionFor447GpuCmp: BitmapComparison,
         experimentalGpuToleranceProfile: List<ToleranceStat>,
         regionStats: List<StrokeRegionStats>,
         residualStats: StrokeResidualStats,
         correctedResidualStats: StrokeResidualStats,
         boundedRuntimeCorrectionResidualStats: StrokeResidualStats,
         widthQuantizedRenderFixFor431ResidualStats: StrokeResidualStats,
+        zeroMaskCorrectionFor447ResidualStats: StrokeResidualStats,
         fragmentLaneRuntimeSnapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         boundedRuntimeCorrectionSnapshot: SkWebGpuDevice.M60F16FragmentLaneDiagnosticSnapshot,
         boundedCorrectionApplicationPointSnapshot:
@@ -528,6 +543,18 @@ class StrokeCapJoinSceneCaptureTest {
             optInResidualStats = widthQuantizedRenderFixFor431ResidualStats,
             adapter = adapter,
         )
+        if (System.getProperty(FOR447_ZERO_MASK_CORRECTION_PROPERTY, "false").toBoolean()) {
+            writeM60F16ZeroMaskOptInCorrectionFor447(
+                reference = reference,
+                currentGpu = experimentalGpu,
+                optInGpu = zeroMaskCorrectionFor447Gpu,
+                currentGpuCmp = experimentalGpuCmp,
+                optInGpuCmp = zeroMaskCorrectionFor447GpuCmp,
+                currentResidualStats = residualStats,
+                optInResidualStats = zeroMaskCorrectionFor447ResidualStats,
+                adapter = adapter,
+            )
+        }
         widthQuantizedColorReconstructionFor432Result?.let { result ->
             writeM60F16WidthQuantizedColorReconstructionFor432(
                 reference = reference,
@@ -1383,6 +1410,20 @@ class StrokeCapJoinSceneCaptureTest {
                 System.clearProperty(FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY)
             } else {
                 System.setProperty(FOR431_WIDTH_QUANTIZED_RENDER_FIX_PROPERTY, previous)
+            }
+        }
+    }
+
+    private fun <T> withM60F16ZeroMaskCorrectionFor447(enabled: Boolean, block: () -> T): T {
+        val previous = System.getProperty(FOR447_ZERO_MASK_CORRECTION_PROPERTY)
+        System.setProperty(FOR447_ZERO_MASK_CORRECTION_PROPERTY, enabled.toString())
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FOR447_ZERO_MASK_CORRECTION_PROPERTY)
+            } else {
+                System.setProperty(FOR447_ZERO_MASK_CORRECTION_PROPERTY, previous)
             }
         }
     }
@@ -6031,6 +6072,253 @@ class StrokeCapJoinSceneCaptureTest {
             }
         """.trimIndent() + "\n"
     }
+
+    private fun writeM60F16ZeroMaskOptInCorrectionFor447(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        optInGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        optInResidualStats: StrokeResidualStats,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-zero-mask-opt-in-correction-for447"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        writePng(File(dir, "reference-cpu.png"), reference)
+        writePng(File(dir, "current-webgpu.png"), currentGpu)
+        writePng(File(dir, "current-webgpu-diff.png"), CrossBackendHarness.pixelDiff(reference, currentGpu))
+        writePng(File(dir, "opt-in-webgpu-zero-mask-correction.png"), optInGpu)
+        writePng(
+            File(dir, "opt-in-webgpu-zero-mask-correction-diff.png"),
+            CrossBackendHarness.pixelDiff(reference, optInGpu),
+        )
+        File(dir, "$sceneId.json").writeText(
+            m60F16ZeroMaskOptInCorrectionFor447Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                optInGpu = optInGpu,
+                currentGpuCmp = currentGpuCmp,
+                optInGpuCmp = optInGpuCmp,
+                currentResidualStats = currentResidualStats,
+                optInResidualStats = optInResidualStats,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16ZeroMaskOptInCorrectionFor447Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        currentGpuCmp: BitmapComparison,
+        optInGpuCmp: BitmapComparison,
+        currentResidualStats: StrokeResidualStats,
+        optInResidualStats: StrokeResidualStats,
+        adapter: String,
+    ): String {
+        val zeroMaskPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val changed = changedPixels(currentGpu, optInGpu)
+        val changedOutsideTargets = changed.filter { it !in zeroMaskPoints }
+        val currentResidual = imageResidual(currentGpu, reference)
+        val optInResidual = imageResidual(optInGpu, reference)
+        val residualDeltas = pixelResidualDeltas(currentGpu, optInGpu, reference)
+        val classification = when {
+            changedOutsideTargets.isNotEmpty() || optInResidual > currentResidual ->
+                "zero-mask-opt-in-correction-regresses-scene"
+            optInResidual < currentResidual && changedOutsideTargets.isEmpty() ->
+                "zero-mask-opt-in-correction-improves-scene"
+            optInResidual == currentResidual && changed.isEmpty() ->
+                "zero-mask-opt-in-correction-neutral"
+            else ->
+                "zero-mask-opt-in-correction-inconclusive"
+        }
+        val partialJson = zeroMaskPoints
+            .sortedWith(compareBy<Pair<Int, Int>> { it.second }.thenBy { it.first })
+            .joinToString(",\n") { (x, y) ->
+                val referencePixel = reference.getPixel(x, y)
+                val currentPixel = currentGpu.getPixel(x, y)
+                val optInPixel = optInGpu.getPixel(x, y)
+                val currentPixelResidual = sampleResidual(referencePixel, currentPixel)
+                val optInPixelResidual = sampleResidual(referencePixel, optInPixel)
+                """
+                    {
+                      "x": $x,
+                      "y": $y,
+                      "drawIndex": 1,
+                      "subdrawOrdinal": 0,
+                      "subdrawRole": "inside",
+                      "for445RuntimeIntegerMaskHex": "0x0000",
+                      "for445CoveredCount": 0,
+                      "for443LowLevelMaskHex": "0x0000",
+                      "for443CoveredCount": 0,
+                      "for442DecisionSourceUsed": false,
+                      "correctionAction": "discard-inside-fragment",
+                      "referenceCpuRgba": ${rgbaArrayJson(rgbaArray(referencePixel))},
+                      "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentPixel))},
+                      "optInWebGpuRgba": ${rgbaArrayJson(rgbaArray(optInPixel))},
+                      "currentResidual": $currentPixelResidual,
+                      "optInResidual": $optInPixelResidual,
+                      "residualDeltaOptInMinusCurrent": ${optInPixelResidual - currentPixelResidual},
+                      "pixelChangedByOptIn": ${currentPixel != optInPixel},
+                      "modelSource": "FOR-447 in-memory WebGPU discard variant using FOR-445/FOR-443 zero-mask evidence"
+                    }
+                """.trimIndent().prependIndent("    ")
+            }
+        val changedSampleJson = changed.take(64).joinToString(",\n") { (x, y) ->
+            val referencePixel = reference.getPixel(x, y)
+            val currentPixel = currentGpu.getPixel(x, y)
+            val optInPixel = optInGpu.getPixel(x, y)
+            """
+                {
+                  "x": $x,
+                  "y": $y,
+                  "targetedFor447": ${(x to y) in zeroMaskPoints},
+                  "referenceRgba": ${rgbaArrayJson(rgbaArray(referencePixel))},
+                  "currentWebGpuRgba": ${rgbaArrayJson(rgbaArray(currentPixel))},
+                  "optInWebGpuRgba": ${rgbaArrayJson(rgbaArray(optInPixel))},
+                  "currentResidual": ${sampleResidual(referencePixel, currentPixel)},
+                  "optInResidual": ${sampleResidual(referencePixel, optInPixel)}
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-447",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "m60-f16-for442-float-mask-field-audit-for446",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-appliquer-une-correction-opt-in-basee-sur-les-masques-zero-for-445-for-443",
+              "sourceFindingMemory": "global/kanvas/findings/for-446-le-champ-float-for-442-est-retire-des-preuves-de-couverture",
+              "sourceArtifacts": {
+                "for445": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-runtime-integer-lane-mask-probe-for445/m60-f16-runtime-integer-lane-mask-probe-for445.json",
+                "for443": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-low-level-exact-mask-probe-for443/m60-f16-low-level-exact-mask-probe-for443.json",
+                "for446": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-for442-float-mask-field-audit-for446/m60-f16-for442-float-mask-field-audit-for446.json",
+                "currentWebGpuPng": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/current-webgpu.png",
+                "optInWebGpuPng": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/opt-in-webgpu-zero-mask-correction.png",
+                "referenceCpuPng": "reports/wgsl-pipeline/scenes/artifacts/$sceneId/reference-cpu.png"
+              },
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "runtimeOwner": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+              "optInFlag": ${FOR447_ZERO_MASK_CORRECTION_PROPERTY.jsonString()},
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR447_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixAppliedByDefault": false,
+              "for442UsedAsDecisionSource": false,
+              "for447CorrectionOptInOnly": true,
+              "for447CorrectionDefaultActive": false,
+              "comparisonPolicy": {
+                "scope": "Full M60 F16 bounded stroke-cap/join scene plus exactly the six FOR-445/FOR-443 zero-mask pixels.",
+                "defaultRender": "captured with ${FOR447_ZERO_MASK_CORRECTION_PROPERTY}=false even when the process property is globally true",
+                "optInRender": "captured with ${FOR447_ZERO_MASK_CORRECTION_PROPERTY}=true",
+                "webgpuRenderModel": "in-memory shader variant; production aa_stencil_cover.wgsl is unchanged",
+                "targetedPixelsOnly": ${changedOutsideTargets.isEmpty()},
+                "decisionSource": "FOR-445 runtime integer zero mask and FOR-443 low-level zero mask; FOR-442 float field is explicitly excluded"
+              },
+              "summary": {
+                "fullScenePixels": ${reference.width * reference.height},
+                "currentSimilarity": ${String.format(Locale.US, "%.6f", currentGpuCmp.similarity)},
+                "optInSimilarity": ${String.format(Locale.US, "%.6f", optInGpuCmp.similarity)},
+                "similarityDeltaOptInMinusCurrent": ${String.format(Locale.US, "%.6f", optInGpuCmp.similarity - currentGpuCmp.similarity)},
+                "currentMatchingPixels": ${currentGpuCmp.matchingPixels},
+                "optInMatchingPixels": ${optInGpuCmp.matchingPixels},
+                "currentMismatchPixels": ${currentGpuCmp.mismatchingPixels},
+                "optInMismatchPixels": ${optInGpuCmp.mismatchingPixels},
+                "currentMaxChannelDelta": ${currentGpuCmp.maxChannelDiff.max()},
+                "optInMaxChannelDelta": ${optInGpuCmp.maxChannelDiff.max()},
+                "currentTotalResidual": $currentResidual,
+                "optInTotalResidual": $optInResidual,
+                "residualDeltaOptInMinusCurrent": ${optInResidual - currentResidual},
+                "changedPixels": ${changed.size},
+                "changedTargetPixels": ${changed.count { it in zeroMaskPoints }},
+                "changedOutsideTargetPixels": ${changedOutsideTargets.size},
+                "improvedPixels": ${residualDeltas.improvedPixels},
+                "regressedPixels": ${residualDeltas.regressedPixels},
+                "unchangedPixels": ${residualDeltas.unchangedPixels},
+                "currentGreaterThanEightPixels": ${currentResidualStats.greaterThanEightPixels},
+                "optInGreaterThanEightPixels": ${optInResidualStats.greaterThanEightPixels},
+                "zeroMaskPixelCount": ${zeroMaskPoints.size},
+                "for445ZeroMaskPixelCount": ${zeroMaskPoints.size},
+                "for443ZeroMaskPixelCount": ${zeroMaskPoints.size},
+                "for442DecisionSourceUsedCount": 0
+              },
+              "otherSceneEffect": {
+                "otherScenesMeasured": false,
+                "effect": "not measured by this ticket; FOR-447 compares the complete M60 F16 bounded scene and reports changedOutsideTargetPixels for non-target pixels inside that scene",
+                "changedOutsideTargetPixelsInM60F16": ${changedOutsideTargets.size}
+              },
+              "partialPixels": [
+            $partialJson
+              ],
+              "changedPixelsSample": [
+            $changedSampleJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "activationByDefault": false,
+                "for442UsedAsDecisionSource": false,
+                "otherScenesClaimedImproved": false
+              },
+              "classificationReason": ${m60F16ZeroMaskOptInCorrectionFor447Reason(classification).jsonString()},
+              "nextStep": ${m60F16ZeroMaskOptInCorrectionFor447NextStep(classification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16ZeroMaskCorrectionFor447.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for447_m60_f16_zero_mask_opt_in_correction.py",
+                "rtk python3 scripts/validate_for446_m60_f16_for442_float_mask_field_audit.py",
+                "rtk python3 scripts/validate_for445_m60_f16_runtime_integer_lane_mask_probe.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for447-pycache python3 -m py_compile scripts/validate_for447_m60_f16_zero_mask_opt_in_correction.py scripts/validate_for446_m60_f16_for442_float_mask_field_audit.py scripts/validate_for445_m60_f16_runtime_integer_lane_mask_probe.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16ZeroMaskOptInCorrectionFor447Reason(classification: String): String =
+        when (classification) {
+            "zero-mask-opt-in-correction-improves-scene" ->
+                "The opt-in discard reduces the full-scene residual without changing pixels outside the six FOR-445/FOR-443 zero-mask targets."
+            "zero-mask-opt-in-correction-regresses-scene" ->
+                "The opt-in discard either increases full-scene residual or changes pixels outside the six zero-mask targets."
+            "zero-mask-opt-in-correction-neutral" ->
+                "The opt-in discard leaves the captured image and full-scene residual unchanged."
+            else ->
+                "The opt-in discard changed the image but did not produce a clean improve/regress/neutral decision."
+        }
+
+    private fun m60F16ZeroMaskOptInCorrectionFor447NextStep(classification: String): String =
+        when (classification) {
+            "zero-mask-opt-in-correction-improves-scene" ->
+                "Keep the correction opt-in and open a separate default-activation or generalization ticket with broader scene coverage."
+            "zero-mask-opt-in-correction-regresses-scene" ->
+                "Do not promote this discard correction; use the changed-pixel evidence to identify the missing coverage/source condition."
+            "zero-mask-opt-in-correction-neutral" ->
+                "Do not promote the correction; first move the predicate to the actual residual-producing path or prove why it is unreachable."
+            else ->
+                "Keep rendering unchanged and add a narrower probe that explains the opt-in image delta."
+        }
 
     private fun writeM60F16WidthQuantizedColorReconstructionFor432(
         reference: SkBitmap,
@@ -22632,6 +22920,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16RuntimeIntegerLaneMaskProbeFor445.enabled"
         private const val FOR446_FOR442_FLOAT_MASK_FIELD_AUDIT_PROPERTY =
             "kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled"
+        private const val FOR447_ZERO_MASK_CORRECTION_PROPERTY =
+            "kanvas.webgpu.m60F16ZeroMaskCorrectionFor447.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -22782,6 +23072,12 @@ class StrokeCapJoinSceneCaptureTest {
             "for442-float-mask-field-sample-selection-mismatch",
             "for442-float-mask-field-retired-as-unreliable",
             "for442-float-mask-field-audit-inconclusive",
+        )
+        private val M60_F16_FOR447_ALLOWED_CLASSIFICATIONS = listOf(
+            "zero-mask-opt-in-correction-improves-scene",
+            "zero-mask-opt-in-correction-regresses-scene",
+            "zero-mask-opt-in-correction-neutral",
+            "zero-mask-opt-in-correction-inconclusive",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
