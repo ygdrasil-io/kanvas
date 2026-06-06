@@ -54,6 +54,8 @@ public object WebGpuSink {
             SkWebGpuDevice.M60F16AaStencilCoverFinalWgslDiagnosticSnapshot,
         val hostDrawPaintBindingFor436Snapshot:
             SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        val lowLevelExactMaskProbeFor443Snapshot:
+            SkWebGpuDevice.M60F16LowLevelExactMaskProbeFor443Snapshot,
     )
 
     /**
@@ -131,6 +133,8 @@ public object WebGpuSink {
                     device.m60F16AaStencilCoverFinalWgslDiagnosticSnapshot(),
                 hostDrawPaintBindingFor436Snapshot =
                     device.m60F16HostDrawPaintBindingFor436Snapshot(),
+                lowLevelExactMaskProbeFor443Snapshot =
+                    device.m60F16LowLevelExactMaskProbeFor443Snapshot(),
             )
         }
     }
