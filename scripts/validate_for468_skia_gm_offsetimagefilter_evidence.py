@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the FOR-465 drawminibitmaprect row-specific refusal evidence."""
+"""Validate the FOR-468 skia-gm-offsetimagefilter row-specific refusal evidence."""
 
 from __future__ import annotations
 
@@ -13,13 +13,13 @@ from typing import Any
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[1]
-LINEAR = "FOR-465"
-ROW_ID = "skia-gm-drawminibitmaprect"
-FALLBACK_REASON = "bitmap.drawminibitmaprect.row-specific-artifacts-required"
+LINEAR = "FOR-468"
+ROW_ID = "skia-gm-offsetimagefilter"
+FALLBACK_REASON = "image-filter.offset.row-specific-artifacts-required"
 LOT1_MANIFEST = ROOT / "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-lot1.json"
 LOT1_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-d50-gm-dashboard-lot1.md"
-ROW_EVIDENCE = ROOT / "reports/wgsl-pipeline/scenes/generated/for465-drawminibitmaprect-evidence.json"
-ROW_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-465-drawminibitmaprect-evidence.md"
+ROW_EVIDENCE = ROOT / "reports/wgsl-pipeline/scenes/generated/for468-skia-gm-offsetimagefilter-evidence.json"
+ROW_REPORT = ROOT / "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md"
 
 EXPECTED_FILES = {
     "reports/wgsl-pipeline/2026-06-06-for-462-d50-lot1-dashboard-integration-gate.md",
@@ -44,7 +44,6 @@ FORBIDDEN_PATHS = {
     "reports/wgsl-pipeline/scenes/data/scenes.json",
     "reports/wgsl-pipeline/scenes/generated/results.json",
     "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
-    "reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json",
 }
 FORBIDDEN_PREFIXES = (
     ".upstream/",
@@ -52,6 +51,13 @@ FORBIDDEN_PREFIXES = (
     "render-pipeline/",
     "cpu-raster/",
     "skia-integration-tests/",
+)
+FEATURE_NON_CLAIMS = (
+    "broadImageFilterDagSupportClaimAddedByFor468",
+    "cropImageFilterDagSupportClaimAddedByFor468",
+    "picturePrepassSupportClaimAddedByFor468",
+    "arbitraryLayerPrepassSupportClaimAddedByFor468",
+    "colorPipelineGlobalSupportClaimAddedByFor468",
 )
 
 
@@ -115,28 +121,51 @@ def require_manifest() -> None:
     require(manifest["statusCounts"] == {"diagnostic-only": 1, "expected-unsupported": 4, "supported": 7}, "manifest status counts mismatch")
     rows = manifest.get("rows")
     require(isinstance(rows, list), "manifest rows must be a list")
+    require([row.get("inventoryId") for row in rows if isinstance(row, dict)] == [
+        "skia-gm-drawbitmaprect",
+        "skia-gm-drawminibitmaprect",
+        "skia-gm-bitmappremul",
+        "skia-gm-image",
+        "skia-gm-imagesource",
+        "skia-gm-localmatriximageshader",
+        "skia-gm-gradientsdegenerate",
+        "skia-gm-offsetimagefilter",
+        "skia-gm-matriximagefilter",
+        "skia-gm-imageblur",
+        "skia-gm-simpleaaclip",
+        "skia-gm-pathfill",
+    ], "manifest order changed")
     matches = [row for row in rows if isinstance(row, dict) and row.get("inventoryId") == ROW_ID]
-    require(len(matches) == 1, "drawminibitmaprect row must appear exactly once")
+    require(len(matches) == 1, "skia-gm-offsetimagefilter row must appear exactly once")
     row = matches[0]
-    require(row.get("status") == "expected-unsupported", "drawminibitmaprect must be expected-unsupported")
-    require(row.get("dashboardRowId") is None, "drawminibitmaprect must not point to a dashboard row")
-    require(row.get("dashboardStatus") is None, "drawminibitmaprect must not claim an active dashboard status")
-    require(row.get("strictDashboardStatus") == "expected-unsupported", "drawminibitmaprect strict dashboard status mismatch")
-    require(row.get("referenceKind") is None, "drawminibitmaprect must not claim a reference kind")
-    require(row.get("fallbackReason") == FALLBACK_REASON, "drawminibitmaprect fallback mismatch")
-    require(row.get("supportClaimAddedByFor465") is False, "FOR-465 must not add support")
-    require(row.get("skiaComparableClaimAddedByFor465") is False, "FOR-465 must not add Skia-comparable claim")
-    require(row.get("drawbitmaprectEvidenceInherited") is False, "drawbitmaprect evidence must not be inherited")
+    require(row.get("status") == "expected-unsupported", "skia-gm-offsetimagefilter must be expected-unsupported")
+    require(row.get("dashboardRowId") is None, "skia-gm-offsetimagefilter must not point to a dashboard row")
+    require(row.get("dashboardStatus") is None, "skia-gm-offsetimagefilter must not claim an active dashboard status")
+    require(row.get("strictDashboardStatus") == "expected-unsupported", "strict dashboard status mismatch")
+    require(row.get("referenceKind") is None, "skia-gm-offsetimagefilter must not claim a reference kind")
+    require(row.get("fallbackReason") == FALLBACK_REASON, "skia-gm-offsetimagefilter fallback mismatch")
+    require(row.get("cpuRoute") == "cpu.image-filter.offset.expected-unsupported", "CPU route mismatch")
+    require(row.get("gpuRoute") == "webgpu.image-filter.offset.expected-unsupported", "GPU route mismatch")
+    require(row.get("supportClaimAddedByFor468") is False, "FOR-468 must not add support")
+    require(row.get("skiaComparableClaimAddedByFor468") is False, "FOR-468 must not add Skia-comparable claim")
+    require(row.get("offsetImageFilterEvidenceInherited") is False, "offset image-filter evidence must not be inherited")
+    provenance = row.get("offsetImageFilterProvenance")
+    require(isinstance(provenance, dict), "offset image-filter provenance must be recorded")
+    require(provenance.get("scene") == "OffsetImageFilterGM", "scene provenance mismatch")
+    require("84.515" in provenance.get("historicalSimilarity", ""), "historical similarity provenance mismatch")
+    require(provenance.get("boundedOffsetFilter") == "not claimed as supported", "bounded offset support must not be claimed")
     non_claims = manifest.get("nonClaims", {})
-    require(non_claims.get("dashboardRowsAddedByFor465") == 0, "FOR-465 must add 0 dashboard rows")
-    require(non_claims.get("supportClaimsAddedByFor465") == 0, "FOR-465 must add 0 support claims")
-    require(non_claims.get("skiaComparableClaimsAddedByFor465") == 0, "FOR-465 must add 0 Skia-comparable claims")
+    require(non_claims.get("dashboardRowsAddedByFor468") == 0, "FOR-468 must add 0 dashboard rows")
+    require(non_claims.get("supportClaimsAddedByFor468") == 0, "FOR-468 must add 0 support claims")
+    require(non_claims.get("skiaComparableClaimsAddedByFor468") == 0, "FOR-468 must add 0 Skia-comparable claims")
     require(non_claims.get("thresholdChanged") is False, "threshold must not change")
     require(non_claims.get("scoringChanged") is False, "scoring must not change")
     require(non_claims.get("fallbackPolicyChanged") is False, "fallback policy must not change")
     require(non_claims.get("pipelineKeyChanged") is False, "PipelineKey must not change")
     require(non_claims.get("productionCodeChanged") is False, "production code must not change")
     require(non_claims.get("wgslProductionChanged") is False, "WGSL production must not change")
+    for key in FEATURE_NON_CLAIMS:
+        require(non_claims.get(key) is False, f"{key} must remain false")
 
 
 def require_row_evidence() -> None:
@@ -144,8 +173,8 @@ def require_row_evidence() -> None:
     require(evidence.get("linear") == LINEAR, "row evidence linear mismatch")
     require(evidence.get("classification") == "row-specific-expected-unsupported-no-support-claim", "row evidence classification mismatch")
     require(
-        evidence.get("statusCountsAfterFor465") == {"diagnostic-only": 4, "expected-unsupported": 1, "supported": 7},
-        "FOR-465 snapshot status counts mismatch",
+        evidence.get("statusCountsAfterFor468") == {"diagnostic-only": 1, "expected-unsupported": 4, "supported": 7},
+        "FOR-468 snapshot status counts mismatch",
     )
     row = evidence.get("row")
     require(isinstance(row, dict), "row evidence must contain row object")
@@ -156,8 +185,14 @@ def require_row_evidence() -> None:
     require(row.get("cpu", {}).get("status") == "expected-unsupported", "CPU must remain expected-unsupported")
     require(row.get("gpu", {}).get("status") == "expected-unsupported", "GPU must remain expected-unsupported")
     require(row.get("diffStats", {}).get("status") == "not-computed", "diff/stat must remain not-computed")
-    require(row.get("nonClaims", {}).get("drawbitmaprectEvidenceInherited") is False, "drawbitmaprect evidence must not be inherited")
-    require(not any("For466" in key or "For467" in key or "For468" in key for key in row.get("nonClaims", {})), "FOR-465 evidence must not include future-ticket non-claims")
+    provenance = row.get("offsetImageFilterProvenance")
+    require(isinstance(provenance, dict), "offset image-filter provenance must be recorded")
+    require(provenance.get("kotlinSource") == "skia-integration-tests/src/main/kotlin/org/skia/tests/OffsetImageFilterGM.kt", "Kotlin source provenance mismatch")
+    require(provenance.get("upstreamSource") == "gm/offsetimagefilter.cpp", "upstream source provenance mismatch")
+    require("no row-specific D50 reference/CPU/GPU artifacts" in provenance.get("fixtureAvailability", ""), "fixture availability mismatch")
+    require(row.get("nonClaims", {}).get("offsetImageFilterEvidenceInherited") is False, "offset image-filter evidence must not be inherited")
+    for key in FEATURE_NON_CLAIMS:
+        require(row.get("nonClaims", {}).get(key) is False, f"{key} must remain false")
     require(evidence.get("scoreImpact", {}).get("supportScoreIncreased") is False, "support score must not increase")
 
 
@@ -165,17 +200,21 @@ def require_reports() -> None:
     lot_report = LOT1_REPORT.read_text(encoding="utf-8")
     row_report = ROW_REPORT.read_text(encoding="utf-8")
     for required in (
-        "FOR-465 ajoute 0 ligne dashboard",
+        "FOR-468 ajoute 0 ligne dashboard",
         "Le score de support ne monte pas",
-        "`skia-gm-drawminibitmaprect` n'herite pas",
+        "`skia-gm-offsetimagefilter` n'herite pas",
+        "support large image-filter DAG",
     ):
         require(required in lot_report, f"lot report missing: {required}")
     for required in (
         "expected-unsupported",
         "ne promeut pas la scene",
-        "n'est pas heritee",
+        "ne sont pas herites",
+        "Provenance offset image-filter",
+        "OffsetImageFilterGM=84.515",
         "score de support ne monte pas",
         "0 support ajoute",
+        "support large image-filter DAG, crop image-filter DAG, picture-prepass, prepass arbitraire ou pipeline couleur global",
     ):
         require(required in row_report, f"row report missing: {required}")
 
