@@ -246,6 +246,8 @@ private const val WEBGPU_M60_F16_PRODUCTION_BOUND_COVER_STENCIL_DIAGNOSTIC_FOR45
     "kanvas.webgpu.m60F16ProductionBoundCoverStencilDiagnosticFor457.enabled"
 private const val WEBGPU_M60_F16_PRODUCTION_COVER_STATE_VS_SHADER_EMISSION_FOR458_FLAG: String =
     "kanvas.webgpu.m60F16ProductionCoverStateVsShaderEmissionFor458.enabled"
+private const val WEBGPU_M60_F16_PRODUCTION_COVER_COLOR_ATTACHMENT_ACCEPTANCE_FOR459_FLAG: String =
+    "kanvas.webgpu.m60F16ProductionCoverColorAttachmentAcceptanceFor459.enabled"
 private const val WEBGPU_M60_F16_FOR442_FLOAT_MASK_FIELD_AUDIT_FOR446_FLAG: String =
     "kanvas.webgpu.m60F16For442FloatMaskFieldAuditFor446.enabled"
 private const val WEBGPU_M60_F16_ZERO_MASK_CORRECTION_FOR447_FLAG: String =
@@ -819,6 +821,69 @@ public class SkWebGpuDevice(
         val reason: String,
     )
 
+    public data class M60F16ProductionCoverColorAttachmentAcceptanceFor459Snapshot(
+        val propertyName: String,
+        val enabled: Boolean,
+        val requestedBoundary: String,
+        val observedBoundary: String,
+        val colorAttachmentFormat: String,
+        val colorAttachmentUsage: String,
+        val depthStencilFormat: String,
+        val normalRenderingUsesDiagnosticColorAttachment: Boolean,
+        val normalRenderingUsesDiagnosticDepthStencil: Boolean,
+        val productionWgslChanged: Boolean,
+        val events: List<M60F16ProductionCoverColorAttachmentAcceptanceFor459Event>,
+    )
+
+    public data class M60F16ProductionCoverColorAttachmentAcceptanceFor459Event(
+        val drawIndex: Int,
+        val pipelineFamily: String,
+        val fillType: String,
+        val blendMode: String,
+        val scissor: IntArray,
+        val edgeCount: Int,
+        val coverVertexCount: Int,
+        val renderPassEncoding: String,
+        val colorAttachment: String,
+        val depthStencilAttachment: String,
+        val colorLoadOpBeforeCover: String,
+        val colorLoadOpForCover: String,
+        val colorStoreOpForCover: String,
+        val stencilLoadOpBeforeCover: String,
+        val stencilLoadOpForCover: String,
+        val stencilStoreOpForCover: String,
+        val stencilReference: Int,
+        val stencilReadMask: Int,
+        val insideCompare: String,
+        val outsideCompare: String,
+        val insidePipelineEntryPoint: String,
+        val outsidePipelineEntryPoint: String,
+        val beforeCoverReadbackEncoded: Boolean,
+        val afterCoverReadbackEncoded: Boolean,
+        val copyAttempted: Boolean,
+        val copySucceeded: Boolean,
+        val copyFailureReason: String?,
+        val normalRenderingUsesDiagnosticColorAttachment: Boolean,
+        val normalRenderingUsesDiagnosticDepthStencil: Boolean,
+        val productionWgslChanged: Boolean,
+        val samples: List<M60F16ProductionCoverColorAttachmentAcceptanceFor459Sample>,
+    )
+
+    public data class M60F16ProductionCoverColorAttachmentAcceptanceFor459Sample(
+        val x: Int,
+        val y: Int,
+        val targetWithinScissor: Boolean,
+        val beforeReadbackAvailable: Boolean,
+        val afterReadbackAvailable: Boolean,
+        val beforeCoverRgbaFloat: FloatArray?,
+        val beforeCoverRgba8: IntArray?,
+        val afterCoverRgbaFloat: FloatArray?,
+        val afterCoverRgba8: IntArray?,
+        val colorChangedByCover: Boolean?,
+        val classification: String,
+        val reason: String,
+    )
+
     public data class M60F16AaStencilCoverIsolatedColorTargetSnapshot(
         val propertyName: String,
         val enabled: Boolean,
@@ -1252,14 +1317,27 @@ public class SkWebGpuDevice(
         System.getProperty(
             WEBGPU_M60_F16_PRODUCTION_BOUND_COVER_STENCIL_DIAGNOSTIC_FOR457_FLAG,
             "false",
-        ).toBoolean() ||
+            ).toBoolean() ||
             System.getProperty(
                 WEBGPU_M60_F16_PRODUCTION_COVER_STATE_VS_SHADER_EMISSION_FOR458_FLAG,
+                "false",
+            ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_PRODUCTION_COVER_COLOR_ATTACHMENT_ACCEPTANCE_FOR459_FLAG,
                 "false",
             ).toBoolean()
     private val m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_PRODUCTION_COVER_STATE_VS_SHADER_EMISSION_FOR458_FLAG,
+            "false",
+        ).toBoolean() ||
+            System.getProperty(
+                WEBGPU_M60_F16_PRODUCTION_COVER_COLOR_ATTACHMENT_ACCEPTANCE_FOR459_FLAG,
+                "false",
+            ).toBoolean()
+    private val m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled: Boolean =
+        System.getProperty(
+            WEBGPU_M60_F16_PRODUCTION_COVER_COLOR_ATTACHMENT_ACCEPTANCE_FOR459_FLAG,
             "false",
         ).toBoolean()
     private val m60F16DirectPassWriteHookEnabled: Boolean =
@@ -1268,7 +1346,8 @@ public class SkWebGpuDevice(
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
             m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
-            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled ||
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled
     private val m60F16AaStencilCoverContributionIsolationDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_CONTRIBUTION_ISOLATION_FLAG,
@@ -1278,7 +1357,8 @@ public class SkWebGpuDevice(
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
             m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
-            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled ||
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled
     private val m60F16AaStencilCoverPredrawDstReadbackDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_PREDRAW_DST_READBACK_FLAG,
@@ -1288,7 +1368,8 @@ public class SkWebGpuDevice(
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
             m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
-            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled ||
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled
     private val m60F16StencilRenderPassSplitFor451DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_STENCIL_RENDER_PASS_SPLIT_FOR451_FLAG,
@@ -1298,7 +1379,8 @@ public class SkWebGpuDevice(
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
             m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
-            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled ||
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled
     private val m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_STENCIL_BACKEND_READBACK_AUDIT_FOR452_FLAG,
@@ -1313,7 +1395,8 @@ public class SkWebGpuDevice(
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
             m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
-            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled ||
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled
     private val m60F16AaStencilCoverShaderReturnDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_SHADER_RETURN_DIAGNOSTIC_FLAG,
@@ -1339,7 +1422,8 @@ public class SkWebGpuDevice(
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
             m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
-            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled ||
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled
     private val m60F16AaStencilCoverIsolatedColorTargetDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_ISOLATED_COLOR_TARGET_FLAG,
@@ -1349,7 +1433,8 @@ public class SkWebGpuDevice(
             m60F16ZeroStencilCoverEmissionAuditFor455DiagnosticsEnabled ||
             m60F16ProductionCoverStencilVsDiagnosticTextureFor456DiagnosticsEnabled ||
             m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
-            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled
+            m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled ||
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled
     private val m60F16AaStencilCoverStorageColorTargetComparisonDiagnosticsEnabled: Boolean =
         System.getProperty(
             WEBGPU_M60_F16_AA_STENCIL_COVER_STORAGE_COLOR_TARGET_COMPARISON_FLAG,
@@ -1479,6 +1564,10 @@ public class SkWebGpuDevice(
         MutableList<M60F16DiagnosticStencilTextureFor453Readback> = mutableListOf()
     private val m60F16ProductionCoverStateVsShaderEmissionFor458Events:
         MutableList<M60F16ProductionCoverStateVsShaderEmissionFor458Event> = mutableListOf()
+    private val m60F16ProductionCoverColorAttachmentAcceptanceFor459Events:
+        MutableList<M60F16ProductionCoverColorAttachmentAcceptanceFor459Event> = mutableListOf()
+    private val m60F16ProductionCoverColorAttachmentAcceptanceFor459PendingReadbacks:
+        MutableList<M60F16ProductionCoverColorAttachmentAcceptanceFor459Readback> = mutableListOf()
     private val m60F16AaStencilCoverContributionIsolationEvents:
         MutableList<M60F16AaStencilCoverContributionIsolationEvent> = mutableListOf()
     private val m60F16AaStencilCoverShaderReturnDiagnosticEvents:
@@ -1804,6 +1893,25 @@ public class SkWebGpuDevice(
             normalRenderingUsesDiagnosticTexture = false,
             productionWgslChanged = false,
             events = m60F16ProductionCoverStateVsShaderEmissionFor458Events.toList(),
+        )
+
+    public fun m60F16ProductionCoverColorAttachmentAcceptanceFor459Snapshot():
+        M60F16ProductionCoverColorAttachmentAcceptanceFor459Snapshot =
+        M60F16ProductionCoverColorAttachmentAcceptanceFor459Snapshot(
+            propertyName = WEBGPU_M60_F16_PRODUCTION_COVER_COLOR_ATTACHMENT_ACCEPTANCE_FOR459_FLAG,
+            enabled = m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled,
+            requestedBoundary =
+                "before and after replaying production cover pipelines into a separate diagnostic color attachment",
+            observedBoundary =
+                "compute textureLoad from the diagnostic RGBA16Float color attachment before and after cover replay",
+            colorAttachmentFormat = GPUTextureFormat.RGBA16Float.name,
+            colorAttachmentUsage =
+                "GPUTextureUsage.RenderAttachment | GPUTextureUsage.TextureBinding",
+            depthStencilFormat = GPUTextureFormat.Depth24PlusStencil8.name,
+            normalRenderingUsesDiagnosticColorAttachment = false,
+            normalRenderingUsesDiagnosticDepthStencil = false,
+            productionWgslChanged = false,
+            events = m60F16ProductionCoverColorAttachmentAcceptanceFor459Events.toList(),
         )
 
     public fun m60F16AaStencilCoverContributionIsolationSnapshot():
@@ -3237,7 +3345,9 @@ public class SkWebGpuDevice(
     private suspend fun recordM60F16StencilRenderPassSplitBoundaryReadbacks() {
         if (!m60F16StencilRenderPassSplitFor451DiagnosticsEnabled &&
             !m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled &&
-            !m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled
+            !m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled &&
+            !m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled &&
+            !m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled
         ) {
             return
         }
@@ -3536,6 +3646,143 @@ public class SkWebGpuDevice(
                         diagnosticTextureUsage =
                             "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
                         stencilPassReplayed = true,
+                        copyAttempted = true,
+                        copySucceeded = false,
+                        copyFailureReason = "${t::class.simpleName}: ${t.message}",
+                        samples = samples,
+                    )
+            }
+        }
+    }
+
+    private suspend fun recordM60F16ProductionCoverColorAttachmentAcceptanceFor459Readbacks() {
+        if (!m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled) return
+        val readbacks = m60F16ProductionCoverColorAttachmentAcceptanceFor459PendingReadbacks.toList()
+        m60F16ProductionCoverColorAttachmentAcceptanceFor459PendingReadbacks.clear()
+        readbacks.forEach { readback ->
+            val metadata = readback.metadata
+            try {
+                readback.beforeStaging.mapAsync(
+                    GPUMapMode.Read,
+                    0uL,
+                    readback.bufferSize,
+                ).getOrThrow()
+                val beforeBytes = readback.beforeStaging
+                    .getMappedRange(0uL, readback.bufferSize)
+                    .toByteArray()
+                readback.beforeStaging.unmap()
+                readback.afterStaging.mapAsync(
+                    GPUMapMode.Read,
+                    0uL,
+                    readback.bufferSize,
+                ).getOrThrow()
+                val afterBytes = readback.afterStaging
+                    .getMappedRange(0uL, readback.bufferSize)
+                    .toByteArray()
+                readback.afterStaging.unmap()
+                val beforeBuffer = ByteBuffer.wrap(beforeBytes).order(ByteOrder.LITTLE_ENDIAN)
+                val afterBuffer = ByteBuffer.wrap(afterBytes).order(ByteOrder.LITTLE_ENDIAN)
+                val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.mapIndexed { index, (x, y) ->
+                    val targetWithinScissor = m60F16PointWithinScissor(x, y, metadata.scissor)
+                    val base = index * M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SAMPLE_STRIDE_BYTES
+                    val before = FloatArray(4) { channel ->
+                        beforeBuffer.getFloat(base + channel * Float.SIZE_BYTES)
+                    }
+                    val after = FloatArray(4) { channel ->
+                        afterBuffer.getFloat(base + channel * Float.SIZE_BYTES)
+                    }
+                    val beforeValid = targetWithinScissor && before.all { value -> value >= 0f }
+                    val afterValid = targetWithinScissor && after.all { value -> value >= 0f }
+                    val changed = if (beforeValid && afterValid) {
+                        before.indices.any { channel ->
+                            kotlin.math.abs(after[channel] - before[channel]) > 0.000001f
+                        }
+                    } else {
+                        null
+                    }
+                    M60F16ProductionCoverColorAttachmentAcceptanceFor459Sample(
+                        x = x,
+                        y = y,
+                        targetWithinScissor = targetWithinScissor,
+                        beforeReadbackAvailable = beforeValid,
+                        afterReadbackAvailable = afterValid,
+                        beforeCoverRgbaFloat = if (beforeValid) before else null,
+                        beforeCoverRgba8 = if (beforeValid) {
+                            IntArray(4) { channel ->
+                                ((before[channel] * 255f) + 0.5f).toInt().coerceIn(0, 255)
+                            }
+                        } else {
+                            null
+                        },
+                        afterCoverRgbaFloat = if (afterValid) after else null,
+                        afterCoverRgba8 = if (afterValid) {
+                            IntArray(4) { channel ->
+                                ((after[channel] * 255f) + 0.5f).toInt().coerceIn(0, 255)
+                            }
+                        } else {
+                            null
+                        },
+                        colorChangedByCover = changed,
+                        classification = when (changed) {
+                            false -> "production-cover-color-attachment-sample-unchanged"
+                            true -> "production-cover-color-attachment-sample-changed"
+                            null -> if (targetWithinScissor) {
+                                "production-cover-color-attachment-sample-unavailable"
+                            } else {
+                                "production-cover-color-attachment-sample-outside-scissor"
+                            }
+                        },
+                        reason = when (changed) {
+                            false ->
+                                "FOR-459 sampled the diagnostic color attachment before and after production cover replay; this pixel did not change."
+                            true ->
+                                "FOR-459 sampled the diagnostic color attachment before and after production cover replay; this pixel changed."
+                            null -> if (targetWithinScissor) {
+                                "FOR-459 encoded the diagnostic color attachment readback, but this coordinate did not produce both color samples."
+                            } else {
+                                "This coordinate is outside this StencilCoverAaPolygonDraw scissor."
+                            }
+                        },
+                    )
+                }
+                m60F16ProductionCoverColorAttachmentAcceptanceFor459Events +=
+                    m60F16ProductionCoverColorAttachmentAcceptanceFor459Event(
+                        metadata = metadata,
+                        beforeCoverReadbackEncoded = true,
+                        afterCoverReadbackEncoded = true,
+                        copyAttempted = true,
+                        copySucceeded = true,
+                        copyFailureReason = null,
+                        samples = samples,
+                    )
+            } catch (t: Throwable) {
+                val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
+                    val targetWithinScissor = m60F16PointWithinScissor(x, y, metadata.scissor)
+                    M60F16ProductionCoverColorAttachmentAcceptanceFor459Sample(
+                        x = x,
+                        y = y,
+                        targetWithinScissor = targetWithinScissor,
+                        beforeReadbackAvailable = false,
+                        afterReadbackAvailable = false,
+                        beforeCoverRgbaFloat = null,
+                        beforeCoverRgba8 = null,
+                        afterCoverRgbaFloat = null,
+                        afterCoverRgba8 = null,
+                        colorChangedByCover = null,
+                        classification = if (targetWithinScissor) {
+                            "production-cover-color-attachment-readback-failed"
+                        } else {
+                            "production-cover-color-attachment-sample-outside-scissor"
+                        },
+                        reason =
+                            "FOR-459 diagnostic color attachment readback failed: ${t::class.simpleName}: ${t.message}",
+                    )
+                }
+                m60F16ProductionCoverColorAttachmentAcceptanceFor459Events +=
+                    m60F16ProductionCoverColorAttachmentAcceptanceFor459Event(
+                        metadata = metadata,
+                        beforeCoverReadbackEncoded = true,
+                        afterCoverReadbackEncoded = true,
                         copyAttempted = true,
                         copySucceeded = false,
                         copyFailureReason = "${t::class.simpleName}: ${t.message}",
@@ -4038,6 +4285,50 @@ public class SkWebGpuDevice(
             copyAttempted = copyAttempted,
             copySucceeded = copySucceeded,
             copyFailureReason = copyFailureReason,
+            samples = samples,
+        )
+
+    private fun m60F16ProductionCoverColorAttachmentAcceptanceFor459Event(
+        metadata: M60F16AaStencilCoverPostPassReadbackMetadata,
+        beforeCoverReadbackEncoded: Boolean,
+        afterCoverReadbackEncoded: Boolean,
+        copyAttempted: Boolean,
+        copySucceeded: Boolean,
+        copyFailureReason: String?,
+        samples: List<M60F16ProductionCoverColorAttachmentAcceptanceFor459Sample>,
+    ): M60F16ProductionCoverColorAttachmentAcceptanceFor459Event =
+        M60F16ProductionCoverColorAttachmentAcceptanceFor459Event(
+            drawIndex = metadata.drawIndex,
+            pipelineFamily = "StencilCoverAaPolygonDraw",
+            fillType = metadata.fillType,
+            blendMode = metadata.blendMode,
+            scissor = metadata.scissor.copyOf(),
+            edgeCount = metadata.edgeCount,
+            coverVertexCount = metadata.coverVertexCount,
+            renderPassEncoding = "split-diagnostic-stencil-then-production-inside-cover-color-attachment",
+            colorAttachment = "SkWebGpuDevice.m60F16ProductionCoverColorAttachmentAcceptanceFor459.color",
+            depthStencilAttachment =
+                "SkWebGpuDevice.m60F16ProductionCoverColorAttachmentAcceptanceFor459.depthStencil",
+            colorLoadOpBeforeCover = GPULoadOp.Clear.name,
+            colorLoadOpForCover = GPULoadOp.Load.name,
+            colorStoreOpForCover = GPUStoreOp.Store.name,
+            stencilLoadOpBeforeCover = GPULoadOp.Clear.name,
+            stencilLoadOpForCover = GPULoadOp.Load.name,
+            stencilStoreOpForCover = GPUStoreOp.Discard.name,
+            stencilReference = 0,
+            stencilReadMask = 0xFF,
+            insideCompare = "GPUCompareFunction.NotEqual",
+            outsideCompare = "GPUCompareFunction.Equal",
+            insidePipelineEntryPoint = "fs_inside",
+            outsidePipelineEntryPoint = "fs_outside-not-encoded",
+            beforeCoverReadbackEncoded = beforeCoverReadbackEncoded,
+            afterCoverReadbackEncoded = afterCoverReadbackEncoded,
+            copyAttempted = copyAttempted,
+            copySucceeded = copySucceeded,
+            copyFailureReason = copyFailureReason,
+            normalRenderingUsesDiagnosticColorAttachment = false,
+            normalRenderingUsesDiagnosticDepthStencil = false,
+            productionWgslChanged = false,
             samples = samples,
         )
 
@@ -17672,7 +17963,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         if (m60F16StencilRenderPassSplitFor451DiagnosticsEnabled ||
             m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled ||
             m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled ||
-            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled
+            m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled
         ) {
             m60F16StencilRenderPassSplitBoundaryEvents.clear()
             m60F16StencilRenderPassSplitBoundaryPendingReadbacks.clear()
@@ -17687,6 +17979,10 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         }
         if (m60F16ProductionCoverStateVsShaderEmissionFor458DiagnosticsEnabled) {
             m60F16ProductionCoverStateVsShaderEmissionFor458Events.clear()
+        }
+        if (m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled) {
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459Events.clear()
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459PendingReadbacks.clear()
         }
         if (m60F16AaStencilCoverContributionIsolationDiagnosticsEnabled) {
             m60F16AaStencilCoverContributionIsolationEvents.clear()
@@ -18302,8 +18598,6 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                                     setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
                                     setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Inside))
                                     draw((d.coverVerts.size / 2).toUInt())
-                                    setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Outside))
-                                    draw((d.coverVerts.size / 2).toUInt())
                                     end()
                                 }
                                 encoder.copyTextureToBuffer(
@@ -18363,6 +18657,225 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                                         diagnosticTextureUsage =
                                             "GPUTextureUsage.RenderAttachment | GPUTextureUsage.CopySrc",
                                         stencilPassReplayed = true,
+                                        copyAttempted = true,
+                                        copySucceeded = false,
+                                        copyFailureReason = "${t::class.simpleName}: ${t.message}",
+                                        samples = samples,
+                                    )
+                            }
+                        }
+                    }
+                    if (m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled) {
+                        val metadata = M60F16AaStencilCoverPostPassReadbackMetadata(
+                            drawIndex = i,
+                            fillType = d.fillType.name,
+                            blendMode = d.mode.name,
+                            scissor = d.scissor.copyOf(),
+                            edgeCount = d.edgeCount,
+                            coverVertexCount = d.coverVerts.size / 2,
+                        )
+                        val colorViewFor459 =
+                            res.m60F16ProductionCoverColorAttachmentAcceptanceFor459ColorView
+                        val depthStencilViewFor459 =
+                            res.m60F16ProductionCoverColorAttachmentAcceptanceFor459DepthStencilView
+                        val beforeStorageFor459 =
+                            res.m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeStorage
+                        val beforeStagingFor459 =
+                            res.m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeStaging
+                        val beforeBindGroupFor459 =
+                            res.m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeBindGroup
+                        val afterStorageFor459 =
+                            res.m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterStorage
+                        val afterStagingFor459 =
+                            res.m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterStaging
+                        val afterBindGroupFor459 =
+                            res.m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterBindGroup
+                        if (
+                            colorViewFor459 == null ||
+                            depthStencilViewFor459 == null ||
+                            beforeStorageFor459 == null ||
+                            beforeStagingFor459 == null ||
+                            beforeBindGroupFor459 == null ||
+                            afterStorageFor459 == null ||
+                            afterStagingFor459 == null ||
+                            afterBindGroupFor459 == null
+                        ) {
+                            val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
+                                val targetWithinScissor = m60F16PointWithinScissor(x, y, metadata.scissor)
+                                M60F16ProductionCoverColorAttachmentAcceptanceFor459Sample(
+                                    x = x,
+                                    y = y,
+                                    targetWithinScissor = targetWithinScissor,
+                                    beforeReadbackAvailable = false,
+                                    afterReadbackAvailable = false,
+                                    beforeCoverRgbaFloat = null,
+                                    beforeCoverRgba8 = null,
+                                    afterCoverRgbaFloat = null,
+                                    afterCoverRgba8 = null,
+                                    colorChangedByCover = null,
+                                    classification = if (targetWithinScissor) {
+                                        "production-cover-color-attachment-resource-unavailable"
+                                    } else {
+                                        "production-cover-color-attachment-sample-outside-scissor"
+                                    },
+                                    reason =
+                                        "FOR-459 diagnostic color attachment resources were not created.",
+                                )
+                            }
+                            m60F16ProductionCoverColorAttachmentAcceptanceFor459Events +=
+                                m60F16ProductionCoverColorAttachmentAcceptanceFor459Event(
+                                    metadata = metadata,
+                                    beforeCoverReadbackEncoded = false,
+                                    afterCoverReadbackEncoded = false,
+                                    copyAttempted = false,
+                                    copySucceeded = false,
+                                    copyFailureReason =
+                                        "diagnostic color attachment resources were not created",
+                                    samples = samples,
+                                )
+                        } else {
+                            try {
+                                encoder.beginRenderPass(
+                                    RenderPassDescriptor(
+                                        colorAttachments = listOf(
+                                            RenderPassColorAttachment(
+                                                view = colorViewFor459,
+                                                loadOp = GPULoadOp.Clear,
+                                                clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                                storeOp = GPUStoreOp.Store,
+                                            ),
+                                        ),
+                                        depthStencilAttachment = RenderPassDepthStencilAttachment(
+                                            view = depthStencilViewFor459,
+                                            stencilClearValue = 0u,
+                                            stencilLoadOp = GPULoadOp.Clear,
+                                            stencilStoreOp = GPUStoreOp.Store,
+                                            stencilReadOnly = false,
+                                            depthReadOnly = true,
+                                        ),
+                                    ),
+                                ) {
+                                    setBindGroup(0u, res.bindGroup)
+                                    setScissorRect(
+                                        x = d.scissor[0].toUInt(),
+                                        y = d.scissor[1].toUInt(),
+                                        width = d.scissor[2].toUInt(),
+                                        height = d.scissor[3].toUInt(),
+                                    )
+                                    setPipeline(stencilWritePipeline)
+                                    setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
+                                    draw((d.stencilVerts.size / 2).toUInt())
+                                    end()
+                                }
+                                encoder.clearBuffer(
+                                    beforeStorageFor459,
+                                    0uL,
+                                    res.m60F16ProductionCoverColorAttachmentAcceptanceFor459BufferSize,
+                                )
+                                val beforePassFor459 = encoder.beginComputePass()
+                                beforePassFor459.setPipeline(m60F16AaStencilCoverPostPassReadbackPipeline)
+                                beforePassFor459.setBindGroup(0u, beforeBindGroupFor459)
+                                beforePassFor459.dispatchWorkgroups(
+                                    M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SAMPLE_COUNT,
+                                )
+                                beforePassFor459.end()
+                                encoder.copyBufferToBuffer(
+                                    source = beforeStorageFor459,
+                                    sourceOffset = 0uL,
+                                    destination = beforeStagingFor459,
+                                    destinationOffset = 0uL,
+                                    size =
+                                        res.m60F16ProductionCoverColorAttachmentAcceptanceFor459BufferSize,
+                                )
+                                encoder.beginRenderPass(
+                                    RenderPassDescriptor(
+                                        colorAttachments = listOf(
+                                            RenderPassColorAttachment(
+                                                view = colorViewFor459,
+                                                loadOp = GPULoadOp.Load,
+                                                clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                                                storeOp = GPUStoreOp.Store,
+                                            ),
+                                        ),
+                                        depthStencilAttachment = RenderPassDepthStencilAttachment(
+                                            view = depthStencilViewFor459,
+                                            stencilClearValue = 0u,
+                                            stencilLoadOp = GPULoadOp.Load,
+                                            stencilStoreOp = GPUStoreOp.Discard,
+                                            stencilReadOnly = false,
+                                            depthReadOnly = true,
+                                        ),
+                                    ),
+                                ) {
+                                    setBindGroup(0u, res.bindGroup)
+                                    setScissorRect(
+                                        x = d.scissor[0].toUInt(),
+                                        y = d.scissor[1].toUInt(),
+                                        width = d.scissor[2].toUInt(),
+                                        height = d.scissor[3].toUInt(),
+                                    )
+                                    setStencilReference(0u)
+                                    setVertexBuffer(slot = 0u, buffer = res.coverVertexBuffer!!)
+                                    setPipeline(aaStencilCoverPipelineFor(d.mode, d.fillType, CoverageSide.Inside))
+                                    draw((d.coverVerts.size / 2).toUInt())
+                                    end()
+                                }
+                                encoder.clearBuffer(
+                                    afterStorageFor459,
+                                    0uL,
+                                    res.m60F16ProductionCoverColorAttachmentAcceptanceFor459BufferSize,
+                                )
+                                val afterPassFor459 = encoder.beginComputePass()
+                                afterPassFor459.setPipeline(m60F16AaStencilCoverPostPassReadbackPipeline)
+                                afterPassFor459.setBindGroup(0u, afterBindGroupFor459)
+                                afterPassFor459.dispatchWorkgroups(
+                                    M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_SAMPLE_COUNT,
+                                )
+                                afterPassFor459.end()
+                                encoder.copyBufferToBuffer(
+                                    source = afterStorageFor459,
+                                    sourceOffset = 0uL,
+                                    destination = afterStagingFor459,
+                                    destinationOffset = 0uL,
+                                    size =
+                                        res.m60F16ProductionCoverColorAttachmentAcceptanceFor459BufferSize,
+                                )
+                                m60F16ProductionCoverColorAttachmentAcceptanceFor459PendingReadbacks +=
+                                    M60F16ProductionCoverColorAttachmentAcceptanceFor459Readback(
+                                        metadata = metadata,
+                                        beforeStaging = beforeStagingFor459,
+                                        afterStaging = afterStagingFor459,
+                                        bufferSize =
+                                            res.m60F16ProductionCoverColorAttachmentAcceptanceFor459BufferSize,
+                                    )
+                            } catch (t: Throwable) {
+                                val samples = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.map { (x, y) ->
+                                    val targetWithinScissor = m60F16PointWithinScissor(x, y, metadata.scissor)
+                                    M60F16ProductionCoverColorAttachmentAcceptanceFor459Sample(
+                                        x = x,
+                                        y = y,
+                                        targetWithinScissor = targetWithinScissor,
+                                        beforeReadbackAvailable = false,
+                                        afterReadbackAvailable = false,
+                                        beforeCoverRgbaFloat = null,
+                                        beforeCoverRgba8 = null,
+                                        afterCoverRgbaFloat = null,
+                                        afterCoverRgba8 = null,
+                                        colorChangedByCover = null,
+                                        classification = if (targetWithinScissor) {
+                                            "production-cover-color-attachment-encode-failed"
+                                        } else {
+                                            "production-cover-color-attachment-sample-outside-scissor"
+                                        },
+                                        reason =
+                                            "FOR-459 diagnostic color attachment replay failed: ${t::class.simpleName}: ${t.message}",
+                                    )
+                                }
+                                m60F16ProductionCoverColorAttachmentAcceptanceFor459Events +=
+                                    m60F16ProductionCoverColorAttachmentAcceptanceFor459Event(
+                                        metadata = metadata,
+                                        beforeCoverReadbackEncoded = true,
+                                        afterCoverReadbackEncoded = true,
                                         copyAttempted = true,
                                         copySucceeded = false,
                                         copyFailureReason = "${t::class.simpleName}: ${t.message}",
@@ -20267,6 +20780,14 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             it.m60F16ProductionBoundCoverStencilDiagnosticFor457Texture?.close()
             it.m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchView?.close()
             it.m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchTexture?.close()
+            it.m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeStaging?.close()
+            it.m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeStorage?.close()
+            it.m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterStaging?.close()
+            it.m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterStorage?.close()
+            it.m60F16ProductionCoverColorAttachmentAcceptanceFor459ColorView?.close()
+            it.m60F16ProductionCoverColorAttachmentAcceptanceFor459ColorTexture?.close()
+            it.m60F16ProductionCoverColorAttachmentAcceptanceFor459DepthStencilView?.close()
+            it.m60F16ProductionCoverColorAttachmentAcceptanceFor459DepthStencilTexture?.close()
             it.m60F16AaStencilCoverIsolatedColorTargetStaging?.close()
             it.m60F16AaStencilCoverIsolatedColorTargetStorage?.close()
             it.m60F16AaStencilCoverIsolatedColorTargetScratchView?.close()
@@ -20331,6 +20852,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         recordM60F16StencilRenderPassSplitBoundaryReadbacks()
         recordM60F16DiagnosticStencilTextureFor453Readbacks()
         recordM60F16ProductionBoundCoverStencilDiagnosticFor457Readbacks()
+        recordM60F16ProductionCoverColorAttachmentAcceptanceFor459Readbacks()
         recordM60F16AaStencilCoverPostPassReadbacks()
         recordM60F16AaStencilCoverIsolatedColorTargetReadbacks()
         recordM60F16AaStencilCoverStorageColorTargetComparisonReadbacks()
@@ -20504,6 +21026,20 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         val m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchTexture: GPUTexture? = null,
         val m60F16ProductionBoundCoverStencilDiagnosticFor457ScratchView: GPUTextureView? = null,
         val m60F16ProductionBoundCoverStencilDiagnosticFor457CreationFailureReason: String? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459ColorTexture: GPUTexture? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459ColorView: GPUTextureView? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459DepthStencilTexture: GPUTexture? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459DepthStencilView: GPUTextureView? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeStorage: GPUBuffer? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeStaging: GPUBuffer? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeBindGroup:
+            io.ygdrasil.webgpu.GPUBindGroup? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterStorage: GPUBuffer? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterStaging: GPUBuffer? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterBindGroup:
+            io.ygdrasil.webgpu.GPUBindGroup? = null,
+        val m60F16ProductionCoverColorAttachmentAcceptanceFor459BufferSize: ULong =
+            M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_BUFFER_SIZE,
         val m60F16AaStencilCoverIsolatedColorTargetScratchTexture: GPUTexture? = null,
         val m60F16AaStencilCoverIsolatedColorTargetScratchView: GPUTextureView? = null,
         val m60F16AaStencilCoverIsolatedColorTargetDepthStencilTexture: GPUTexture? = null,
@@ -20594,6 +21130,13 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     private data class M60F16AaStencilCoverIsolatedColorTargetReadback(
         val metadata: M60F16AaStencilCoverPostPassReadbackMetadata,
         val staging: GPUBuffer,
+        val bufferSize: ULong,
+    )
+
+    private data class M60F16ProductionCoverColorAttachmentAcceptanceFor459Readback(
+        val metadata: M60F16AaStencilCoverPostPassReadbackMetadata,
+        val beforeStaging: GPUBuffer,
+        val afterStaging: GPUBuffer,
         val bufferSize: ULong,
     )
 
@@ -22471,7 +23014,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             (m60F16StencilRenderPassSplitFor451DiagnosticsEnabled ||
                 m60F16StencilBackendReadbackAuditFor452DiagnosticsEnabled ||
                 m60F16DiagnosticStencilTextureFor453DiagnosticsEnabled ||
-                m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled) &&
+                m60F16ProductionBoundCoverStencilDiagnosticFor457DiagnosticsEnabled ||
+                m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled) &&
                 d.m60F16BandMetadata != null &&
                 intermediateFormat == GPUTextureFormat.RGBA16Float
         val stencilRenderPassSplitBoundaryStorage = if (stencilRenderPassSplitBoundaryEnabled) {
@@ -22626,6 +23170,138 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         val productionBoundCoverStencilDiagnosticFor457CreationFailureReason =
             productionBoundCoverStencilDiagnosticFor457Result?.exceptionOrNull()?.let { t ->
                 "${t::class.simpleName}: ${t.message}"
+            }
+        val productionCoverColorAttachmentAcceptanceFor459Enabled =
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DiagnosticsEnabled &&
+                d.m60F16BandMetadata != null &&
+                intermediateFormat == GPUTextureFormat.RGBA16Float
+        val productionCoverColorAttachmentAcceptanceFor459ColorTexture =
+            if (productionCoverColorAttachmentAcceptanceFor459Enabled) {
+                context.device.createTexture(
+                    TextureDescriptor(
+                        size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                        format = GPUTextureFormat.RGBA16Float,
+                        usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                        label =
+                            "SkWebGpuDevice.m60F16ProductionCoverColorAttachmentAcceptanceFor459.color.diagnosticOnly",
+                    ),
+                )
+            } else {
+                null
+            }
+        val productionCoverColorAttachmentAcceptanceFor459ColorView =
+            productionCoverColorAttachmentAcceptanceFor459ColorTexture?.createView()
+        val productionCoverColorAttachmentAcceptanceFor459DepthStencilTexture =
+            if (productionCoverColorAttachmentAcceptanceFor459Enabled) {
+                context.device.createTexture(
+                    TextureDescriptor(
+                        size = Extent3D(width = width.toUInt(), height = height.toUInt()),
+                        format = GPUTextureFormat.Depth24PlusStencil8,
+                        usage = GPUTextureUsage.RenderAttachment,
+                        label =
+                            "SkWebGpuDevice.m60F16ProductionCoverColorAttachmentAcceptanceFor459.depthStencil.diagnosticOnly",
+                    ),
+                )
+            } else {
+                null
+            }
+        val productionCoverColorAttachmentAcceptanceFor459DepthStencilView =
+            productionCoverColorAttachmentAcceptanceFor459DepthStencilTexture?.createView()
+        val productionCoverColorAttachmentAcceptanceFor459BeforeStorage =
+            if (productionCoverColorAttachmentAcceptanceFor459Enabled) {
+                context.device.createBuffer(
+                    BufferDescriptor(
+                        size = M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_BUFFER_SIZE,
+                        usage = GPUBufferUsage.Storage or GPUBufferUsage.CopySrc or GPUBufferUsage.CopyDst,
+                        label =
+                            "SkWebGpuDevice.m60F16ProductionCoverColorAttachmentAcceptanceFor459.beforeStorage.diagnosticOnly",
+                    ),
+                )
+            } else {
+                null
+            }
+        val productionCoverColorAttachmentAcceptanceFor459BeforeStaging =
+            if (productionCoverColorAttachmentAcceptanceFor459Enabled) {
+                context.device.createBuffer(
+                    BufferDescriptor(
+                        size = M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_BUFFER_SIZE,
+                        usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                        label =
+                            "SkWebGpuDevice.m60F16ProductionCoverColorAttachmentAcceptanceFor459.beforeStaging.diagnosticOnly",
+                    ),
+                )
+            } else {
+                null
+            }
+        val productionCoverColorAttachmentAcceptanceFor459AfterStorage =
+            if (productionCoverColorAttachmentAcceptanceFor459Enabled) {
+                context.device.createBuffer(
+                    BufferDescriptor(
+                        size = M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_BUFFER_SIZE,
+                        usage = GPUBufferUsage.Storage or GPUBufferUsage.CopySrc or GPUBufferUsage.CopyDst,
+                        label =
+                            "SkWebGpuDevice.m60F16ProductionCoverColorAttachmentAcceptanceFor459.afterStorage.diagnosticOnly",
+                    ),
+                )
+            } else {
+                null
+            }
+        val productionCoverColorAttachmentAcceptanceFor459AfterStaging =
+            if (productionCoverColorAttachmentAcceptanceFor459Enabled) {
+                context.device.createBuffer(
+                    BufferDescriptor(
+                        size = M60_F16_AA_STENCIL_COVER_POST_PASS_READBACK_BUFFER_SIZE,
+                        usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                        label =
+                            "SkWebGpuDevice.m60F16ProductionCoverColorAttachmentAcceptanceFor459.afterStaging.diagnosticOnly",
+                    ),
+                )
+            } else {
+                null
+            }
+        val productionCoverColorAttachmentAcceptanceFor459BeforeBindGroup =
+            if (productionCoverColorAttachmentAcceptanceFor459Enabled) {
+                context.device.createBindGroup(
+                    BindGroupDescriptor(
+                        layout = for258ShaderSideProbeBindGroupLayout,
+                        entries = listOf(
+                            BindGroupEntry(
+                                binding = 0u,
+                                resource = productionCoverColorAttachmentAcceptanceFor459ColorView!!,
+                            ),
+                            BindGroupEntry(
+                                binding = 1u,
+                                resource = BufferBinding(
+                                    buffer = productionCoverColorAttachmentAcceptanceFor459BeforeStorage!!,
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            } else {
+                null
+            }
+        val productionCoverColorAttachmentAcceptanceFor459AfterBindGroup =
+            if (productionCoverColorAttachmentAcceptanceFor459Enabled) {
+                context.device.createBindGroup(
+                    BindGroupDescriptor(
+                        layout = for258ShaderSideProbeBindGroupLayout,
+                        entries = listOf(
+                            BindGroupEntry(
+                                binding = 0u,
+                                resource = productionCoverColorAttachmentAcceptanceFor459ColorView!!,
+                            ),
+                            BindGroupEntry(
+                                binding = 1u,
+                                resource = BufferBinding(
+                                    buffer = productionCoverColorAttachmentAcceptanceFor459AfterStorage!!,
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            } else {
+                null
             }
         val isolatedColorTargetEnabled =
             m60F16AaStencilCoverIsolatedColorTargetDiagnosticsEnabled &&
@@ -22931,6 +23607,26 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                 productionBoundCoverStencilDiagnosticFor457ScratchView,
             m60F16ProductionBoundCoverStencilDiagnosticFor457CreationFailureReason =
                 productionBoundCoverStencilDiagnosticFor457CreationFailureReason,
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459ColorTexture =
+                productionCoverColorAttachmentAcceptanceFor459ColorTexture,
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459ColorView =
+                productionCoverColorAttachmentAcceptanceFor459ColorView,
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DepthStencilTexture =
+                productionCoverColorAttachmentAcceptanceFor459DepthStencilTexture,
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459DepthStencilView =
+                productionCoverColorAttachmentAcceptanceFor459DepthStencilView,
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeStorage =
+                productionCoverColorAttachmentAcceptanceFor459BeforeStorage,
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeStaging =
+                productionCoverColorAttachmentAcceptanceFor459BeforeStaging,
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459BeforeBindGroup =
+                productionCoverColorAttachmentAcceptanceFor459BeforeBindGroup,
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterStorage =
+                productionCoverColorAttachmentAcceptanceFor459AfterStorage,
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterStaging =
+                productionCoverColorAttachmentAcceptanceFor459AfterStaging,
+            m60F16ProductionCoverColorAttachmentAcceptanceFor459AfterBindGroup =
+                productionCoverColorAttachmentAcceptanceFor459AfterBindGroup,
             m60F16AaStencilCoverIsolatedColorTargetScratchTexture = isolatedColorTargetScratchTexture,
             m60F16AaStencilCoverIsolatedColorTargetScratchView = isolatedColorTargetScratchView,
             m60F16AaStencilCoverIsolatedColorTargetDepthStencilTexture = isolatedColorTargetDepthStencilTexture,
