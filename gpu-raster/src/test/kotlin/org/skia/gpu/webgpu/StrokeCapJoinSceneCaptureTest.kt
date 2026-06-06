@@ -15,10 +15,13 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
+import org.skia.core.SkAlphaType
 import org.skia.core.SkCanvas
+import org.skia.core.SkColorSpaceXformSteps
 import org.skia.core.SkScanFillPathSubsampleTrace
 import org.skia.encode.SkPngEncoder
 import org.skia.foundation.SkBitmap
+import org.skia.foundation.SkColorSpace
 import org.skia.foundation.SkLinearGradient
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkPathBuilder
@@ -216,7 +219,8 @@ class StrokeCapJoinSceneCaptureTest {
                         System.getProperty(FOR433_STENCIL_SUBDRAW_SOURCE_COLOR_PROPERTY, "false").toBoolean() ||
                         System.getProperty(FOR434_STENCIL_SOURCE_PAYLOAD_TRACE_PROPERTY, "false").toBoolean() ||
                         System.getProperty(FOR435_PAINT_STROKE_INPUT_TRACE_PROPERTY, "false").toBoolean() ||
-                        System.getProperty(FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY, "false").toBoolean()
+                        System.getProperty(FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY, "false").toBoolean() ||
+                        System.getProperty(FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY, "false").toBoolean()
                 val widthQuantizedColorReconstructionFor432Result =
                     if (widthQuantizedColorReconstructionRequested) {
                         withExperimentalStrokeCapJoinRender {
@@ -226,11 +230,22 @@ class StrokeCapJoinSceneCaptureTest {
                                         withM60F16DirectPassWriteHook(true) {
                                             withM60F16PredrawDstReadback(true) {
                                                 withM60F16ShaderReturnDiagnostic(true) {
-                                                    WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
-                                                        ctx,
-                                                        gm,
-                                                        targetColorSpaceBlend = true,
-                                                    )
+                                                    withM60F16HostDrawPaintBindingFor436(
+                                                        enabled = System.getProperty(
+                                                            FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY,
+                                                            "false",
+                                                        ).toBoolean() ||
+                                                            System.getProperty(
+                                                                FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY,
+                                                                "false",
+                                                            ).toBoolean(),
+                                                    ) {
+                                                        WebGpuSink.drawWithM60F16FragmentLaneDiagnosticSnapshot(
+                                                            ctx,
+                                                            gm,
+                                                            targetColorSpaceBlend = true,
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -436,6 +451,17 @@ class StrokeCapJoinSceneCaptureTest {
                     reference = reference,
                     currentGpu = experimentalGpu,
                     optInGpu = widthQuantizedRenderFixFor431Gpu,
+                    hostSnapshot = result.hostDrawPaintBindingFor436Snapshot,
+                    adapter = adapter,
+                )
+            }
+            if (System.getProperty(FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY, "false").toBoolean()) {
+                writeM60F16CpuReferenceSourceExpectationFor437(
+                    reference = reference,
+                    currentGpu = experimentalGpu,
+                    optInGpu = widthQuantizedRenderFixFor431Gpu,
+                    shaderReturnSnapshot = result.aaStencilCoverShaderReturnDiagnosticSnapshot,
+                    predrawSnapshot = result.aaStencilCoverPredrawDstReadbackSnapshot,
                     hostSnapshot = result.hostDrawPaintBindingFor436Snapshot,
                     adapter = adapter,
                 )
@@ -1147,6 +1173,20 @@ class StrokeCapJoinSceneCaptureTest {
         }
     }
 
+    private fun <T> withM60F16HostDrawPaintBindingFor436(enabled: Boolean, block: () -> T): T {
+        val previous = System.getProperty(FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY)
+        System.setProperty(FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY, enabled.toString())
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY)
+            } else {
+                System.setProperty(FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY, previous)
+            }
+        }
+    }
+
     private fun <T> withM60F16BoundedCorrectionApplicationPointDiagnostic(
         enabled: Boolean,
         block: () -> T,
@@ -1332,6 +1372,38 @@ class StrokeCapJoinSceneCaptureTest {
                 c.drawRect(org.graphiks.math.SkRect.MakeXYWH(10f, 28f, 88f, 64f), outlinePaint)
                 c.restore()
             }
+        }
+    }
+
+    private class BoundedStrokeCapJoinPrefixFor437GM : GM() {
+        override fun getName(): String = "m60_bounded_stroke_cap_join_prefix_for437"
+        override fun getISize(): SkISize = SkISize.Make(192, 128)
+
+        override fun onDraw(canvas: SkCanvas?) {
+            val c = canvas ?: return
+            c.drawColor(SK_ColorWHITE)
+            val path = SkPathBuilder()
+                .moveTo(18f, 78f)
+                .lineTo(54f, 42f)
+                .lineTo(90f, 78f)
+                .detach()
+            val paint = SkPaint().apply {
+                color = 0xFF0066CC.toInt()
+                isAntiAlias = true
+                style = SkPaint.Style.kStroke_Style
+                strokeWidth = 10f
+                strokeCap = SkPaint.Cap.kButt_Cap
+                strokeJoin = SkPaint.Join.kBevel_Join
+                strokeMiter = 4f
+            }
+            val outlinePaint = SkPaint().apply {
+                color = SK_ColorBLACK
+                style = SkPaint.Style.kStroke_Style
+                strokeWidth = 0f
+                isAntiAlias = true
+            }
+            c.drawPath(path, paint)
+            c.drawRect(org.graphiks.math.SkRect.MakeXYWH(10f, 28f, 88f, 64f), outlinePaint)
         }
     }
 
@@ -7752,6 +7824,420 @@ class StrokeCapJoinSceneCaptureTest {
                 "Add a narrower trace around CPU/source expectation and host draw mapping."
         }
 
+    private fun writeM60F16CpuReferenceSourceExpectationFor437(
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        hostSnapshot: SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        adapter: String,
+    ) {
+        val sceneId = "m60-f16-cpu-reference-source-expectation-for437"
+        val dir = repoFile("reports/wgsl-pipeline/scenes/artifacts/$sceneId").apply { mkdirs() }
+        File(dir, "$sceneId.json").writeText(
+            m60F16CpuReferenceSourceExpectationFor437Json(
+                sceneId = sceneId,
+                reference = reference,
+                currentGpu = currentGpu,
+                optInGpu = optInGpu,
+                shaderReturnSnapshot = shaderReturnSnapshot,
+                predrawSnapshot = predrawSnapshot,
+                hostSnapshot = hostSnapshot,
+                adapter = adapter,
+            ),
+        )
+    }
+
+    private fun m60F16CpuReferenceSourceExpectationFor437Json(
+        sceneId: String,
+        reference: SkBitmap,
+        currentGpu: SkBitmap,
+        optInGpu: SkBitmap,
+        shaderReturnSnapshot: SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSnapshot,
+        predrawSnapshot: SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSnapshot,
+        hostSnapshot: SkWebGpuDevice.M60F16HostDrawPaintBindingFor436Snapshot,
+        adapter: String,
+    ): String {
+        val coverageAlpha = 10f / 16f
+        val partialPoints = M60_F16_DIRECT_PASS_WRITE_HOOK_POINTS.take(6).toSet()
+        val shaderByPoint = shaderReturnSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val predrawByPoint = predrawSnapshot.events
+            .flatMap { event -> event.samples.map { sample -> (sample.x to sample.y) to (event to sample) } }
+            .groupBy({ it.first }, { it.second })
+        val candidates = m60F16FixtureSourceCandidatesFor437()
+        val cpuReferenceBeforeDrawIndex3 = TestUtils.runGmTest(BoundedStrokeCapJoinPrefixFor437GM())
+        val hostBinding = hostSnapshot.events.firstOrNull { it.drawIndex == 3 }
+        val records = partialPoints
+            .map { (x, y) -> M60F16DrawPixelKey(1, x, y) }
+            .sortedWith(compareBy<M60F16DrawPixelKey> { it.y }.thenBy { it.x })
+            .map { key ->
+                val point = key.x to key.y
+                val sources = shaderByPoint[point].orEmpty()
+                    .filter { (_, sample) ->
+                        val capturedAlpha = sample.coverageOrAaAlpha
+                        sample.shaderObserved &&
+                            !sample.captureSynthetic &&
+                            sample.sourceColorSentToBlend != null &&
+                            capturedAlpha != null &&
+                            kotlin.math.abs(capturedAlpha - coverageAlpha) <= (1f / 255f)
+                    }
+                val effectiveRenderDrawIndex = sources.firstOrNull()?.first?.drawIndex ?: 3
+                val selected = sources
+                    .filter { (event, _) -> event.drawIndex == effectiveRenderDrawIndex }
+                    .firstOrNull { (_, sample) -> sample.subdrawOrdinal == 0 && sample.subdrawRole == "inside" }
+                    ?: sources.firstOrNull()
+                val predraw = predrawByPoint[point].orEmpty()
+                    .sortedBy { it.first.drawIndex }
+                    .firstOrNull { (event, sample) ->
+                        event.drawIndex == effectiveRenderDrawIndex &&
+                            sample.targetWithinScissor &&
+                            sample.readbackAvailable &&
+                            sample.dstBeforeRgbaFloat != null
+                    }
+                val referenceFloat = rgbaByteArrayToFloat(rgbaArray(reference.getPixel(key.x, key.y)))
+                val cpuReferenceBeforeDrawIndex3Rgba = rgbaArray(cpuReferenceBeforeDrawIndex3.getPixel(key.x, key.y))
+                val cpuReferenceBeforeDrawIndex3Float = rgbaByteArrayToFloat(cpuReferenceBeforeDrawIndex3Rgba)
+                val cpuReferenceEqualsPrefixBeforeDrawIndex3 =
+                    rgbaMaxAbsDelta(referenceFloat, cpuReferenceBeforeDrawIndex3Float) <= (1f / 255f)
+                val dstBefore = predraw?.second?.dstBeforeRgbaFloat
+                val requiredSource = dstBefore?.let { inverseSourceOverPremul(referenceFloat, it, coverageAlpha) }
+                val requiredPaintPayload = requiredSource?.let { source ->
+                    if (coverageAlpha > 0f) {
+                        floatArrayOf(source[0] / coverageAlpha, source[1] / coverageAlpha, source[2] / coverageAlpha, 1f)
+                    } else {
+                        null
+                    }
+                }
+                val candidateDeltas = candidates.map { candidate ->
+                    candidate to requiredPaintPayload?.let {
+                        rgbaDelta(candidate.targetColorspaceRgbaFloat, it, 1f / 255f)
+                    }
+                }
+                val best = candidateDeltas
+                    .filter { it.second != null }
+                    .minByOrNull { requireNotNull(it.second).maxChannel }
+                    ?.first
+                val fixtureBlue = candidates.first { it.drawIndex == 1 }
+                val fixtureBlueDelta = candidateDeltas
+                    .firstOrNull { it.first.drawIndex == 1 }
+                    ?.second
+                val hostBoundCandidate = candidates.firstOrNull { it.drawIndex == hostBinding?.drawIndex }
+                val hostBoundDelta = candidateDeltas
+                    .firstOrNull { it.first.drawIndex == hostBinding?.drawIndex }
+                    ?.second
+                val classification = when {
+                    selected == null || dstBefore == null || requiredSource == null || requiredPaintPayload == null ->
+                        "trace-incomplete"
+                    cpuReferenceEqualsPrefixBeforeDrawIndex3 ->
+                        "cpu-reference-source-derived-from-different-draw"
+                    fixtureBlueDelta?.withinTolerance == true && hostBinding?.drawIndex != fixtureBlue.drawIndex ->
+                        "cpu-reference-source-derived-from-different-draw"
+                    fixtureBlueDelta?.withinTolerance == true ->
+                        "cpu-reference-source-is-fixture-blue"
+                    best != null && hostBoundCandidate != null && best.drawIndex != hostBoundCandidate.drawIndex ->
+                        "cpu-reference-source-derived-from-different-draw"
+                    hostBoundDelta != null && hostBoundDelta.withinTolerance ->
+                        "fixture-expectation-mismatch"
+                    else ->
+                        "cpu-reference-source-expectation-unresolved"
+                }
+                M60F16CpuReferenceSourceExpectationFor437Record(
+                    key = key,
+                    effectiveRenderDrawIndex = effectiveRenderDrawIndex,
+                    selectedSource = selected,
+                    predraw = predraw,
+                    referenceRgba = rgbaArray(reference.getPixel(key.x, key.y)),
+                    currentGpuRgba = rgbaArray(currentGpu.getPixel(key.x, key.y)),
+                    optInGpuRgba = rgbaArray(optInGpu.getPixel(key.x, key.y)),
+                    cpuReferenceBeforeDrawIndex3Rgba = cpuReferenceBeforeDrawIndex3Rgba,
+                    cpuReferenceEqualsPrefixBeforeDrawIndex3 = cpuReferenceEqualsPrefixBeforeDrawIndex3,
+                    requiredSourcePremul = requiredSource,
+                    requiredPaintPayload = requiredPaintPayload,
+                    bestFixtureCandidate = best,
+                    fixtureBlueDelta = fixtureBlueDelta,
+                    hostBoundDelta = hostBoundDelta,
+                    candidateDeltas = candidateDeltas,
+                    missingFields = buildList {
+                        if (selected == null) add("selectedWidthQuantizedShaderReturnSubdraw")
+                        if (predraw == null) add("dstBeforeRgbaFloat")
+                        if (requiredSource == null) add("requiredPremulSourceByInverseSrcOver")
+                        if (requiredPaintPayload == null) add("requiredPaintPayloadBeforeCoverage")
+                    },
+                    classification = classification,
+                )
+            }
+        val classification = when {
+            records.any { it.classification == "trace-incomplete" } -> "trace-incomplete"
+            records.all { it.classification == "cpu-reference-source-derived-from-different-draw" } ->
+                "cpu-reference-source-derived-from-different-draw"
+            records.all { it.classification == "cpu-reference-source-is-fixture-blue" } ->
+                "cpu-reference-source-is-fixture-blue"
+            records.any { it.classification == "cpu-reference-composition-inversion-mismatch" } ->
+                "cpu-reference-composition-inversion-mismatch"
+            records.any { it.classification == "fixture-expectation-mismatch" } ->
+                "fixture-expectation-mismatch"
+            else -> "cpu-reference-source-expectation-unresolved"
+        }
+        val maxBlueDelta = records.mapNotNull { it.fixtureBlueDelta?.maxChannel }.maxOrNull() ?: 0f
+        val maxHostBoundDelta = records.mapNotNull { it.hostBoundDelta?.maxChannel }.maxOrNull() ?: 0f
+        val pixelsJson = records.joinToString(",\n") { record ->
+            m60F16CpuReferenceSourceExpectationFor437RecordJson(record).prependIndent("    ")
+        }
+        val candidatesJson = candidates.joinToString(",\n") { candidate ->
+            m60F16FixtureSourceCandidateFor437Json(candidate).prependIndent("    ")
+        }
+        return """
+            {
+              "schemaVersion": 1,
+              "linear": "FOR-437",
+              "sceneId": ${sceneId.jsonString()},
+              "sourceSceneId": "m60-f16-host-draw-paint-binding-for436",
+              "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-m60-f16-tracer-attente-source-cpu-reference-pour-pixels-draw-index-3",
+              "sourceFindingMemory": "global/kanvas/findings/for-436-web-gpu-host-draw-paint-binding-trace-classifies-cpu-reference-source-expectation-mismatch",
+              "sourceArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-host-draw-paint-binding-for436/m60-f16-host-draw-paint-binding-for436.json",
+              "sourceReport": "reports/wgsl-pipeline/2026-06-06-for-436-m60-f16-host-draw-paint-binding.md",
+              "sourceFor435Artifact": "reports/wgsl-pipeline/scenes/artifacts/m60-f16-paint-stroke-input-trace-for435/m60-f16-paint-stroke-input-trace-for435.json",
+              "adapter": ${adapter.jsonString()},
+              "producer": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+              "classification": ${classification.jsonString()},
+              "allowedClassifications": [
+            ${M60_F16_FOR437_ALLOWED_CLASSIFICATIONS.joinToString(",\n") { it.jsonString().prependIndent("    ") }}
+              ],
+              "diagnosticFlag": ${FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY.jsonString()},
+              "sourceFor436DiagnosticFlag": ${FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY.jsonString()},
+              "sourceFor435DiagnosticFlag": ${FOR435_PAINT_STROKE_INPUT_TRACE_PROPERTY.jsonString()},
+              "supportClaim": false,
+              "promoted": false,
+              "defaultRenderingChanged": false,
+              "thresholdChanged": false,
+              "scoringChanged": false,
+              "fallbackPolicyChanged": false,
+              "pipelineKeyChanged": false,
+              "productionWgslChanged": false,
+              "wgsl4kModified": false,
+              "renderingFixApplied": false,
+              "comparisonPolicy": {
+                "scope": "Exactly the six FOR-436 residual pixels. Invert the CPU reference through SrcOver at 10/16 coverage, then compare the required source payload to the static BoundedStrokeCapJoinGM fixture paints transformed into the CPU reference colorspace.",
+                "cpuReferenceSink": "RasterSinkF16(DM_REFERENCE_COLOR_SPACE)",
+                "cpuReferenceColorSpace": "Rec2020 transfer + Rec2020 gamut",
+                "cpuReferencePrefixBeforeDrawIndex3": "BoundedStrokeCapJoinPrefixFor437GM renders the scene through the first blue draw and its outline before the round/round drawIndex 3 is submitted.",
+                "coverageNumerator": 10,
+                "coverageDenominator": 16,
+                "coverageAlpha": ${m60F16JsonFloat(coverageAlpha)},
+                "noRenderingFixApplied": true,
+                "boundedToSixPixels": true
+              },
+              "summary": {
+                "partialPixelCount": ${records.size},
+                "expectedPartialPixelCount": 6,
+                "hostBindingEventCount": ${hostSnapshot.events.size},
+                "hostBoundDrawIndex": ${hostBinding?.drawIndex ?: "null"},
+                "hostBoundPaintHexArgb": ${hostBinding?.sourcePaintHexArgb?.jsonString() ?: "null"},
+                "hostBoundStrokeWidth": ${hostBinding?.strokeWidth?.let { m60F16JsonFloat(it) } ?: "null"},
+                "hostBoundStrokeCap": ${hostBinding?.strokeCap?.jsonString() ?: "null"},
+                "hostBoundStrokeJoin": ${hostBinding?.strokeJoin?.jsonString() ?: "null"},
+                "bestFixtureCandidateDrawIndex": ${records.firstOrNull()?.bestFixtureCandidate?.drawIndex ?: "null"},
+                "bestFixtureCandidatePaintHexArgb": ${records.firstOrNull()?.bestFixtureCandidate?.paintHexArgb?.jsonString() ?: "null"},
+                "bestFixtureCandidateStrokeCap": ${records.firstOrNull()?.bestFixtureCandidate?.cap?.jsonString() ?: "null"},
+                "bestFixtureCandidateStrokeJoin": ${records.firstOrNull()?.bestFixtureCandidate?.join?.jsonString() ?: "null"},
+                "cpuReferencePrefixMatchCount": ${records.count { it.cpuReferenceEqualsPrefixBeforeDrawIndex3 }},
+                "maxRequiredPaintVsFixtureBlueTargetDelta": ${String.format(Locale.US, "%.9f", maxBlueDelta)},
+                "maxRequiredPaintVsHostBoundTargetDelta": ${String.format(Locale.US, "%.9f", maxHostBoundDelta)},
+                "traceComplete": ${records.all { it.missingFields.isEmpty() }}
+              },
+              "fixtureSourceCandidates": [
+            $candidatesJson
+              ],
+              "partialPixels": [
+            $pixelsJson
+              ],
+              "nonGoalsPreserved": {
+                "defaultRenderingChanged": false,
+                "supportClaimRaised": false,
+                "promoted": false,
+                "thresholdChanged": false,
+                "scoringChanged": false,
+                "fallbackChanged": false,
+                "pipelineKeyChanged": false,
+                "productionWgslChanged": false,
+                "wgsl4kModified": false,
+                "for431ActivatedByDefault": false,
+                "renderingFixApplied": false
+              },
+              "classificationReason": ${m60F16CpuReferenceSourceExpectationFor437GlobalReason(classification).jsonString()},
+              "nextStep": ${m60F16CpuReferenceSourceExpectationFor437NextStep(classification).jsonString()},
+              "validationCommands": [
+                "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.m60F16CpuReferenceSourceExpectationFor437.enabled=true :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest",
+                "rtk python3 scripts/validate_for437_m60_f16_cpu_reference_source_expectation.py",
+                "rtk python3 scripts/validate_for436_m60_f16_host_draw_paint_binding.py",
+                "rtk python3 scripts/validate_for435_m60_f16_paint_stroke_input_trace.py",
+                "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for437-pycache python3 -m py_compile scripts/validate_for437_m60_f16_cpu_reference_source_expectation.py",
+                "rtk git diff --check"
+              ]
+            }
+        """.trimIndent() + "\n"
+    }
+
+    private fun m60F16FixtureSourceCandidatesFor437(): List<M60F16FixtureSourceCandidateFor437> =
+        listOf(
+            M60F16FixtureSourceCandidateFor437(1, "0xFF0066CC", 0xFF0066CC.toInt(), "butt", "bevel", 0f, 48f),
+            M60F16FixtureSourceCandidateFor437(3, "0xFF008A4C", 0xFF008A4C.toInt(), "round", "round", 48f, 96f),
+            M60F16FixtureSourceCandidateFor437(5, "0xFFB33C00", 0xFFB33C00.toInt(), "square", "bevel", 96f, 192f),
+        ).map { candidate ->
+            candidate.copy(targetColorspaceRgbaFloat = m60F16FixturePaintInCpuReferenceSpaceFor437(candidate.paintColor))
+        }
+
+    private fun m60F16FixturePaintInCpuReferenceSpaceFor437(color: Int): FloatArray {
+        val rgba = floatArrayOf(
+            ((color ushr 16) and 0xFF) / 255f,
+            ((color ushr 8) and 0xFF) / 255f,
+            (color and 0xFF) / 255f,
+            ((color ushr 24) and 0xFF) / 255f,
+        )
+        SkColorSpaceXformSteps(
+            src = SkColorSpace.makeSRGB(),
+            srcAT = SkAlphaType.kUnpremul,
+            dst = TestUtils.DM_REFERENCE_COLOR_SPACE,
+            dstAT = SkAlphaType.kUnpremul,
+        ).apply(rgba)
+        return rgba
+    }
+
+    private fun m60F16FixtureSourceCandidateFor437Json(candidate: M60F16FixtureSourceCandidateFor437): String = """
+        {
+          "drawIndex": ${candidate.drawIndex},
+          "paintHexArgb": ${candidate.paintHexArgb.jsonString()},
+          "paintRgba8": ${intArrayJson(rgbaArray(candidate.paintColor))},
+          "stroke": {
+            "width": 10.0,
+            "cap": ${candidate.cap.jsonString()},
+            "join": ${candidate.join.jsonString()}
+          },
+          "bandXStart": ${m60F16JsonFloat(candidate.bandXStart)},
+          "bandXEnd": ${m60F16JsonFloat(candidate.bandXEnd)},
+          "targetColorspacePayloadRgbaFloat": ${candidate.targetColorspaceRgbaFloat.floatArrayOrNullJson()},
+          "targetColorspacePayloadRgba8Approx": ${floatRgbaToByteArrayJson(candidate.targetColorspaceRgbaFloat)}
+        }
+    """.trimIndent()
+
+    private fun m60F16CpuReferenceSourceExpectationFor437RecordJson(
+        record: M60F16CpuReferenceSourceExpectationFor437Record,
+    ): String {
+        val candidateDeltasJson = record.candidateDeltas.joinToString(",\n") { (candidate, delta) ->
+            """
+                {
+                  "drawIndex": ${candidate.drawIndex},
+                  "paintHexArgb": ${candidate.paintHexArgb.jsonString()},
+                  "payloadVsRequiredPaintDelta": ${delta?.let { rgbaDeltaJson(it) } ?: "null"}
+                }
+            """.trimIndent().prependIndent("    ")
+        }
+        return """
+            {
+              "x": ${record.key.x},
+              "y": ${record.key.y},
+              "drawIndex": ${record.key.drawIndex},
+              "effectiveRenderDrawIndex": ${record.effectiveRenderDrawIndex},
+              "classification": ${record.classification.jsonString()},
+              "classificationReason": ${m60F16CpuReferenceSourceExpectationFor437LocalReason(record).jsonString()},
+              "referenceCpuRgba": ${intArrayJson(record.referenceRgba)},
+              "cpuReferenceBeforeDrawIndex3Rgba": ${intArrayJson(record.cpuReferenceBeforeDrawIndex3Rgba)},
+              "cpuReferenceEqualsPrefixBeforeDrawIndex3": ${record.cpuReferenceEqualsPrefixBeforeDrawIndex3},
+              "currentWebGpuRgba": ${intArrayJson(record.currentGpuRgba)},
+              "optInFor431Rgba": ${intArrayJson(record.optInGpuRgba)},
+              "destination": {
+                "dstBeforeRgbaFloat": ${record.predraw?.second?.dstBeforeRgbaFloat.floatArrayOrNullJson()},
+                "dstBeforeRgba8": ${record.predraw?.second?.dstBeforeRgbaFloat?.let { floatRgbaToByteArrayJson(it) } ?: "null"}
+              },
+              "coverage": {
+                "numerator": 10,
+                "denominator": 16,
+                "alpha": 0.625,
+                "capturedCoverageOrAaAlpha": ${record.selectedSource?.second?.coverageOrAaAlpha?.let { m60F16JsonFloat(it) } ?: "null"}
+              },
+              "requiredSourcePremul": {
+                "formula": "cpuReference - dstBefore * (1 - 10/16), alpha = 10/16",
+                "rgbaFloat": ${record.requiredSourcePremul.floatArrayOrNullJson()},
+                "rgba8Approx": ${record.requiredSourcePremul?.let { floatRgbaToByteArrayJson(it) } ?: "null"}
+              },
+              "requiredPaintPayloadBeforeCoverage": {
+                "formula": "requiredSourcePremul.rgb / (10/16), alpha = 1",
+                "rgbaFloat": ${record.requiredPaintPayload.floatArrayOrNullJson()},
+                "rgba8Approx": ${record.requiredPaintPayload?.let { floatRgbaToByteArrayJson(it) } ?: "null"}
+              },
+              "selectedWebGpuSource": {
+                "drawIndex": ${record.selectedSource?.first?.drawIndex ?: "null"},
+                "subdrawOrdinal": ${record.selectedSource?.second?.subdrawOrdinal ?: "null"},
+                "subdrawRole": ${record.selectedSource?.second?.subdrawRole?.jsonString() ?: "null"},
+                "sourceColorSentToBlend": ${record.selectedSource?.second?.sourceColorSentToBlend.floatArrayOrNullJson()}
+              },
+              "bestFixtureSourceCandidate": {
+                "drawIndex": ${record.bestFixtureCandidate?.drawIndex ?: "null"},
+                "paintHexArgb": ${record.bestFixtureCandidate?.paintHexArgb?.jsonString() ?: "null"},
+                "strokeCap": ${record.bestFixtureCandidate?.cap?.jsonString() ?: "null"},
+                "strokeJoin": ${record.bestFixtureCandidate?.join?.jsonString() ?: "null"},
+                "targetColorspacePayloadRgbaFloat": ${record.bestFixtureCandidate?.targetColorspaceRgbaFloat.floatArrayOrNullJson()},
+                "targetColorspacePayloadRgba8Approx": ${record.bestFixtureCandidate?.targetColorspaceRgbaFloat?.let { floatRgbaToByteArrayJson(it) } ?: "null"}
+              },
+              "fixtureBlueVsRequiredPaintDelta": ${record.fixtureBlueDelta?.let { rgbaDeltaJson(it) } ?: "null"},
+              "hostBoundGreenVsRequiredPaintDelta": ${record.hostBoundDelta?.let { rgbaDeltaJson(it) } ?: "null"},
+              "candidateDeltas": [
+            $candidateDeltasJson
+              ],
+              "missingFields": [${record.missingFields.joinToString(", ") { it.jsonString() }}]
+            }
+        """.trimIndent()
+    }
+
+    private fun m60F16CpuReferenceSourceExpectationFor437LocalReason(
+        record: M60F16CpuReferenceSourceExpectationFor437Record,
+    ): String = when (record.classification) {
+        "cpu-reference-source-derived-from-different-draw" ->
+            "The CPU reference pixel already matches the CPU prefix rendered before drawIndex 3, so the reference is carrying the previous blue draw through these coordinates while the confirmed WebGPU host binding remains the green drawIndex 3 paint."
+        "cpu-reference-source-is-fixture-blue" ->
+            "The required source payload reconstructed from the CPU reference matches the fixture blue paint."
+        "fixture-expectation-mismatch" ->
+            "The required source payload matches the host-bound fixture paint, so the remaining mismatch points back to fixture expectation or captured destination."
+        "trace-incomplete" ->
+            "The trace is missing the selected source, predraw destination, or inverse SrcOver source payload."
+        else ->
+            "The trace is complete but no fixture source candidate explains the CPU reference payload within tolerance."
+    }
+
+    private fun m60F16CpuReferenceSourceExpectationFor437GlobalReason(classification: String): String =
+        when (classification) {
+            "cpu-reference-source-derived-from-different-draw" ->
+                "All six residual CPU reference pixels are already present in the CPU prefix rendered before the round/round drawIndex 3, while WebGPU traces a 10/16 drawIndex 3 green stencil-cover contribution at the same coordinates."
+            "cpu-reference-source-is-fixture-blue" ->
+                "The CPU reference payload is fixture blue for all six pixels."
+            "cpu-reference-composition-inversion-mismatch" ->
+                "The inverse SrcOver reconstruction does not round-trip the CPU reference under the expected 10/16 coverage."
+            "fixture-expectation-mismatch" ->
+                "The source expectation appears internally consistent with the host binding, so the remaining discrepancy belongs to fixture expectation."
+            "trace-incomplete" ->
+                "The diagnostic lacks a required source, destination, or reconstructed payload field."
+            else ->
+                "The CPU reference source expectation is still unresolved after candidate comparison."
+        }
+
+    private fun m60F16CpuReferenceSourceExpectationFor437NextStep(classification: String): String =
+        when (classification) {
+            "cpu-reference-source-derived-from-different-draw" ->
+                "Trace why CPU reference composition leaves these edge pixels as the previous blue draw while WebGPU effective drawIndex 3 binds and contributes the green stroke; do not change coverage, thresholds, FOR-431, PipelineKey, or WGSL payload until the draw/source ordering difference is isolated."
+            "cpu-reference-source-is-fixture-blue" ->
+                "Reduce the next ticket to the exact fixture/draw mapping that makes the CPU reference expect fixture blue at the drawIndex 3 residual pixels."
+            "fixture-expectation-mismatch" ->
+                "Audit the fixture expectation before changing renderer code."
+            "trace-incomplete" ->
+                "Add the exact missing field named in partialPixels[].missingFields before deriving a correction."
+            else ->
+                "Add a narrower CPU draw/source trace around these six pixels."
+        }
+
     private fun m60F16SubsampleComparisonGridJson(
         key: M60F16DrawPixelKey,
         cpuMask: Int?,
@@ -11071,6 +11557,43 @@ class StrokeCapJoinSceneCaptureTest {
         val shaderPayloadVsTargetDelta: RgbaFloatDelta?,
         val boundedCorrectionVsTargetDelta: RgbaFloatDelta?,
         val alternateSingleCandidatesShareSource: Boolean,
+        val missingFields: List<String>,
+        val classification: String,
+    )
+
+    private data class M60F16FixtureSourceCandidateFor437(
+        val drawIndex: Int,
+        val paintHexArgb: String,
+        val paintColor: Int,
+        val cap: String,
+        val join: String,
+        val bandXStart: Float,
+        val bandXEnd: Float,
+        val targetColorspaceRgbaFloat: FloatArray = floatArrayOf(),
+    )
+
+    private data class M60F16CpuReferenceSourceExpectationFor437Record(
+        val key: M60F16DrawPixelKey,
+        val effectiveRenderDrawIndex: Int,
+        val selectedSource: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverShaderReturnDiagnosticSample,
+            >?,
+        val predraw: Pair<
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackEvent,
+            SkWebGpuDevice.M60F16AaStencilCoverPredrawDstReadbackSample,
+            >?,
+        val referenceRgba: IntArray,
+        val currentGpuRgba: IntArray,
+        val optInGpuRgba: IntArray,
+        val cpuReferenceBeforeDrawIndex3Rgba: IntArray,
+        val cpuReferenceEqualsPrefixBeforeDrawIndex3: Boolean,
+        val requiredSourcePremul: FloatArray?,
+        val requiredPaintPayload: FloatArray?,
+        val bestFixtureCandidate: M60F16FixtureSourceCandidateFor437?,
+        val fixtureBlueDelta: RgbaFloatDelta?,
+        val hostBoundDelta: RgbaFloatDelta?,
+        val candidateDeltas: List<Pair<M60F16FixtureSourceCandidateFor437, RgbaFloatDelta?>>,
         val missingFields: List<String>,
         val classification: String,
     )
@@ -18022,6 +18545,8 @@ class StrokeCapJoinSceneCaptureTest {
             "kanvas.webgpu.m60F16PaintStrokeInputTraceFor435.enabled"
         private const val FOR436_HOST_DRAW_PAINT_BINDING_PROPERTY =
             "kanvas.webgpu.m60F16HostDrawPaintBindingFor436.enabled"
+        private const val FOR437_CPU_REFERENCE_SOURCE_EXPECTATION_PROPERTY =
+            "kanvas.webgpu.m60F16CpuReferenceSourceExpectationFor437.enabled"
         private val M60_F16_FOR427_ALLOWED_CLASSIFICATIONS = listOf(
             "wgsl-misses-cpu-covered-subsamples",
             "wgsl-adds-extra-subsamples",
@@ -18089,6 +18614,14 @@ class StrokeCapJoinSceneCaptureTest {
             "fixture-expectation-mismatch",
             "trace-incomplete",
             "paint-binding-origin-unresolved",
+        )
+        private val M60_F16_FOR437_ALLOWED_CLASSIFICATIONS = listOf(
+            "cpu-reference-source-is-fixture-blue",
+            "cpu-reference-source-derived-from-different-draw",
+            "cpu-reference-composition-inversion-mismatch",
+            "fixture-expectation-mismatch",
+            "trace-incomplete",
+            "cpu-reference-source-expectation-unresolved",
         )
         private val M60_F16_FOR431_ALLOWED_CLASSIFICATIONS = listOf(
             "opt-in-render-fix-improves-m60-f16",
