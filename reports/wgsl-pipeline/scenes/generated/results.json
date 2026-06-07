@@ -3277,6 +3277,114 @@
         "risk.expected-unsupported",
         "risk.font-gated"
       ]
+    },
+    {
+      "id": "d52-drawminibitmaprect",
+      "inventoryId": "skia-gm-drawminibitmaprect",
+      "title": "D52 DrawMiniBitmapRect Skia reference",
+      "priority": "P1",
+      "status": "pass",
+      "source": "reports/wgsl-pipeline/2026-06-08-d52-5-drawminibitmaprect-dashboard-promotion.md",
+      "generation": {
+        "mode": "generated",
+        "producer": "pipelineGeneratedSceneExport",
+        "derivationTask": "D52DashboardPromotion",
+        "derivationReport": "reports/wgsl-pipeline/2026-06-08-d52-5-drawminibitmaprect-dashboard-promotion.md",
+        "derivationContract": "reports/wgsl-pipeline/scenes/generated/d52-drawminibitmaprect-draw-image-rect-provenance-boundary.json",
+        "commit": "7e0577180e55c43ec721e7b5ab8183633dd89c40",
+        "artifactRoot": "artifacts/d52-drawminibitmaprect",
+        "schema": "generated-scene-result.v1",
+        "linearIssue": "FOR-460",
+        "inventoryId": "skia-gm-drawminibitmaprect",
+        "sourceTask": ":gpu-raster:test",
+        "sourceTest": "org.skia.gpu.webgpu.DrawMiniBitmapRectSceneCaptureTest",
+        "sourceReport": "reports/wgsl-pipeline/2026-06-06-d52-4-drawminibitmaprect-draw-image-rect-provenance-boundary.md",
+        "derivedFromGeneratedScene": "d52-drawminibitmaprect",
+        "sourceFindingMemory": "global/kanvas/findings/d52-4-drawminibitmaprect-draw-image-rect-provenance-boundary-promotion-locale"
+      },
+      "referenceKind": "skia-upstream",
+      "reference": "artifacts/d52-drawminibitmaprect/skia.png",
+      "cpu": {
+        "status": "pass",
+        "image": "artifacts/d52-drawminibitmaprect/cpu.png",
+        "diff": "artifacts/d52-drawminibitmaprect/cpu-diff.png",
+        "similarity": 99.014,
+        "route": {
+          "selectedRoute": "cpu.raster.dm-reference-colorspace.draw-image-rect-fast-src",
+          "fallbackReason": "none",
+          "inventoryId": "skia-gm-drawminibitmaprect"
+        },
+        "stats": {
+          "pixels": 1048576,
+          "matchingPixels": 1038237,
+          "maxChannelDelta": 242,
+          "threshold": 40.0,
+          "backend": "CPU",
+          "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.DrawMiniBitmapRectSceneCaptureTest"
+        }
+      },
+      "gpu": {
+        "status": "pass",
+        "image": "artifacts/d52-drawminibitmaprect/gpu.png",
+        "diff": "artifacts/d52-drawminibitmaprect/gpu-diff.png",
+        "similarity": 99.9864,
+        "route": {
+          "selectedRoute": "webgpu.image.drawminibitmaprect.fast-src-rotated-grid",
+          "pipelineKey": "not-promoted-by-D52-2",
+          "fallbackReason": "none",
+          "inventoryId": "skia-gm-drawminibitmaprect",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterEvidenceReport": "reports/wgsl-pipeline/2026-06-06-d52-4-drawminibitmaprect-draw-image-rect-provenance-boundary.md"
+        },
+        "stats": {
+          "pixels": 1048576,
+          "matchingPixels": 1048433,
+          "maxChannelDelta": 242,
+          "threshold": 99.95,
+          "backend": "WebGPU",
+          "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.DrawMiniBitmapRectSceneCaptureTest",
+          "adapter": "Apple M2 Max",
+          "adapterBackend": "WebGPU/Metal",
+          "adapterCapture": "d52-drawminibitmaprect"
+        }
+      },
+      "diffs": {
+        "cpu": "artifacts/d52-drawminibitmaprect/cpu-diff.png",
+        "gpu": "artifacts/d52-drawminibitmaprect/gpu-diff.png"
+      },
+      "routeDiagnostics": {
+        "cpu": "artifacts/d52-drawminibitmaprect/route-cpu.json",
+        "gpu": "artifacts/d52-drawminibitmaprect/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 1048576,
+        "matchingPixels": 1048433,
+        "maxChannelDelta": 242,
+        "threshold": 99.95
+      },
+      "evidence": [
+        "reports/wgsl-pipeline/2026-06-08-d52-5-drawminibitmaprect-dashboard-promotion.md",
+        "reports/wgsl-pipeline/2026-06-06-d52-4-drawminibitmaprect-draw-image-rect-provenance-boundary.md",
+        "reports/wgsl-pipeline/scenes/generated/d52-drawminibitmaprect-draw-image-rect-provenance-boundary.json",
+        "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/d52-drawminibitmaprect/stats.json",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/DrawMiniBitmapRectSceneCaptureTest.kt"
+      ],
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.image.bitmap",
+        "feature.sampling.nearest",
+        "feature.matrix-transform",
+        "route.cpu.raster",
+        "route.gpu.webgpu",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "maturity.adapter-backed",
+        "risk.none"
+      ]
     }
   ]
 }
