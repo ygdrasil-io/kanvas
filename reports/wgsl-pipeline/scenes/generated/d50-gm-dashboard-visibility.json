@@ -5,33 +5,11 @@
   "artifactSourceRoot": "reports/wgsl-pipeline/scenes/artifacts",
   "sourceReport": "reports/wgsl-pipeline/2026-06-06-d50-gm-dashboard-lot1.md",
   "selectedReport": "reports/wgsl-pipeline/2026-06-06-for-462-d50-lot1-dashboard-integration-gate.md",
-  "selectedCandidateCount": 12,
+  "selectedCandidateCount": 11,
   "outputEvidenceDir": "wgsl-pipeline-d50-lot1-generated",
   "outputDescription": "D50 policy-only dashboard rows materialized for unsupported GM visibility.",
   "outputManifest": "data/d50-gm-dashboard-generated-scenes.json",
   "scenes": [
-    {
-      "id": "skia-gm-drawminibitmaprect",
-      "inventoryId": "skia-gm-drawminibitmaprect",
-      "title": "D50 DrawMiniBitmapRect GM row-specific refusal",
-      "family": "Bitmap/image sampling",
-      "status": "expected-unsupported",
-      "linearIssue": "FOR-465",
-      "baseArtifactScene": "skia-gm-drawminibitmaprect",
-      "allowArtifactOnlyBase": true,
-      "policyOnlyArtifacts": true,
-      "sourceTask": "pipelineD50Lot1DashboardVisibilityPack",
-      "sourceTest": "policy-only-dashboard-visibility",
-      "sourceReport": "reports/wgsl-pipeline/2026-06-06-for-465-drawminibitmaprect-evidence.md",
-      "referenceKind": "skia-upstream",
-      "cpuRoute": "cpu.image-rect.drawminibitmaprect.expected-unsupported",
-      "gpuRoute": "webgpu.image-rect.drawminibitmaprect.expected-unsupported",
-      "pipelineKey": "imageRect sampling=miniBitmapRect source=DrawMiniBitmapRectGM milestone=D50 visibility=policy-only",
-      "fallbackReason": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
-      "nonClaim": "Dashboard visibility only. This row does not claim DrawMiniBitmapRectGM support until row-specific Skia reference, CPU, GPU, diff/stat, and route diagnostics exist with fallbackReason=none.",
-      "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.image.bitmap", "feature.sampling.nearest", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
-    },
     {
       "id": "skia-gm-image",
       "inventoryId": "skia-gm-image",
@@ -52,7 +30,17 @@
       "fallbackReason": "image.imagegm.row-specific-artifacts-required",
       "nonClaim": "Dashboard visibility only. This row does not claim ImageGM, codec, YUV, animation, EXIF, mipmap, tile-mode, or color-managed image support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.image.bitmap", "feature.image.decode", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.image.bitmap",
+        "feature.image.decode",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     },
     {
       "id": "skia-gm-imagesource",
@@ -74,7 +62,17 @@
       "fallbackReason": "image.imagesource.row-specific-artifacts-required",
       "nonClaim": "Dashboard visibility only. This row does not claim ImageSourceGM, dynamic source image, codec, YUV, animation, EXIF, mipmap, tile-mode, or color-managed image support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.image.bitmap", "feature.image.source", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.image.bitmap",
+        "feature.image.source",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     },
     {
       "id": "skia-gm-offsetimagefilter",
@@ -96,7 +94,16 @@
       "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
       "nonClaim": "Dashboard visibility only. This row does not claim broad image-filter DAG, crop image-filter, picture prepass, arbitrary layer prepass, or global color pipeline support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.image-filter", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.image-filter",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     },
     {
       "id": "skia-gm-pathfill",
@@ -118,7 +125,17 @@
       "fallbackReason": "path.pathfill.row-specific-artifacts-required",
       "nonClaim": "Dashboard visibility only. This row does not claim broad Path AA, convex path, stroke, cap/join, dash, or edge-budget support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.path-aa", "feature.coverage.fill", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.path-aa",
+        "feature.coverage.fill",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     },
     {
       "id": "skia-gm-rectpolystroke",
@@ -140,7 +157,17 @@
       "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
       "nonClaim": "Dashboard visibility only. This row does not claim RectPolyStrokeGM, broad stroke, cap/join, dash, or Path AA support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.path-aa", "feature.stroke", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.path-aa",
+        "feature.stroke",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     },
     {
       "id": "skia-gm-imagemakewithfilter",
@@ -162,7 +189,17 @@
       "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
       "nonClaim": "Dashboard visibility only. This row does not claim ImageMakeWithFilterGM, arbitrary image-filter DAG, crop prepass, picture prepass, or layer prepass support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.image-filter", "feature.image.bitmap", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.image-filter",
+        "feature.image.bitmap",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     },
     {
       "id": "skia-gm-runtimeintrinsics",
@@ -189,7 +226,16 @@
       },
       "nonClaim": "Dashboard visibility only. This row does not claim arbitrary SkSL, dynamic runtime-effect compilation, or broad runtime intrinsic support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.runtime-effect", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.runtime-effect",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     },
     {
       "id": "skia-gm-textblobtransforms",
@@ -216,7 +262,17 @@
       },
       "nonClaim": "Dashboard visibility only. This row does not claim shaped text, complex text transforms, glyph atlas, color glyph, or broad font support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.font", "feature.text", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.font",
+        "feature.text",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     },
     {
       "id": "skia-gm-runtimeimagefilter",
@@ -252,7 +308,17 @@
       },
       "nonClaim": "Dashboard visibility only. This row does not claim RuntimeImageFilterGM, arbitrary SkSL, dynamic runtime-effect compilation, or runtime image-filter descriptor support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.runtime-effect", "feature.image-filter", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.runtime-effect",
+        "feature.image-filter",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     },
     {
       "id": "skia-gm-shadertext3",
@@ -288,7 +354,18 @@
       },
       "nonClaim": "Dashboard visibility only. This row does not claim ShaderText3GM, shaped text, glyph atlas, text shader behavior, or broad font support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.font", "feature.text", "feature.runtime-effect", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.font",
+        "feature.text",
+        "feature.runtime-effect",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     },
     {
       "id": "skia-gm-gradients2ptconical",
@@ -324,7 +401,21 @@
       },
       "nonClaim": "Dashboard visibility only. This row does not claim Gradients2ptConicalGM, two-point conical gradients, or broader gradient-envelope support.",
       "policyArtifactDescription": "Policy-only expected-unsupported row for D50 Dashboard visibility.",
-      "tags": ["source.generated", "source.inventory", "feature.gradient", "route.cpu.policy", "route.gpu.expected-unsupported", "reference.skia-upstream", "maturity.generated-evidence", "risk.expected-unsupported"]
+      "tags": [
+        "source.generated",
+        "source.inventory",
+        "feature.gradient",
+        "route.cpu.policy",
+        "route.gpu.expected-unsupported",
+        "reference.skia-upstream",
+        "maturity.generated-evidence",
+        "risk.expected-unsupported"
+      ]
     }
-  ]
+  ],
+  "d52Interaction": {
+    "excludedRow": "skia-gm-drawminibitmaprect",
+    "activePassRow": "d52-drawminibitmaprect",
+    "reason": "D52-5 promotes d52-drawminibitmaprect as a pass row; this policy-only D50 visibility contract excludes the old skia-gm-drawminibitmaprect expected-unsupported row to avoid contradictory active dashboard status."
+  }
 }
