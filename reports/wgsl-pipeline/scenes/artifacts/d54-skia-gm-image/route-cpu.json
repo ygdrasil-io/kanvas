@@ -1,0 +1,18 @@
+{
+  "sceneId": "d54-skia-gm-image",
+  "inventoryId": "skia-gm-image",
+  "backend": "CPU",
+  "drawKind": "ImageGM",
+  "status": "pass",
+  "selectedRoute": "cpu.raster.dm-reference-colorspace.imagegm-surface-snapshot",
+  "referenceKind": "skia-upstream-png",
+  "referencePath": "skia-integration-tests/src/test/resources/original-888/image-surface.png",
+  "fallbackReason": "none",
+  "similarity": 98.4826,
+  "threshold": 98.0,
+  "tolerance": 8,
+  "matchingPixels": 1134520,
+  "totalPixels": 1152000,
+  "maxChannelDelta": 255,
+  "test": "org.skia.gpu.webgpu.ImageGmSceneCaptureTest#imagegm captures row specific reference cpu and webgpu evidence"
+}
