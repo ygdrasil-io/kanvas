@@ -21,6 +21,7 @@ EXPECTED_COUNTERS = {
     "supportClaims": 22,
     "policyOnlyRows": 20,
     "rowSpecificRefusalRows": 4,
+    "groupedPolicyRefusalRows": 9,
     "expectedUnsupportedWithFallback": 25,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
@@ -50,6 +51,17 @@ EXPECTED_ROW_SPECIFIC_REFUSALS = {
         "json": "reports/wgsl-pipeline/scenes/generated/for469-skia-gm-pathfill-evidence.json",
         "report": "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md",
     },
+}
+EXPECTED_GROUPED_POLICY_REFUSALS = {
+    "skia-gm-dashcubics": "coverage.dash-cubic.row-specific-artifacts-required",
+    "skia-gm-dashing": "coverage.dashing.row-specific-artifacts-required",
+    "skia-gm-hairlines": "coverage.hairline.row-specific-artifacts-required",
+    "skia-gm-hairmodes": "coverage.hairmode.row-specific-artifacts-required",
+    "skia-gm-scaledstrokes": "coverage.scaled-stroke.row-specific-artifacts-required",
+    "skia-gm-strokedlines": "coverage.stroked-lines.row-specific-artifacts-required",
+    "skia-gm-strokerect": "coverage.stroke-rect.row-specific-artifacts-required",
+    "skia-gm-strokerects": "coverage.stroke-rects.row-specific-artifacts-required",
+    "skia-gm-thinstrokedrects": "coverage.thin-stroked-rects.row-specific-artifacts-required",
 }
 EXPECTED_SOURCE_COUNTS = {
     "d50-visibility": 11,
@@ -108,6 +120,7 @@ def validate_registry() -> None:
     linked_m66_rows = 0
     linked_m86_rows = 0
     row_specific_refusal_rows = 0
+    grouped_policy_refusal_rows = 0
 
     for index, row in enumerate(rows):
         require(isinstance(row, dict), f"rows[{index}] must be an object")
@@ -123,6 +136,7 @@ def validate_registry() -> None:
         policy_only = row.get("policyOnly")
         evidence_links = row.get("evidenceLinks")
         row_specific_refusals = row.get("rowSpecificRefusals")
+        grouped_policy_refusals = row.get("groupedPolicyRefusals")
 
         require(isinstance(source, str) and source, f"{row_id}: missing source")
         require(isinstance(status, str) and status, f"{row_id}: missing status")
@@ -132,6 +146,7 @@ def validate_registry() -> None:
         require(isinstance(policy_only, bool), f"{row_id}: policyOnly must be boolean")
         require(isinstance(evidence_links, dict), f"{row_id}: evidenceLinks must be object")
         require(isinstance(row_specific_refusals, list), f"{row_id}: rowSpecificRefusals must be list")
+        require(isinstance(grouped_policy_refusals, list), f"{row_id}: groupedPolicyRefusals must be list")
         require(row.get("referenceKind") in {"skia-upstream", "skia-derived", "cpu-oracle", "test-oracle", "none"}, f"{row_id}: invalid referenceKind")
         require(row.get("nextTicketType") in {"implementation", "dependency", "fidelity-burndown", "policy-visibility", "performance-gate"}, f"{row_id}: invalid nextTicketType")
         require(row.get("pmImpact") in {"high", "medium", "low"}, f"{row_id}: invalid pmImpact")
@@ -145,6 +160,7 @@ def validate_registry() -> None:
         linked_m66_rows += int("m66" in evidence_links)
         linked_m86_rows += int("m86" in evidence_links)
         row_specific_refusal_rows += int(bool(row_specific_refusals))
+        grouped_policy_refusal_rows += int(bool(grouped_policy_refusals))
 
         if status == "pass":
             require(source == "generated-dashboard", f"{row_id}: only generated dashboard rows may be pass in M89")
@@ -186,6 +202,35 @@ def validate_registry() -> None:
             require(refusal.get("diffStatsStatus") == "not-computed", f"{row_id}: diff/stat must remain not-computed")
             require(refusal.get("supportScoreIncreased") is False, f"{row_id}: row-specific refusal must not increase support score")
 
+        expected_grouped_fallback = EXPECTED_GROUPED_POLICY_REFUSALS.get(row_id)
+        if expected_grouped_fallback is None:
+            require(not grouped_policy_refusals, f"{row_id}: unexpected grouped policy refusal link")
+        else:
+            require(len(grouped_policy_refusals) == 1, f"{row_id}: expected exactly one grouped policy refusal link")
+            grouped = grouped_policy_refusals[0]
+            require(isinstance(grouped, dict), f"{row_id}: grouped policy refusal link must be object")
+            require(source == "d53-visibility", f"{row_id}: grouped policy refusal must stay D53 visibility")
+            require(policy_only, f"{row_id}: grouped policy refusal remains policy-only")
+            require(status == "expected-unsupported", f"{row_id}: grouped policy refusal must remain expected-unsupported")
+            require(not support_claim, f"{row_id}: grouped policy refusal must not claim support")
+            require(grouped.get("linear") == "FOR-461", f"{row_id}: grouped policy refusal Linear mismatch")
+            require(
+                grouped.get("classification") == "grouped-policy-only-expected-unsupported-no-support-claim",
+                f"{row_id}: grouped policy refusal classification mismatch",
+            )
+            require(
+                grouped.get("json") == "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+                f"{row_id}: grouped policy refusal JSON path mismatch",
+            )
+            require(grouped.get("report") == "reports/upstream-rebaseline/2026-05-25-post-1047.md", f"{row_id}: grouped policy refusal report mismatch")
+            require(grouped.get("fallbackReason") == expected_grouped_fallback, f"{row_id}: grouped policy refusal fallback mismatch")
+            require(
+                grouped.get("sourceTask") == "pipelineDashHairlineStrokeDashboardVisibilityPack",
+                f"{row_id}: grouped policy refusal source task mismatch",
+            )
+            require("Policy-only expected-unsupported" in grouped.get("policyArtifactDescription", ""), f"{row_id}: grouped policy refusal policy artifact description mismatch")
+            require(grouped.get("supportScoreIncreased") is False, f"{row_id}: grouped policy refusal must not increase support score")
+
         if str(fallback).startswith("font.") or row_id in {"skia-gm-shadertext3", "skia-gm-textblobtransforms"}:
             require(family == "text-glyph", f"{row_id}: font/text rows must remain text-glyph")
 
@@ -219,6 +264,7 @@ def validate_registry() -> None:
     require(support_claims == EXPECTED_COUNTERS["supportClaims"], "derived support claim count mismatch")
     require(policy_only_rows == EXPECTED_COUNTERS["policyOnlyRows"], "derived policy-only count mismatch")
     require(row_specific_refusal_rows == EXPECTED_COUNTERS["rowSpecificRefusalRows"], "derived row-specific refusal count mismatch")
+    require(grouped_policy_refusal_rows == EXPECTED_COUNTERS["groupedPolicyRefusalRows"], "derived grouped policy refusal count mismatch")
     require(
         expected_unsupported_with_fallback == EXPECTED_COUNTERS["expectedUnsupportedWithFallback"],
         "derived expected-unsupported fallback count mismatch",
@@ -266,6 +312,7 @@ def validate_report() -> None:
         "Support claims: `22`",
         "Policy-only rows: `20`",
         "Row-specific refusal links: `4`",
+        "Grouped policy refusal links: `9`",
         "`expected-unsupported`: `25`",
         "`pass`: `22`",
         "Linked M66 rows: `18`",

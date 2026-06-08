@@ -11,6 +11,7 @@
       "text-glyph": 7,
       "transform-layer": 1
     },
+    "groupedPolicyRefusalRows": 9,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
     "policyOnlyRows": 20,
@@ -72,6 +73,7 @@
       "evidenceLinks": {},
       "fallbackReason": "image.imagegm.row-specific-artifacts-required",
       "family": "bitmap-image",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim ImageGM, codec, YUV, animation, EXIF, mipmap, tile-mode, or color-managed image support.",
@@ -107,6 +109,7 @@
       "evidenceLinks": {},
       "fallbackReason": "image.imagesource.row-specific-artifacts-required",
       "family": "bitmap-image",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim ImageSourceGM, dynamic source image, codec, YUV, animation, EXIF, mipmap, tile-mode, or color-managed image support.",
@@ -142,6 +145,7 @@
       "evidenceLinks": {},
       "fallbackReason": "gradient.2ptconical.row-specific-artifacts-required",
       "family": "gradient",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim Gradients2ptConicalGM, two-point conical gradients, or broader gradient-envelope support.",
@@ -163,6 +167,7 @@
       "evidenceLinks": {},
       "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
       "family": "image-filter",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim ImageMakeWithFilterGM, arbitrary image-filter DAG, crop prepass, picture prepass, or layer prepass support.",
@@ -184,6 +189,7 @@
       "evidenceLinks": {},
       "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
       "family": "image-filter",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad image-filter DAG, crop image-filter, picture prepass, arbitrary layer prepass, or global color pipeline support.",
@@ -219,6 +225,7 @@
       "evidenceLinks": {},
       "fallbackReason": "path.pathfill.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad Path AA, convex path, stroke, cap/join, dash, or edge-budget support.",
@@ -254,6 +261,7 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim RectPolyStrokeGM, broad stroke, cap/join, dash, or Path AA support.",
@@ -275,6 +283,7 @@
       "evidenceLinks": {},
       "fallbackReason": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
       "family": "runtime-effect",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim RuntimeImageFilterGM, arbitrary SkSL, dynamic runtime-effect compilation, or runtime image-filter descriptor support.",
@@ -296,6 +305,7 @@
       "evidenceLinks": {},
       "fallbackReason": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
       "family": "runtime-effect",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim arbitrary SkSL, dynamic runtime-effect compilation, or broad runtime intrinsic support.",
@@ -317,6 +327,7 @@
       "evidenceLinks": {},
       "fallbackReason": "font.shadertext3.row-specific-artifacts-required",
       "family": "text-glyph",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim ShaderText3GM, shaped text, glyph atlas, text shader behavior, or broad font support.",
@@ -338,6 +349,7 @@
       "evidenceLinks": {},
       "fallbackReason": "font.textblobtransforms.row-specific-artifacts-required",
       "family": "text-glyph",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim shaped text, complex text transforms, glyph atlas, color glyph, or broad font support.",
@@ -359,6 +371,18 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [
+        {
+          "classification": "grouped-policy-only-expected-unsupported-no-support-claim",
+          "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
+          "json": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+          "linear": "FOR-461",
+          "policyArtifactDescription": "Policy-only expected-unsupported row for grouped dash/hairline/stroke Dashboard visibility.",
+          "report": "reports/upstream-rebaseline/2026-05-25-post-1047.md",
+          "sourceTask": "pipelineDashHairlineStrokeDashboardVisibilityPack",
+          "supportScoreIncreased": false
+        }
+      ],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim dashed cubic Path AA, dash effect flattening, broad stroke, cap/join, or edge-budget support.",
@@ -380,6 +404,18 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [
+        {
+          "classification": "grouped-policy-only-expected-unsupported-no-support-claim",
+          "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
+          "json": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+          "linear": "FOR-461",
+          "policyArtifactDescription": "Policy-only expected-unsupported row for grouped dash/hairline/stroke Dashboard visibility.",
+          "report": "reports/upstream-rebaseline/2026-05-25-post-1047.md",
+          "sourceTask": "pipelineDashHairlineStrokeDashboardVisibilityPack",
+          "supportScoreIncreased": false
+        }
+      ],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad dashing, dash phase parity, dash path effects, cap/join, or edge-budget support.",
@@ -401,6 +437,18 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [
+        {
+          "classification": "grouped-policy-only-expected-unsupported-no-support-claim",
+          "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+          "json": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+          "linear": "FOR-461",
+          "policyArtifactDescription": "Policy-only expected-unsupported row for grouped dash/hairline/stroke Dashboard visibility.",
+          "report": "reports/upstream-rebaseline/2026-05-25-post-1047.md",
+          "sourceTask": "pipelineDashHairlineStrokeDashboardVisibilityPack",
+          "supportScoreIncreased": false
+        }
+      ],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad hairline Path AA, subpixel hairline coverage, transform-sensitive hairline width, or edge-budget support.",
@@ -422,6 +470,18 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [
+        {
+          "classification": "grouped-policy-only-expected-unsupported-no-support-claim",
+          "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
+          "json": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+          "linear": "FOR-461",
+          "policyArtifactDescription": "Policy-only expected-unsupported row for grouped dash/hairline/stroke Dashboard visibility.",
+          "report": "reports/upstream-rebaseline/2026-05-25-post-1047.md",
+          "sourceTask": "pipelineDashHairlineStrokeDashboardVisibilityPack",
+          "supportScoreIncreased": false
+        }
+      ],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim hairline blend-mode parity, hairline coverage across paint modes, cap/join breadth, or broad Path AA support.",
@@ -443,6 +503,18 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [
+        {
+          "classification": "grouped-policy-only-expected-unsupported-no-support-claim",
+          "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
+          "json": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+          "linear": "FOR-461",
+          "policyArtifactDescription": "Policy-only expected-unsupported row for grouped dash/hairline/stroke Dashboard visibility.",
+          "report": "reports/upstream-rebaseline/2026-05-25-post-1047.md",
+          "sourceTask": "pipelineDashHairlineStrokeDashboardVisibilityPack",
+          "supportScoreIncreased": false
+        }
+      ],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim transform-scaled stroke parity, stroke normalization, cap/join breadth, dash support, or broad Path AA support.",
@@ -464,6 +536,18 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [
+        {
+          "classification": "grouped-policy-only-expected-unsupported-no-support-claim",
+          "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
+          "json": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+          "linear": "FOR-461",
+          "policyArtifactDescription": "Policy-only expected-unsupported row for grouped dash/hairline/stroke Dashboard visibility.",
+          "report": "reports/upstream-rebaseline/2026-05-25-post-1047.md",
+          "sourceTask": "pipelineDashHairlineStrokeDashboardVisibilityPack",
+          "supportScoreIncreased": false
+        }
+      ],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad stroked-line coverage, all cap styles, line joins, hairline parity, or edge-budget support.",
@@ -485,6 +569,18 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [
+        {
+          "classification": "grouped-policy-only-expected-unsupported-no-support-claim",
+          "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
+          "json": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+          "linear": "FOR-461",
+          "policyArtifactDescription": "Policy-only expected-unsupported row for grouped dash/hairline/stroke Dashboard visibility.",
+          "report": "reports/upstream-rebaseline/2026-05-25-post-1047.md",
+          "sourceTask": "pipelineDashHairlineStrokeDashboardVisibilityPack",
+          "supportScoreIncreased": false
+        }
+      ],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim stroke-rect parity, miter/cap/join breadth, anisotropic stroke behavior, or broad Path AA support.",
@@ -506,6 +602,18 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [
+        {
+          "classification": "grouped-policy-only-expected-unsupported-no-support-claim",
+          "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
+          "json": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+          "linear": "FOR-461",
+          "policyArtifactDescription": "Policy-only expected-unsupported row for grouped dash/hairline/stroke Dashboard visibility.",
+          "report": "reports/upstream-rebaseline/2026-05-25-post-1047.md",
+          "sourceTask": "pipelineDashHairlineStrokeDashboardVisibilityPack",
+          "supportScoreIncreased": false
+        }
+      ],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad stroked-rect families, mixed stroke widths, joins, hairlines, or edge-budget support.",
@@ -527,6 +635,18 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
       "family": "path-aa",
+      "groupedPolicyRefusals": [
+        {
+          "classification": "grouped-policy-only-expected-unsupported-no-support-claim",
+          "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
+          "json": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+          "linear": "FOR-461",
+          "policyArtifactDescription": "Policy-only expected-unsupported row for grouped dash/hairline/stroke Dashboard visibility.",
+          "report": "reports/upstream-rebaseline/2026-05-25-post-1047.md",
+          "sourceTask": "pipelineDashHairlineStrokeDashboardVisibilityPack",
+          "supportScoreIncreased": false
+        }
+      ],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim thin stroked-rect parity, subpixel stroke coverage, hairline equivalence, joins, or broad Path AA support.",
@@ -575,6 +695,7 @@
       },
       "fallbackReason": "none",
       "family": "bitmap-image",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -606,6 +727,7 @@
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "bitmap-image",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -637,6 +759,7 @@
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "bitmap-image",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -689,6 +812,7 @@
       },
       "fallbackReason": "none",
       "family": "bitmap-image",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -720,6 +844,7 @@
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "bitmap-image",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 99.9864,
         "maxChannelDelta": 242,
@@ -751,6 +876,7 @@
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "blend-color",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -803,6 +929,7 @@
       },
       "fallbackReason": "none",
       "family": "blend-color",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -855,6 +982,7 @@
       },
       "fallbackReason": "none",
       "family": "gradient",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -886,6 +1014,7 @@
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "gradient",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -938,6 +1067,7 @@
       },
       "fallbackReason": "none",
       "family": "gradient",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -990,6 +1120,7 @@
       },
       "fallbackReason": "none",
       "family": "image-filter",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 98.44,
         "maxChannelDelta": 110,
@@ -1042,6 +1173,7 @@
       },
       "fallbackReason": "none",
       "family": "image-filter",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1092,6 +1224,7 @@
       },
       "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
       "family": "image-filter",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "implementation",
       "nonClaim": "",
@@ -1140,6 +1273,7 @@
       },
       "fallbackReason": "none",
       "family": "path-aa",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1192,6 +1326,7 @@
       },
       "fallbackReason": "none",
       "family": "path-aa",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 84.44,
         "maxChannelDelta": 255,
@@ -1223,6 +1358,7 @@
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "path-aa",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1254,6 +1390,7 @@
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "path-aa",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1283,6 +1420,7 @@
       "evidenceLinks": {},
       "fallbackReason": "coverage.edge-count-exceeded",
       "family": "path-aa",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "implementation",
       "nonClaim": "",
@@ -1329,6 +1467,7 @@
       },
       "fallbackReason": "coverage.edge-count-exceeded",
       "family": "path-aa",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "implementation",
       "nonClaim": "",
@@ -1377,6 +1516,7 @@
       },
       "fallbackReason": "none",
       "family": "path-aa",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 91.81,
         "maxChannelDelta": 169,
@@ -1429,6 +1569,7 @@
       },
       "fallbackReason": "none",
       "family": "runtime-effect",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1479,6 +1620,7 @@
       },
       "fallbackReason": "font.complex-shaping-requires-explicit-shaper",
       "family": "text-glyph",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "dependency",
       "nonClaim": "",
@@ -1504,6 +1646,7 @@
       "evidenceLinks": {},
       "fallbackReason": "font.color-glyph-emoji-unsupported",
       "family": "text-glyph",
+      "groupedPolicyRefusals": [],
       "metrics": {},
       "nextTicketType": "dependency",
       "nonClaim": "",
@@ -1552,6 +1695,7 @@
       },
       "fallbackReason": "none",
       "family": "text-glyph",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1604,6 +1748,7 @@
       },
       "fallbackReason": "none",
       "family": "text-glyph",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1656,6 +1801,7 @@
       },
       "fallbackReason": "none",
       "family": "text-glyph",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1708,6 +1854,7 @@
       },
       "fallbackReason": "none",
       "family": "transform-layer",
+      "groupedPolicyRefusals": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,

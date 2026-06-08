@@ -48,6 +48,17 @@ ROW_SPECIFIC_REFUSALS = {
         "report": ROOT / "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md",
     },
 }
+D53_GROUPED_POLICY_REFUSALS = {
+    "skia-gm-dashcubics",
+    "skia-gm-dashing",
+    "skia-gm-hairlines",
+    "skia-gm-hairmodes",
+    "skia-gm-scaledstrokes",
+    "skia-gm-strokedlines",
+    "skia-gm-strokerect",
+    "skia-gm-strokerects",
+    "skia-gm-thinstrokedrects",
+}
 
 VALID_STATUSES = {
     "pass",
@@ -311,6 +322,31 @@ def row_specific_refusals(scene_id: str, fallback: str, indexes: dict[str, Any])
     ]
 
 
+def grouped_policy_refusals(source: str, scene: dict[str, Any], fallback: str) -> list[dict[str, Any]]:
+    scene_id = str(scene.get("id") or "")
+    if source != "d53-visibility" or scene_id not in D53_GROUPED_POLICY_REFUSALS:
+        return []
+    if scene.get("status") != "expected-unsupported":
+        raise AssertionError(f"{scene_id}: grouped D53 refusal must remain expected-unsupported")
+    if scene.get("policyOnlyArtifacts") is not True:
+        raise AssertionError(f"{scene_id}: grouped D53 refusal must remain policy-only")
+    if fallback == "none":
+        raise AssertionError(f"{scene_id}: grouped D53 refusal must keep stable fallback")
+
+    return [
+        {
+            "linear": scene.get("linearIssue", "FOR-461"),
+            "classification": "grouped-policy-only-expected-unsupported-no-support-claim",
+            "json": rel(GENERATED_DIR / "dash-hairline-stroke-gm-dashboard-visibility.json"),
+            "report": str(scene.get("sourceReport") or "reports/upstream-rebaseline/2026-05-25-post-1047.md"),
+            "fallbackReason": fallback,
+            "sourceTask": scene.get("sourceTask", "pipelineDashHairlineStrokeDashboardVisibilityPack"),
+            "policyArtifactDescription": scene.get("policyArtifactDescription", ""),
+            "supportScoreIncreased": False,
+        }
+    ]
+
+
 def owner_for(source: str, scene: dict[str, Any]) -> str:
     if source == "d50-visibility":
         return "M89"
@@ -381,6 +417,7 @@ def normalize_scene(source: str, scene: dict[str, Any], indexes: dict[str, Any])
         "metrics": metrics(scene),
         "evidenceLinks": evidence_links(scene_id, indexes),
         "rowSpecificRefusals": row_specific_refusals(scene_id, fallback, indexes),
+        "groupedPolicyRefusals": grouped_policy_refusals(source, scene, fallback),
         "owningMilestone": owner_for(source, scene),
         "nextTicketType": next_ticket_type(scene, status, family),
         "pmImpact": pm_impact(status, family),
@@ -410,6 +447,7 @@ def build_registry() -> dict[str, Any]:
     linked_m66 = sum(1 for row in rows if "m66" in row["evidenceLinks"])
     linked_m86 = sum(1 for row in rows if "m86" in row["evidenceLinks"])
     row_specific_refusal_rows = sum(1 for row in rows if row["rowSpecificRefusals"])
+    grouped_policy_refusal_rows = sum(1 for row in rows if row["groupedPolicyRefusals"])
     m88 = indexes["m88"]
     m88_counters = m88.get("dashboardCounters", {}) if isinstance(m88.get("dashboardCounters"), dict) else {}
 
@@ -460,6 +498,7 @@ def build_registry() -> dict[str, Any]:
             "source": dict(sorted(source_counts.items())),
             "policyOnlyRows": sum(1 for row in rows if row["policyOnly"]),
             "rowSpecificRefusalRows": row_specific_refusal_rows,
+            "groupedPolicyRefusalRows": grouped_policy_refusal_rows,
             "expectedUnsupportedWithFallback": sum(
                 1 for row in rows if row["status"] == "expected-unsupported" and row["fallbackReason"] != "none"
             ),
@@ -485,6 +524,7 @@ def write_markdown(registry: dict[str, Any]) -> None:
         f"- Support claims: `{counters['supportClaims']}`",
         f"- Policy-only rows: `{counters['policyOnlyRows']}`",
         f"- Row-specific refusal links: `{counters['rowSpecificRefusalRows']}`",
+        f"- Grouped policy refusal links: `{counters['groupedPolicyRefusalRows']}`",
         f"- Expected unsupported with fallback: `{counters['expectedUnsupportedWithFallback']}`",
         f"- Linked M66 rows: `{counters['linkedM66Rows']}`",
         f"- Linked M86 rows: `{counters['linkedM86Rows']}`",
