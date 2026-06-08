@@ -169,6 +169,9 @@ tasks.withType<Test> {
     System.getProperty("kanvas.sceneEvidence.write")?.let {
         systemProperty("kanvas.sceneEvidence.write", it)
     }
+    System.getProperty("kanvas.webgpu.strokeCapJoin.experimentalRender")?.let {
+        systemProperty("kanvas.webgpu.strokeCapJoin.experimentalRender", it)
+    }
     System.getProperty("kanvas.for333.runtimeTrace.write")?.let {
         systemProperty("kanvas.for333.runtimeTrace.write", it)
     }

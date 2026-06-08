@@ -30,6 +30,7 @@
   },
   "artifactContract": {
     "writeCommand": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
+    "experimentalVisualCaptureCommand": "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.strokeCapJoin.experimentalRender=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
     "writeMode": "opt-in",
     "checkedInRenderedArtifactsRequiredByThisItem": true,
     "alwaysExpectedWhenWriteEnabled": [
@@ -92,6 +93,7 @@
     "rtk ./gradlew --no-daemon pipelineM90PathAaHairlinesArtifactHarness",
     "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
     "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
+    "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.strokeCapJoin.experimentalRender=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
     "rtk git diff --check"
   ],
   "artifactValidationCommand": "rtk python3 scripts/validate_m90_hairlines_artifact_harness.py --require-artifacts"

@@ -4,7 +4,7 @@
   "milestone": "M90",
   "ticket": "M90-PAA-3A",
   "classification": "path-aa-hairlines-evidence-intake-no-new-rendering-support",
-  "status": "partial-row-specific-evidence-present-non-promotional",
+  "status": "row-specific-evidence-present-non-promotional",
   "inputs": {
     "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
     "candidateReadiness": "reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json",
@@ -39,9 +39,9 @@
   },
   "counters": {
     "requiredEvidenceItems": 10,
-    "presentEvidenceItems": 8,
-    "missingEvidenceItems": 2,
-    "validatedNonPromotionalEvidenceItems": 8,
+    "presentEvidenceItems": 10,
+    "missingEvidenceItems": 0,
+    "validatedNonPromotionalEvidenceItems": 10,
     "historicalSignals": 7,
     "promotionalHistoricalSignals": 0,
     "newSupportClaims": 0,
@@ -83,10 +83,10 @@
     {
       "kind": "CPU/GPU rendered artifacts",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu.png",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "validatedNonPromotional": false,
-      "status": "missing"
+      "validatedNonPromotional": true,
+      "status": "present-non-promotional"
     },
     {
       "kind": "CPU/GPU diff/stat artifacts",
@@ -99,10 +99,10 @@
     {
       "kind": "CPU/GPU diff/stat artifacts",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-diff.png",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "validatedNonPromotional": false,
-      "status": "missing"
+      "validatedNonPromotional": true,
+      "status": "present-non-promotional"
     },
     {
       "kind": "CPU/GPU diff/stat artifacts",

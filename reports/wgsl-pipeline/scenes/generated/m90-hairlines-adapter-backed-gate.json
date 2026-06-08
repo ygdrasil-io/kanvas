@@ -13,23 +13,27 @@
   "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
   "dependencyGate": {
     "kind": "adapter-backed-webgpu-render",
-    "requiredCommand": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
+    "requiredCommand": "rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.strokeCapJoin.experimentalRender=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
     "requiredRouteStatus": "pass",
     "requiredFallbackReason": "none",
-    "missingArtifacts": [
-      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu.png",
-      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-diff.png"
-    ],
+    "missingArtifacts": [],
     "presentNonPromotionalArtifacts": [
       "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/skia.png",
       "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu.png",
       "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-diff.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-diff.png",
       "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-cpu.json",
       "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-gpu.json",
       "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/stats.json",
       "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-performance.json",
       "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-performance.json"
-    ]
+    ],
+    "observedRouteStatus": "expected-unsupported",
+    "observedFallbackReason": "coverage.hairline.row-specific-artifacts-required",
+    "observedGpuSimilarity": 98.9581,
+    "observedGpuThreshold": 99.95,
+    "remainingBlocker": "coverage.hairline-visual-parity-below-threshold"
   },
   "promotionGate": {
     "promotionAllowed": false,

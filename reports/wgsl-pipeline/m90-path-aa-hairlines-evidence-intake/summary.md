@@ -1,6 +1,6 @@
 # M90 Path AA Hairlines Evidence Intake
 
-Status: partial-row-specific-evidence-present-non-promotional
+Status: row-specific-evidence-present-non-promotional
 
 This report materializes the `M90-PAA-3A` intake for `skia-gm-hairlines`. It records the active refusal state, inventories historical HairlinesGM signals as non-promotional, and keeps support evaluation blocked until row-specific artifacts exist.
 
@@ -18,9 +18,9 @@ This report materializes the `M90-PAA-3A` intake for `skia-gm-hairlines`. It rec
 ## Counters
 
 - Required evidence items: `10`
-- Present evidence items: `8`
-- Missing evidence items: `2`
-- Validated non-promotional evidence items: `8`
+- Present evidence items: `10`
+- Missing evidence items: `0`
+- Validated non-promotional evidence items: `10`
 - Historical signals: `7`
 - Promotional historical signals: `0`
 - New support claims: `0`
@@ -32,9 +32,9 @@ This report materializes the `M90-PAA-3A` intake for `skia-gm-hairlines`. It rec
 - `CPU route evidence with fallbackReason=none`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-cpu.json`; present=`True` promotional=`False`
 - `WebGPU route evidence with fallbackReason=none`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-gpu.json`; present=`True` promotional=`False`
 - `CPU/GPU rendered artifacts`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu.png`; present=`True` promotional=`False`
-- `CPU/GPU rendered artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu.png`; present=`False` promotional=`False`
+- `CPU/GPU rendered artifacts`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu.png`; present=`True` promotional=`False`
 - `CPU/GPU diff/stat artifacts`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-diff.png`; present=`True` promotional=`False`
-- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-diff.png`; present=`False` promotional=`False`
+- `CPU/GPU diff/stat artifacts`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-diff.png`; present=`True` promotional=`False`
 - `CPU/GPU diff/stat artifacts`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/stats.json`; present=`True` promotional=`False`
 - `performance impact evidence`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-performance.json`; present=`True` promotional=`False`
 - `performance impact evidence`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-performance.json`; present=`True` promotional=`False`

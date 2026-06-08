@@ -31,7 +31,9 @@ EXPECTED_ARTIFACT_FILES = {
     "cpu-diff.png",
     "cpu-performance.json",
     "cpu.png",
+    "gpu-diff.png",
     "gpu-performance.json",
+    "gpu.png",
     "route-cpu.json",
     "route-gpu.json",
     "skia.png",
@@ -44,18 +46,20 @@ INTAKE = ROOT / "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/sum
 CANDIDATE_CLOSEOUT = ROOT / "reports/wgsl-pipeline/m90-path-aa-candidate-intake-closeout/summary.json"
 
 FORBIDDEN_PROMOTION_FILES = {
-    "reports/wgsl-pipeline/m89-gm-registry/registry.json",
     "reports/wgsl-pipeline/scenes/generated/results.json",
     "reports/wgsl-pipeline/scenes/generated/dashboard-results.json",
     "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
 }
 ALLOWED_STATUS_PATHS = {
     "build.gradle.kts",
+    "gpu-raster/build.gradle.kts",
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/HairlinesSceneCaptureTest.kt",
     "scripts/m90_path_aa_candidate_intake_closeout.py",
     "scripts/m90_path_aa_hairlines_evidence_intake.py",
+    "scripts/validate_m89_gm_registry.py",
     "scripts/validate_m90_hairlines_artifact_harness.py",
     "reports/wgsl-pipeline/2026-06-08-m90-hairlines-artifact-harness.md",
+    "reports/wgsl-pipeline/m89-gm-registry/registry.json",
     "reports/wgsl-pipeline/m90-path-aa-candidate-intake-closeout/summary.json",
     "reports/wgsl-pipeline/m90-path-aa-candidate-intake-closeout/summary.md",
     "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json",
@@ -313,13 +317,15 @@ def validate_adapter_gate() -> None:
     require(gate.get("kind") == "adapter-backed-webgpu-render", "adapter gate kind changed")
     require(gate.get("requiredRouteStatus") == "pass", "adapter gate route requirement changed")
     require(gate.get("requiredFallbackReason") == "none", "adapter gate fallback requirement changed")
-    require(gate.get("missingArtifacts") == [
-        rel(ARTIFACT_DIR / "gpu.png"),
-        rel(ARTIFACT_DIR / "gpu-diff.png"),
-    ], "adapter gate missing artifacts changed")
+    require(gate.get("missingArtifacts") == [], "adapter gate must not list missing GPU artifacts after visual capture")
     require(set(gate.get("presentNonPromotionalArtifacts", [])) == {
         rel(ARTIFACT_DIR / name) for name in EXPECTED_ARTIFACT_FILES
     }, "adapter gate present artifact set changed")
+    require(gate.get("observedRouteStatus") == "expected-unsupported", "adapter gate observed route status changed")
+    require(gate.get("observedFallbackReason") == FALLBACK_REASON, "adapter gate observed fallback changed")
+    require(gate.get("observedGpuSimilarity") == 98.9581, "adapter gate observed GPU similarity changed")
+    require(gate.get("observedGpuThreshold") == GPU_THRESHOLD, "adapter gate observed GPU threshold changed")
+    require(gate.get("remainingBlocker") == "coverage.hairline-visual-parity-below-threshold", "adapter gate remaining blocker changed")
 
     promotion = data.get("promotionGate")
     require(isinstance(promotion, dict), "adapter gate missing promotionGate")
@@ -348,7 +354,7 @@ def validate_optional_artifacts() -> None:
     require(ARTIFACT_DIR.is_dir(), f"missing artifact directory: {rel(ARTIFACT_DIR)}")
     actual = {path.name for path in ARTIFACT_DIR.iterdir() if path.is_file()}
     require(actual == EXPECTED_ARTIFACT_FILES, f"artifact file set changed: expected={sorted(EXPECTED_ARTIFACT_FILES)} actual={sorted(actual)}")
-    for name in ["skia.png", "cpu.png", "cpu-diff.png"]:
+    for name in ["skia.png", "cpu.png", "cpu-diff.png", "gpu.png", "gpu-diff.png"]:
         png_header(ARTIFACT_DIR / name)
     for name in ["route-cpu.json", "route-gpu.json", "stats.json", "cpu-performance.json", "gpu-performance.json"]:
         require((ARTIFACT_DIR / name).is_file(), f"missing artifact metadata: {rel(ARTIFACT_DIR / name)}")
@@ -365,9 +371,16 @@ def validate_optional_artifacts() -> None:
     require(gpu.get("backend") == "WebGPU", "GPU route backend mismatch")
     require(gpu.get("status") == "pass" or gpu.get("fallbackReason") == FALLBACK_REASON, "GPU route must pass or retain refusal")
     require(gpu.get("supportClaim") is False, "GPU route artifact must remain non-promotional")
+    if gpu.get("status") != "pass":
+        require(gpu.get("similarity") == 98.9581, "GPU route similarity changed")
+        require(gpu.get("threshold") == GPU_THRESHOLD, "GPU route threshold changed")
+        require(gpu.get("failure") is None, "GPU visual capture should not retain render failure")
     require(stats.get("sceneId") == SCENE_ID, "stats scene mismatch")
     require(stats.get("globalDashboardPromoted") is False, "optional stats must not promote dashboard")
     require(stats.get("supportClaim") is False, "optional stats must remain non-promotional")
+    require(stats.get("gpuArtifact") == rel(ARTIFACT_DIR / "gpu.png"), "stats GPU artifact path changed")
+    require(stats.get("gpuDiffArtifact") == rel(ARTIFACT_DIR / "gpu-diff.png"), "stats GPU diff path changed")
+    require(stats.get("gpuSimilarity") == 98.9581, "stats GPU similarity changed")
     require(cpu_perf.get("sceneId") == SCENE_ID, "CPU perf scene mismatch")
     require(cpu_perf.get("backend") == "CPU", "CPU perf backend mismatch")
     require(cpu_perf.get("supportClaim") is False, "CPU perf must remain non-promotional")
@@ -379,10 +392,6 @@ def validate_optional_artifacts() -> None:
     require(gpu_perf.get("globalDashboardPromoted") is False, "GPU perf must not promote dashboard")
     if gpu_perf.get("elapsedNanos") is not None:
         require(isinstance(gpu_perf.get("elapsedNanos"), int) and gpu_perf["elapsedNanos"] > 0, "GPU perf elapsedNanos must be positive when present")
-    if (ARTIFACT_DIR / "gpu.png").exists():
-        png_header(ARTIFACT_DIR / "gpu.png")
-        png_header(ARTIFACT_DIR / "gpu-diff.png")
-
 
 def validate_worktree_scope(allow_artifacts: bool = False) -> None:
     proc = subprocess.run(
