@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "scripts/m90_path_aa_thinstrokedrects_evidence_intake.py",
+  "milestone": "M90",
+  "ticket": "M90-PAA-3C",
+  "classification": "path-aa-thinstrokedrects-evidence-intake-no-new-rendering-support",
+  "status": "blocked-by-missing-row-specific-evidence",
+  "inputs": {
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "candidateReadiness": "reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json",
+    "routeCpu": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-thinstrokedrects/route-cpu.json",
+    "routeGpu": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-thinstrokedrects/route-gpu.json",
+    "visibility": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+    "gpuSimilarityProperties": "gpu-raster/test-similarity-scores-webgpu.properties",
+    "cpuSimilarityProperties": "skia-integration-tests/test-similarity-scores.properties",
+    "historicalWebGpuTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ThinStrokedRectsWebGpuTest.kt",
+    "historicalCrossBackendTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/ThinStrokedRectsCrossBackendTest.kt"
+  },
+  "upstreamReadinessState": {
+    "activeNextRecommendedTicket": "M90-PAA-3A",
+    "activeNextRecommendedRow": "skia-gm-hairlines",
+    "thisIntakeIsOutOfOrder": true,
+    "reason": "M90-PAA-3C is materialized as a conservative evidence intake for the third-ranked candidate only; it does not supersede the active M90-PAA-3A recommendation."
+  },
+  "row": {
+    "rowId": "skia-gm-thinstrokedrects",
+    "sourceGm": "ThinStrokedRectsGM",
+    "status": "expected-unsupported",
+    "supportClaim": false,
+    "policyOnly": true,
+    "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "candidatePriority": 3,
+    "visibilityPolicyOnlyArtifacts": true
+  },
+  "counters": {
+    "requiredEvidenceItems": 10,
+    "presentEvidenceItems": 0,
+    "missingEvidenceItems": 10,
+    "historicalSignals": 4,
+    "promotionalHistoricalSignals": 0,
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0
+  },
+  "requiredEvidence": [
+    {
+      "kind": "row-specific Skia reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-thinstrokedrects/skia.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-thinstrokedrects/route-cpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "WebGPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-thinstrokedrects/route-gpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU rendered artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-thinstrokedrects/cpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU rendered artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-thinstrokedrects/gpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-thinstrokedrects/cpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-thinstrokedrects/gpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-thinstrokedrects/stats.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-thinstrokedrects/cpu-performance.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-thinstrokedrects/gpu-performance.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    }
+  ],
+  "historicalSignals": [
+    {
+      "kind": "historical-webgpu-test",
+      "path": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ThinStrokedRectsWebGpuTest.kt",
+      "promotional": false,
+      "reason": "Historical WebGPU ThinStrokedRectsGM test is not a M90 row-specific artifact bundle and does not update the M89 registry row."
+    },
+    {
+      "kind": "historical-crossbackend-test",
+      "path": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/ThinStrokedRectsCrossBackendTest.kt",
+      "promotional": false,
+      "reason": "Historical cross-backend signal is not the current row-specific skia/cpu/gpu/diff/stat/perf evidence required by M90-PAA-3."
+    },
+    {
+      "kind": "historical-gpu-similarity-floor",
+      "path": "gpu-raster/test-similarity-scores-webgpu.properties",
+      "observed": "ThinStrokedRectsGM=94.21",
+      "promotional": false,
+      "reason": "A historical score is not a support claim; tolerance-only status is not counted as a production missing feature."
+    },
+    {
+      "kind": "historical-cpu-similarity-floor",
+      "path": "skia-integration-tests/test-similarity-scores.properties",
+      "observed": "ThinStrokedRectsGM=88.86848958333333",
+      "promotional": false,
+      "reason": "A historical CPU score is not a M90 support promotion or a replacement for row-specific route artifacts."
+    }
+  ],
+  "nextRecommendedTicket": {
+    "id": "M90-PAA-3C-REF",
+    "scope": "Produce row-specific ThinStrokedRectsGM Skia reference plus CPU/WebGPU fallbackReason=none route, render, diff/stat, and performance artifacts before any support evaluation.",
+    "supportClaimAllowed": false,
+    "promotionAllowedWithoutEvidence": false
+  },
+  "supportGuard": {
+    "supportClaimAdded": false,
+    "readinessMoved": false,
+    "policyOnlyPromoted": false,
+    "thresholdChanged": false,
+    "edgeBudgetChanged": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "broadPathAASupport": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadStrokeSupport": false,
+    "ganeshPort": false,
+    "graphitePort": false
+  },
+  "validationCommands": [
+    "rtk python3 scripts/m90_path_aa_thinstrokedrects_evidence_intake.py",
+    "rtk ./gradlew --no-daemon pipelineM90PathAaThinStrokedRectsEvidenceIntake",
+    "rtk git diff --check"
+  ]
+}
