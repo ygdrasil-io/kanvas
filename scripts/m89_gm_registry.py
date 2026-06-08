@@ -44,6 +44,11 @@ ROW_SPECIFIC_REFUSALS = {
         "json": GENERATED_DIR / "for468-skia-gm-offsetimagefilter-evidence.json",
         "report": ROOT / "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
     },
+    "skia-gm-imagemakewithfilter": {
+        "linear": "FOR-470",
+        "json": GENERATED_DIR / "for470-skia-gm-imagemakewithfilter-evidence.json",
+        "report": ROOT / "reports/wgsl-pipeline/2026-06-08-for-470-skia-gm-imagemakewithfilter-evidence.md",
+    },
     "skia-gm-pathfill": {
         "linear": "FOR-469",
         "json": GENERATED_DIR / "for469-skia-gm-pathfill-evidence.json",

@@ -1,0 +1,125 @@
+{
+  "classification": "row-specific-expected-unsupported-no-support-claim",
+  "date": "2026-06-08",
+  "linear": "FOR-470",
+  "nonClaims": {
+    "arbitraryImageFilterDagSupportClaimAddedByFor470": false,
+    "broadImageFilterSupportClaimAddedByFor470": false,
+    "cropPrepassSupportClaimAddedByFor470": false,
+    "dashboardRowAddedByFor470": false,
+    "dashboardStatusChangedByFor470": false,
+    "fallbackPolicyChanged": false,
+    "imagemakewithfilterEvidenceInherited": false,
+    "layerPrepassSupportClaimAddedByFor470": false,
+    "picturePrepassSupportClaimAddedByFor470": false,
+    "pipelineKeyChanged": false,
+    "productionCodeChanged": false,
+    "scoringChanged": false,
+    "skiaComparableClaimAddedByFor470": false,
+    "supportClaimAddedByFor470": false,
+    "thresholdChanged": false,
+    "upstreamSourceChanged": false,
+    "wgslProductionChanged": false
+  },
+  "row": {
+    "cpu": {
+      "artifact": "not-generated",
+      "expectation": "CPU image-filter DAG/layer oracle with explicit source, crop, and output bounds for ImageMakeWithFilterGM.",
+      "refusalReason": "row-specific CPU image-filter artifact is missing",
+      "required": true,
+      "route": "cpu.image-filter.imagemakewithfilter.expected-unsupported",
+      "status": "expected-unsupported"
+    },
+    "diffStats": {
+      "reason": "diff/stat payload cannot be computed without row-specific reference, CPU, and GPU artifacts",
+      "required": true,
+      "status": "not-computed"
+    },
+    "displayName": "ImageMakeWithFilter",
+    "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+    "family": "image-filters",
+    "gpu": {
+      "artifact": "not-generated",
+      "expectation": "WebGPU image-filter DAG/layer route with deterministic intermediate texture ownership and bounds.",
+      "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+      "refusalReason": "row-specific WebGPU artifact is missing",
+      "required": true,
+      "route": "webgpu.image-filter.imagemakewithfilter.expected-unsupported",
+      "status": "expected-unsupported"
+    },
+    "imageMakeWithFilterProvenance": {
+      "boundedM61Evidence": "M61/M89 bounded crop and compose image-filter rows are separate selected evidence and must not be inherited by skia-gm-imagemakewithfilter.",
+      "fixtureAvailability": "A Kotlin GM port and historical similarity report exist, but no row-specific D50 reference/CPU/GPU artifacts are generated.",
+      "historicalSimilarity": "ImageMakeWithFilterGM=84.35382962588474 in skia-integration-tests/test-similarity-scores.properties; this is not a D50 row-specific dashboard artifact and is not treated as a production missing feature when the only signal is tolerance.",
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageMakeWithFilterGM.kt",
+      "scene": "ImageMakeWithFilterGM",
+      "unsupportedBroadClaims": [
+        "arbitrary image-filter DAG",
+        "broad image-filter support",
+        "crop prepass",
+        "picture prepass",
+        "layer prepass",
+        "bounded M61/M89 evidence inheritance"
+      ],
+      "upstreamSource": "gm/imagemakewithfilter.cpp"
+    },
+    "inventoryId": "skia-gm-imagemakewithfilter",
+    "linear": "FOR-470",
+    "nonClaims": {
+      "arbitraryImageFilterDagSupportClaimAddedByFor470": false,
+      "broadImageFilterSupportClaimAddedByFor470": false,
+      "cropPrepassSupportClaimAddedByFor470": false,
+      "dashboardRowAddedByFor470": false,
+      "dashboardStatusChangedByFor470": false,
+      "fallbackPolicyChanged": false,
+      "imagemakewithfilterEvidenceInherited": false,
+      "layerPrepassSupportClaimAddedByFor470": false,
+      "picturePrepassSupportClaimAddedByFor470": false,
+      "pipelineKeyChanged": false,
+      "productionCodeChanged": false,
+      "scoringChanged": false,
+      "skiaComparableClaimAddedByFor470": false,
+      "supportClaimAddedByFor470": false,
+      "thresholdChanged": false,
+      "upstreamSourceChanged": false,
+      "wgslProductionChanged": false
+    },
+    "rank": 21,
+    "reason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+    "reference": {
+      "plan": "Skia GM capture for one bounded ImageMakeWithFilterGM candidate cell.",
+      "refusalReason": "candidate-specific Skia GM reference capture is missing",
+      "required": true,
+      "status": "not-generated"
+    },
+    "routeDiagnostics": {
+      "cpu": "cpu.image-filter.imagemakewithfilter.expected-unsupported",
+      "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+      "gpu": "webgpu.image-filter.imagemakewithfilter.expected-unsupported",
+      "policy": "Historical ImageMakeWithFilterGM similarity, the Kotlin GM port, and bounded M61/M89 image-filter evidence are not D50 dashboard row-specific proof for skia-gm-imagemakewithfilter. The row stays unsupported until a candidate-specific Skia reference capture, CPU DAG/layer artifact, WebGPU DAG/layer artifact, diff/stat payload, and fallbackReason=none exist without threshold or scoring changes."
+    },
+    "source": {
+      "candidateInventory": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageMakeWithFilterGM.kt",
+      "similarityScores": "skia-integration-tests/test-similarity-scores.properties",
+      "upstreamSource": "gm/imagemakewithfilter.cpp"
+    },
+    "status": "expected-unsupported"
+  },
+  "schemaVersion": 1,
+  "scoreImpact": {
+    "reason": "The row is a visible expected-unsupported refusal, not a supported rendering row.",
+    "supportScoreIncreased": false
+  },
+  "sourceManifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-visibility.json",
+  "validationCommands": [
+    "rtk python3 scripts/validate_for470_skia_gm_imagemakewithfilter_evidence.py",
+    "rtk python3 scripts/m89_gm_registry.py",
+    "rtk python3 scripts/validate_m89_gm_registry.py",
+    "rtk python3 scripts/m89_pm_bundle_registry.py --project-root /Users/chaos/.codex/worktrees/ce14/kanvas --bundle-root build/reports/wgsl-pipeline-pm-bundle",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for470-pycache python3 -m py_compile scripts/validate_for470_skia_gm_imagemakewithfilter_evidence.py scripts/m89_gm_registry.py scripts/validate_m89_gm_registry.py scripts/m89_pm_bundle_registry.py",
+    "rtk ./gradlew --no-daemon pipelineM89GmRegistry validateM89GmRegistry",
+    "rtk ./gradlew --no-daemon pipelinePmBundle",
+    "rtk git diff --check"
+  ]
+}

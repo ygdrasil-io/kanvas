@@ -20,7 +20,7 @@ EXPECTED_COUNTERS = {
     "totalRows": 47,
     "supportClaims": 22,
     "policyOnlyRows": 20,
-    "rowSpecificRefusalRows": 4,
+    "rowSpecificRefusalRows": 5,
     "dependencyGateLinkRows": 4,
     "groupedPolicyRefusalRows": 9,
     "expectedUnsupportedWithFallback": 25,
@@ -45,6 +45,12 @@ EXPECTED_ROW_SPECIFIC_REFUSALS = {
         "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
         "json": "reports/wgsl-pipeline/scenes/generated/for468-skia-gm-offsetimagefilter-evidence.json",
         "report": "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
+    },
+    "skia-gm-imagemakewithfilter": {
+        "linear": "FOR-470",
+        "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/for470-skia-gm-imagemakewithfilter-evidence.json",
+        "report": "reports/wgsl-pipeline/2026-06-08-for-470-skia-gm-imagemakewithfilter-evidence.md",
     },
     "skia-gm-pathfill": {
         "linear": "FOR-469",
@@ -208,6 +214,8 @@ def validate_registry() -> None:
             )
             require(refusal.get("json") == expected_refusal["json"], f"{row_id}: row-specific refusal JSON path mismatch")
             require(refusal.get("report") == expected_refusal["report"], f"{row_id}: row-specific refusal report path mismatch")
+            require((ROOT / expected_refusal["json"]).is_file(), f"{row_id}: row-specific refusal JSON file missing")
+            require((ROOT / expected_refusal["report"]).is_file(), f"{row_id}: row-specific refusal report file missing")
             require(refusal.get("fallbackReason") == expected_refusal["fallbackReason"], f"{row_id}: row-specific refusal fallback mismatch")
             require(refusal.get("registryFallbackReason") == fallback, f"{row_id}: registry fallback link mismatch")
             require(refusal.get("referenceStatus") in {"not-generated", "available-historical-skia-integration-reference"}, f"{row_id}: reference status must not imply support")
@@ -396,6 +404,12 @@ def validate_registry() -> None:
         "registry must preserve WGSL/SkSL non-claim",
     )
 
+    source_inputs = registry.get("sourceInputs")
+    require(isinstance(source_inputs, list) and source_inputs, "sourceInputs must be a non-empty list")
+    for source_input in source_inputs:
+        require(isinstance(source_input, str) and source_input, "sourceInputs entries must be non-empty strings")
+        require((ROOT / source_input).is_file(), f"sourceInputs entry does not exist: {source_input}")
+
 
 def validate_report() -> None:
     require(REPORT.is_file(), f"missing markdown report: {rel(REPORT)}")
@@ -404,7 +418,7 @@ def validate_report() -> None:
         "Total rows: `47`",
         "Support claims: `22`",
         "Policy-only rows: `20`",
-        "Row-specific refusal links: `4`",
+        "Row-specific refusal links: `5`",
         "Dependency gate links: `4`",
         "Grouped policy refusal links: `9`",
         "`expected-unsupported`: `25`",
