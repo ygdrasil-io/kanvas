@@ -1,0 +1,206 @@
+{
+  "classification": "image-filter-imagemakewithfilter-reference-package-plan-no-new-rendering-support",
+  "counters": {
+    "dashboardPromotions": 0,
+    "diffStatsAdded": 0,
+    "fallbackReasonNoneRoutesAdded": 0,
+    "historicalReferencePromoted": 0,
+    "historicalReferencesInventoried": 4,
+    "missingEvidenceItemsStill": 9,
+    "newSupportClaims": 0,
+    "presentEvidenceItemsStill": 2,
+    "readinessDelta": 0.0,
+    "referenceArtifactsAdded": 0,
+    "referencePlans": 1,
+    "renderArtifactsAdded": 0,
+    "thresholdChanges": 0
+  },
+  "currentEvidence": {
+    "graph": {
+      "classification": "image-filter-imagemakewithfilter-graph-dump-no-new-rendering-support",
+      "gridCells": 78,
+      "makeWithFilterExecuted": false,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/graph.json",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    "intake": {
+      "missingEvidenceItems": 9,
+      "path": "reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-evidence-intake/summary.json",
+      "presentEvidenceItems": 2
+    },
+    "intermediateOwnership": {
+      "classification": "image-filter-imagemakewithfilter-intermediate-ownership-no-new-rendering-support",
+      "ownershipStatus": "requirements-only",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/intermediate-ownership.json",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    }
+  },
+  "generatedBy": "scripts/m91_image_filter_imagemakewithfilter_reference_package_plan.py",
+  "historicalReferences": [
+    {
+      "bitDepth": 16,
+      "colorType": 6,
+      "height": 860,
+      "path": "skia-integration-tests/src/test/resources/original-888/imagemakewithfilter.png",
+      "promotableAsDashboardReference": false,
+      "reason": "Historical fixture only; M91 still requires a row-specific packaged Skia/reference artifact with provenance before support evaluation.",
+      "width": 1840
+    },
+    {
+      "bitDepth": 16,
+      "colorType": 6,
+      "height": 860,
+      "path": "skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_ref.png",
+      "promotableAsDashboardReference": false,
+      "reason": "Historical fixture only; M91 still requires a row-specific packaged Skia/reference artifact with provenance before support evaluation.",
+      "width": 1840
+    },
+    {
+      "bitDepth": 16,
+      "colorType": 6,
+      "height": 860,
+      "path": "skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_crop.png",
+      "promotableAsDashboardReference": false,
+      "reason": "Historical fixture only; M91 still requires a row-specific packaged Skia/reference artifact with provenance before support evaluation.",
+      "width": 1840
+    },
+    {
+      "bitDepth": 16,
+      "colorType": 6,
+      "height": 860,
+      "path": "skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_crop_ref.png",
+      "promotableAsDashboardReference": false,
+      "reason": "Historical fixture only; M91 still requires a row-specific packaged Skia/reference artifact with provenance before support evaluation.",
+      "width": 1840
+    }
+  ],
+  "milestone": "M91",
+  "nonClaims": {
+    "belowThresholdCountedAsProductionGap": false,
+    "boundedM61M89EvidenceInherited": false,
+    "broadImageFilterDAGSupport": false,
+    "cpuReadbackFallbackAdded": false,
+    "cropPrepassSupport": false,
+    "dashboardPromoted": false,
+    "diffStatsAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "fallbackReasonNoneClaimed": false,
+    "ganeshPort": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "historicalReferencePromoted": false,
+    "imagemakewithfilterEvidenceInherited": false,
+    "layerPrepassSupport": false,
+    "makeWithFilterExecuted": false,
+    "performanceGatePromoted": false,
+    "picturePrepassSupport": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "referenceArtifactAdded": false,
+    "renderArtifactsAdded": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "promotionGate": {
+    "fallbackReasonNoneRoutesAddedNow": false,
+    "historicalFixtureCanStandInForPackagedReference": false,
+    "readyForSupportEvaluation": false,
+    "reason": "This plan only names the reference/provenance package contract; it deliberately does not create row-specific reference, route, render, diff/stat, or performance evidence.",
+    "referenceArtifactAddedNow": false,
+    "supportClaimAllowedNow": false
+  },
+  "referencePackageContract": {
+    "historicalFixturesCanStandIn": false,
+    "reason": "Historical original-888 fixtures preserve provenance, but they are not the row-specific M91 packaged reference/provenance artifact.",
+    "requiredPackagedReferencePath": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/skia.png",
+    "requiredProvenancePath": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/reference-provenance.json",
+    "requiredReferenceKind": "skia-upstream",
+    "selectedCapture": "one bounded ImageMakeWithFilterGM candidate cell before any full-grid support evaluation"
+  },
+  "requiredFutureOutputs": [
+    {
+      "kind": "row-specific Skia/reference artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/skia.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "reference provenance",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/reference-provenance.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/route-cpu.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "WebGPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/route-gpu.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU render artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/cpu.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "WebGPU render artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/gpu.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU diff artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/cpu-diff.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "WebGPU diff artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/gpu-diff.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/stats.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/performance.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    }
+  ],
+  "row": {
+    "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+    "policyOnly": true,
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "rowId": "skia-gm-imagemakewithfilter",
+    "sourceGm": "ImageMakeWithFilterGM",
+    "status": "expected-unsupported",
+    "supportClaim": false
+  },
+  "schemaVersion": 1,
+  "status": "reference-package-planned-no-reference-artifact-generated",
+  "ticket": "M91-IF-3B-REF",
+  "upstreamProvenance": {
+    "boundedM61Evidence": "M61/M89 bounded crop and compose image-filter rows are separate selected evidence and must not be inherited by skia-gm-imagemakewithfilter.",
+    "historicalSimilarity": "ImageMakeWithFilterGM=84.35382962588474 in skia-integration-tests/test-similarity-scores.properties; this is not a D50 row-specific dashboard artifact and is not treated as a production missing feature when the only signal is tolerance.",
+    "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageMakeWithFilterGM.kt",
+    "scene": "ImageMakeWithFilterGM",
+    "upstreamSource": "gm/imagemakewithfilter.cpp"
+  }
+}

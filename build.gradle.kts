@@ -4858,6 +4858,26 @@ tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterGraphOwnershipPro
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterReferencePackagePlan") {
+    group = "verification"
+    description = "Generates and validates M91-IF-3B ImageMakeWithFilterGM reference package plan without changing support claims."
+    dependsOn("pipelineM91ImageFilterImageMakeWithFilterEvidenceIntake")
+    commandLine("python3", "scripts/m91_image_filter_imagemakewithfilter_reference_package_plan.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_imagemakewithfilter_reference_package_plan.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-evidence-intake/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/graph.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/intermediate-ownership.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/for470-skia-gm-imagemakewithfilter-evidence.json"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/ImageMakeWithFilterGM.kt"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/imagemakewithfilter.png"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_ref.png"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_crop.png"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_crop_ref.png"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-reference-package-plan"))
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/reference-plan.json"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM91ImageFilterOffsetGraphOwnershipProof") {
     group = "verification"
     description = "Generates and validates M91-IF-3A OffsetImageFilterGM graph and ownership proof without changing support claims."
