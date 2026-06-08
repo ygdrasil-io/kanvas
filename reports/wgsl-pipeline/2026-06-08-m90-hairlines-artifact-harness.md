@@ -44,6 +44,8 @@ Expected files are:
 
 The M90 Hairlines intake classifies these checked-in files as non-promotional evidence.
 `gpu.png` and `gpu-diff.png` remain absent until an adapter-backed render path produces them.
+That unresolved adapter-backed requirement is tracked explicitly in
+`reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json`.
 
 ## Non-Claims
 

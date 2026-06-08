@@ -25,6 +25,7 @@ CPU_THRESHOLD = 96.0
 TEST_FILE = ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/HairlinesSceneCaptureTest.kt"
 REPORT = ROOT / "reports/wgsl-pipeline/2026-06-08-m90-hairlines-artifact-harness.md"
 EVIDENCE = ROOT / "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json"
+ADAPTER_GATE = ROOT / "reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json"
 ARTIFACT_DIR = ROOT / "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines"
 EXPECTED_ARTIFACT_FILES = {
     "cpu-diff.png",
@@ -59,6 +60,7 @@ ALLOWED_STATUS_PATHS = {
     "reports/wgsl-pipeline/m90-path-aa-candidate-intake-closeout/summary.md",
     "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json",
     "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.md",
+    "reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json",
     "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json",
 }
 
@@ -288,12 +290,53 @@ def validate_report() -> None:
             "cpu-performance.json",
             "gpu-performance.json",
             "checked-in files as non-promotional evidence",
+            "m90-hairlines-adapter-backed-gate.json",
             "No Ganesh or Graphite port",
             "No dynamic SkSL compiler, IR, or VM",
             "No global threshold reduction",
             "No support promotion from a below-threshold/tolerance-only case",
         ],
     )
+
+
+def validate_adapter_gate() -> None:
+    data = load_json(ADAPTER_GATE)
+    require(data.get("ticket") == "M90-PAA-3A-REF-GPU", "adapter gate ticket mismatch")
+    require(data.get("parentTicket") == TICKET, "adapter gate parent ticket mismatch")
+    require(data.get("sceneId") == SCENE_ID, "adapter gate scene mismatch")
+    require(data.get("status") == "dependency-gated", "adapter gate status changed")
+    require(data.get("supportClaim") is False, "adapter gate must not claim support")
+    require(data.get("fallbackReason") == FALLBACK_REASON, "adapter gate fallback changed")
+
+    gate = data.get("dependencyGate")
+    require(isinstance(gate, dict), "adapter gate missing dependencyGate")
+    require(gate.get("kind") == "adapter-backed-webgpu-render", "adapter gate kind changed")
+    require(gate.get("requiredRouteStatus") == "pass", "adapter gate route requirement changed")
+    require(gate.get("requiredFallbackReason") == "none", "adapter gate fallback requirement changed")
+    require(gate.get("missingArtifacts") == [
+        rel(ARTIFACT_DIR / "gpu.png"),
+        rel(ARTIFACT_DIR / "gpu-diff.png"),
+    ], "adapter gate missing artifacts changed")
+    require(set(gate.get("presentNonPromotionalArtifacts", [])) == {
+        rel(ARTIFACT_DIR / name) for name in EXPECTED_ARTIFACT_FILES
+    }, "adapter gate present artifact set changed")
+
+    promotion = data.get("promotionGate")
+    require(isinstance(promotion, dict), "adapter gate missing promotionGate")
+    for key in [
+        "promotionAllowed",
+        "supportAllowedFromToleranceOnly",
+        "supportAllowedWithoutGpuBitmapAndDiff",
+        "supportAllowedWithoutFallbackReasonNone",
+    ]:
+        require(promotion.get(key) is False, f"adapter gate promotion flag changed: {key}")
+
+    impact = data.get("scoreImpact")
+    require(isinstance(impact, dict), "adapter gate missing scoreImpact")
+    require(impact.get("newSupportClaims") == 0, "adapter gate must not add support claims")
+    require(impact.get("readinessDelta") == 0.0, "adapter gate readiness delta changed")
+    require(impact.get("dashboardPromotion") is False, "adapter gate dashboard promotion changed")
+    require(impact.get("thresholdChanged") is False, "adapter gate threshold changed")
 
 
 def png_header(path: Path) -> None:
@@ -379,6 +422,7 @@ def main() -> None:
     validate_test()
     validate_existing_evidence()
     validate_evidence_json()
+    validate_adapter_gate()
     validate_report()
     artifacts_present = ARTIFACT_DIR.exists()
     if args.require_artifacts or artifacts_present:
