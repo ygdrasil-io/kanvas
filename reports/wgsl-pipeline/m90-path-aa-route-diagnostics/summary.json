@@ -1,0 +1,140 @@
+{
+  "classification": "path-aa-route-diagnostics-no-new-rendering-support",
+  "counters": {
+    "cpuRouteDiagnostics": 9,
+    "diagnosticRows": 9,
+    "gpuRouteDiagnostics": 9,
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0
+  },
+  "diagnostics": [
+    {
+      "cpu": "cpu.path.dash-cubic.expected-unsupported",
+      "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
+      "gpu": "webgpu.path.dash-cubic.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashcubics/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashcubics/route-gpu.json",
+      "rowId": "skia-gm-dashcubics",
+      "sourceGm": "DashCubicsGM",
+      "supportClaim": false
+    },
+    {
+      "cpu": "cpu.path.dashing.expected-unsupported",
+      "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
+      "gpu": "webgpu.path.dashing.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashing/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashing/route-gpu.json",
+      "rowId": "skia-gm-dashing",
+      "sourceGm": "DashingGM",
+      "supportClaim": false
+    },
+    {
+      "cpu": "cpu.path.hairline.expected-unsupported",
+      "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+      "gpu": "webgpu.path.hairline.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-gpu.json",
+      "rowId": "skia-gm-hairlines",
+      "sourceGm": "HairlinesGM",
+      "supportClaim": false
+    },
+    {
+      "cpu": "cpu.path.hairmode.expected-unsupported",
+      "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
+      "gpu": "webgpu.path.hairmode.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairmodes/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairmodes/route-gpu.json",
+      "rowId": "skia-gm-hairmodes",
+      "sourceGm": "HairModesGM",
+      "supportClaim": false
+    },
+    {
+      "cpu": "cpu.path.scaled-stroke.expected-unsupported",
+      "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
+      "gpu": "webgpu.path.scaled-stroke.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-scaledstrokes/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-scaledstrokes/route-gpu.json",
+      "rowId": "skia-gm-scaledstrokes",
+      "sourceGm": "ScaledStrokesGM",
+      "supportClaim": false
+    },
+    {
+      "cpu": "cpu.path.stroked-lines.expected-unsupported",
+      "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
+      "gpu": "webgpu.path.stroked-lines.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokedlines/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokedlines/route-gpu.json",
+      "rowId": "skia-gm-strokedlines",
+      "sourceGm": "StrokedLinesGM",
+      "supportClaim": false
+    },
+    {
+      "cpu": "cpu.path.stroke-rect.expected-unsupported",
+      "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
+      "gpu": "webgpu.path.stroke-rect.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokerect/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokerect/route-gpu.json",
+      "rowId": "skia-gm-strokerect",
+      "sourceGm": "StrokeRectGM",
+      "supportClaim": false
+    },
+    {
+      "cpu": "cpu.path.stroke-rects.expected-unsupported",
+      "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
+      "gpu": "webgpu.path.stroke-rects.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokerects/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokerects/route-gpu.json",
+      "rowId": "skia-gm-strokerects",
+      "sourceGm": "StrokeRectsGM",
+      "supportClaim": false
+    },
+    {
+      "cpu": "cpu.path.thin-stroked-rects.expected-unsupported",
+      "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
+      "gpu": "webgpu.path.thin-stroked-rects.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-thinstrokedrects/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-thinstrokedrects/route-gpu.json",
+      "rowId": "skia-gm-thinstrokedrects",
+      "sourceGm": "ThinStrokedRectsGM",
+      "supportClaim": false
+    }
+  ],
+  "generatedBy": "scripts/m90_path_aa_route_diagnostics.py",
+  "inputs": {
+    "edgeBudgetAdr": ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+    "pathAaBoundarySpec": ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "selection": "reports/wgsl-pipeline/m90-path-aa-slice/selection.json"
+  },
+  "milestone": "M90",
+  "schemaVersion": 1,
+  "status": "generated evidence",
+  "supportGuard": {
+    "belowThresholdCountedAsProductionGap": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadPathAASupport": false,
+    "broadStrokeSupport": false,
+    "edgeBudgetChanged": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "policyOnlyPromoted": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ticket": "M90-PAA-1",
+  "validationCommands": [
+    "rtk python3 scripts/m90_path_aa_route_diagnostics.py",
+    "rtk ./gradlew --no-daemon pipelineM90PathAaRouteDiagnostics",
+    "rtk git diff --check"
+  ]
+}

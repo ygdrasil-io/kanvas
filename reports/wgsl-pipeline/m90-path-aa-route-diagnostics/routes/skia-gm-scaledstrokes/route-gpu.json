@@ -1,0 +1,33 @@
+{
+  "backend": "WebGPU",
+  "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
+  "milestone": "M90",
+  "nonClaims": {
+    "belowThresholdCountedAsProductionGap": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadPathAASupport": false,
+    "broadStrokeSupport": false,
+    "edgeBudgetChanged": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "policyOnlyPromoted": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "policy": "Future support requires row-specific Skia reference, CPU/GPU route evidence, diff/stat artifacts, and fallbackReason=none without threshold, scoring, edge-budget, or fallback-policy changes.",
+  "policyOnlyArtifact": true,
+  "route": "webgpu.path.scaled-stroke.expected-unsupported",
+  "rowId": "skia-gm-scaledstrokes",
+  "schemaVersion": 1,
+  "shapeFactsRequired": [
+    "stroke scale",
+    "cap/join facts",
+    "transform facts"
+  ],
+  "sourceGm": "ScaledStrokesGM",
+  "sourceRegistry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+  "sourceSelection": "reports/wgsl-pipeline/m90-path-aa-slice/selection.json",
+  "status": "expected-unsupported",
+  "ticket": "M90-PAA-1"
+}

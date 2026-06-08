@@ -1,0 +1,33 @@
+{
+  "backend": "CPU",
+  "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
+  "milestone": "M90",
+  "nonClaims": {
+    "belowThresholdCountedAsProductionGap": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadPathAASupport": false,
+    "broadStrokeSupport": false,
+    "edgeBudgetChanged": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "policyOnlyPromoted": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "policy": "Future support requires row-specific Skia reference, CPU/GPU route evidence, diff/stat artifacts, and fallbackReason=none without threshold, scoring, edge-budget, or fallback-policy changes.",
+  "policyOnlyArtifact": true,
+  "route": "cpu.path.dash-cubic.expected-unsupported",
+  "rowId": "skia-gm-dashcubics",
+  "schemaVersion": 1,
+  "shapeFactsRequired": [
+    "cubic segments",
+    "dash intervals",
+    "stroke outline"
+  ],
+  "sourceGm": "DashCubicsGM",
+  "sourceRegistry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+  "sourceSelection": "reports/wgsl-pipeline/m90-path-aa-slice/selection.json",
+  "status": "expected-unsupported",
+  "ticket": "M90-PAA-1"
+}

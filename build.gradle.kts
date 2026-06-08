@@ -4629,6 +4629,18 @@ tasks.register<Exec>("pipelineM90PathAaSlice") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaRouteDiagnostics") {
+    group = "verification"
+    description = "Generates and validates M90 Path AA route diagnostics for grouped policy refusal rows."
+    dependsOn("pipelineM90PathAaSlice")
+    commandLine("python3", "scripts/m90_path_aa_route_diagnostics.py")
+    inputs.file(layout.projectDirectory.file("scripts/m90_path_aa_route_diagnostics.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-slice/selection.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m90-path-aa-route-diagnostics"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateMepNextFeatureBreadth") {
     group = "verification"
     description = "Validates checked-in MEP-NEXT FOR-189..192 feature breadth evidence without Kadre native dependencies."

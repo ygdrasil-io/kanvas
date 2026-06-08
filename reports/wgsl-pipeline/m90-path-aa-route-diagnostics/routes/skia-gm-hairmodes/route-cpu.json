@@ -1,0 +1,33 @@
+{
+  "backend": "CPU",
+  "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
+  "milestone": "M90",
+  "nonClaims": {
+    "belowThresholdCountedAsProductionGap": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadPathAASupport": false,
+    "broadStrokeSupport": false,
+    "edgeBudgetChanged": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "policyOnlyPromoted": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "policy": "Future support requires row-specific Skia reference, CPU/GPU route evidence, diff/stat artifacts, and fallbackReason=none without threshold, scoring, edge-budget, or fallback-policy changes.",
+  "policyOnlyArtifact": true,
+  "route": "cpu.path.hairmode.expected-unsupported",
+  "rowId": "skia-gm-hairmodes",
+  "schemaVersion": 1,
+  "shapeFactsRequired": [
+    "hairline stroke",
+    "blend/paint mode interaction",
+    "AA edge facts"
+  ],
+  "sourceGm": "HairModesGM",
+  "sourceRegistry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+  "sourceSelection": "reports/wgsl-pipeline/m90-path-aa-slice/selection.json",
+  "status": "expected-unsupported",
+  "ticket": "M90-PAA-1"
+}
