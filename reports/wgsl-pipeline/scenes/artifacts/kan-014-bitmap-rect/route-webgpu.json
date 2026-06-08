@@ -1,0 +1,61 @@
+            {
+              "sceneId": "paint.bitmap-rect.nearest.fixture.v1",
+              "scopeId": "bitmap-rect.nearest.fixture.simple.v1",
+              "backend": "WebGPU",
+              "adapter": "Apple M2 Max",
+              "drawKind": "SkCanvas.drawImageRect",
+              "status": "pass",
+              "supportScope": "simple-fixture-backed-bitmap-rect-nearest",
+              "supportClaim": true,
+              "selectedRoute": "webgpu.image.bitmap-rect.nearest.fixture",
+              "fixtureBacked": true,
+              "fixtureId": "kanvas-fixture-checker-8x6-rgba8888-v1",
+              "fixtureSha256": "bdd9a379cdc796aa06e09414cb757cb60490b01ad99e94bd929aa3951681ec3d",
+              "sampler": "nearest",
+              "filterMode": "kNearest",
+              "tileMode": "kClamp",
+              "srcRectConstraint": "kStrict",
+              "blendMode": "kSrcOver",
+              "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp state=[blendMode=kSrcOver]",
+              "sourceRect": {
+  "left": 1.0,
+  "top": 1.0,
+  "right": 7.0,
+  "bottom": 5.0
+},
+              "destinationRect": {
+  "left": 28.0,
+  "top": 22.0,
+  "right": 124.0,
+  "bottom": 70.0
+},
+              "referenceKind": "analytic-strict-nearest-fixture-oracle",
+              "fallbackReason": "none",
+              "colorSpacePolicy": "srgb-unmanaged-fixture-oracle",
+              "sampledPixels": 4608,
+              "comparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 0,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+              "similarityThreshold": 99.00,
+              "globalThresholdChanged": false,
+              "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/reference.png",
+              "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/webgpu.png",
+              "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/webgpu-diff.png",
+              "nonClaims": ["no-broad-image-claim", "no-codec-decode-claim", "no-arbitrary-texture-claim", "no-mipmap-claim", "no-tile-mode-claim", "no-color-managed-decode-claim", "no-texture-atlas-claim", "no-perspective-transform-claim"]
+            }
