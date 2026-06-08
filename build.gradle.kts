@@ -4952,6 +4952,19 @@ tasks.register<Exec>("pipelineM90PathAaDashCubicsEvidenceIntake") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaDashCubicsEvidenceGate") {
+    group = "verification"
+    description = "Validates the M90-PAA-3I-REF DashCubicsGM row-specific evidence gate without changing support claims."
+    commandLine("python3", "scripts/validate_m90_dashcubics_evidence_gate.py", "--check-worktree-scope")
+    inputs.file(layout.projectDirectory.file("scripts/validate_m90_dashcubics_evidence_gate.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-08-m90-dashcubics-evidence-gate.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-dashcubics-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-dashcubics-evidence-intake/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashcubics/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashcubics/route-gpu.json"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM90PathAaCandidateIntakeCloseout") {
     group = "verification"
     description = "Generates and validates the M90-PAA-3 candidate intake closeout without changing support claims."

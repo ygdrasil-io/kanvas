@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "manual-m90-dashcubics-row-specific-evidence-gate",
+  "milestone": "M90",
+  "ticket": "M90-PAA-3I-REF",
+  "parentTicket": "M90-PAA-3I",
+  "classification": "dashcubics-row-specific-evidence-gate-no-support-promotion",
+  "sceneId": "skia-gm-dashcubics",
+  "inventoryId": "skia-gm-dashcubics",
+  "sourceGm": "DashCubicsGM",
+  "status": "dependency-gated",
+  "supportClaim": false,
+  "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
+  "evidenceGate": {
+    "kind": "row-specific-reference-cpu-webgpu-artifact-bundle",
+    "requiredRouteStatus": "pass",
+    "requiredFallbackReason": "none",
+    "requiredArtifacts": [
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashcubics/skia.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashcubics/route-cpu.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashcubics/route-gpu.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashcubics/cpu.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashcubics/gpu.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashcubics/cpu-diff.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashcubics/gpu-diff.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashcubics/stats.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashcubics/cpu-performance.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashcubics/gpu-performance.json"
+    ],
+    "currentlyPresentArtifacts": [],
+    "historicalSignalsOnly": [
+      "skia-integration-tests/src/test/kotlin/org/skia/tests/DashCubicsTest.kt",
+      "skia-integration-tests/src/main/kotlin/org/skia/tests/DashCubicsGM.kt",
+      "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/DashCubicsCrossBackendTest.kt",
+      "gpu-raster/test-similarity-scores-webgpu.properties#DashCubicsGM-gpu=92.69; DashCubicsGM-raster=91.07",
+      "skia-integration-tests/test-similarity-scores.properties#DashCubicsGM=89.86897880539499",
+      "cpu-raster/test-similarity-scores.properties#DashCubicsGM=89.86897880539499",
+      "kanvas-skia/test-similarity-scores.properties#DashCubicsGM=89.86897880539499"
+    ]
+  },
+  "promotionGate": {
+    "promotionAllowed": false,
+    "supportAllowedFromToleranceOnly": false,
+    "supportAllowedFromHistoricalSignalsOnly": false,
+    "supportAllowedWithoutRowSpecificArtifactBundle": false,
+    "supportAllowedWithoutFallbackReasonNone": false
+  },
+  "scoreImpact": {
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0,
+    "dashboardPromotion": false,
+    "thresholdChanged": false,
+    "edgeBudgetChanged": false
+  },
+  "nonClaims": {
+    "rowSupportClaimed": false,
+    "broadPathAASupport": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadStrokeSupport": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "dynamicSkSLCompiler": false,
+    "thresholdChanged": false,
+    "dashboardPromoted": false,
+    "belowThresholdCountedAsProductionGap": false
+  }
+}
