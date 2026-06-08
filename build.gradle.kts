@@ -4763,6 +4763,19 @@ tasks.register<Exec>("pipelineM91ImageFilterOffsetReferencePackagePlan") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM91ImageFilterOffsetReferenceProvenanceGate") {
+    group = "verification"
+    description = "Generates and validates M91-IF-3A OffsetImageFilterGM reference provenance gate without changing support claims."
+    commandLine("python3", "scripts/m91_image_filter_offset_reference_provenance_gate.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_offset_reference_provenance_gate.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/reference-plan.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-offset-reference-package-plan/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-offset-evidence-intake/summary.json"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/offsetimagefilter.png"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-offset-reference-provenance-gate"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM91ImageFilterOffsetGraphOwnershipProof") {
     group = "verification"
     description = "Generates and validates M91-IF-3A OffsetImageFilterGM graph and ownership proof without changing support claims."

@@ -1,0 +1,193 @@
+{
+  "classification": "image-filter-offset-reference-provenance-gate-no-new-rendering-support",
+  "counters": {
+    "dashboardPromotions": 0,
+    "diffStatsAdded": 0,
+    "fallbackReasonNoneRoutesAdded": 0,
+    "historicalFixturePromoted": 0,
+    "missingEvidenceItemsStill": 9,
+    "newSupportClaims": 0,
+    "performanceArtifactsAdded": 0,
+    "presentEvidenceItemsStill": 2,
+    "provenanceGates": 1,
+    "readinessDelta": 0.0,
+    "referenceArtifactsAdded": 0,
+    "referenceProvenanceArtifactsAdded": 0,
+    "renderArtifactsAdded": 0,
+    "thresholdChanges": 0
+  },
+  "generatedBy": "scripts/m91_image_filter_offset_reference_provenance_gate.py",
+  "historicalFixtureBoundary": {
+    "allowedUse": "provenance-boundary-check-only",
+    "bitDepth": 16,
+    "canSatisfyReferenceProvenance": false,
+    "canSatisfySkiaReferenceArtifact": false,
+    "colorType": 6,
+    "height": 100,
+    "path": "skia-integration-tests/src/test/resources/original-888/offsetimagefilter.png",
+    "reason": "The checked-in fixture is historical test data, not a row-specific M91 reference package with generation provenance.",
+    "width": 600
+  },
+  "inputs": {
+    "evidenceIntake": "reports/wgsl-pipeline/m91-image-filter-offset-evidence-intake/summary.json",
+    "historicalFixture": "skia-integration-tests/src/test/resources/original-888/offsetimagefilter.png",
+    "referencePlan": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/reference-plan.json",
+    "referencePlanSummary": "reports/wgsl-pipeline/m91-image-filter-offset-reference-package-plan/summary.json"
+  },
+  "milestone": "M91",
+  "nonClaims": {
+    "belowThresholdCountedAsProductionGap": false,
+    "cpuReadbackFallbackAdded": false,
+    "dashboardPromoted": false,
+    "diffStatsAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "fallbackReasonNoneClaimed": false,
+    "ganeshPort": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "historicalReferencePromoted": false,
+    "performanceGatePromoted": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "referenceArtifactAdded": false,
+    "referenceProvenanceAdded": false,
+    "renderArtifactsAdded": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "requiredAbsentOutputs": [
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/skia.png",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/reference-provenance.json",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-cpu.json",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-gpu.json",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/cpu.png",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/gpu.png",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/cpu-diff.png",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/gpu-diff.png",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/stats.json",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/performance.json",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    }
+  ],
+  "requiredFutureEvidence": [
+    {
+      "kind": "row-specific Skia/reference artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/skia.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "reference provenance",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/reference-provenance.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-cpu.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "WebGPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-gpu.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU render artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/cpu.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "WebGPU render artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/gpu.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU diff artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/cpu-diff.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "WebGPU diff artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/gpu-diff.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/stats.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/performance.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    }
+  ],
+  "row": {
+    "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+    "policyOnly": true,
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "rowId": "skia-gm-offsetimagefilter",
+    "sourceGm": "OffsetImageFilterGM",
+    "status": "expected-unsupported",
+    "supportClaim": false
+  },
+  "schemaVersion": 1,
+  "status": "blocked-until-row-specific-reference-provenance-exists",
+  "ticket": "M91-IF-3A-PROV",
+  "validationCommands": [
+    "rtk python3 scripts/m91_image_filter_offset_reference_provenance_gate.py",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-m91-offset-reference-provenance-gate-pycache python3 -m py_compile scripts/m91_image_filter_offset_reference_provenance_gate.py",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterOffsetReferenceProvenanceGate",
+    "rtk git diff --check"
+  ]
+}
