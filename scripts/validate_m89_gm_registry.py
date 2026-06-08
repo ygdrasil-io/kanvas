@@ -17,6 +17,7 @@ REGISTRY = ROOT / "reports/wgsl-pipeline/m89-gm-registry/registry.json"
 REPORT = ROOT / "reports/wgsl-pipeline/m89-gm-registry/registry.md"
 GENERATED_RESULTS = ROOT / "reports/wgsl-pipeline/scenes/generated/results.json"
 SCENES_DIR = ROOT / "reports/wgsl-pipeline/scenes"
+TEXT_GLYPH_DEPENDENCY_GATE_JSON = ROOT / "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json"
 
 EXPECTED_COUNTERS = {
     "totalRows": 47,
@@ -27,6 +28,7 @@ EXPECTED_COUNTERS = {
     "groupedPolicyRefusalRows": 9,
     "edgeBudgetGateLinkRows": 2,
     "imageFilterPrepassGateLinkRows": 1,
+    "textGlyphDependencyGateLinkRows": 2,
     "expectedUnsupportedWithFallback": 25,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
@@ -115,6 +117,28 @@ EXPECTED_IMAGE_FILTER_PREPASS_GATES = {
         "m86RootCause": "filter.picture-prepass-required",
     },
 }
+EXPECTED_TEXT_GLYPH_DEPENDENCY_GATES = {
+    "font-emoji-color-glyph-refusal": {
+        "fallbackReason": "font.color-glyph-emoji-unsupported",
+        "dependency": "color-font-emoji-rendering",
+        "specificSpec": ".upstream/specs/font/05-color-fonts-emoji-and-fixtures.md",
+        "cpuRoute": "cpu.text.refusal-oracle.emoji-color-glyph",
+        "gpuRoute": "webgpu.text.refuse",
+        "gpuCoverageStrategy": "webgpu.coverage.refuse",
+        "gpuPipelineKey": "textRoute=emoji-color-glyph glyphRepresentation=unsupported",
+        "shapingMode": "emoji-color-glyph",
+    },
+    "font-complex-shaping-refusal": {
+        "fallbackReason": "font.complex-shaping-requires-explicit-shaper",
+        "dependency": "explicit-shaper",
+        "specificSpec": ".upstream/specs/font/03-shaping-and-layout-boundary.md",
+        "cpuRoute": "cpu.text.refusal-oracle.complex-shaping",
+        "gpuRoute": "webgpu.text.refuse",
+        "gpuCoverageStrategy": "webgpu.coverage.refuse",
+        "gpuPipelineKey": "textRoute=complex-shaping glyphRepresentation=unsupported",
+        "shapingMode": "complex-shaping",
+    },
+}
 EXPECTED_SOURCE_COUNTS = {
     "d50-visibility": 11,
     "d53-visibility": 9,
@@ -176,6 +200,7 @@ def route_diagnostic(source_scene: dict[str, Any], backend: str) -> tuple[str, d
 def validate_registry() -> None:
     registry = load_json(REGISTRY)
     generated_rows = generated_source_rows()
+    text_gate_evidence = load_json(TEXT_GLYPH_DEPENDENCY_GATE_JSON)
     require(registry.get("schemaVersion") == 1, "schemaVersion mismatch")
     require(registry.get("generatedBy") == "scripts/m89_gm_registry.py", "generatedBy mismatch")
 
@@ -197,6 +222,7 @@ def validate_registry() -> None:
     grouped_policy_refusal_rows = 0
     edge_budget_gate_link_rows = 0
     image_filter_prepass_gate_link_rows = 0
+    text_glyph_dependency_gate_link_rows = 0
 
     for index, row in enumerate(rows):
         require(isinstance(row, dict), f"rows[{index}] must be an object")
@@ -216,6 +242,7 @@ def validate_registry() -> None:
         grouped_policy_refusals = row.get("groupedPolicyRefusals")
         edge_budget_gate_links = row.get("edgeBudgetGateLinks")
         image_filter_prepass_gate_links = row.get("imageFilterPrepassGateLinks")
+        text_glyph_dependency_gate_links = row.get("textGlyphDependencyGateLinks")
 
         require(isinstance(source, str) and source, f"{row_id}: missing source")
         require(isinstance(status, str) and status, f"{row_id}: missing status")
@@ -229,6 +256,7 @@ def validate_registry() -> None:
         require(isinstance(grouped_policy_refusals, list), f"{row_id}: groupedPolicyRefusals must be list")
         require(isinstance(edge_budget_gate_links, list), f"{row_id}: edgeBudgetGateLinks must be list")
         require(isinstance(image_filter_prepass_gate_links, list), f"{row_id}: imageFilterPrepassGateLinks must be list")
+        require(isinstance(text_glyph_dependency_gate_links, list), f"{row_id}: textGlyphDependencyGateLinks must be list")
         require(row.get("referenceKind") in {"skia-upstream", "skia-derived", "cpu-oracle", "test-oracle", "none"}, f"{row_id}: invalid referenceKind")
         require(row.get("nextTicketType") in {"implementation", "dependency", "fidelity-burndown", "policy-visibility", "performance-gate"}, f"{row_id}: invalid nextTicketType")
         require(row.get("pmImpact") in {"high", "medium", "low"}, f"{row_id}: invalid pmImpact")
@@ -246,6 +274,7 @@ def validate_registry() -> None:
         grouped_policy_refusal_rows += int(bool(grouped_policy_refusals))
         edge_budget_gate_link_rows += int(bool(edge_budget_gate_links))
         image_filter_prepass_gate_link_rows += int(bool(image_filter_prepass_gate_links))
+        text_glyph_dependency_gate_link_rows += int(bool(text_glyph_dependency_gate_links))
 
         if status == "pass":
             require(source == "generated-dashboard", f"{row_id}: only generated dashboard rows may be pass in M89")
@@ -635,6 +664,117 @@ def validate_registry() -> None:
             ):
                 require((ROOT / gate[linked_path]).is_file(), f"{row_id}: image-filter {linked_path} file missing")
 
+        expected_text_gate = EXPECTED_TEXT_GLYPH_DEPENDENCY_GATES.get(row_id)
+        if expected_text_gate is None:
+            require(not text_glyph_dependency_gate_links, f"{row_id}: unexpected text/glyph dependency gate link")
+        else:
+            require(len(text_glyph_dependency_gate_links) == 1, f"{row_id}: expected exactly one text/glyph dependency gate link")
+            gate = text_glyph_dependency_gate_links[0]
+            require(isinstance(gate, dict), f"{row_id}: text/glyph dependency gate link must be object")
+            require(source == "generated-dashboard", f"{row_id}: text/glyph dependency gate must remain generated-dashboard")
+            require(family == "text-glyph", f"{row_id}: text/glyph dependency gate must remain text-glyph")
+            require(status == "expected-unsupported", f"{row_id}: text/glyph dependency gate row must remain expected-unsupported")
+            require(not support_claim, f"{row_id}: text/glyph dependency gate row must not claim support")
+            require(policy_only is False, f"{row_id}: text/glyph generated row must not become policy-only")
+            require(row.get("nextTicketType") == "dependency", f"{row_id}: text/glyph nextTicketType mismatch")
+            require(fallback == expected_text_gate["fallbackReason"], f"{row_id}: text/glyph fallback mismatch")
+            require(gate.get("linear") == "FOR-308", f"{row_id}: text/glyph Linear mismatch")
+            require(
+                gate.get("classification") == "text-glyph-dependency-gated-generated-expected-unsupported-no-support-claim",
+                f"{row_id}: text/glyph classification mismatch",
+            )
+            require(gate.get("fallbackReason") == fallback, f"{row_id}: text/glyph link fallback mismatch")
+            require(gate.get("dependency") == expected_text_gate["dependency"], f"{row_id}: text/glyph dependency mismatch")
+            require(
+                gate.get("json")
+                == "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
+                f"{row_id}: text/glyph JSON path mismatch",
+            )
+            require(
+                gate.get("report") == "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md",
+                f"{row_id}: text/glyph report path mismatch",
+            )
+            require(gate.get("fontSpec") == ".upstream/specs/font/README.md", f"{row_id}: text/glyph font spec mismatch")
+            require(gate.get("specificSpec") == expected_text_gate["specificSpec"], f"{row_id}: text/glyph specific spec mismatch")
+            require(gate.get("validationSpec") == ".upstream/specs/font/06-validation-and-conformance.md", f"{row_id}: text/glyph validation spec mismatch")
+            require(gate.get("cpuRoute") == expected_text_gate["cpuRoute"], f"{row_id}: text/glyph CPU route mismatch")
+            require(gate.get("gpuRoute") == expected_text_gate["gpuRoute"], f"{row_id}: text/glyph GPU route mismatch")
+            require(gate.get("gpuCoverageStrategy") == expected_text_gate["gpuCoverageStrategy"], f"{row_id}: text/glyph GPU strategy mismatch")
+            require(gate.get("gpuPipelineKey") == expected_text_gate["gpuPipelineKey"], f"{row_id}: text/glyph GPU pipeline mismatch")
+            require(gate.get("shapingMode") == expected_text_gate["shapingMode"], f"{row_id}: text/glyph shaping mode mismatch")
+            require(
+                gate.get("supportDecision") == "KEEP_TEXT_GLYPH_DEPENDENCY_GATED_UNTIL_REAL_DELIVERY",
+                f"{row_id}: text/glyph support decision mismatch",
+            )
+            require(isinstance(gate.get("forbiddenSubstituteCount"), int) and gate.get("forbiddenSubstituteCount") >= 6, f"{row_id}: text/glyph forbidden substitute count mismatch")
+            require(
+                isinstance(gate.get("requiredFuturePromotionProofCount"), int)
+                and gate.get("requiredFuturePromotionProofCount") >= 10,
+                f"{row_id}: text/glyph future proof count mismatch",
+            )
+            require(gate.get("nativeFallbackAdded") is False, f"{row_id}: text/glyph must not add native fallback")
+            require(gate.get("fontSubstituteAdded") is False, f"{row_id}: text/glyph must not add font substitute")
+            require(gate.get("supportScoreIncreased") is False, f"{row_id}: text/glyph gate must not increase support score")
+
+            preserved_refusals = text_gate_evidence.get("preservedRefusals")
+            require(isinstance(preserved_refusals, list), f"{row_id}: FOR-308 preservedRefusals missing")
+            preserved = [
+                item
+                for item in preserved_refusals
+                if isinstance(item, dict) and item.get("id") == row_id
+            ]
+            require(len(preserved) == 1, f"{row_id}: FOR-308 preserved refusal mismatch")
+            preserved_row = preserved[0]
+            require(preserved_row.get("status") == "expected-unsupported", f"{row_id}: FOR-308 status mismatch")
+            require(preserved_row.get("route") == expected_text_gate["gpuRoute"], f"{row_id}: FOR-308 route mismatch")
+            require(preserved_row.get("pipelineKey") == expected_text_gate["gpuPipelineKey"], f"{row_id}: FOR-308 pipeline mismatch")
+            require(preserved_row.get("fallbackReason") == fallback, f"{row_id}: FOR-308 fallback mismatch")
+            require(
+                text_gate_evidence.get("decision") == "TEXT_GLYPH_DEPENDENCY_GATE_APPLIED",
+                f"{row_id}: FOR-308 decision mismatch",
+            )
+            require(
+                text_gate_evidence.get("supportDecision") == "KEEP_TEXT_GLYPH_DEPENDENCY_GATED_UNTIL_REAL_DELIVERY",
+                f"{row_id}: FOR-308 support decision mismatch",
+            )
+
+            source_scene = generated_rows.get(row_id)
+            require(isinstance(source_scene, dict), f"{row_id}: generated source row missing")
+            source_cpu = source_scene.get("cpu")
+            source_gpu = source_scene.get("gpu")
+            require(isinstance(source_cpu, dict), f"{row_id}: generated CPU diagnostics missing")
+            require(isinstance(source_gpu, dict), f"{row_id}: generated GPU diagnostics missing")
+            source_cpu_route = source_cpu.get("route")
+            source_gpu_route = source_gpu.get("route")
+            require(isinstance(source_cpu_route, dict), f"{row_id}: generated CPU route missing")
+            require(isinstance(source_gpu_route, dict), f"{row_id}: generated GPU route missing")
+            require(source_cpu.get("status") == "pass", f"{row_id}: generated CPU status mismatch")
+            require(source_gpu.get("status") == "expected-unsupported", f"{row_id}: generated GPU status mismatch")
+            require(source_cpu_route.get("selectedRoute") == gate.get("cpuRoute"), f"{row_id}: generated CPU route mismatch")
+            require(source_cpu_route.get("fallbackReason") == "none", f"{row_id}: generated CPU fallback mismatch")
+            require(source_gpu_route.get("selectedRoute") == gate.get("gpuRoute"), f"{row_id}: generated GPU route mismatch")
+            require(source_gpu_route.get("coverageStrategy") == gate.get("gpuCoverageStrategy"), f"{row_id}: generated GPU strategy mismatch")
+            require(source_gpu_route.get("pipelineKey") == gate.get("gpuPipelineKey"), f"{row_id}: generated GPU pipeline mismatch")
+            require(source_gpu_route.get("fallbackReason") == fallback, f"{row_id}: generated GPU fallback mismatch")
+
+            cpu_diagnostic_path, cpu_diagnostic = route_diagnostic(source_scene, "cpu")
+            gpu_diagnostic_path, gpu_diagnostic = route_diagnostic(source_scene, "gpu")
+            require(gate.get("routeCpuDiagnostic") == cpu_diagnostic_path, f"{row_id}: text/glyph CPU diagnostic path differs from source dashboard")
+            require(gate.get("routeGpuDiagnostic") == gpu_diagnostic_path, f"{row_id}: text/glyph GPU diagnostic path differs from source dashboard")
+            require(cpu_diagnostic.get("status") == source_cpu.get("status") == "pass", f"{row_id}: CPU diagnostic status mismatch")
+            require(cpu_diagnostic.get("selectedRoute") == source_cpu_route.get("selectedRoute") == gate.get("cpuRoute"), f"{row_id}: CPU diagnostic route mismatch")
+            require(cpu_diagnostic.get("fallbackReason") == source_cpu_route.get("fallbackReason") == "none", f"{row_id}: CPU diagnostic fallback mismatch")
+            require(cpu_diagnostic.get("shapingMode") == gate.get("shapingMode"), f"{row_id}: CPU diagnostic shaping mode mismatch")
+            require(gpu_diagnostic.get("status") == source_gpu.get("status") == "expected-unsupported", f"{row_id}: GPU diagnostic status mismatch")
+            require(gpu_diagnostic.get("selectedRoute") == source_gpu_route.get("selectedRoute") == gate.get("gpuRoute"), f"{row_id}: GPU diagnostic route mismatch")
+            require(gpu_diagnostic.get("coverageStrategy") == source_gpu_route.get("coverageStrategy") == gate.get("gpuCoverageStrategy"), f"{row_id}: GPU diagnostic strategy mismatch")
+            require(gpu_diagnostic.get("pipelineKey") == source_gpu_route.get("pipelineKey") == gate.get("gpuPipelineKey"), f"{row_id}: GPU diagnostic pipeline mismatch")
+            require(gpu_diagnostic.get("fallbackReason") == source_gpu_route.get("fallbackReason") == gate.get("fallbackReason"), f"{row_id}: GPU diagnostic fallback mismatch")
+            require(gpu_diagnostic.get("shapingMode") == gate.get("shapingMode"), f"{row_id}: GPU diagnostic shaping mode mismatch")
+
+            for linked_path in ("json", "report", "fontSpec", "specificSpec", "validationSpec", "routeCpuDiagnostic", "routeGpuDiagnostic"):
+                require((ROOT / gate[linked_path]).is_file(), f"{row_id}: text/glyph {linked_path} file missing")
+
     duplicates = sorted(row_id for row_id, count in Counter(row_ids).items() if count > 1)
     require(not duplicates, f"duplicate row ids: {duplicates}")
 
@@ -657,6 +797,10 @@ def validate_registry() -> None:
     require(
         image_filter_prepass_gate_link_rows == EXPECTED_COUNTERS["imageFilterPrepassGateLinkRows"],
         "derived image-filter prepass gate link count mismatch",
+    )
+    require(
+        text_glyph_dependency_gate_link_rows == EXPECTED_COUNTERS["textGlyphDependencyGateLinkRows"],
+        "derived text/glyph dependency gate link count mismatch",
     )
     require(
         expected_unsupported_with_fallback == EXPECTED_COUNTERS["expectedUnsupportedWithFallback"],
@@ -715,6 +859,7 @@ def validate_report() -> None:
         "Grouped policy refusal links: `9`",
         "Edge-budget gate links: `2`",
         "Image-filter prepass gate links: `1`",
+        "Text/glyph dependency gate links: `2`",
         "`expected-unsupported`: `25`",
         "`pass`: `22`",
         "Linked M66 rows: `18`",

@@ -39,6 +39,10 @@ M38_IMAGE_FILTER_POLICY_UPDATE = ROOT / "reports/wgsl-pipeline/2026-05-28-m38-im
 M41_CROP_IMAGE_FILTER_GENERATED_EVIDENCE = ROOT / "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md"
 IMAGE_FILTER_PREPASS_ROUTE_CPU = SCENES_DIR / "artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json"
 IMAGE_FILTER_PREPASS_ROUTE_GPU = SCENES_DIR / "artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json"
+FONT_README = ROOT / ".upstream/specs/font/README.md"
+FONT_SHAPING_BOUNDARY = ROOT / ".upstream/specs/font/03-shaping-and-layout-boundary.md"
+FONT_COLOR_EMOJI_POLICY = ROOT / ".upstream/specs/font/05-color-fonts-emoji-and-fixtures.md"
+FONT_VALIDATION_CONFORMANCE = ROOT / ".upstream/specs/font/06-validation-and-conformance.md"
 ROW_SPECIFIC_REFUSALS = {
     "skia-gm-image": {
         "linear": "FOR-466",
@@ -125,6 +129,30 @@ IMAGE_FILTER_PREPASS_GATE_ROWS = {
         "pipelineKey": "imageFilter=Crop(input=nonNull),prePass=required,selectedM38Shape=false",
         "m66RefusalId": "m66-image-filter-crop-prepass-refusal",
         "m86RootCause": "filter.picture-prepass-required",
+    },
+}
+TEXT_GLYPH_GENERATED_DEPENDENCY_GATE_ROWS = {
+    "font-emoji-color-glyph-refusal": {
+        "linear": "FOR-308",
+        "fallbackReason": "font.color-glyph-emoji-unsupported",
+        "dependency": "color-font-emoji-rendering",
+        "shapingMode": "emoji-color-glyph",
+        "cpuRoute": "cpu.text.refusal-oracle.emoji-color-glyph",
+        "gpuRoute": "webgpu.text.refuse",
+        "gpuCoverageStrategy": "webgpu.coverage.refuse",
+        "pipelineKey": "textRoute=emoji-color-glyph glyphRepresentation=unsupported",
+        "spec": FONT_COLOR_EMOJI_POLICY,
+    },
+    "font-complex-shaping-refusal": {
+        "linear": "FOR-308",
+        "fallbackReason": "font.complex-shaping-requires-explicit-shaper",
+        "dependency": "explicit-shaper",
+        "shapingMode": "complex-shaping",
+        "cpuRoute": "cpu.text.refusal-oracle.complex-shaping",
+        "gpuRoute": "webgpu.text.refuse",
+        "gpuCoverageStrategy": "webgpu.coverage.refuse",
+        "pipelineKey": "textRoute=complex-shaping glyphRepresentation=unsupported",
+        "spec": FONT_SHAPING_BOUNDARY,
     },
 }
 
@@ -660,6 +688,113 @@ def image_filter_prepass_gate_links(
     ]
 
 
+def text_glyph_dependency_gate_links(
+    source: str,
+    scene: dict[str, Any],
+    fallback: str,
+    indexes: dict[str, Any],
+) -> list[dict[str, Any]]:
+    scene_id = str(scene.get("id") or "")
+    metadata = TEXT_GLYPH_GENERATED_DEPENDENCY_GATE_ROWS.get(scene_id)
+    if source != "generated-dashboard" or not isinstance(metadata, dict):
+        return []
+    if scene.get("status") != "expected-unsupported":
+        raise AssertionError(f"{scene_id}: text/glyph dependency gate row must remain expected-unsupported")
+    if fallback != metadata["fallbackReason"]:
+        raise AssertionError(f"{scene_id}: text/glyph dependency fallback mismatch")
+
+    evidence = indexes["textGlyphDependencyGate"]
+    if not isinstance(evidence, dict):
+        raise AssertionError(f"{scene_id}: text/glyph dependency evidence must be an object")
+    if evidence.get("decision") != "TEXT_GLYPH_DEPENDENCY_GATE_APPLIED":
+        raise AssertionError(f"{scene_id}: text/glyph dependency decision mismatch")
+    if evidence.get("supportDecision") != "KEEP_TEXT_GLYPH_DEPENDENCY_GATED_UNTIL_REAL_DELIVERY":
+        raise AssertionError(f"{scene_id}: text/glyph support decision mismatch")
+    preserved = [
+        row
+        for row in evidence.get("preservedRefusals", [])
+        if isinstance(row, dict) and row.get("id") == scene_id
+    ]
+    if len(preserved) != 1:
+        raise AssertionError(f"{scene_id}: FOR-308 preserved refusal missing")
+    preserved_row = preserved[0]
+    if preserved_row.get("status") != "expected-unsupported" or preserved_row.get("fallbackReason") != fallback:
+        raise AssertionError(f"{scene_id}: FOR-308 preserved refusal status/fallback mismatch")
+    if preserved_row.get("route") != metadata["gpuRoute"] or preserved_row.get("pipelineKey") != metadata["pipelineKey"]:
+        raise AssertionError(f"{scene_id}: FOR-308 preserved refusal route mismatch")
+    forbidden = evidence.get("forbiddenSubstitutes")
+    required = evidence.get("requiredFuturePromotionProof")
+    if not isinstance(forbidden, list) or len(forbidden) < 6:
+        raise AssertionError(f"{scene_id}: text/glyph dependency forbidden substitutes missing")
+    if not isinstance(required, list) or len(required) < 10:
+        raise AssertionError(f"{scene_id}: text/glyph future proof requirements missing")
+
+    cpu = scene.get("cpu")
+    gpu = scene.get("gpu")
+    if not isinstance(cpu, dict) or not isinstance(gpu, dict):
+        raise AssertionError(f"{scene_id}: text/glyph route diagnostics missing")
+    cpu_route = cpu.get("route")
+    gpu_route = gpu.get("route")
+    if not isinstance(cpu_route, dict) or cpu_route.get("selectedRoute") != metadata["cpuRoute"]:
+        raise AssertionError(f"{scene_id}: text/glyph CPU route mismatch")
+    if not isinstance(gpu_route, dict):
+        raise AssertionError(f"{scene_id}: text/glyph GPU route missing")
+    if gpu.get("status") != "expected-unsupported":
+        raise AssertionError(f"{scene_id}: text/glyph GPU status mismatch")
+    if gpu_route.get("selectedRoute") != metadata["gpuRoute"]:
+        raise AssertionError(f"{scene_id}: text/glyph GPU route mismatch")
+    if gpu_route.get("coverageStrategy") != metadata["gpuCoverageStrategy"]:
+        raise AssertionError(f"{scene_id}: text/glyph GPU strategy mismatch")
+    if gpu_route.get("pipelineKey") != metadata["pipelineKey"] or gpu_route.get("fallbackReason") != fallback:
+        raise AssertionError(f"{scene_id}: text/glyph GPU pipeline/fallback mismatch")
+
+    cpu_diagnostic_path, cpu_diagnostic = route_diagnostic(scene, "cpu")
+    gpu_diagnostic_path, gpu_diagnostic = route_diagnostic(scene, "gpu")
+    if cpu_diagnostic.get("status") != "pass" or cpu_diagnostic.get("selectedRoute") != metadata["cpuRoute"]:
+        raise AssertionError(f"{scene_id}: text/glyph CPU diagnostic route mismatch")
+    if cpu_diagnostic.get("fallbackReason") != "none":
+        raise AssertionError(f"{scene_id}: text/glyph CPU diagnostic fallback mismatch")
+    if cpu_diagnostic.get("shapingMode") != metadata["shapingMode"]:
+        raise AssertionError(f"{scene_id}: text/glyph CPU shaping mode mismatch")
+    if gpu_diagnostic.get("status") != "expected-unsupported":
+        raise AssertionError(f"{scene_id}: text/glyph GPU diagnostic status mismatch")
+    if gpu_diagnostic.get("selectedRoute") != metadata["gpuRoute"]:
+        raise AssertionError(f"{scene_id}: text/glyph GPU diagnostic route mismatch")
+    if gpu_diagnostic.get("coverageStrategy") != metadata["gpuCoverageStrategy"]:
+        raise AssertionError(f"{scene_id}: text/glyph GPU diagnostic strategy mismatch")
+    if gpu_diagnostic.get("pipelineKey") != metadata["pipelineKey"] or gpu_diagnostic.get("fallbackReason") != fallback:
+        raise AssertionError(f"{scene_id}: text/glyph GPU diagnostic pipeline/fallback mismatch")
+    if gpu_diagnostic.get("shapingMode") != metadata["shapingMode"]:
+        raise AssertionError(f"{scene_id}: text/glyph GPU shaping mode mismatch")
+
+    return [
+        {
+            "linear": metadata["linear"],
+            "classification": "text-glyph-dependency-gated-generated-expected-unsupported-no-support-claim",
+            "fallbackReason": fallback,
+            "dependency": metadata["dependency"],
+            "json": rel(TEXT_GLYPH_DEPENDENCY_GATE["json"]),
+            "report": rel(TEXT_GLYPH_DEPENDENCY_GATE["report"]),
+            "fontSpec": rel(FONT_README),
+            "specificSpec": rel(metadata["spec"]),
+            "validationSpec": rel(FONT_VALIDATION_CONFORMANCE),
+            "cpuRoute": metadata["cpuRoute"],
+            "gpuRoute": metadata["gpuRoute"],
+            "gpuCoverageStrategy": metadata["gpuCoverageStrategy"],
+            "gpuPipelineKey": metadata["pipelineKey"],
+            "routeCpuDiagnostic": rel(cpu_diagnostic_path),
+            "routeGpuDiagnostic": rel(gpu_diagnostic_path),
+            "shapingMode": metadata["shapingMode"],
+            "forbiddenSubstituteCount": len(forbidden),
+            "requiredFuturePromotionProofCount": len(required),
+            "supportDecision": evidence.get("supportDecision"),
+            "nativeFallbackAdded": False,
+            "fontSubstituteAdded": False,
+            "supportScoreIncreased": False,
+        }
+    ]
+
+
 def owner_for(source: str, scene: dict[str, Any]) -> str:
     if source == "d50-visibility":
         return "M89"
@@ -740,6 +875,7 @@ def normalize_scene(source: str, scene: dict[str, Any], indexes: dict[str, Any])
         "groupedPolicyRefusals": grouped_policy_refusals(source, scene, fallback),
         "edgeBudgetGateLinks": edge_budget_gate_links(source, scene, fallback),
         "imageFilterPrepassGateLinks": image_filter_prepass_gate_links(source, scene, fallback, indexes),
+        "textGlyphDependencyGateLinks": text_glyph_dependency_gate_links(source, scene, fallback, indexes),
         "owningMilestone": owner_for(source, scene),
         "nextTicketType": next_ticket_type(scene, status, family),
         "pmImpact": pm_impact(status, family),
@@ -773,6 +909,7 @@ def build_registry() -> dict[str, Any]:
     grouped_policy_refusal_rows = sum(1 for row in rows if row["groupedPolicyRefusals"])
     edge_budget_gate_link_rows = sum(1 for row in rows if row["edgeBudgetGateLinks"])
     image_filter_prepass_gate_link_rows = sum(1 for row in rows if row["imageFilterPrepassGateLinks"])
+    text_glyph_dependency_gate_link_rows = sum(1 for row in rows if row["textGlyphDependencyGateLinks"])
     m88 = indexes["m88"]
     m88_counters = m88.get("dashboardCounters", {}) if isinstance(m88.get("dashboardCounters"), dict) else {}
 
@@ -799,6 +936,10 @@ def build_registry() -> dict[str, Any]:
             rel(M41_CROP_IMAGE_FILTER_GENERATED_EVIDENCE),
             rel(IMAGE_FILTER_PREPASS_ROUTE_CPU),
             rel(IMAGE_FILTER_PREPASS_ROUTE_GPU),
+            rel(FONT_README),
+            rel(FONT_SHAPING_BOUNDARY),
+            rel(FONT_COLOR_EMOJI_POLICY),
+            rel(FONT_VALIDATION_CONFORMANCE),
         ],
         "evidencePackages": {
             "m66": {
@@ -843,6 +984,7 @@ def build_registry() -> dict[str, Any]:
             "groupedPolicyRefusalRows": grouped_policy_refusal_rows,
             "edgeBudgetGateLinkRows": edge_budget_gate_link_rows,
             "imageFilterPrepassGateLinkRows": image_filter_prepass_gate_link_rows,
+            "textGlyphDependencyGateLinkRows": text_glyph_dependency_gate_link_rows,
             "expectedUnsupportedWithFallback": sum(
                 1 for row in rows if row["status"] == "expected-unsupported" and row["fallbackReason"] != "none"
             ),
@@ -872,6 +1014,7 @@ def write_markdown(registry: dict[str, Any]) -> None:
         f"- Grouped policy refusal links: `{counters['groupedPolicyRefusalRows']}`",
         f"- Edge-budget gate links: `{counters['edgeBudgetGateLinkRows']}`",
         f"- Image-filter prepass gate links: `{counters['imageFilterPrepassGateLinkRows']}`",
+        f"- Text/glyph dependency gate links: `{counters['textGlyphDependencyGateLinkRows']}`",
         f"- Expected unsupported with fallback: `{counters['expectedUnsupportedWithFallback']}`",
         f"- Linked M66 rows: `{counters['linkedM66Rows']}`",
         f"- Linked M86 rows: `{counters['linkedM86Rows']}`",

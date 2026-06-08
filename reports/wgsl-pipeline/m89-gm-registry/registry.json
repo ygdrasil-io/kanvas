@@ -29,6 +29,7 @@
       "pass": 22
     },
     "supportClaims": 22,
+    "textGlyphDependencyGateLinkRows": 2,
     "totalRows": 47
   },
   "description": "M89 normalized GM support/refusal registry. This artifact changes no support claims.",
@@ -108,6 +109,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 Image GM row-specific refusal"
     },
     {
@@ -147,6 +149,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 ImageSource GM row-specific refusal"
     },
     {
@@ -186,6 +189,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 Gradients2ptConical GM row-specific refusal"
     },
     {
@@ -225,6 +229,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 ImageMakeWithFilter GM row-specific refusal"
     },
     {
@@ -264,6 +269,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 OffsetImageFilter GM row-specific refusal"
     },
     {
@@ -303,6 +309,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 PathFill GM row-specific refusal"
     },
     {
@@ -342,6 +349,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 RectPolyStroke GM row-specific refusal"
     },
     {
@@ -384,6 +392,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 RuntimeImageFilter GM row-specific refusal"
     },
     {
@@ -426,6 +435,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 RuntimeIntrinsics GM row-specific refusal"
     },
     {
@@ -464,6 +474,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 ShaderText3 GM row-specific refusal"
     },
     {
@@ -502,6 +513,7 @@
       "source": "d50-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "D50 TextBlobTransforms GM row-specific refusal"
     },
     {
@@ -538,6 +550,7 @@
       "source": "d53-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "DashCubics GM row-specific refusal"
     },
     {
@@ -574,6 +587,7 @@
       "source": "d53-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "Dashing GM row-specific refusal"
     },
     {
@@ -610,6 +624,7 @@
       "source": "d53-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "Hairlines GM row-specific refusal"
     },
     {
@@ -646,6 +661,7 @@
       "source": "d53-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "HairModes GM row-specific refusal"
     },
     {
@@ -682,6 +698,7 @@
       "source": "d53-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "ScaledStrokes GM row-specific refusal"
     },
     {
@@ -718,6 +735,7 @@
       "source": "d53-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "StrokedLines GM row-specific refusal"
     },
     {
@@ -754,6 +772,7 @@
       "source": "d53-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "StrokeRect GM row-specific refusal"
     },
     {
@@ -790,6 +809,7 @@
       "source": "d53-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "StrokeRects GM row-specific refusal"
     },
     {
@@ -826,6 +846,7 @@
       "source": "d53-visibility",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "ThinStrokedRects GM row-specific refusal"
     },
     {
@@ -882,6 +903,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Bitmap rect nearest sampling"
     },
     {
@@ -917,6 +939,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Bitmap shader rotated local-matrix rect"
     },
     {
@@ -952,6 +975,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Bitmap shader repeat tile paint rect"
     },
     {
@@ -1008,6 +1032,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Bitmap subset shader local-matrix repeat"
     },
     {
@@ -1043,6 +1068,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "D52 DrawMiniBitmapRect Skia reference"
     },
     {
@@ -1078,6 +1104,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Solid filled rect"
     },
     {
@@ -1134,6 +1161,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Partial alpha SrcOver blend stack"
     },
     {
@@ -1190,6 +1218,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Linear gradient color-filter kPlus route"
     },
     {
@@ -1225,6 +1254,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Linear gradient rect generated WGSL route"
     },
     {
@@ -1281,6 +1311,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Sweep gradient clamp on AA circle path"
     },
     {
@@ -1337,6 +1368,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Crop non-null image-filter child pre-pass"
     },
     {
@@ -1393,6 +1425,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Image-filter Compose ColorFilter over MatrixTransform"
     },
     {
@@ -1468,6 +1501,7 @@
       "source": "generated-dashboard",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "Image-filter Crop(input=nonNull) pre-pass refusal"
     },
     {
@@ -1524,6 +1558,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Analytic AA convex path"
     },
     {
@@ -1580,6 +1615,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Clip rect difference route diagnostics"
     },
     {
@@ -1615,6 +1651,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "drawPaint clipped rect route"
     },
     {
@@ -1650,6 +1687,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "drawPaint full clip opaque source"
     },
     {
@@ -1698,6 +1736,7 @@
       "source": "generated-dashboard",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "Path AA ConvexPaths edge-budget refusal"
     },
     {
@@ -1767,6 +1806,7 @@
       "source": "generated-dashboard",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [],
       "title": "Path AA Dashing edge-budget refusal"
     },
     {
@@ -1823,6 +1863,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Path AA primitive stroke family"
     },
     {
@@ -1879,6 +1920,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Registered SimpleRT runtime-effect route"
     },
     {
@@ -1929,6 +1971,32 @@
       "source": "generated-dashboard",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [
+        {
+          "classification": "text-glyph-dependency-gated-generated-expected-unsupported-no-support-claim",
+          "cpuRoute": "cpu.text.refusal-oracle.complex-shaping",
+          "dependency": "explicit-shaper",
+          "fallbackReason": "font.complex-shaping-requires-explicit-shaper",
+          "fontSpec": ".upstream/specs/font/README.md",
+          "fontSubstituteAdded": false,
+          "forbiddenSubstituteCount": 6,
+          "gpuCoverageStrategy": "webgpu.coverage.refuse",
+          "gpuPipelineKey": "textRoute=complex-shaping glyphRepresentation=unsupported",
+          "gpuRoute": "webgpu.text.refuse",
+          "json": "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
+          "linear": "FOR-308",
+          "nativeFallbackAdded": false,
+          "report": "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md",
+          "requiredFuturePromotionProofCount": 11,
+          "routeCpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/route-cpu.json",
+          "routeGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/route-gpu.json",
+          "shapingMode": "complex-shaping",
+          "specificSpec": ".upstream/specs/font/03-shaping-and-layout-boundary.md",
+          "supportDecision": "KEEP_TEXT_GLYPH_DEPENDENCY_GATED_UNTIL_REAL_DELIVERY",
+          "supportScoreIncreased": false,
+          "validationSpec": ".upstream/specs/font/06-validation-and-conformance.md"
+        }
+      ],
       "title": "Complex shaping explicit refusal"
     },
     {
@@ -1958,6 +2026,32 @@
       "source": "generated-dashboard",
       "status": "expected-unsupported",
       "supportClaim": false,
+      "textGlyphDependencyGateLinks": [
+        {
+          "classification": "text-glyph-dependency-gated-generated-expected-unsupported-no-support-claim",
+          "cpuRoute": "cpu.text.refusal-oracle.emoji-color-glyph",
+          "dependency": "color-font-emoji-rendering",
+          "fallbackReason": "font.color-glyph-emoji-unsupported",
+          "fontSpec": ".upstream/specs/font/README.md",
+          "fontSubstituteAdded": false,
+          "forbiddenSubstituteCount": 6,
+          "gpuCoverageStrategy": "webgpu.coverage.refuse",
+          "gpuPipelineKey": "textRoute=emoji-color-glyph glyphRepresentation=unsupported",
+          "gpuRoute": "webgpu.text.refuse",
+          "json": "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
+          "linear": "FOR-308",
+          "nativeFallbackAdded": false,
+          "report": "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md",
+          "requiredFuturePromotionProofCount": 11,
+          "routeCpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/font-emoji-color-glyph-refusal/route-cpu.json",
+          "routeGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/font-emoji-color-glyph-refusal/route-gpu.json",
+          "shapingMode": "emoji-color-glyph",
+          "specificSpec": ".upstream/specs/font/05-color-fonts-emoji-and-fixtures.md",
+          "supportDecision": "KEEP_TEXT_GLYPH_DEPENDENCY_GATED_UNTIL_REAL_DELIVERY",
+          "supportScoreIncreased": false,
+          "validationSpec": ".upstream/specs/font/06-validation-and-conformance.md"
+        }
+      ],
       "title": "Emoji color glyph explicit refusal"
     },
     {
@@ -2014,6 +2108,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Kerning and style OpenType fixture"
     },
     {
@@ -2070,6 +2165,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Simple Latin outline drawString"
     },
     {
@@ -2126,6 +2222,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Positioned glyph-run text blob"
     },
     {
@@ -2182,6 +2279,7 @@
       "source": "generated-dashboard",
       "status": "pass",
       "supportClaim": true,
+      "textGlyphDependencyGateLinks": [],
       "title": "Scaled rects transform stack"
     }
   ],
@@ -2220,6 +2318,10 @@
     "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
     "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md",
     "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
-    "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json"
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
+    ".upstream/specs/font/README.md",
+    ".upstream/specs/font/03-shaping-and-layout-boundary.md",
+    ".upstream/specs/font/05-color-fonts-emoji-and-fixtures.md",
+    ".upstream/specs/font/06-validation-and-conformance.md"
   ]
 }
