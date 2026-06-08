@@ -1,0 +1,544 @@
+    {
+      "schemaVersion": 1,
+      "ticket": "D54-2",
+      "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d54-2-diagnostiquer-lecart-web-gpu-image-gm-apres-artefacts-row-specific",
+      "sourceFindingMemory": "global/kanvas/findings/d54-1-skia-gm-image-artifact-harness",
+      "sceneId": "d54-skia-gm-image",
+      "inventoryId": "skia-gm-image",
+      "classification": "webgpu-gap-diagnostic-no-dashboard-promotion",
+      "status": "expected-unsupported",
+      "fallbackReason": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required",
+      "adapter": "Apple M2 Max",
+      "metrics": {
+        "cpu": {
+          "status": "pass",
+          "similarity": 98.4826,
+          "threshold": 98.0,
+          "matchingPixels": 1134520,
+          "mismatchingPixels": 17480,
+          "maxChannelDelta": 255
+        },
+      "webgpu": {
+        "status": "expected-unsupported",
+        "similarity": 98.5962,
+        "threshold": 99.95,
+        "matchingPixels": 1135828,
+        "mismatchingPixels": 16172,
+        "maxChannelDelta": 255,
+        "fallbackReason": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required",
+        "supportClaim": false
+      }
+      },
+      "regionModel": {
+        "coordinateSpace": "device pixels after ImageGM scale(2) and translate(80,20)",
+        "cells": "2 raster columns x 7 ImageGM rows",
+        "cellWidth": 132,
+        "cellHeight": 132
+      },
+      "diagnosis": {
+        "summary": "The residual is distributed across the ImageGM raster snapshot cells rather than the intentionally blank GPU column.",
+        "dominantSignal": "cell-level internal SkBitmap comparisons",
+        "pngCaveat": "PNG exports are encoded through SkBitmap.getPixelAsSrgb and are visual evidence only; promotion decisions use internal SkBitmap comparison metrics.",
+      "dominantRegion": "pre-alloc/full-crop",
+      "dominantRegionMismatchingPixels": 1046,
+        "safeCorrectionIdentifiedByD54_2": false,
+        "nextAction": "Add a narrower shader/upload diagnostic for snapshot-image texture sampling before changing production rendering."
+      },
+      "nonClaims": {
+        "supportClaimAddedByD54_2": false,
+        "globalDashboardPromotedByD54_2": false,
+        "globalThresholdChanged": false,
+        "resultsJsonChanged": false,
+        "scenesJsonChanged": false,
+        "pipelineKeyChanged": false,
+        "rendererChanged": false,
+        "wgslProductionChanged": false,
+        "broadImageDecodeClaim": false,
+        "codecSupportClaim": false,
+        "neighborEvidenceInherited": false
+      },
+      "cpuVsReferenceRegions": [
+        {
+  "name": "pre-alloc/original-img",
+  "rect": {"x": 160, "y": 40, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16312,
+  "mismatchingPixels": 1112,
+  "maxChannelDelta": 75,
+  "similarity": 93.6180
+},
+{
+  "name": "pre-alloc/modified-img",
+  "rect": {"x": 160, "y": 200, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16420,
+  "mismatchingPixels": 1004,
+  "maxChannelDelta": 84,
+  "similarity": 94.2378
+},
+{
+  "name": "pre-alloc/cur-surface",
+  "rect": {"x": 160, "y": 360, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16544,
+  "mismatchingPixels": 880,
+  "maxChannelDelta": 90,
+  "similarity": 94.9495
+},
+{
+  "name": "pre-alloc/full-crop",
+  "rect": {"x": 160, "y": 520, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16252,
+  "mismatchingPixels": 1172,
+  "maxChannelDelta": 155,
+  "similarity": 93.2736
+},
+{
+  "name": "pre-alloc/over-crop",
+  "rect": {"x": 160, "y": 680, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16943,
+  "mismatchingPixels": 481,
+  "maxChannelDelta": 84,
+  "similarity": 97.2394
+},
+{
+  "name": "pre-alloc/upper-left",
+  "rect": {"x": 160, "y": 840, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16250,
+  "mismatchingPixels": 1174,
+  "maxChannelDelta": 199,
+  "similarity": 93.2622
+},
+{
+  "name": "pre-alloc/no-crop",
+  "rect": {"x": 160, "y": 1000, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16358,
+  "mismatchingPixels": 1066,
+  "maxChannelDelta": 185,
+  "similarity": 93.8820
+},
+{
+  "name": "new-alloc/original-img",
+  "rect": {"x": 320, "y": 40, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16312,
+  "mismatchingPixels": 1112,
+  "maxChannelDelta": 75,
+  "similarity": 93.6180
+},
+{
+  "name": "new-alloc/modified-img",
+  "rect": {"x": 320, "y": 200, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16420,
+  "mismatchingPixels": 1004,
+  "maxChannelDelta": 84,
+  "similarity": 94.2378
+},
+{
+  "name": "new-alloc/cur-surface",
+  "rect": {"x": 320, "y": 360, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16544,
+  "mismatchingPixels": 880,
+  "maxChannelDelta": 90,
+  "similarity": 94.9495
+},
+{
+  "name": "new-alloc/full-crop",
+  "rect": {"x": 320, "y": 520, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16252,
+  "mismatchingPixels": 1172,
+  "maxChannelDelta": 155,
+  "similarity": 93.2736
+},
+{
+  "name": "new-alloc/over-crop",
+  "rect": {"x": 320, "y": 680, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16943,
+  "mismatchingPixels": 481,
+  "maxChannelDelta": 84,
+  "similarity": 97.2394
+},
+{
+  "name": "new-alloc/upper-left",
+  "rect": {"x": 320, "y": 840, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16250,
+  "mismatchingPixels": 1174,
+  "maxChannelDelta": 199,
+  "similarity": 93.2622
+},
+{
+  "name": "new-alloc/no-crop",
+  "rect": {"x": 320, "y": 1000, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16358,
+  "mismatchingPixels": 1066,
+  "maxChannelDelta": 185,
+  "similarity": 93.8820
+}
+      ],
+      "webgpuVsReferenceRegions": [
+        {
+  "name": "pre-alloc/original-img",
+  "rect": {"x": 160, "y": 40, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16420,
+  "mismatchingPixels": 1004,
+  "maxChannelDelta": 69,
+  "similarity": 94.2378
+},
+{
+  "name": "pre-alloc/modified-img",
+  "rect": {"x": 160, "y": 200, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16504,
+  "mismatchingPixels": 920,
+  "maxChannelDelta": 82,
+  "similarity": 94.7199
+},
+{
+  "name": "pre-alloc/cur-surface",
+  "rect": {"x": 160, "y": 360, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16572,
+  "mismatchingPixels": 852,
+  "maxChannelDelta": 81,
+  "similarity": 95.1102
+},
+{
+  "name": "pre-alloc/full-crop",
+  "rect": {"x": 160, "y": 520, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16378,
+  "mismatchingPixels": 1046,
+  "maxChannelDelta": 152,
+  "similarity": 93.9968
+},
+{
+  "name": "pre-alloc/over-crop",
+  "rect": {"x": 160, "y": 680, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16981,
+  "mismatchingPixels": 443,
+  "maxChannelDelta": 84,
+  "similarity": 97.4575
+},
+{
+  "name": "pre-alloc/upper-left",
+  "rect": {"x": 160, "y": 840, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16422,
+  "mismatchingPixels": 1002,
+  "maxChannelDelta": 195,
+  "similarity": 94.2493
+},
+{
+  "name": "pre-alloc/no-crop",
+  "rect": {"x": 160, "y": 1000, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16456,
+  "mismatchingPixels": 968,
+  "maxChannelDelta": 181,
+  "similarity": 94.4444
+},
+{
+  "name": "new-alloc/original-img",
+  "rect": {"x": 320, "y": 40, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16420,
+  "mismatchingPixels": 1004,
+  "maxChannelDelta": 69,
+  "similarity": 94.2378
+},
+{
+  "name": "new-alloc/modified-img",
+  "rect": {"x": 320, "y": 200, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16504,
+  "mismatchingPixels": 920,
+  "maxChannelDelta": 82,
+  "similarity": 94.7199
+},
+{
+  "name": "new-alloc/cur-surface",
+  "rect": {"x": 320, "y": 360, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16572,
+  "mismatchingPixels": 852,
+  "maxChannelDelta": 81,
+  "similarity": 95.1102
+},
+{
+  "name": "new-alloc/full-crop",
+  "rect": {"x": 320, "y": 520, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16378,
+  "mismatchingPixels": 1046,
+  "maxChannelDelta": 152,
+  "similarity": 93.9968
+},
+{
+  "name": "new-alloc/over-crop",
+  "rect": {"x": 320, "y": 680, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16981,
+  "mismatchingPixels": 443,
+  "maxChannelDelta": 82,
+  "similarity": 97.4575
+},
+{
+  "name": "new-alloc/upper-left",
+  "rect": {"x": 320, "y": 840, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16422,
+  "mismatchingPixels": 1002,
+  "maxChannelDelta": 195,
+  "similarity": 94.2493
+},
+{
+  "name": "new-alloc/no-crop",
+  "rect": {"x": 320, "y": 1000, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16456,
+  "mismatchingPixels": 968,
+  "maxChannelDelta": 181,
+  "similarity": 94.4444
+}
+      ],
+      "webgpuVsCpuRegions": [
+        {
+  "name": "pre-alloc/original-img",
+  "rect": {"x": 160, "y": 40, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16832,
+  "mismatchingPixels": 592,
+  "maxChannelDelta": 16,
+  "similarity": 96.6024
+},
+{
+  "name": "pre-alloc/modified-img",
+  "rect": {"x": 160, "y": 200, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16992,
+  "mismatchingPixels": 432,
+  "maxChannelDelta": 16,
+  "similarity": 97.5207
+},
+{
+  "name": "pre-alloc/cur-surface",
+  "rect": {"x": 160, "y": 360, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 17040,
+  "mismatchingPixels": 384,
+  "maxChannelDelta": 16,
+  "similarity": 97.7961
+},
+{
+  "name": "pre-alloc/full-crop",
+  "rect": {"x": 160, "y": 520, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16792,
+  "mismatchingPixels": 632,
+  "maxChannelDelta": 137,
+  "similarity": 96.3728
+},
+{
+  "name": "pre-alloc/over-crop",
+  "rect": {"x": 160, "y": 680, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 17215,
+  "mismatchingPixels": 209,
+  "maxChannelDelta": 16,
+  "similarity": 98.8005
+},
+{
+  "name": "pre-alloc/upper-left",
+  "rect": {"x": 160, "y": 840, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16787,
+  "mismatchingPixels": 637,
+  "maxChannelDelta": 192,
+  "similarity": 96.3441
+},
+{
+  "name": "pre-alloc/no-crop",
+  "rect": {"x": 160, "y": 1000, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16956,
+  "mismatchingPixels": 468,
+  "maxChannelDelta": 103,
+  "similarity": 97.3140
+},
+{
+  "name": "new-alloc/original-img",
+  "rect": {"x": 320, "y": 40, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16832,
+  "mismatchingPixels": 592,
+  "maxChannelDelta": 16,
+  "similarity": 96.6024
+},
+{
+  "name": "new-alloc/modified-img",
+  "rect": {"x": 320, "y": 200, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16992,
+  "mismatchingPixels": 432,
+  "maxChannelDelta": 16,
+  "similarity": 97.5207
+},
+{
+  "name": "new-alloc/cur-surface",
+  "rect": {"x": 320, "y": 360, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 17040,
+  "mismatchingPixels": 384,
+  "maxChannelDelta": 16,
+  "similarity": 97.7961
+},
+{
+  "name": "new-alloc/full-crop",
+  "rect": {"x": 320, "y": 520, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16792,
+  "mismatchingPixels": 632,
+  "maxChannelDelta": 137,
+  "similarity": 96.3728
+},
+{
+  "name": "new-alloc/over-crop",
+  "rect": {"x": 320, "y": 680, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 17215,
+  "mismatchingPixels": 209,
+  "maxChannelDelta": 16,
+  "similarity": 98.8005
+},
+{
+  "name": "new-alloc/upper-left",
+  "rect": {"x": 320, "y": 840, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16787,
+  "mismatchingPixels": 637,
+  "maxChannelDelta": 192,
+  "similarity": 96.3441
+},
+{
+  "name": "new-alloc/no-crop",
+  "rect": {"x": 320, "y": 1000, "width": 132, "height": 132},
+  "totalPixels": 17424,
+  "matchingPixels": 16956,
+  "mismatchingPixels": 468,
+  "maxChannelDelta": 103,
+  "similarity": 97.3140
+}
+      ],
+      "samples": [
+        {
+  "name": "pre-alloc/original-img",
+  "point": {"x": 224, "y": 104},
+  "referenceArgb": "0xFFCA3B12",
+  "cpuArgb": "0xFFCA3B13",
+  "webgpuArgb": "0xFFCA3B13"
+},
+{
+  "name": "pre-alloc/modified-img",
+  "point": {"x": 224, "y": 264},
+  "referenceArgb": "0xFF91F544",
+  "cpuArgb": "0xFF91F545",
+  "webgpuArgb": "0xFF91F545"
+},
+{
+  "name": "pre-alloc/cur-surface",
+  "point": {"x": 224, "y": 424},
+  "referenceArgb": "0xFF2B0DF2",
+  "cpuArgb": "0xFF2B0DF1",
+  "webgpuArgb": "0xFF2B0DF1"
+},
+{
+  "name": "pre-alloc/full-crop",
+  "point": {"x": 224, "y": 584},
+  "referenceArgb": "0xFFCA3B12",
+  "cpuArgb": "0xFFCA3B13",
+  "webgpuArgb": "0xFFCA3B13"
+},
+{
+  "name": "pre-alloc/over-crop",
+  "point": {"x": 224, "y": 744},
+  "referenceArgb": "0xFF91F544",
+  "cpuArgb": "0xFF91F545",
+  "webgpuArgb": "0xFF91F545"
+},
+{
+  "name": "pre-alloc/upper-left",
+  "point": {"x": 224, "y": 904},
+  "referenceArgb": "0xFFCA3B12",
+  "cpuArgb": "0xFFCA3B13",
+  "webgpuArgb": "0xFFCA3B13"
+},
+{
+  "name": "pre-alloc/no-crop",
+  "point": {"x": 224, "y": 1064},
+  "referenceArgb": "0xFF91F544",
+  "cpuArgb": "0xFF91F545",
+  "webgpuArgb": "0xFF91F545"
+},
+{
+  "name": "new-alloc/original-img",
+  "point": {"x": 384, "y": 104},
+  "referenceArgb": "0xFFCA3B12",
+  "cpuArgb": "0xFFCA3B13",
+  "webgpuArgb": "0xFFCA3B13"
+},
+{
+  "name": "new-alloc/modified-img",
+  "point": {"x": 384, "y": 264},
+  "referenceArgb": "0xFF91F544",
+  "cpuArgb": "0xFF91F545",
+  "webgpuArgb": "0xFF91F545"
+},
+{
+  "name": "new-alloc/cur-surface",
+  "point": {"x": 384, "y": 424},
+  "referenceArgb": "0xFF2B0DF2",
+  "cpuArgb": "0xFF2B0DF1",
+  "webgpuArgb": "0xFF2B0DF1"
+},
+{
+  "name": "new-alloc/full-crop",
+  "point": {"x": 384, "y": 584},
+  "referenceArgb": "0xFFCA3B12",
+  "cpuArgb": "0xFFCA3B13",
+  "webgpuArgb": "0xFFCA3B13"
+},
+{
+  "name": "new-alloc/over-crop",
+  "point": {"x": 384, "y": 744},
+  "referenceArgb": "0xFF91F544",
+  "cpuArgb": "0xFF91F545",
+  "webgpuArgb": "0xFF91F545"
+},
+{
+  "name": "new-alloc/upper-left",
+  "point": {"x": 384, "y": 904},
+  "referenceArgb": "0xFFCA3B12",
+  "cpuArgb": "0xFFCA3B13",
+  "webgpuArgb": "0xFFCA3B13"
+},
+{
+  "name": "new-alloc/no-crop",
+  "point": {"x": 384, "y": 1064},
+  "referenceArgb": "0xFF91F544",
+  "cpuArgb": "0xFF91F545",
+  "webgpuArgb": "0xFF91F545"
+}
+      ]
+    }
