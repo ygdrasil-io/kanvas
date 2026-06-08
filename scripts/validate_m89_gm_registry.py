@@ -29,6 +29,7 @@ EXPECTED_COUNTERS = {
     "edgeBudgetGateLinkRows": 2,
     "imageFilterPrepassGateLinkRows": 1,
     "textGlyphDependencyGateLinkRows": 2,
+    "unlinkedUnsupportedRows": 0,
     "expectedUnsupportedWithFallback": 25,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
@@ -223,6 +224,7 @@ def validate_registry() -> None:
     edge_budget_gate_link_rows = 0
     image_filter_prepass_gate_link_rows = 0
     text_glyph_dependency_gate_link_rows = 0
+    unlinked_unsupported_rows = 0
 
     for index, row in enumerate(rows):
         require(isinstance(row, dict), f"rows[{index}] must be an object")
@@ -275,6 +277,18 @@ def validate_registry() -> None:
         edge_budget_gate_link_rows += int(bool(edge_budget_gate_links))
         image_filter_prepass_gate_link_rows += int(bool(image_filter_prepass_gate_links))
         text_glyph_dependency_gate_link_rows += int(bool(text_glyph_dependency_gate_links))
+        has_specialized_visibility_link = any(
+            bool(links)
+            for links in (
+                row_specific_refusals,
+                dependency_gate_links,
+                grouped_policy_refusals,
+                edge_budget_gate_links,
+                image_filter_prepass_gate_links,
+                text_glyph_dependency_gate_links,
+            )
+        )
+        unlinked_unsupported_rows += int(status != "pass" and not has_specialized_visibility_link)
 
         if status == "pass":
             require(source == "generated-dashboard", f"{row_id}: only generated dashboard rows may be pass in M89")
@@ -803,6 +817,10 @@ def validate_registry() -> None:
         "derived text/glyph dependency gate link count mismatch",
     )
     require(
+        unlinked_unsupported_rows == EXPECTED_COUNTERS["unlinkedUnsupportedRows"],
+        "derived unlinked unsupported row count mismatch",
+    )
+    require(
         expected_unsupported_with_fallback == EXPECTED_COUNTERS["expectedUnsupportedWithFallback"],
         "derived expected-unsupported fallback count mismatch",
     )
@@ -860,6 +878,7 @@ def validate_report() -> None:
         "Edge-budget gate links: `2`",
         "Image-filter prepass gate links: `1`",
         "Text/glyph dependency gate links: `2`",
+        "Unlinked unsupported rows: `0`",
         "`expected-unsupported`: `25`",
         "`pass`: `22`",
         "Linked M66 rows: `18`",

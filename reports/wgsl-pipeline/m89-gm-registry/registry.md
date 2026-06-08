@@ -15,6 +15,7 @@ This registry normalizes current generated dashboard rows and policy-only GM vis
 - Edge-budget gate links: `2`
 - Image-filter prepass gate links: `1`
 - Text/glyph dependency gate links: `2`
+- Unlinked unsupported rows: `0`
 - Expected unsupported with fallback: `25`
 - Linked M66 rows: `18`
 - Linked M86 rows: `18`
@@ -47,3 +48,4 @@ This registry normalizes current generated dashboard rows and policy-only GM vis
 - Convert policy-only rows into row-specific evidence without changing claims.
 - Keep dependency-gated text/font rows visible until real dependencies land.
 - Keep tolerance-only rows in fidelity burn-down rather than production missing-feature counts.
+- Keep `unlinkedUnsupportedRows=0` so every non-pass row has PM-visible support/refusal context.

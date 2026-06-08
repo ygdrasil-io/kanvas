@@ -30,7 +30,8 @@
     },
     "supportClaims": 22,
     "textGlyphDependencyGateLinkRows": 2,
-    "totalRows": 47
+    "totalRows": 47,
+    "unlinkedUnsupportedRows": 0
   },
   "description": "M89 normalized GM support/refusal registry. This artifact changes no support claims.",
   "evidencePackages": {

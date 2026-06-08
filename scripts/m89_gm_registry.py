@@ -884,6 +884,20 @@ def normalize_scene(source: str, scene: dict[str, Any], indexes: dict[str, Any])
     }
 
 
+def has_specialized_visibility_link(row: dict[str, Any]) -> bool:
+    return any(
+        bool(row.get(field))
+        for field in (
+            "rowSpecificRefusals",
+            "dependencyGateLinks",
+            "groupedPolicyRefusals",
+            "edgeBudgetGateLinks",
+            "imageFilterPrepassGateLinks",
+            "textGlyphDependencyGateLinks",
+        )
+    )
+
+
 def build_registry() -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     input_paths: list[str] = []
@@ -910,6 +924,11 @@ def build_registry() -> dict[str, Any]:
     edge_budget_gate_link_rows = sum(1 for row in rows if row["edgeBudgetGateLinks"])
     image_filter_prepass_gate_link_rows = sum(1 for row in rows if row["imageFilterPrepassGateLinks"])
     text_glyph_dependency_gate_link_rows = sum(1 for row in rows if row["textGlyphDependencyGateLinks"])
+    unlinked_unsupported_rows = sum(
+        1
+        for row in rows
+        if row["status"] != "pass" and not has_specialized_visibility_link(row)
+    )
     m88 = indexes["m88"]
     m88_counters = m88.get("dashboardCounters", {}) if isinstance(m88.get("dashboardCounters"), dict) else {}
 
@@ -985,6 +1004,7 @@ def build_registry() -> dict[str, Any]:
             "edgeBudgetGateLinkRows": edge_budget_gate_link_rows,
             "imageFilterPrepassGateLinkRows": image_filter_prepass_gate_link_rows,
             "textGlyphDependencyGateLinkRows": text_glyph_dependency_gate_link_rows,
+            "unlinkedUnsupportedRows": unlinked_unsupported_rows,
             "expectedUnsupportedWithFallback": sum(
                 1 for row in rows if row["status"] == "expected-unsupported" and row["fallbackReason"] != "none"
             ),
@@ -1015,6 +1035,7 @@ def write_markdown(registry: dict[str, Any]) -> None:
         f"- Edge-budget gate links: `{counters['edgeBudgetGateLinkRows']}`",
         f"- Image-filter prepass gate links: `{counters['imageFilterPrepassGateLinkRows']}`",
         f"- Text/glyph dependency gate links: `{counters['textGlyphDependencyGateLinkRows']}`",
+        f"- Unlinked unsupported rows: `{counters['unlinkedUnsupportedRows']}`",
         f"- Expected unsupported with fallback: `{counters['expectedUnsupportedWithFallback']}`",
         f"- Linked M66 rows: `{counters['linkedM66Rows']}`",
         f"- Linked M86 rows: `{counters['linkedM86Rows']}`",
@@ -1034,6 +1055,7 @@ def write_markdown(registry: dict[str, Any]) -> None:
     lines.append("- Convert policy-only rows into row-specific evidence without changing claims.")
     lines.append("- Keep dependency-gated text/font rows visible until real dependencies land.")
     lines.append("- Keep tolerance-only rows in fidelity burn-down rather than production missing-feature counts.")
+    lines.append("- Keep `unlinkedUnsupportedRows=0` so every non-pass row has PM-visible support/refusal context.")
     REGISTRY_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
