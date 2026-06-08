@@ -1,0 +1,137 @@
+{
+  "classification": "row-specific-expected-unsupported-no-support-claim",
+  "date": "2026-06-08",
+  "linear": "FOR-472",
+  "nonClaims": {
+    "broadGradientEnvelopeSupportClaimAddedByFor472": false,
+    "conicalGradientSupportClaimAddedByFor472": false,
+    "dashboardRowAddedByFor472": false,
+    "dashboardStatusChangedByFor472": false,
+    "fallbackPolicyChanged": false,
+    "gradientTileModeSupportClaimAddedByFor472": false,
+    "gradients2ptConicalEvidenceInherited": false,
+    "pipelineKeyChanged": false,
+    "productionCodeChanged": false,
+    "scoringChanged": false,
+    "skiaComparableClaimAddedByFor472": false,
+    "supportClaimAddedByFor472": false,
+    "sweepGradientEvidenceInherited": false,
+    "thresholdChanged": false,
+    "upstreamSourceChanged": false,
+    "wgslProductionChanged": false
+  },
+  "row": {
+    "cpu": {
+      "artifact": "not-generated",
+      "expectation": "CPU two-point conical gradient oracle with case type, tile mode, dither, focal/degenerate parameters, and color stops recorded.",
+      "refusalReason": "row-specific CPU two-point conical gradient artifact is missing",
+      "required": true,
+      "route": "cpu.gradient.2ptconical.expected-unsupported",
+      "status": "expected-unsupported"
+    },
+    "diffStats": {
+      "reason": "diff/stat payload cannot be computed without row-specific reference, CPU, and GPU artifacts",
+      "required": true,
+      "status": "not-computed"
+    },
+    "displayName": "Gradients2ptConical",
+    "fallbackReason": "gradient.2ptconical.row-specific-artifacts-required",
+    "family": "gradients",
+    "gpu": {
+      "artifact": "not-generated",
+      "expectation": "WebGPU two-point conical gradient route with explicit quadratic/focal/degen handling and tile-mode diagnostics.",
+      "fallbackReason": "gradient.2ptconical.row-specific-artifacts-required",
+      "refusalReason": "row-specific WebGPU two-point conical artifact is missing",
+      "required": true,
+      "route": "webgpu.gradient.2ptconical.expected-unsupported",
+      "status": "expected-unsupported"
+    },
+    "gradients2ptConicalProvenance": {
+      "aliasStatus": "Upstream ConicalGradientsGM is an alias for gradients_2pt_conical_inside; sibling variants cover inside/outside/edge and repeat/mirror cases historically.",
+      "boundaryEvidence": [
+        "reports/wgsl-pipeline/2026-05-31-m56-pm-report.md",
+        "reports/wgsl-pipeline/2026-05-31-m56-unsupported-to-pass-selection.md",
+        "reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"
+      ],
+      "fixtureAvailability": "Kotlin GM ports and historical raster tests exist, and the WebGPU alias test is disabled as duplicate coverage, but no row-specific M89 registry reference/CPU/GPU artifacts are generated.",
+      "historicalTests": [
+        "skia-integration-tests/src/test/kotlin/org/skia/tests/ConicalGradientsTest.kt",
+        "skia-integration-tests/src/test/kotlin/org/skia/tests/ConicalGradients2ptTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ConicalGradientsWebGpuTest.kt"
+      ],
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ConicalGradientsGM.kt",
+      "scene": "ConicalGradientsGM",
+      "unsupportedBroadClaims": [
+        "two-point conical gradient support",
+        "broad conical-gradient support",
+        "gradient tile-mode parity",
+        "broader gradient envelope",
+        "sweep-gradient evidence inheritance",
+        "historical conical test inheritance"
+      ],
+      "upstreamSource": "gm/gradients_2pt_conical.cpp",
+      "visibilityRemap": "D50 remaps an excluded inventory row to expected-unsupported dashboard visibility only; readiness and fidelity support counters do not move."
+    },
+    "inventoryId": "skia-gm-gradients2ptconical",
+    "linear": "FOR-472",
+    "nonClaims": {
+      "broadGradientEnvelopeSupportClaimAddedByFor472": false,
+      "conicalGradientSupportClaimAddedByFor472": false,
+      "dashboardRowAddedByFor472": false,
+      "dashboardStatusChangedByFor472": false,
+      "fallbackPolicyChanged": false,
+      "gradientTileModeSupportClaimAddedByFor472": false,
+      "gradients2ptConicalEvidenceInherited": false,
+      "pipelineKeyChanged": false,
+      "productionCodeChanged": false,
+      "scoringChanged": false,
+      "skiaComparableClaimAddedByFor472": false,
+      "supportClaimAddedByFor472": false,
+      "sweepGradientEvidenceInherited": false,
+      "thresholdChanged": false,
+      "upstreamSourceChanged": false,
+      "wgslProductionChanged": false
+    },
+    "rank": 24,
+    "reason": "gradient.2ptconical.row-specific-artifacts-required",
+    "reference": {
+      "plan": "Skia GM capture for bounded Gradients2ptConical candidate cells across inside/outside/edge and tile-mode cases.",
+      "refusalReason": "candidate-specific Skia GM reference capture is missing",
+      "required": true,
+      "status": "not-generated"
+    },
+    "routeDiagnostics": {
+      "cpu": "cpu.gradient.2ptconical.expected-unsupported",
+      "fallbackReason": "gradient.2ptconical.row-specific-artifacts-required",
+      "gpu": "webgpu.gradient.2ptconical.expected-unsupported",
+      "policy": "M56/M63 sweep-gradient and bounded gradient evidence, historical ConicalGradients tests, and D50 exclusion remap are not M89 registry row-specific proof for skia-gm-gradients2ptconical. The row stays unsupported until a candidate-specific Skia reference capture, CPU two-point conical artifact, WebGPU two-point conical artifact, diff/stat payload, and fallbackReason=none exist without threshold, scoring, fallback policy, PipelineKey, or broad gradient-envelope changes."
+    },
+    "source": {
+      "candidateInventory": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
+      "d50Visibility": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-visibility.json",
+      "historicalRasterTest": "skia-integration-tests/src/test/kotlin/org/skia/tests/ConicalGradientsTest.kt",
+      "historicalVariantTest": "skia-integration-tests/src/test/kotlin/org/skia/tests/ConicalGradients2ptTest.kt",
+      "historicalWebGpuAliasTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ConicalGradientsWebGpuTest.kt",
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ConicalGradientsGM.kt",
+      "m56BoundaryReport": "reports/wgsl-pipeline/2026-05-31-m56-pm-report.md",
+      "upstreamSource": "gm/gradients_2pt_conical.cpp"
+    },
+    "status": "expected-unsupported"
+  },
+  "schemaVersion": 1,
+  "scoreImpact": {
+    "reason": "The row is a visible expected-unsupported refusal, not a supported rendering row.",
+    "supportScoreIncreased": false
+  },
+  "sourceManifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-visibility.json",
+  "validationCommands": [
+    "rtk python3 scripts/validate_for472_skia_gm_gradients2ptconical_evidence.py",
+    "rtk python3 scripts/m89_gm_registry.py",
+    "rtk python3 scripts/validate_m89_gm_registry.py",
+    "rtk python3 scripts/m89_pm_bundle_registry.py --project-root /Users/chaos/.codex/worktrees/ce14/kanvas --bundle-root build/reports/wgsl-pipeline-pm-bundle",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for472-pycache python3 -m py_compile scripts/validate_for472_skia_gm_gradients2ptconical_evidence.py scripts/m89_gm_registry.py scripts/validate_m89_gm_registry.py scripts/m89_pm_bundle_registry.py",
+    "rtk ./gradlew --no-daemon pipelineM89GmRegistry validateM89GmRegistry",
+    "rtk ./gradlew --no-daemon pipelinePmBundle",
+    "rtk git diff --check"
+  ]
+}
