@@ -1,0 +1,150 @@
+{
+  "classification": "image-filter-offset-route-evidence-gate-no-new-rendering-support",
+  "counters": {
+    "dashboardPromotions": 0,
+    "diffStatsAdded": 0,
+    "fallbackReasonNoneRoutesAdded": 0,
+    "missingEvidenceItemsStill": 9,
+    "newSupportClaims": 0,
+    "performanceArtifactsAdded": 0,
+    "presentEvidenceItemsStill": 2,
+    "readinessDelta": 0.0,
+    "referenceArtifactsAdded": 0,
+    "referenceProvenanceArtifactsAdded": 0,
+    "renderArtifactsAdded": 0,
+    "routeDiagnosticInputs": 2,
+    "routeEvidenceGates": 1,
+    "sceneRouteEvidenceArtifactsAdded": 0,
+    "thresholdChanges": 0
+  },
+  "generatedBy": "scripts/m91_image_filter_offset_route_evidence_gate.py",
+  "inputs": {
+    "evidenceIntake": "reports/wgsl-pipeline/m91-image-filter-offset-evidence-intake/summary.json",
+    "referencePlan": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/reference-plan.json",
+    "referenceProvenanceGate": "reports/wgsl-pipeline/m91-image-filter-offset-reference-provenance-gate/summary.json",
+    "routeDiagnosticCpu": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-cpu.json",
+    "routeDiagnosticGpu": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-gpu.json"
+  },
+  "milestone": "M91",
+  "nonClaims": {
+    "belowThresholdCountedAsProductionGap": false,
+    "cpuReadbackFallbackAdded": false,
+    "dashboardPromoted": false,
+    "diffStatsAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "fallbackReasonNoneClaimed": false,
+    "ganeshPort": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "performanceGatePromoted": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "referenceArtifactAdded": false,
+    "referenceProvenanceAdded": false,
+    "renderArtifactsAdded": false,
+    "routeEvidenceArtifactAdded": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "promotionGate": {
+    "cpuSceneRouteEvidenceAddedNow": false,
+    "fallbackReasonNoneAllowedNow": false,
+    "readyForSupportEvaluation": false,
+    "routeDiagnosticsCanStandInForSceneRoutes": false,
+    "webgpuSceneRouteEvidenceAddedNow": false
+  },
+  "requiredAbsentOutputs": [
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/skia.png",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/reference-provenance.json",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-cpu.json",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-gpu.json",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/cpu.png",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/gpu.png",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/cpu-diff.png",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/gpu-diff.png",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/stats.json",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    },
+    {
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/performance.json",
+      "present": false,
+      "requiredAbsentForThisGate": true
+    }
+  ],
+  "routeDiagnosticsBoundary": {
+    "cpu": {
+      "backend": "CPU",
+      "canSatisfySceneRouteEvidence": false,
+      "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+      "path": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-cpu.json",
+      "policyOnlyArtifact": true,
+      "route": "cpu.image-filter.offset-image-filter.expected-unsupported",
+      "status": "expected-unsupported"
+    },
+    "gpu": {
+      "backend": "WebGPU",
+      "canSatisfySceneRouteEvidence": false,
+      "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+      "path": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-gpu.json",
+      "policyOnlyArtifact": true,
+      "route": "webgpu.image-filter.offset-image-filter.expected-unsupported",
+      "status": "expected-unsupported"
+    },
+    "reason": "Existing M91 route diagnostics are policy-only refusal records. Scene route evidence requires row-specific route-cpu.json and route-gpu.json with fallbackReason=none plus reference, render, diff/stat, and performance evidence."
+  },
+  "row": {
+    "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+    "policyOnly": true,
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "rowId": "skia-gm-offsetimagefilter",
+    "sourceGm": "OffsetImageFilterGM",
+    "status": "expected-unsupported",
+    "supportClaim": false
+  },
+  "schemaVersion": 1,
+  "status": "blocked-until-row-specific-route-evidence-can-use-fallback-none",
+  "ticket": "M91-IF-3A-ROUTE",
+  "validationCommands": [
+    "rtk python3 scripts/m91_image_filter_offset_route_evidence_gate.py",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-m91-offset-route-evidence-gate-pycache python3 -m py_compile scripts/m91_image_filter_offset_route_evidence_gate.py",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterOffsetRouteEvidenceGate",
+    "rtk git diff --check"
+  ]
+}
