@@ -4777,6 +4777,19 @@ tasks.register<Exec>("pipelineM90PathAaStrokedLinesEvidenceIntake") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaStrokedLinesEvidenceGate") {
+    group = "verification"
+    description = "Validates the M90-PAA-3D-REF StrokedLinesGM row-specific evidence gate without changing support claims."
+    commandLine("python3", "scripts/validate_m90_strokedlines_evidence_gate.py", "--check-worktree-scope")
+    inputs.file(layout.projectDirectory.file("scripts/validate_m90_strokedlines_evidence_gate.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-08-m90-strokedlines-evidence-gate.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-strokedlines-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-strokedlines-evidence-intake/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokedlines/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokedlines/route-gpu.json"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM90PathAaStrokeRectsEvidenceIntake") {
     group = "verification"
     description = "Generates and validates M90-PAA-3E StrokeRectsGM evidence intake without changing support claims."

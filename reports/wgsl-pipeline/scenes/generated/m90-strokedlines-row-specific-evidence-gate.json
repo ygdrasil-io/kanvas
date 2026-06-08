@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "manual-m90-strokedlines-row-specific-evidence-gate",
+  "milestone": "M90",
+  "ticket": "M90-PAA-3D-REF",
+  "parentTicket": "M90-PAA-3D",
+  "classification": "strokedlines-row-specific-evidence-gate-no-support-promotion",
+  "sceneId": "skia-gm-strokedlines",
+  "inventoryId": "skia-gm-strokedlines",
+  "sourceGm": "StrokedLinesGM",
+  "status": "dependency-gated",
+  "supportClaim": false,
+  "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
+  "evidenceGate": {
+    "kind": "row-specific-reference-cpu-webgpu-artifact-bundle",
+    "requiredRouteStatus": "pass",
+    "requiredFallbackReason": "none",
+    "requiredArtifacts": [
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/skia.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/cpu.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/gpu.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/cpu-diff.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/gpu-diff.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/route-cpu.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/route-gpu.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/stats.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/cpu-performance.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/gpu-performance.json"
+    ],
+    "currentlyPresentArtifacts": [],
+    "historicalSignalsOnly": [
+      "skia-integration-tests/src/test/kotlin/org/skia/tests/StrokedLinesTest.kt",
+      "skia-integration-tests/src/main/kotlin/org/skia/tests/StrokedLinesGM.kt",
+      "skia-integration-tests/test-similarity-scores.properties#StrokedLinesGM_drawLine=68.22145061728395",
+      "skia-integration-tests/test-similarity-scores.properties#StrokedLinesGM_drawPath=68.22145061728395",
+      "cpu-raster/test-similarity-scores.properties#StrokedLinesGM_drawLine=68.22145061728395; StrokedLinesGM_drawPath=68.22145061728395",
+      "kanvas-skia/test-similarity-scores.properties#StrokedLinesGM_drawLine=68.22145061728395; StrokedLinesGM_drawPath=68.22145061728395"
+    ]
+  },
+  "promotionGate": {
+    "promotionAllowed": false,
+    "supportAllowedFromToleranceOnly": false,
+    "supportAllowedFromHistoricalSignalsOnly": false,
+    "supportAllowedWithoutRowSpecificArtifactBundle": false,
+    "supportAllowedWithoutFallbackReasonNone": false
+  },
+  "scoreImpact": {
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0,
+    "dashboardPromotion": false,
+    "thresholdChanged": false,
+    "edgeBudgetChanged": false
+  },
+  "nonClaims": {
+    "rowSupportClaimed": false,
+    "broadPathAASupport": false,
+    "broadStrokeSupport": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "dynamicSkSLCompiler": false,
+    "thresholdChanged": false,
+    "dashboardPromoted": false,
+    "belowThresholdCountedAsProductionGap": false
+  }
+}
