@@ -1,0 +1,1637 @@
+{
+  "counters": {
+    "expectedUnsupportedWithFallback": 25,
+    "family": {
+      "bitmap-image": 7,
+      "blend-color": 2,
+      "gradient": 4,
+      "image-filter": 5,
+      "path-aa": 18,
+      "runtime-effect": 3,
+      "text-glyph": 7,
+      "transform-layer": 1
+    },
+    "linkedM66Rows": 18,
+    "linkedM86Rows": 18,
+    "policyOnlyRows": 20,
+    "source": {
+      "d50-visibility": 11,
+      "d53-visibility": 9,
+      "generated-dashboard": 27
+    },
+    "status": {
+      "expected-unsupported": 25,
+      "pass": 22
+    },
+    "supportClaims": 22,
+    "totalRows": 47
+  },
+  "description": "M89 normalized GM support/refusal registry. This artifact changes no support claims.",
+  "evidencePackages": {
+    "m66": {
+      "linkedRegistryRows": 18,
+      "path": "reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json",
+      "rejectedRows": 4,
+      "selectedRows": 19
+    },
+    "m86": {
+      "classifiedRows": 7,
+      "globalThresholdWeakened": false,
+      "linkedRegistryRows": 18,
+      "path": "reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json",
+      "rankedCandidates": 19,
+      "skiaComparableSupportRows": 6
+    },
+    "m88": {
+      "categories": [
+        "supported",
+        "expected-unsupported",
+        "dependency-gated",
+        "implementation-gap",
+        "reporting-only"
+      ],
+      "expectedUnsupportedRows": 5,
+      "failRows": 0,
+      "passRows": 21,
+      "path": "reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json",
+      "status": "pass",
+      "trackedGapRows": 0
+    }
+  },
+  "generatedBy": "scripts/m89_gm_registry.py",
+  "nonClaims": [
+    "Policy-only visibility rows do not count as support.",
+    "Expected-unsupported rows remain visible until row-specific evidence proves support.",
+    "Rows that only miss strict similarity/tolerance thresholds belong in fidelity burn-down, not production missing-feature accounting.",
+    "WGSL remains the WebGPU shader target; SkSL is compatibility/refusal wording only."
+  ],
+  "rows": [
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "image.imagegm.row-specific-artifacts-required",
+      "family": "bitmap-image",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim ImageGM, codec, YUV, animation, EXIF, mipmap, tile-mode, or color-managed image support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-image",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 Image GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "image.imagesource.row-specific-artifacts-required",
+      "family": "bitmap-image",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim ImageSourceGM, dynamic source image, codec, YUV, animation, EXIF, mipmap, tile-mode, or color-managed image support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-imagesource",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 ImageSource GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "gradient.2ptconical.row-specific-artifacts-required",
+      "family": "gradient",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim Gradients2ptConicalGM, two-point conical gradients, or broader gradient-envelope support.",
+      "owningMilestone": "M89",
+      "pmImpact": "medium",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-gradients2ptconical",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 Gradients2ptConical GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+      "family": "image-filter",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim ImageMakeWithFilterGM, arbitrary image-filter DAG, crop prepass, picture prepass, or layer prepass support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-imagemakewithfilter",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 ImageMakeWithFilter GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+      "family": "image-filter",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim broad image-filter DAG, crop image-filter, picture prepass, arbitrary layer prepass, or global color pipeline support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-offsetimagefilter",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 OffsetImageFilter GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "path.pathfill.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim broad Path AA, convex path, stroke, cap/join, dash, or edge-budget support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-pathfill",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 PathFill GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim RectPolyStrokeGM, broad stroke, cap/join, dash, or Path AA support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-rectpolystroke",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 RectPolyStroke GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
+      "family": "runtime-effect",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim RuntimeImageFilterGM, arbitrary SkSL, dynamic runtime-effect compilation, or runtime image-filter descriptor support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-runtimeimagefilter",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 RuntimeImageFilter GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
+      "family": "runtime-effect",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim arbitrary SkSL, dynamic runtime-effect compilation, or broad runtime intrinsic support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-runtimeintrinsics",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 RuntimeIntrinsics GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "font.shadertext3.row-specific-artifacts-required",
+      "family": "text-glyph",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim ShaderText3GM, shaped text, glyph atlas, text shader behavior, or broad font support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-shadertext3",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 ShaderText3 GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "font.textblobtransforms.row-specific-artifacts-required",
+      "family": "text-glyph",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim shaped text, complex text transforms, glyph atlas, color glyph, or broad font support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-textblobtransforms",
+      "source": "d50-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "D50 TextBlobTransforms GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim dashed cubic Path AA, dash effect flattening, broad stroke, cap/join, or edge-budget support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-dashcubics",
+      "source": "d53-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "DashCubics GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim broad dashing, dash phase parity, dash path effects, cap/join, or edge-budget support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-dashing",
+      "source": "d53-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "Dashing GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim broad hairline Path AA, subpixel hairline coverage, transform-sensitive hairline width, or edge-budget support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-hairlines",
+      "source": "d53-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "Hairlines GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim hairline blend-mode parity, hairline coverage across paint modes, cap/join breadth, or broad Path AA support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-hairmodes",
+      "source": "d53-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "HairModes GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim transform-scaled stroke parity, stroke normalization, cap/join breadth, dash support, or broad Path AA support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-scaledstrokes",
+      "source": "d53-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "ScaledStrokes GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim broad stroked-line coverage, all cap styles, line joins, hairline parity, or edge-budget support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-strokedlines",
+      "source": "d53-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "StrokedLines GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim stroke-rect parity, miter/cap/join breadth, anisotropic stroke behavior, or broad Path AA support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-strokerect",
+      "source": "d53-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "StrokeRect GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim broad stroked-rect families, mixed stroke widths, joins, hairlines, or edge-budget support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-strokerects",
+      "source": "d53-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "StrokeRects GM row-specific refusal"
+    },
+    {
+      "artifacts": {},
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "policy-visibility",
+      "nonClaim": "Dashboard visibility only. This row does not claim thin stroked-rect parity, subpixel stroke coverage, hairline equivalence, joins, or broad Path AA support.",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": true,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "expected-unsupported",
+      "routeGpu": "expected-unsupported",
+      "rowId": "skia-gm-thinstrokedrects",
+      "source": "d53-visibility",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "ThinStrokedRects GM row-specific refusal"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/bitmap-rect-nearest/cpu.png",
+        "cpuDiff": "artifacts/bitmap-rect-nearest/cpu-diff.png",
+        "gpu": "artifacts/bitmap-rect-nearest/gpu.png",
+        "gpuDiff": "artifacts/bitmap-rect-nearest/gpu-diff.png",
+        "reference": "artifacts/bitmap-rect-nearest/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-bitmap-rect-nearest-skia",
+            "inventoryId": "skia-gm-drawbitmaprect",
+            "referenceKind": "skia-upstream",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": true,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.95,
+            "id": "m66-bitmap-rect-nearest-skia",
+            "pmValue": 4,
+            "risk": "medium",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "bitmap-image",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "bitmap-rect-nearest",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Bitmap rect nearest sampling"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/bitmap-shader-local-matrix/cpu.png",
+        "cpuDiff": "artifacts/bitmap-shader-local-matrix/cpu-diff.png",
+        "gpu": "artifacts/bitmap-shader-local-matrix/gpu.png",
+        "gpuDiff": "artifacts/bitmap-shader-local-matrix/gpu-diff.png",
+        "reference": "artifacts/bitmap-shader-local-matrix/skia.png"
+      },
+      "evidenceLinks": {},
+      "fallbackReason": "none",
+      "family": "bitmap-image",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "bitmap-shader-local-matrix",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Bitmap shader rotated local-matrix rect"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/bitmap-shader-repeat-tile/cpu.png",
+        "cpuDiff": "artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
+        "gpu": "artifacts/bitmap-shader-repeat-tile/gpu.png",
+        "gpuDiff": "artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
+        "reference": "artifacts/bitmap-shader-repeat-tile/skia.png"
+      },
+      "evidenceLinks": {},
+      "fallbackReason": "none",
+      "family": "bitmap-image",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M48",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "bitmap-shader-repeat-tile",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Bitmap shader repeat tile paint rect"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
+        "cpuDiff": "artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+        "gpu": "artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
+        "gpuDiff": "artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
+        "reference": "artifacts/bitmap-subset-local-matrix-repeat/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-bitmap-subset-local-matrix-repeat-skia",
+            "inventoryId": "skia-gm-bitmapshaders-localmatrix",
+            "referenceKind": "skia-upstream",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": true,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.94,
+            "id": "m66-bitmap-subset-local-matrix-repeat-skia",
+            "pmValue": 4,
+            "risk": "medium",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "bitmap-image",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.94
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M48",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Bitmap subset shader local-matrix repeat"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/d52-drawminibitmaprect/cpu.png",
+        "cpuDiff": "artifacts/d52-drawminibitmaprect/cpu-diff.png",
+        "gpu": "artifacts/d52-drawminibitmaprect/gpu.png",
+        "gpuDiff": "artifacts/d52-drawminibitmaprect/gpu-diff.png",
+        "reference": "artifacts/d52-drawminibitmaprect/skia.png"
+      },
+      "evidenceLinks": {},
+      "fallbackReason": "none",
+      "family": "bitmap-image",
+      "metrics": {
+        "gpuSimilarity": 99.9864,
+        "maxChannelDelta": 242,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "D52",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "d52-drawminibitmaprect",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "D52 DrawMiniBitmapRect Skia reference"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/solid-rect/cpu.png",
+        "cpuDiff": "artifacts/solid-rect/cpu-diff.png",
+        "gpu": "artifacts/solid-rect/gpu.png",
+        "gpuDiff": "artifacts/solid-rect/gpu-diff.png",
+        "reference": "artifacts/solid-rect/skia.png"
+      },
+      "evidenceLinks": {},
+      "fallbackReason": "none",
+      "family": "blend-color",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "cpu-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "solid-rect",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Solid filled rect"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/src-over-stack/cpu.png",
+        "cpuDiff": "artifacts/src-over-stack/cpu-diff.png",
+        "gpu": "artifacts/src-over-stack/gpu.png",
+        "gpuDiff": "artifacts/src-over-stack/gpu-diff.png",
+        "reference": "artifacts/src-over-stack/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-src-over-alpha-stack-oracle",
+            "inventoryId": "",
+            "referenceKind": "test-oracle",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.95,
+            "id": "m66-src-over-alpha-stack-oracle",
+            "pmValue": 4,
+            "risk": "medium",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "blend-color",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "src-over-stack",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Partial alpha SrcOver blend stack"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/gradient-color-filter-linear-kplus/cpu.png",
+        "cpuDiff": "artifacts/gradient-color-filter-linear-kplus/cpu-diff.png",
+        "gpu": "artifacts/gradient-color-filter-linear-kplus/gpu.png",
+        "gpuDiff": "artifacts/gradient-color-filter-linear-kplus/gpu-diff.png",
+        "reference": "artifacts/gradient-color-filter-linear-kplus/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-linear-gradient-kplus-oracle",
+            "inventoryId": "",
+            "referenceKind": "test-oracle",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.95,
+            "id": "m66-linear-gradient-kplus-oracle",
+            "pmValue": 4,
+            "risk": "medium",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "gradient",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M48",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "gradient-color-filter-linear-kplus",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Linear gradient color-filter kPlus route"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/linear-gradient-rect/cpu.png",
+        "cpuDiff": "artifacts/linear-gradient-rect/cpu-diff.png",
+        "gpu": "artifacts/linear-gradient-rect/gpu.png",
+        "gpuDiff": "artifacts/linear-gradient-rect/gpu-diff.png",
+        "reference": "artifacts/linear-gradient-rect/skia.png"
+      },
+      "evidenceLinks": {},
+      "fallbackReason": "none",
+      "family": "gradient",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "linear-gradient-rect",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Linear gradient rect generated WGSL route"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/sweep-gradient-path-clamp/cpu.png",
+        "cpuDiff": "artifacts/sweep-gradient-path-clamp/cpu-diff.png",
+        "gpu": "artifacts/sweep-gradient-path-clamp/gpu.png",
+        "gpuDiff": "artifacts/sweep-gradient-path-clamp/gpu-diff.png",
+        "reference": "artifacts/sweep-gradient-path-clamp/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-sweep-gradient-path-clamp-oracle",
+            "inventoryId": "",
+            "referenceKind": "test-oracle",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.95,
+            "id": "m66-sweep-gradient-path-clamp-oracle",
+            "pmValue": 4,
+            "risk": "medium",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "gradient",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M48",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "sweep-gradient-path-clamp",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Sweep gradient clamp on AA circle path"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+        "cpuDiff": "artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+        "gpu": "artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+        "gpuDiff": "artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+        "reference": "artifacts/crop-image-filter-nonnull-prepass/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-crop-image-filter-nonnull-prepass-skia",
+            "inventoryId": "skia-gm-imagefilters-cropped",
+            "referenceKind": "skia-upstream",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": true,
+            "gpuSimilarity": 98.44,
+            "gpuThreshold": 50.0,
+            "id": "m66-crop-image-filter-nonnull-prepass-skia",
+            "pmValue": 5,
+            "risk": "high",
+            "rootCause": "filter.bounds-prepass"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "image-filter",
+      "metrics": {
+        "gpuSimilarity": 98.44,
+        "maxChannelDelta": 110,
+        "threshold": 50
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "crop-image-filter-nonnull-prepass",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Crop non-null image-filter child pre-pass"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/image-filter-compose-cf-matrix-transform/cpu.png",
+        "cpuDiff": "artifacts/image-filter-compose-cf-matrix-transform/cpu-diff.png",
+        "gpu": "artifacts/image-filter-compose-cf-matrix-transform/gpu.png",
+        "gpuDiff": "artifacts/image-filter-compose-cf-matrix-transform/gpu-diff.png",
+        "reference": "artifacts/image-filter-compose-cf-matrix-transform/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-image-filter-compose-cf-matrix-transform-oracle",
+            "inventoryId": "",
+            "referenceKind": "test-oracle",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.0,
+            "id": "m66-image-filter-compose-cf-matrix-transform-oracle",
+            "pmValue": 5,
+            "risk": "high",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "image-filter",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "image-filter-compose-cf-matrix-transform",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Image-filter Compose ColorFilter over MatrixTransform"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/image-filter-crop-nonnull-prepass-required/cpu.png",
+        "cpuDiff": "artifacts/image-filter-crop-nonnull-prepass-required/cpu-diff.png",
+        "reference": "artifacts/image-filter-crop-nonnull-prepass-required/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+            "id": "m66-image-filter-crop-prepass-refusal",
+            "inventoryId": "skia-gm-imagefilters-cropped-null-input",
+            "referenceKind": "cpu-oracle",
+            "status": "expected-unsupported"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": null,
+            "gpuThreshold": 0.0,
+            "id": "m66-image-filter-crop-prepass-refusal",
+            "pmValue": 5,
+            "risk": "high",
+            "rootCause": "filter.picture-prepass-required"
+          }
+        ]
+      },
+      "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+      "family": "image-filter",
+      "metrics": {},
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M48",
+      "pmImpact": "high",
+      "policyOnly": false,
+      "referenceKind": "cpu-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "expected-unsupported",
+      "rowId": "image-filter-crop-nonnull-prepass-required",
+      "source": "generated-dashboard",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "Image-filter Crop(input=nonNull) pre-pass refusal"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/analytic-aa-convex/cpu.png",
+        "cpuDiff": "artifacts/analytic-aa-convex/cpu-diff.png",
+        "gpu": "artifacts/analytic-aa-convex/gpu.png",
+        "gpuDiff": "artifacts/analytic-aa-convex/gpu-diff.png",
+        "reference": "artifacts/analytic-aa-convex/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-analytic-aa-convex-cpu-oracle",
+            "inventoryId": "skia-gm-convexpaths-derived",
+            "referenceKind": "cpu-oracle",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.85,
+            "id": "m66-analytic-aa-convex-cpu-oracle",
+            "pmValue": 5,
+            "risk": "high",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "path-aa",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.85
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "cpu-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "analytic-aa-convex",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Analytic AA convex path"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/clip-rect-difference/cpu.png",
+        "cpuDiff": "artifacts/clip-rect-difference/cpu-diff.png",
+        "gpu": "artifacts/clip-rect-difference/gpu.png",
+        "gpuDiff": "artifacts/clip-rect-difference/gpu-diff.png",
+        "reference": "artifacts/clip-rect-difference/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-clip-rect-difference-skia",
+            "inventoryId": "skia-gm-cliprect-difference-derived",
+            "referenceKind": "skia-upstream",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": true,
+            "gpuSimilarity": 84.44,
+            "gpuThreshold": 80.0,
+            "id": "m66-clip-rect-difference-skia",
+            "pmValue": 5,
+            "risk": "high",
+            "rootCause": "coverage.edge-delta"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "path-aa",
+      "metrics": {
+        "gpuSimilarity": 84.44,
+        "maxChannelDelta": 255,
+        "threshold": 80
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "clip-rect-difference",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Clip rect difference route diagnostics"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/draw-paint-clipped-rect/cpu.png",
+        "cpuDiff": "artifacts/draw-paint-clipped-rect/cpu-diff.png",
+        "gpu": "artifacts/draw-paint-clipped-rect/gpu.png",
+        "gpuDiff": "artifacts/draw-paint-clipped-rect/gpu-diff.png",
+        "reference": "artifacts/draw-paint-clipped-rect/skia.png"
+      },
+      "evidenceLinks": {},
+      "fallbackReason": "none",
+      "family": "path-aa",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M48",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "draw-paint-clipped-rect",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "drawPaint clipped rect route"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/draw-paint-full-clip/cpu.png",
+        "cpuDiff": "artifacts/draw-paint-full-clip/cpu-diff.png",
+        "gpu": "artifacts/draw-paint-full-clip/gpu.png",
+        "gpuDiff": "artifacts/draw-paint-full-clip/gpu-diff.png",
+        "reference": "artifacts/draw-paint-full-clip/skia.png"
+      },
+      "evidenceLinks": {},
+      "fallbackReason": "none",
+      "family": "path-aa",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M48",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "draw-paint-full-clip",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "drawPaint full clip opaque source"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/path-aa-convexpaths-edge-budget/cpu.png",
+        "cpuDiff": "artifacts/path-aa-convexpaths-edge-budget/cpu-diff.png",
+        "reference": "artifacts/path-aa-convexpaths-edge-budget/skia.png"
+      },
+      "evidenceLinks": {},
+      "fallbackReason": "coverage.edge-count-exceeded",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M48",
+      "pmImpact": "high",
+      "policyOnly": false,
+      "referenceKind": "cpu-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "expected-unsupported",
+      "rowId": "path-aa-convexpaths-edge-budget",
+      "source": "generated-dashboard",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "Path AA ConvexPaths edge-budget refusal"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/path-aa-dashing-edge-budget/cpu.png",
+        "cpuDiff": "artifacts/path-aa-dashing-edge-budget/cpu-diff.png",
+        "reference": "artifacts/path-aa-dashing-edge-budget/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "coverage.edge-count-exceeded",
+            "id": "m66-path-aa-dashing-edge-budget-refusal",
+            "inventoryId": "skia-gm-dashcircle",
+            "referenceKind": "cpu-oracle",
+            "status": "expected-unsupported"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": null,
+            "gpuThreshold": 0.0,
+            "id": "m66-path-aa-dashing-edge-budget-refusal",
+            "pmValue": 5,
+            "risk": "high",
+            "rootCause": "coverage.edge-count-exceeded"
+          }
+        ]
+      },
+      "fallbackReason": "coverage.edge-count-exceeded",
+      "family": "path-aa",
+      "metrics": {},
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M48",
+      "pmImpact": "high",
+      "policyOnly": false,
+      "referenceKind": "cpu-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "expected-unsupported",
+      "rowId": "path-aa-dashing-edge-budget",
+      "source": "generated-dashboard",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "Path AA Dashing edge-budget refusal"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/path-aa-stroke-primitive/cpu.png",
+        "cpuDiff": "artifacts/path-aa-stroke-primitive/cpu-diff.png",
+        "gpu": "artifacts/path-aa-stroke-primitive/gpu.png",
+        "gpuDiff": "artifacts/path-aa-stroke-primitive/gpu-diff.png",
+        "reference": "artifacts/path-aa-stroke-primitive/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-path-aa-stroke-primitive-oracle",
+            "inventoryId": "",
+            "referenceKind": "test-oracle",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": 91.81,
+            "gpuThreshold": 91.76,
+            "id": "m66-path-aa-stroke-primitive-oracle",
+            "pmValue": 5,
+            "risk": "high",
+            "rootCause": "coverage.stroke-raster-delta"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "path-aa",
+      "metrics": {
+        "gpuSimilarity": 91.81,
+        "maxChannelDelta": 169,
+        "threshold": 91.76
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "path-aa-stroke-primitive",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Path AA primitive stroke family"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/runtime-effect-simple/cpu.png",
+        "cpuDiff": "artifacts/runtime-effect-simple/cpu-diff.png",
+        "gpu": "artifacts/runtime-effect-simple/gpu.png",
+        "gpuDiff": "artifacts/runtime-effect-simple/gpu-diff.png",
+        "reference": "artifacts/runtime-effect-simple/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-runtime-effect-simple-descriptor-oracle",
+            "inventoryId": "",
+            "referenceKind": "test-oracle",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.95,
+            "id": "m66-runtime-effect-simple-descriptor-oracle",
+            "pmValue": 3,
+            "risk": "medium",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "runtime-effect",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "test-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "runtime-effect-simple",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Registered SimpleRT runtime-effect route"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/font-complex-shaping-refusal/cpu.png",
+        "cpuDiff": "artifacts/font-complex-shaping-refusal/cpu-diff.png",
+        "reference": "artifacts/font-complex-shaping-refusal/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "font.complex-shaping-requires-explicit-shaper",
+            "id": "m66-font-complex-shaping-refusal",
+            "inventoryId": "skia-gm-shaping-derived",
+            "referenceKind": "cpu-oracle",
+            "status": "expected-unsupported"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": null,
+            "gpuThreshold": 0.0,
+            "id": "m66-font-complex-shaping-refusal",
+            "pmValue": 3,
+            "risk": "dependency-gated",
+            "rootCause": "glyph.complex-shaping-dependency"
+          }
+        ]
+      },
+      "fallbackReason": "font.complex-shaping-requires-explicit-shaper",
+      "family": "text-glyph",
+      "metrics": {},
+      "nextTicketType": "dependency",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": false,
+      "referenceKind": "cpu-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "expected-unsupported",
+      "rowId": "font-complex-shaping-refusal",
+      "source": "generated-dashboard",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "Complex shaping explicit refusal"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/font-emoji-color-glyph-refusal/cpu.png",
+        "cpuDiff": "artifacts/font-emoji-color-glyph-refusal/cpu-diff.png",
+        "reference": "artifacts/font-emoji-color-glyph-refusal/skia.png"
+      },
+      "evidenceLinks": {},
+      "fallbackReason": "font.color-glyph-emoji-unsupported",
+      "family": "text-glyph",
+      "metrics": {},
+      "nextTicketType": "dependency",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "high",
+      "policyOnly": false,
+      "referenceKind": "cpu-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "expected-unsupported",
+      "rowId": "font-emoji-color-glyph-refusal",
+      "source": "generated-dashboard",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "title": "Emoji color glyph explicit refusal"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/font-kerning-style-fixture/cpu.png",
+        "cpuDiff": "artifacts/font-kerning-style-fixture/cpu-diff.png",
+        "gpu": "artifacts/font-kerning-style-fixture/gpu.png",
+        "gpuDiff": "artifacts/font-kerning-style-fixture/gpu-diff.png",
+        "reference": "artifacts/font-kerning-style-fixture/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-font-kerning-style-cpu-oracle",
+            "inventoryId": "",
+            "referenceKind": "cpu-oracle",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.95,
+            "id": "m66-font-kerning-style-cpu-oracle",
+            "pmValue": 3,
+            "risk": "dependency-gated",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "text-glyph",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "cpu-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "font-kerning-style-fixture",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Kerning and style OpenType fixture"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/font-latin-outline-drawstring/cpu.png",
+        "cpuDiff": "artifacts/font-latin-outline-drawstring/cpu-diff.png",
+        "gpu": "artifacts/font-latin-outline-drawstring/gpu.png",
+        "gpuDiff": "artifacts/font-latin-outline-drawstring/gpu-diff.png",
+        "reference": "artifacts/font-latin-outline-drawstring/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-font-latin-outline-cpu-oracle",
+            "inventoryId": "",
+            "referenceKind": "cpu-oracle",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.95,
+            "id": "m66-font-latin-outline-cpu-oracle",
+            "pmValue": 3,
+            "risk": "dependency-gated",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "text-glyph",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "cpu-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "font-latin-outline-drawstring",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Simple Latin outline drawString"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/font-textblob-positioned-glyph-run/cpu.png",
+        "cpuDiff": "artifacts/font-textblob-positioned-glyph-run/cpu-diff.png",
+        "gpu": "artifacts/font-textblob-positioned-glyph-run/gpu.png",
+        "gpuDiff": "artifacts/font-textblob-positioned-glyph-run/gpu-diff.png",
+        "reference": "artifacts/font-textblob-positioned-glyph-run/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-font-positioned-glyph-run-cpu-oracle",
+            "inventoryId": "",
+            "referenceKind": "cpu-oracle",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": false,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.95,
+            "id": "m66-font-positioned-glyph-run-cpu-oracle",
+            "pmValue": 3,
+            "risk": "dependency-gated",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "text-glyph",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.95
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M89",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "cpu-oracle",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "font-textblob-positioned-glyph-run",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Positioned glyph-run text blob"
+    },
+    {
+      "artifacts": {
+        "cpu": "artifacts/scaled-rects-transform-stack/cpu.png",
+        "cpuDiff": "artifacts/scaled-rects-transform-stack/cpu-diff.png",
+        "gpu": "artifacts/scaled-rects-transform-stack/gpu.png",
+        "gpuDiff": "artifacts/scaled-rects-transform-stack/gpu-diff.png",
+        "reference": "artifacts/scaled-rects-transform-stack/skia.png"
+      },
+      "evidenceLinks": {
+        "m66": [
+          {
+            "fallbackReason": "none",
+            "id": "m66-scaled-rects-transform-stack-skia",
+            "inventoryId": "skia-gm-scaledrects",
+            "referenceKind": "skia-upstream",
+            "status": "pass"
+          }
+        ],
+        "m86": [
+          {
+            "fidelityScoreEligible": true,
+            "gpuSimilarity": 100.0,
+            "gpuThreshold": 99.99,
+            "id": "m66-scaled-rects-transform-stack-skia",
+            "pmValue": 3,
+            "risk": "medium",
+            "rootCause": "none"
+          }
+        ]
+      },
+      "fallbackReason": "none",
+      "family": "transform-layer",
+      "metrics": {
+        "gpuSimilarity": 100,
+        "maxChannelDelta": 0,
+        "threshold": 99.99
+      },
+      "nextTicketType": "implementation",
+      "nonClaim": "",
+      "owningMilestone": "M48",
+      "pmImpact": "low",
+      "policyOnly": false,
+      "referenceKind": "skia-upstream",
+      "routeCpu": "pass",
+      "routeGpu": "pass",
+      "rowId": "scaled-rects-transform-stack",
+      "source": "generated-dashboard",
+      "status": "pass",
+      "supportClaim": true,
+      "title": "Scaled rects transform stack"
+    }
+  ],
+  "schemaVersion": 1,
+  "sourceInputs": [
+    "reports/wgsl-pipeline/scenes/generated/results.json",
+    "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-visibility.json",
+    "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+    "reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json",
+    "reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json",
+    "reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"
+  ]
+}
