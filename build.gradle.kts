@@ -139,6 +139,10 @@ val requiredPipelineConformanceSuites = listOf(
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
         className = "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
@@ -349,7 +353,7 @@ fun renderPipelineConformanceReport(
         |${row("GPU smoke promotion policy", "enforced", "`reports/wgsl-pipeline/2026-05-27-m31-gpu-smoke-promotion-policy.md` defines promotion checklist and rollback path; current smoke includes selector/telemetry baseline plus promoted image-rect, Path AA, and selected SimpleOffset image-filter fixtures; `coverage.edge-count-exceeded`, out-of-scope `image-filter.crop-input-nonnull-prepass-required`, and unresolved similarity regressions remain inventory-only")}
         |${row("WebGPU coverage strategy inventory", webGpuCoverageInventoryStatus, "`WebGpuCoverageStrategyInventory` separates selector-only `proven` mask/atlas route selection, adapter-evidence promoted candidates (analytic rect/rrect, convex fan, stencil-cover) with explicit statuses (`adapter-pass`, `adapter-fail`, `adapter-skipped`, `adapter-timeout`; `blocked-no-adapter-lane` only when the lane is missing), `compatibility` full-scissor, and `refused` span-runs/alpha-mask/coverage-atlas/edge-overflow/arbitrary-AA-clip branches with stable diagnostics; `coverage.edge-count-exceeded` remains a known unsupported GPU breadth gap and `image-filter.crop-input-nonnull-prepass-required` is retained only for out-of-scope Crop(input nonNull) graph shapes, not the M38 SimpleOffset pre-pass target.")}
         |${row("CoverageAtlas policy gate", "blocked", "`CoverageAtlasPolicyGate` keeps persistent atlas caching disabled by default: persistent policy verdict `no-go`, shape-key/transform-key/invalidation/memory-budget/eviction/CPU-GPU-sync/owner-thread checks are missing by policy, static gate counters remain hits=0 misses=0 residentBytes=0 evictions=0 because runtime atlas telemetry is not enabled, and unsupported persistent atlas use emits `coverage.atlas-policy-unavailable`")}
-        |${row("Glyph mask ownership", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest"), "`GlyphMaskLowering` defines the descriptor boundary for glyph-run mask handoff: text/glyph infrastructure owns discovery, rasterization, atlas lifetime, and invalidation; geometry only consumes an opaque alpha-mask ref or emits `coverage.glyph-mask-dependency-unavailable`; WebGPU currently refuses alpha-mask coverage with `coverage.alpha-mask-unsupported`")}
+        |${row("Glyph mask ownership", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest"), "`GlyphMaskLowering` defines the descriptor boundary for glyph-run mask handoff: text/glyph infrastructure owns discovery, rasterization, atlas lifetime, and invalidation; geometry only consumes an opaque alpha-mask ref or emits `coverage.glyph-mask-dependency-unavailable`; `SkWebGpuGlyphAtlasTest` proves a bounded KAN-010 A8/R8 upload-plan atlas with coordinates and sampling diagnostics; WebGPU still refuses standalone alpha-mask coverage with `coverage.alpha-mask-unsupported`")}
         |${row("Image rect lowering", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest"), "`ImageRectLowering` captures source rect, destination rect, transform facts, opaque paint-owned sampling payload handoff, and route id; axis-aligned image rects select analytic rect coverage, transformed descriptor tests select path-like coverage without moving sampling/pixels/filtering/colorspace into geometry; CPU oracle covers one axis-aligned image rect and WebGPU selector diagnostics record the adapter-gated image-rect route")}
         |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; matrix counts $runtimeEffectSupportMatrixCounts")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
@@ -378,6 +382,10 @@ fun renderPipelineConformanceReport(
         |  (`GlyphMaskLowering` accepts text-owned glyph alpha masks as opaque refs, lowers them to
         |  `CoveragePlan.AlphaMask`, and reports `coverage.glyph-mask-dependency-unavailable` when the
         |  text/glyph infrastructure has not supplied a mask; WebGPU still refuses standalone alpha masks).
+        |- WebGPU glyph atlas upload-plan dump: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlasTest.kt`
+        |  (`SkWebGpuGlyphAtlas` consumes the KAN-010 CPU glyph masks, emits deterministic A8/R8
+        |  coordinates, upload bytes, a sampling diagnostic, and non-claims for line text, shaping,
+        |  fallback fonts, emoji/color fonts, SDF/LCD, and dynamic eviction).
         |- Image rect lowering: `render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt`
         |  (`ImageRectLowering` chooses analytic rect coverage for axis-aligned image rects and path-like
         |  coverage in descriptor tests for transformed image rects while preserving an opaque paint-owned
@@ -432,7 +440,7 @@ project(":cpu-raster").registerPipelineConformanceTest(
 )
 
 project(":gpu-raster").registerPipelineConformanceTest(
-    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, and WebGPU selector conformance tests.",
+    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, and selector conformance tests.",
     testPatterns = listOf(
         "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
         "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
@@ -441,6 +449,7 @@ project(":gpu-raster").registerPipelineConformanceTest(
         "org.skia.gpu.webgpu.PipelineKeyTelemetryTest",
         "org.skia.gpu.webgpu.BlendPlanTest",
         "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest",
+        "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest",
         "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
     ),
 )
@@ -481,7 +490,7 @@ tasks.register("pipelineConformance") {
             |pipelineConformance summary:
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
-            |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, and selector tests: :gpu-raster:pipelineConformanceTest
+            |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, and selector tests: :gpu-raster:pipelineConformanceTest
             |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
             |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
             |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
