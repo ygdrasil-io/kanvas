@@ -7772,6 +7772,51 @@ tasks.register<Exec>("validateM89PmBundleCounters") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelinePmBundleM90PathAaRefGateCloseout") {
+    group = "verification"
+    description = "Adds M90 Path AA REF gate closeout evidence to the generated PM bundle without changing support claims."
+    dependsOn("pipelinePmBundle", "pipelinePmBundleM89Registry")
+    commandLine(
+        "python3",
+        "scripts/m90_path_aa_ref_pm_bundle.py",
+        "--project-root",
+        rootDir.absolutePath,
+        "--bundle-root",
+        "build/reports/wgsl-pipeline-pm-bundle",
+    )
+    inputs.file(layout.projectDirectory.file("scripts/m90_path_aa_ref_pm_bundle.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-08-m90-path-aa-ref-gate-closeout.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-path-aa-ref-gate-closeout.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-candidate-intake-closeout/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-strokerect-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-thinstrokedrects-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-strokedlines-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-strokerects-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-hairmodes-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-scaledstrokes-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-dashing-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-dashcubics-row-specific-evidence-gate.json"))
+    inputs.file(layout.buildDirectory.file("reports/wgsl-pipeline-pm-bundle/manifest.json"))
+    outputs.dir(layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle/registry/m90-path-aa-ref-gate-closeout"))
+}
+
+tasks.register<Exec>("validateM90PathAaRefPmBundle") {
+    group = "verification"
+    description = "Validates M90 Path AA REF gate closeout exposure in the generated PM bundle without changing support claims."
+    dependsOn("pipelinePmBundleM90PathAaRefGateCloseout")
+    commandLine("python3", "scripts/validate_m90_path_aa_ref_pm_bundle.py")
+    inputs.file(layout.projectDirectory.file("scripts/validate_m90_path_aa_ref_pm_bundle.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-path-aa-ref-gate-closeout.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-08-m90-path-aa-ref-gate-closeout.md"))
+    inputs.file(layout.buildDirectory.file("reports/wgsl-pipeline-pm-bundle/manifest.json"))
+    inputs.file(layout.buildDirectory.file("reports/wgsl-pipeline-pm-bundle/README.md"))
+    inputs.file(layout.buildDirectory.file("reports/wgsl-pipeline-pm-bundle/registry/m90-path-aa-ref-gate-closeout/m90-path-aa-ref-gate-closeout.json"))
+    inputs.file(layout.buildDirectory.file("reports/wgsl-pipeline-pm-bundle/registry/m90-path-aa-ref-gate-closeout/2026-06-08-m90-path-aa-ref-gate-closeout.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.named("pipelinePmBundle") {
     finalizedBy("pipelinePmBundleM89Registry")
 }
