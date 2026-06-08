@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "scripts/m90_path_aa_strokedlines_evidence_intake.py",
+  "milestone": "M90",
+  "ticket": "M90-PAA-3D",
+  "classification": "path-aa-strokedlines-evidence-intake-no-new-rendering-support",
+  "status": "blocked-by-missing-row-specific-evidence",
+  "inputs": {
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "candidateReadiness": "reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json",
+    "routeCpu": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokedlines/route-cpu.json",
+    "routeGpu": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokedlines/route-gpu.json",
+    "visibility": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+    "cpuSimilarityProperties": "skia-integration-tests/test-similarity-scores.properties",
+    "cpuRasterSimilarityProperties": "cpu-raster/test-similarity-scores.properties",
+    "kanvasSkiaSimilarityProperties": "kanvas-skia/test-similarity-scores.properties",
+    "historicalCpuTest": "skia-integration-tests/src/test/kotlin/org/skia/tests/StrokedLinesTest.kt",
+    "historicalGmSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/StrokedLinesGM.kt"
+  },
+  "upstreamReadinessState": {
+    "activeNextRecommendedTicket": "M90-PAA-3A",
+    "activeNextRecommendedRow": "skia-gm-hairlines",
+    "thisIntakeIsOutOfOrder": true,
+    "reason": "M90-PAA-3D is materialized as a conservative evidence intake for the fourth-ranked candidate only; it does not supersede the active M90-PAA-3A recommendation."
+  },
+  "row": {
+    "rowId": "skia-gm-strokedlines",
+    "sourceGm": "StrokedLinesGM",
+    "status": "expected-unsupported",
+    "supportClaim": false,
+    "policyOnly": true,
+    "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "candidatePriority": 4,
+    "visibilityPolicyOnlyArtifacts": true
+  },
+  "counters": {
+    "requiredEvidenceItems": 10,
+    "presentEvidenceItems": 0,
+    "missingEvidenceItems": 10,
+    "historicalSignals": 6,
+    "promotionalHistoricalSignals": 0,
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0
+  },
+  "requiredEvidence": [
+    {
+      "kind": "row-specific Skia reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/skia.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/route-cpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "WebGPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/route-gpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU rendered artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/cpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU rendered artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/gpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/cpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/gpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/stats.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/cpu-performance.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-strokedlines/gpu-performance.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    }
+  ],
+  "historicalSignals": [
+    {
+      "kind": "historical-cpu-test",
+      "path": "skia-integration-tests/src/test/kotlin/org/skia/tests/StrokedLinesTest.kt",
+      "promotional": false,
+      "reason": "Historical CPU StrokedLinesGM tests are not a M90 row-specific CPU/WebGPU artifact bundle and do not update the M89 registry row."
+    },
+    {
+      "kind": "historical-gm-source-port",
+      "path": "skia-integration-tests/src/main/kotlin/org/skia/tests/StrokedLinesGM.kt",
+      "promotional": false,
+      "reason": "The existing Kotlin GM source is a historical port signal only; it is not row-specific route, diff/stat, or performance evidence."
+    },
+    {
+      "kind": "historical-cpu-similarity-floor-drawLine",
+      "path": "skia-integration-tests/test-similarity-scores.properties",
+      "observed": "StrokedLinesGM_drawLine=68.22145061728395",
+      "promotional": false,
+      "reason": "A historical CPU score is not a support claim; tolerance-only status is not counted as a production missing feature."
+    },
+    {
+      "kind": "historical-cpu-similarity-floor-drawPath",
+      "path": "skia-integration-tests/test-similarity-scores.properties",
+      "observed": "StrokedLinesGM_drawPath=68.22145061728395",
+      "promotional": false,
+      "reason": "A historical CPU score is not a M90 support promotion or a replacement for row-specific route artifacts."
+    },
+    {
+      "kind": "historical-cpu-raster-score-mirror",
+      "path": "cpu-raster/test-similarity-scores.properties",
+      "observed": "StrokedLinesGM_drawLine=68.22145061728395; StrokedLinesGM_drawPath=68.22145061728395",
+      "promotional": false,
+      "reason": "A mirrored historical score file is consistency evidence only, not a CPU/WebGPU promotion artifact."
+    },
+    {
+      "kind": "historical-kanvas-skia-score-mirror",
+      "path": "kanvas-skia/test-similarity-scores.properties",
+      "observed": "StrokedLinesGM_drawLine=68.22145061728395; StrokedLinesGM_drawPath=68.22145061728395",
+      "promotional": false,
+      "reason": "A mirrored kanvas-skia score is consistency evidence only and does not clear the row-specific M90 evidence contract."
+    }
+  ],
+  "nextRecommendedTicket": {
+    "id": "M90-PAA-3D-REF",
+    "scope": "Produce row-specific StrokedLinesGM Skia reference plus CPU/WebGPU fallbackReason=none route, render, diff/stat, and performance artifacts before any support evaluation.",
+    "supportClaimAllowed": false,
+    "promotionAllowedWithoutEvidence": false
+  },
+  "supportGuard": {
+    "supportClaimAdded": false,
+    "readinessMoved": false,
+    "policyOnlyPromoted": false,
+    "thresholdChanged": false,
+    "edgeBudgetChanged": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "broadPathAASupport": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadStrokeSupport": false,
+    "ganeshPort": false,
+    "graphitePort": false
+  },
+  "validationCommands": [
+    "rtk python3 scripts/m90_path_aa_strokedlines_evidence_intake.py",
+    "rtk ./gradlew --no-daemon pipelineM90PathAaStrokedLinesEvidenceIntake",
+    "rtk git diff --check"
+  ]
+}
