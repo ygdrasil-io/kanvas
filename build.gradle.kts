@@ -4655,6 +4655,20 @@ tasks.register<Exec>("pipelineM90PathAaEdgeBudgetProof") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaCandidateReadiness") {
+    group = "verification"
+    description = "Generates and validates M90 Path AA candidate-readiness evidence without changing support claims."
+    dependsOn("pipelineM90PathAaRouteDiagnostics", "pipelineM90PathAaEdgeBudgetProof")
+    commandLine("python3", "scripts/m90_path_aa_candidate_readiness.py")
+    inputs.file(layout.projectDirectory.file("scripts/m90_path_aa_candidate_readiness.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-slice/selection.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-edge-budget-proof/summary.json"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m90-path-aa-candidate-readiness"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateMepNextFeatureBreadth") {
     group = "verification"
     description = "Validates checked-in MEP-NEXT FOR-189..192 feature breadth evidence without Kadre native dependencies."

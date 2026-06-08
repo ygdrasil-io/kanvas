@@ -1,0 +1,279 @@
+{
+  "candidates": [
+    {
+      "candidateKind": "bounded-hairline",
+      "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific Skia reference",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "notes": "Smallest hairline candidate by route taxonomy, but still policy-only and missing all promotion evidence.",
+      "priority": 1,
+      "promotionTicket": "M90-PAA-3A",
+      "readyForPromotion": false,
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-gpu.json",
+      "rowId": "skia-gm-hairlines",
+      "sourceGm": "HairlinesGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    {
+      "candidateKind": "bounded-stroke-rect",
+      "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific Skia reference",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "notes": "Smallest stroke-rect candidate after hairline; still lacks row-specific reference, pass routes, diff/stat, and perf evidence.",
+      "priority": 2,
+      "promotionTicket": "M90-PAA-3B",
+      "readyForPromotion": false,
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokerect/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokerect/route-gpu.json",
+      "rowId": "skia-gm-strokerect",
+      "sourceGm": "StrokeRectGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    {
+      "candidateKind": "thin-stroke-rect",
+      "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific Skia reference",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "notes": "Thin rect strokes need subpixel coverage proof before any support evaluation.",
+      "priority": 3,
+      "promotionTicket": "M90-PAA-3C",
+      "readyForPromotion": false,
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-thinstrokedrects/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-thinstrokedrects/route-gpu.json",
+      "rowId": "skia-gm-thinstrokedrects",
+      "sourceGm": "ThinStrokedRectsGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    {
+      "candidateKind": "bounded-stroked-lines",
+      "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific Skia reference",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "notes": "Line stroke caps require row-specific CPU/GPU agreement before promotion can be evaluated.",
+      "priority": 4,
+      "promotionTicket": "M90-PAA-3D",
+      "readyForPromotion": false,
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokedlines/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokedlines/route-gpu.json",
+      "rowId": "skia-gm-strokedlines",
+      "sourceGm": "StrokedLinesGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    {
+      "candidateKind": "multi-stroke-rects",
+      "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific Skia reference",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "notes": "Multiple stroked rects broaden the slice and are not first candidate material without row-specific evidence.",
+      "priority": 5,
+      "promotionTicket": "M90-PAA-3E",
+      "readyForPromotion": false,
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokerects/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokerects/route-gpu.json",
+      "rowId": "skia-gm-strokerects",
+      "sourceGm": "StrokeRectsGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    {
+      "candidateKind": "hairline-paint-mode",
+      "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific Skia reference",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "notes": "Paint/blend mode interaction makes this later than the plain hairline candidate.",
+      "priority": 6,
+      "promotionTicket": "M90-PAA-3F",
+      "readyForPromotion": false,
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairmodes/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairmodes/route-gpu.json",
+      "rowId": "skia-gm-hairmodes",
+      "sourceGm": "HairModesGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    {
+      "candidateKind": "scaled-stroke",
+      "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific Skia reference",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "notes": "Transform-dependent stroke scale should follow a simpler stroke slice.",
+      "priority": 7,
+      "promotionTicket": "M90-PAA-3G",
+      "readyForPromotion": false,
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-scaledstrokes/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-scaledstrokes/route-gpu.json",
+      "rowId": "skia-gm-scaledstrokes",
+      "sourceGm": "ScaledStrokesGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    {
+      "candidateKind": "dash-stroke",
+      "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific Skia reference",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "notes": "Dash intervals, caps, and joins broaden the slice; edge-budget refusal proof remains separate.",
+      "priority": 8,
+      "promotionTicket": "M90-PAA-3H",
+      "readyForPromotion": false,
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashing/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashing/route-gpu.json",
+      "rowId": "skia-gm-dashing",
+      "sourceGm": "DashingGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    {
+      "candidateKind": "dash-cubic",
+      "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific Skia reference",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "notes": "Cubic dash behavior is the broadest candidate in this set and must stay after bounded hairline/stroke proof.",
+      "priority": 9,
+      "promotionTicket": "M90-PAA-3I",
+      "readyForPromotion": false,
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashcubics/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashcubics/route-gpu.json",
+      "rowId": "skia-gm-dashcubics",
+      "sourceGm": "DashCubicsGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    }
+  ],
+  "classification": "path-aa-candidate-readiness-no-new-rendering-support",
+  "counters": {
+    "blockedByMissingEvidenceRows": 9,
+    "candidateRows": 9,
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0,
+    "readyForPromotionRows": 0
+  },
+  "generatedBy": "scripts/m90_path_aa_candidate_readiness.py",
+  "inputs": {
+    "edgeBudgetProof": "reports/wgsl-pipeline/m90-path-aa-edge-budget-proof/summary.json",
+    "pathAaBoundarySpec": ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "routeDiagnostics": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/summary.json",
+    "selection": "reports/wgsl-pipeline/m90-path-aa-slice/selection.json"
+  },
+  "milestone": "M90",
+  "nextRecommendedTicket": {
+    "id": "M90-PAA-3A",
+    "promotionAllowedWithoutEvidence": false,
+    "rowId": "skia-gm-hairlines",
+    "scope": "Collect row-specific Skia reference, CPU/GPU fallbackReason=none route evidence, diff/stat artifacts, and performance impact for HairlinesGM before any support evaluation.",
+    "supportClaimAllowed": false
+  },
+  "rankingPolicy": {
+    "contract": "M90-PAA-3 readiness ranking is a local PM ordering over the selected policy rows; it does not change registry support status or selection membership.",
+    "rowOrder": [
+      "skia-gm-hairlines",
+      "skia-gm-strokerect",
+      "skia-gm-thinstrokedrects",
+      "skia-gm-strokedlines",
+      "skia-gm-strokerects",
+      "skia-gm-hairmodes",
+      "skia-gm-scaledstrokes",
+      "skia-gm-dashing",
+      "skia-gm-dashcubics"
+    ],
+    "source": "scripts/m90_path_aa_candidate_readiness.py"
+  },
+  "requiredPromotionEvidence": [
+    "row-specific Skia reference",
+    "CPU route evidence with fallbackReason=none",
+    "WebGPU route evidence with fallbackReason=none",
+    "CPU/GPU diff/stat artifacts",
+    "performance impact evidence"
+  ],
+  "schemaVersion": 1,
+  "status": "generated evidence",
+  "supportGuard": {
+    "belowThresholdCountedAsProductionGap": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadPathAASupport": false,
+    "broadStrokeSupport": false,
+    "edgeBudgetChanged": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ticket": "M90-PAA-3",
+  "validationCommands": [
+    "rtk python3 scripts/m90_path_aa_candidate_readiness.py",
+    "rtk ./gradlew --no-daemon pipelineM90PathAaCandidateReadiness",
+    "rtk git diff --check"
+  ]
+}
