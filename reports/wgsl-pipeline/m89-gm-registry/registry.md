@@ -9,6 +9,7 @@ This registry normalizes current generated dashboard rows and policy-only GM vis
 - Total rows: `47`
 - Support claims: `22`
 - Policy-only rows: `20`
+- Row-specific refusal links: `4`
 - Expected unsupported with fallback: `25`
 - Linked M66 rows: `18`
 - Linked M86 rows: `18`

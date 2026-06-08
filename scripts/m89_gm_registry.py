@@ -26,6 +26,28 @@ INPUTS = [
 M66_PROMOTION = GENERATED_DIR / "m66-gm-promotion-wave.json"
 M86_BURNDOWN = ROOT / "reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json"
 M88_RC2 = ROOT / "reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"
+ROW_SPECIFIC_REFUSALS = {
+    "skia-gm-image": {
+        "linear": "FOR-466",
+        "json": GENERATED_DIR / "for466-skia-gm-image-evidence.json",
+        "report": ROOT / "reports/wgsl-pipeline/2026-06-06-for-466-skia-gm-image-evidence.md",
+    },
+    "skia-gm-imagesource": {
+        "linear": "FOR-467",
+        "json": GENERATED_DIR / "for467-skia-gm-imagesource-evidence.json",
+        "report": ROOT / "reports/wgsl-pipeline/2026-06-06-for-467-skia-gm-imagesource-evidence.md",
+    },
+    "skia-gm-offsetimagefilter": {
+        "linear": "FOR-468",
+        "json": GENERATED_DIR / "for468-skia-gm-offsetimagefilter-evidence.json",
+        "report": ROOT / "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
+    },
+    "skia-gm-pathfill": {
+        "linear": "FOR-469",
+        "json": GENERATED_DIR / "for469-skia-gm-pathfill-evidence.json",
+        "report": ROOT / "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md",
+    },
+}
 
 VALID_STATUSES = {
     "pass",
@@ -208,6 +230,13 @@ def build_evidence_indexes() -> dict[str, Any]:
         "m86": m86,
         "m86ByBase": m86_by_base,
         "m88": m88,
+        "rowSpecificRefusals": {
+            row_id: {
+                **metadata,
+                "evidence": optional_json(metadata["json"]),
+            }
+            for row_id, metadata in ROW_SPECIFIC_REFUSALS.items()
+        },
     }
 
 
@@ -241,6 +270,45 @@ def evidence_links(scene_id: str, indexes: dict[str, Any]) -> dict[str, Any]:
             for row in m86_rows
         ]
     return links
+
+
+def row_specific_refusals(scene_id: str, fallback: str, indexes: dict[str, Any]) -> list[dict[str, Any]]:
+    metadata = indexes["rowSpecificRefusals"].get(scene_id)
+    if not isinstance(metadata, dict):
+        return []
+    evidence = metadata.get("evidence")
+    if not isinstance(evidence, dict):
+        raise AssertionError(f"{scene_id}: row-specific refusal evidence must be an object")
+    row = evidence.get("row")
+    if not isinstance(row, dict):
+        raise AssertionError(f"{scene_id}: row-specific refusal evidence must contain row")
+    if row.get("inventoryId") != scene_id:
+        raise AssertionError(f"{scene_id}: row-specific refusal inventory mismatch")
+    if row.get("status") != "expected-unsupported":
+        raise AssertionError(f"{scene_id}: row-specific refusal must remain expected-unsupported")
+    row_fallback = row.get("fallbackReason")
+    if not isinstance(row_fallback, str) or row_fallback == "none":
+        raise AssertionError(f"{scene_id}: row-specific refusal must have stable fallback")
+    if evidence.get("classification") != "row-specific-expected-unsupported-no-support-claim":
+        raise AssertionError(f"{scene_id}: row-specific refusal classification mismatch")
+    if evidence.get("scoreImpact", {}).get("supportScoreIncreased") is not False:
+        raise AssertionError(f"{scene_id}: row-specific refusal must not increase support score")
+
+    return [
+        {
+            "linear": metadata["linear"],
+            "classification": evidence.get("classification"),
+            "json": rel(metadata["json"]),
+            "report": rel(metadata["report"]),
+            "fallbackReason": row_fallback,
+            "registryFallbackReason": fallback,
+            "referenceStatus": row.get("reference", {}).get("status", "unknown"),
+            "cpuStatus": row.get("cpu", {}).get("status", "unknown"),
+            "gpuStatus": row.get("gpu", {}).get("status", "unknown"),
+            "diffStatsStatus": row.get("diffStats", {}).get("status", "unknown"),
+            "supportScoreIncreased": evidence.get("scoreImpact", {}).get("supportScoreIncreased"),
+        }
+    ]
 
 
 def owner_for(source: str, scene: dict[str, Any]) -> str:
@@ -312,6 +380,7 @@ def normalize_scene(source: str, scene: dict[str, Any], indexes: dict[str, Any])
         "artifacts": artifacts(scene),
         "metrics": metrics(scene),
         "evidenceLinks": evidence_links(scene_id, indexes),
+        "rowSpecificRefusals": row_specific_refusals(scene_id, fallback, indexes),
         "owningMilestone": owner_for(source, scene),
         "nextTicketType": next_ticket_type(scene, status, family),
         "pmImpact": pm_impact(status, family),
@@ -340,6 +409,7 @@ def build_registry() -> dict[str, Any]:
     support_claims = sum(1 for row in rows if row["supportClaim"])
     linked_m66 = sum(1 for row in rows if "m66" in row["evidenceLinks"])
     linked_m86 = sum(1 for row in rows if "m86" in row["evidenceLinks"])
+    row_specific_refusal_rows = sum(1 for row in rows if row["rowSpecificRefusals"])
     m88 = indexes["m88"]
     m88_counters = m88.get("dashboardCounters", {}) if isinstance(m88.get("dashboardCounters"), dict) else {}
 
@@ -347,7 +417,10 @@ def build_registry() -> dict[str, Any]:
         "schemaVersion": 1,
         "generatedBy": "scripts/m89_gm_registry.py",
         "description": "M89 normalized GM support/refusal registry. This artifact changes no support claims.",
-        "sourceInputs": input_paths + [rel(M66_PROMOTION), rel(M86_BURNDOWN), rel(M88_RC2)],
+        "sourceInputs": input_paths
+        + [rel(M66_PROMOTION), rel(M86_BURNDOWN), rel(M88_RC2)]
+        + [rel(metadata["json"]) for metadata in ROW_SPECIFIC_REFUSALS.values()]
+        + [rel(metadata["report"]) for metadata in ROW_SPECIFIC_REFUSALS.values()],
         "evidencePackages": {
             "m66": {
                 "path": rel(M66_PROMOTION),
@@ -386,6 +459,7 @@ def build_registry() -> dict[str, Any]:
             "family": dict(sorted(family_counts.items())),
             "source": dict(sorted(source_counts.items())),
             "policyOnlyRows": sum(1 for row in rows if row["policyOnly"]),
+            "rowSpecificRefusalRows": row_specific_refusal_rows,
             "expectedUnsupportedWithFallback": sum(
                 1 for row in rows if row["status"] == "expected-unsupported" and row["fallbackReason"] != "none"
             ),
@@ -410,6 +484,7 @@ def write_markdown(registry: dict[str, Any]) -> None:
         f"- Total rows: `{counters['totalRows']}`",
         f"- Support claims: `{counters['supportClaims']}`",
         f"- Policy-only rows: `{counters['policyOnlyRows']}`",
+        f"- Row-specific refusal links: `{counters['rowSpecificRefusalRows']}`",
         f"- Expected unsupported with fallback: `{counters['expectedUnsupportedWithFallback']}`",
         f"- Linked M66 rows: `{counters['linkedM66Rows']}`",
         f"- Linked M86 rows: `{counters['linkedM86Rows']}`",

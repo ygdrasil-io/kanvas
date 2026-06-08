@@ -20,9 +20,36 @@ EXPECTED_COUNTERS = {
     "totalRows": 47,
     "supportClaims": 22,
     "policyOnlyRows": 20,
+    "rowSpecificRefusalRows": 4,
     "expectedUnsupportedWithFallback": 25,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
+}
+EXPECTED_ROW_SPECIFIC_REFUSALS = {
+    "skia-gm-image": {
+        "linear": "FOR-466",
+        "fallbackReason": "image.imagegm.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/for466-skia-gm-image-evidence.json",
+        "report": "reports/wgsl-pipeline/2026-06-06-for-466-skia-gm-image-evidence.md",
+    },
+    "skia-gm-imagesource": {
+        "linear": "FOR-467",
+        "fallbackReason": "image.imagesource.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/for467-skia-gm-imagesource-evidence.json",
+        "report": "reports/wgsl-pipeline/2026-06-06-for-467-skia-gm-imagesource-evidence.md",
+    },
+    "skia-gm-offsetimagefilter": {
+        "linear": "FOR-468",
+        "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/for468-skia-gm-offsetimagefilter-evidence.json",
+        "report": "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
+    },
+    "skia-gm-pathfill": {
+        "linear": "FOR-469",
+        "fallbackReason": "path-aa.fill.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/for469-skia-gm-pathfill-evidence.json",
+        "report": "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md",
+    },
 }
 EXPECTED_SOURCE_COUNTS = {
     "d50-visibility": 11,
@@ -80,6 +107,7 @@ def validate_registry() -> None:
     expected_unsupported_with_fallback = 0
     linked_m66_rows = 0
     linked_m86_rows = 0
+    row_specific_refusal_rows = 0
 
     for index, row in enumerate(rows):
         require(isinstance(row, dict), f"rows[{index}] must be an object")
@@ -94,6 +122,7 @@ def validate_registry() -> None:
         support_claim = row.get("supportClaim")
         policy_only = row.get("policyOnly")
         evidence_links = row.get("evidenceLinks")
+        row_specific_refusals = row.get("rowSpecificRefusals")
 
         require(isinstance(source, str) and source, f"{row_id}: missing source")
         require(isinstance(status, str) and status, f"{row_id}: missing status")
@@ -102,6 +131,7 @@ def validate_registry() -> None:
         require(isinstance(support_claim, bool), f"{row_id}: supportClaim must be boolean")
         require(isinstance(policy_only, bool), f"{row_id}: policyOnly must be boolean")
         require(isinstance(evidence_links, dict), f"{row_id}: evidenceLinks must be object")
+        require(isinstance(row_specific_refusals, list), f"{row_id}: rowSpecificRefusals must be list")
         require(row.get("referenceKind") in {"skia-upstream", "skia-derived", "cpu-oracle", "test-oracle", "none"}, f"{row_id}: invalid referenceKind")
         require(row.get("nextTicketType") in {"implementation", "dependency", "fidelity-burndown", "policy-visibility", "performance-gate"}, f"{row_id}: invalid nextTicketType")
         require(row.get("pmImpact") in {"high", "medium", "low"}, f"{row_id}: invalid pmImpact")
@@ -114,6 +144,7 @@ def validate_registry() -> None:
         expected_unsupported_with_fallback += int(status == "expected-unsupported" and fallback != "none")
         linked_m66_rows += int("m66" in evidence_links)
         linked_m86_rows += int("m86" in evidence_links)
+        row_specific_refusal_rows += int(bool(row_specific_refusals))
 
         if status == "pass":
             require(source == "generated-dashboard", f"{row_id}: only generated dashboard rows may be pass in M89")
@@ -129,6 +160,31 @@ def validate_registry() -> None:
             require(status == "expected-unsupported", f"{row_id}: policy visibility row must remain expected-unsupported")
             require(not support_claim, f"{row_id}: policy visibility row must not claim support")
             require(row.get("nextTicketType") == "policy-visibility", f"{row_id}: policy visibility row must keep policy-visibility next action")
+
+        expected_refusal = EXPECTED_ROW_SPECIFIC_REFUSALS.get(row_id)
+        if expected_refusal is None:
+            require(not row_specific_refusals, f"{row_id}: unexpected row-specific refusal link")
+        else:
+            require(len(row_specific_refusals) == 1, f"{row_id}: expected exactly one row-specific refusal link")
+            refusal = row_specific_refusals[0]
+            require(isinstance(refusal, dict), f"{row_id}: row-specific refusal link must be object")
+            require(policy_only, f"{row_id}: row-specific refusal remains attached to policy visibility row")
+            require(status == "expected-unsupported", f"{row_id}: row-specific refusal must remain expected-unsupported")
+            require(not support_claim, f"{row_id}: row-specific refusal must not claim support")
+            require(refusal.get("linear") == expected_refusal["linear"], f"{row_id}: row-specific refusal Linear mismatch")
+            require(
+                refusal.get("classification") == "row-specific-expected-unsupported-no-support-claim",
+                f"{row_id}: row-specific refusal classification mismatch",
+            )
+            require(refusal.get("json") == expected_refusal["json"], f"{row_id}: row-specific refusal JSON path mismatch")
+            require(refusal.get("report") == expected_refusal["report"], f"{row_id}: row-specific refusal report path mismatch")
+            require(refusal.get("fallbackReason") == expected_refusal["fallbackReason"], f"{row_id}: row-specific refusal fallback mismatch")
+            require(refusal.get("registryFallbackReason") == fallback, f"{row_id}: registry fallback link mismatch")
+            require(refusal.get("referenceStatus") in {"not-generated", "available-historical-skia-integration-reference"}, f"{row_id}: reference status must not imply support")
+            require(refusal.get("cpuStatus") in {"expected-unsupported", "available-historical-disabled-stress-test"}, f"{row_id}: CPU status must not imply support")
+            require(refusal.get("gpuStatus") == "expected-unsupported", f"{row_id}: GPU status must remain expected-unsupported")
+            require(refusal.get("diffStatsStatus") == "not-computed", f"{row_id}: diff/stat must remain not-computed")
+            require(refusal.get("supportScoreIncreased") is False, f"{row_id}: row-specific refusal must not increase support score")
 
         if str(fallback).startswith("font.") or row_id in {"skia-gm-shadertext3", "skia-gm-textblobtransforms"}:
             require(family == "text-glyph", f"{row_id}: font/text rows must remain text-glyph")
@@ -162,6 +218,7 @@ def validate_registry() -> None:
     require(dict(family_counts) == EXPECTED_FAMILY_COUNTS, "derived family counters mismatch")
     require(support_claims == EXPECTED_COUNTERS["supportClaims"], "derived support claim count mismatch")
     require(policy_only_rows == EXPECTED_COUNTERS["policyOnlyRows"], "derived policy-only count mismatch")
+    require(row_specific_refusal_rows == EXPECTED_COUNTERS["rowSpecificRefusalRows"], "derived row-specific refusal count mismatch")
     require(
         expected_unsupported_with_fallback == EXPECTED_COUNTERS["expectedUnsupportedWithFallback"],
         "derived expected-unsupported fallback count mismatch",
@@ -208,6 +265,7 @@ def validate_report() -> None:
         "Total rows: `47`",
         "Support claims: `22`",
         "Policy-only rows: `20`",
+        "Row-specific refusal links: `4`",
         "`expected-unsupported`: `25`",
         "`pass`: `22`",
         "Linked M66 rows: `18`",
