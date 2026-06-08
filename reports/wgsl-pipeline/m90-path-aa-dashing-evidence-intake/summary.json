@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "scripts/m90_path_aa_dashing_evidence_intake.py",
+  "milestone": "M90",
+  "ticket": "M90-PAA-3H",
+  "classification": "path-aa-dashing-evidence-intake-no-new-rendering-support",
+  "status": "blocked-by-missing-row-specific-evidence",
+  "inputs": {
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "candidateReadiness": "reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json",
+    "routeCpu": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashing/route-cpu.json",
+    "routeGpu": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashing/route-gpu.json",
+    "visibility": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+    "gpuSimilarityProperties": "gpu-raster/test-similarity-scores-webgpu.properties",
+    "cpuSimilarityProperties": "skia-integration-tests/test-similarity-scores.properties",
+    "cpuRasterSimilarityProperties": "cpu-raster/test-similarity-scores.properties",
+    "kanvasSkiaSimilarityProperties": "kanvas-skia/test-similarity-scores.properties",
+    "historicalCpuTest": "skia-integration-tests/src/test/kotlin/org/skia/tests/DashingTest.kt",
+    "historicalGmSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/DashingGM.kt",
+    "historicalCrossBackendTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/DashingCrossBackendTest.kt"
+  },
+  "upstreamReadinessState": {
+    "activeNextRecommendedTicket": "M90-PAA-3A",
+    "activeNextRecommendedRow": "skia-gm-hairlines",
+    "thisIntakeIsOutOfOrder": true,
+    "reason": "M90-PAA-3H is materialized as a conservative evidence intake for the eighth-ranked candidate only; it does not supersede the active M90-PAA-3A recommendation."
+  },
+  "row": {
+    "rowId": "skia-gm-dashing",
+    "sourceGm": "DashingGM",
+    "status": "expected-unsupported",
+    "supportClaim": false,
+    "policyOnly": true,
+    "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "candidatePriority": 8,
+    "visibilityPolicyOnlyArtifacts": true
+  },
+  "counters": {
+    "requiredEvidenceItems": 10,
+    "presentEvidenceItems": 0,
+    "missingEvidenceItems": 10,
+    "historicalSignals": 7,
+    "promotionalHistoricalSignals": 0,
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0
+  },
+  "requiredEvidence": [
+    {
+      "kind": "row-specific Skia reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashing/skia.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashing/route-cpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "WebGPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashing/route-gpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU rendered artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashing/cpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU rendered artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashing/gpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashing/cpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashing/gpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashing/stats.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashing/cpu-performance.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-dashing/gpu-performance.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    }
+  ],
+  "historicalSignals": [
+    {
+      "kind": "historical-cpu-test",
+      "path": "skia-integration-tests/src/test/kotlin/org/skia/tests/DashingTest.kt",
+      "promotional": false,
+      "reason": "Historical CPU DashingGM test is not a M90 row-specific CPU/WebGPU artifact bundle and does not update the M89 registry row."
+    },
+    {
+      "kind": "historical-gm-source-port",
+      "path": "skia-integration-tests/src/main/kotlin/org/skia/tests/DashingGM.kt",
+      "promotional": false,
+      "reason": "The existing Kotlin GM source is a historical port signal only; it is not row-specific route, diff/stat, or performance evidence."
+    },
+    {
+      "kind": "historical-crossbackend-test",
+      "path": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/DashingCrossBackendTest.kt",
+      "promotional": false,
+      "reason": "Historical cross-backend floors are provenance only; they do not replace current skia/cpu/gpu/diff/stat/perf evidence."
+    },
+    {
+      "kind": "historical-gpu-similarity-floor",
+      "path": "gpu-raster/test-similarity-scores-webgpu.properties",
+      "observed": "DashingGM-gpu=96.80; DashingGM-raster=96.08",
+      "promotional": false,
+      "reason": "A historical GPU score is not a support claim and does not override the expected-unsupported row policy."
+    },
+    {
+      "kind": "historical-cpu-similarity-floor",
+      "path": "skia-integration-tests/test-similarity-scores.properties",
+      "observed": "DashingGM=96.06985294117646",
+      "promotional": false,
+      "reason": "A historical CPU score is not a M90 support promotion or a replacement for row-specific route artifacts."
+    },
+    {
+      "kind": "historical-cpu-raster-score-mirror",
+      "path": "cpu-raster/test-similarity-scores.properties",
+      "observed": "DashingGM=96.06985294117646",
+      "promotional": false,
+      "reason": "A mirrored historical score file is consistency evidence only, not a CPU/WebGPU promotion artifact."
+    },
+    {
+      "kind": "historical-kanvas-skia-score-mirror",
+      "path": "kanvas-skia/test-similarity-scores.properties",
+      "observed": "DashingGM=96.06985294117646",
+      "promotional": false,
+      "reason": "A mirrored kanvas-skia score is consistency evidence only and does not clear the row-specific M90 evidence contract."
+    }
+  ],
+  "nextRecommendedTicket": {
+    "id": "M90-PAA-3H-REF",
+    "scope": "Produce row-specific DashingGM Skia reference plus CPU/WebGPU fallbackReason=none route, render, diff/stat, and performance artifacts before any support evaluation.",
+    "supportClaimAllowed": false,
+    "promotionAllowedWithoutEvidence": false
+  },
+  "supportGuard": {
+    "supportClaimAdded": false,
+    "readinessMoved": false,
+    "policyOnlyPromoted": false,
+    "thresholdChanged": false,
+    "edgeBudgetChanged": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "broadPathAASupport": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadStrokeSupport": false,
+    "ganeshPort": false,
+    "graphitePort": false
+  },
+  "validationCommands": [
+    "rtk python3 scripts/m90_path_aa_dashing_evidence_intake.py",
+    "rtk ./gradlew --no-daemon pipelineM90PathAaDashingEvidenceIntake",
+    "rtk git diff --check"
+  ]
+}
