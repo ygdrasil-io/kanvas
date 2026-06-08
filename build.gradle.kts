@@ -7818,5 +7818,5 @@ tasks.register<Exec>("validateM90PathAaRefPmBundle") {
 }
 
 tasks.named("pipelinePmBundle") {
-    finalizedBy("pipelinePmBundleM89Registry")
+    finalizedBy("pipelinePmBundleM89Registry", "pipelinePmBundleM90PathAaRefGateCloseout")
 }
