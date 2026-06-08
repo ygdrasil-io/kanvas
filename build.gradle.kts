@@ -4881,6 +4881,7 @@ tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterReferencePackageP
 tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterReferenceProvenanceGate") {
     group = "verification"
     description = "Generates and validates M91-IF-3B ImageMakeWithFilterGM reference provenance gate without changing support claims."
+    dependsOn("pipelineM91ImageFilterImageMakeWithFilterReferencePackagePlan")
     commandLine("python3", "scripts/m91_image_filter_imagemakewithfilter_reference_provenance_gate.py")
     inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_imagemakewithfilter_reference_provenance_gate.py"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/reference-plan.json"))
@@ -4891,6 +4892,21 @@ tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterReferenceProvenan
     inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_crop.png"))
     inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_crop_ref.png"))
     outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-reference-provenance-gate"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterRouteEvidenceGate") {
+    group = "verification"
+    description = "Generates and validates M91-IF-3B ImageMakeWithFilterGM route evidence gate without changing support claims."
+    dependsOn("pipelineM91ImageFilterImageMakeWithFilterReferenceProvenanceGate")
+    commandLine("python3", "scripts/m91_image_filter_imagemakewithfilter_route_evidence_gate.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_imagemakewithfilter_route_evidence_gate.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-evidence-intake/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/reference-plan.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-reference-provenance-gate/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-gpu.json"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-route-evidence-gate"))
     outputs.upToDateWhen { false }
 }
 

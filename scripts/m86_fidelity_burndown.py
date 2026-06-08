@@ -201,7 +201,7 @@ def selected_rows(project_root: Path) -> list[dict[str, Any]]:
     return ranked
 
 
-def build_evidence(project_root: Path) -> dict[str, Any]:
+def build_evidence(project_root: Path, existing_evidence: dict[str, Any] | None = None) -> dict[str, Any]:
     rows = selected_rows(project_root)
     support_rows = [row for row in rows if row["status"] == "pass"]
     unsupported_rows = [row for row in rows if row["status"] == "expected-unsupported"]
@@ -227,7 +227,7 @@ def build_evidence(project_root: Path) -> dict[str, Any]:
         "schemaVersion": 1,
         "milestone": "M86 Fidelity Burn-Down Wave 2",
         "generatedBy": "pipelineM86FidelityBurndown",
-        "gitCommit": git_commit(project_root),
+        "gitCommit": existing_evidence.get("gitCommit", git_commit(project_root)) if existing_evidence else git_commit(project_root),
         "linear": {
             "epic": "FOR-102",
             "tickets": ["FOR-164", "FOR-165", "FOR-166", "FOR-167", "FOR-168"],
@@ -375,8 +375,10 @@ def main() -> None:
     args = parser.parse_args()
 
     project_root = Path(args.project_root).resolve()
-    evidence = build_evidence(project_root)
     output_dir = project_root / args.output_dir
+    existing_evidence_path = output_dir / "evidence.json"
+    existing_evidence = read_json(existing_evidence_path) if existing_evidence_path.is_file() else None
+    evidence = build_evidence(project_root, existing_evidence)
     write_json(output_dir / "evidence.json", evidence)
     write_markdown(output_dir / "evidence.md", evidence)
     write_markdown(project_root / args.report, evidence)
