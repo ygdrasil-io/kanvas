@@ -14,6 +14,7 @@ sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATED_DIR = ROOT / "reports/wgsl-pipeline/scenes/generated"
+SCENES_DIR = ROOT / "reports/wgsl-pipeline/scenes"
 OUTPUT_DIR = ROOT / "reports/wgsl-pipeline/m89-gm-registry"
 REGISTRY_JSON = OUTPUT_DIR / "registry.json"
 REGISTRY_MD = OUTPUT_DIR / "registry.md"
@@ -32,6 +33,12 @@ PATH_AA_MVP_BOUNDARY = ROOT / ".upstream/specs/geometry-coverage/08-path-aa-mvp-
 PATH_AA_EDGE_BUDGET_ADR = ROOT / ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md"
 M47_PATH_AA_POLICY = ROOT / "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md"
 M48_EXPECTED_UNSUPPORTED_BREADTH = ROOT / "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md"
+IMAGE_FILTER_MVP_LANE = ROOT / ".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md"
+M38_CROP_NONNULL_PREPASS_IMPLEMENTATION = ROOT / "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md"
+M38_IMAGE_FILTER_POLICY_UPDATE = ROOT / "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md"
+M41_CROP_IMAGE_FILTER_GENERATED_EVIDENCE = ROOT / "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md"
+IMAGE_FILTER_PREPASS_ROUTE_CPU = SCENES_DIR / "artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json"
+IMAGE_FILTER_PREPASS_ROUTE_GPU = SCENES_DIR / "artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json"
 ROW_SPECIFIC_REFUSALS = {
     "skia-gm-image": {
         "linear": "FOR-466",
@@ -105,6 +112,19 @@ EDGE_BUDGET_GATE_ROWS = {
         "source": "DashingGM",
         "cpuRoute": "cpu.path-coverage.dashing-oracle",
         "gpuRoute": "webgpu.coverage.refuse.edge-count",
+    },
+}
+IMAGE_FILTER_PREPASS_GATE_ROWS = {
+    "image-filter-crop-nonnull-prepass-required": {
+        "linear": "GRA-284",
+        "source": "Crop(input=nonNull)",
+        "supportedSiblingScene": "crop-image-filter-nonnull-prepass",
+        "cpuRoute": "cpu.image-filter.crop-nonnull-reference",
+        "gpuRoute": "webgpu.image-filter.refuse.prepass-required",
+        "gpuCoverageStrategy": "webgpu.image-filter.refuse",
+        "pipelineKey": "imageFilter=Crop(input=nonNull),prePass=required,selectedM38Shape=false",
+        "m66RefusalId": "m66-image-filter-crop-prepass-refusal",
+        "m86RootCause": "filter.picture-prepass-required",
     },
 }
 
@@ -258,6 +278,18 @@ def optional_json(path: Path) -> dict[str, Any]:
     if not isinstance(root, dict):
         raise AssertionError(f"{rel(path)} root must be an object")
     return root
+
+
+def route_diagnostic(scene: dict[str, Any], backend: str) -> tuple[Path, dict[str, Any]]:
+    diagnostics = scene.get("routeDiagnostics")
+    if not isinstance(diagnostics, dict):
+        raise AssertionError(f"{scene.get('id')}: missing routeDiagnostics")
+    diagnostic = diagnostics.get(backend)
+    if not isinstance(diagnostic, str) or not diagnostic:
+        raise AssertionError(f"{scene.get('id')}: missing {backend} route diagnostic")
+    path = SCENES_DIR / diagnostic
+    root = load_json(path)
+    return path, root
 
 
 def build_evidence_indexes() -> dict[str, Any]:
@@ -535,6 +567,99 @@ def edge_budget_gate_links(source: str, scene: dict[str, Any], fallback: str) ->
     ]
 
 
+def image_filter_prepass_gate_links(
+    source: str,
+    scene: dict[str, Any],
+    fallback: str,
+    indexes: dict[str, Any],
+) -> list[dict[str, Any]]:
+    scene_id = str(scene.get("id") or "")
+    metadata = IMAGE_FILTER_PREPASS_GATE_ROWS.get(scene_id)
+    if source != "generated-dashboard" or not isinstance(metadata, dict):
+        return []
+    if scene.get("status") != "expected-unsupported":
+        raise AssertionError(f"{scene_id}: image-filter prepass gate row must remain expected-unsupported")
+    if fallback != "image-filter.crop-input-nonnull-prepass-required":
+        raise AssertionError(f"{scene_id}: image-filter prepass fallback mismatch")
+    cpu = scene.get("cpu")
+    if not isinstance(cpu, dict):
+        raise AssertionError(f"{scene_id}: image-filter prepass CPU diagnostics missing")
+    cpu_route = cpu.get("route")
+    if not isinstance(cpu_route, dict) or cpu_route.get("selectedRoute") != metadata["cpuRoute"]:
+        raise AssertionError(f"{scene_id}: image-filter prepass CPU route mismatch")
+    gpu = scene.get("gpu")
+    if not isinstance(gpu, dict) or gpu.get("status") != "expected-unsupported":
+        raise AssertionError(f"{scene_id}: image-filter prepass GPU route must remain expected-unsupported")
+    route = gpu.get("route")
+    if not isinstance(route, dict) or route.get("fallbackReason") != fallback:
+        raise AssertionError(f"{scene_id}: image-filter prepass GPU route fallback mismatch")
+    if route.get("coverageStrategy") != metadata["gpuCoverageStrategy"]:
+        raise AssertionError(f"{scene_id}: image-filter prepass GPU strategy mismatch")
+    if route.get("pipelineKey") != metadata["pipelineKey"]:
+        raise AssertionError(f"{scene_id}: image-filter prepass GPU pipeline key mismatch")
+    cpu_diagnostic_path, cpu_diagnostic = route_diagnostic(scene, "cpu")
+    if cpu_diagnostic.get("sceneId") != scene_id or cpu_diagnostic.get("status") != "pass":
+        raise AssertionError(f"{scene_id}: image-filter prepass CPU diagnostic status mismatch")
+    if cpu_diagnostic.get("selectedRoute") != metadata["cpuRoute"] or cpu_diagnostic.get("fallbackReason") != "none":
+        raise AssertionError(f"{scene_id}: image-filter prepass CPU diagnostic route mismatch")
+    gpu_diagnostic_path, gpu_diagnostic = route_diagnostic(scene, "gpu")
+    if gpu_diagnostic.get("sceneId") != scene_id or gpu_diagnostic.get("status") != "expected-unsupported":
+        raise AssertionError(f"{scene_id}: image-filter prepass GPU diagnostic status mismatch")
+    if gpu_diagnostic.get("coverageStrategy") != route["coverageStrategy"]:
+        raise AssertionError(f"{scene_id}: image-filter prepass GPU diagnostic strategy mismatch")
+    if gpu_diagnostic.get("pipelineKey") != route["pipelineKey"]:
+        raise AssertionError(f"{scene_id}: image-filter prepass GPU diagnostic pipeline key mismatch")
+    if gpu_diagnostic.get("fallbackReason") != fallback:
+        raise AssertionError(f"{scene_id}: image-filter prepass GPU diagnostic fallback mismatch")
+
+    m66_rows = indexes["m66ByBase"].get(scene_id, [])
+    if not any(
+        row.get("id") == metadata["m66RefusalId"]
+        and row.get("status") == "expected-unsupported"
+        and row.get("fallbackReason") == fallback
+        for row in m66_rows
+        if isinstance(row, dict)
+    ):
+        raise AssertionError(f"{scene_id}: image-filter prepass M66 refusal link missing")
+    m86_rows = indexes["m86ByBase"].get(scene_id, [])
+    if not any(
+        row.get("id") == metadata["m66RefusalId"]
+        and row.get("rootCause") == metadata["m86RootCause"]
+        and row.get("risk") == "high"
+        and row.get("fidelityScoreEligible") is False
+        for row in m86_rows
+        if isinstance(row, dict)
+    ):
+        raise AssertionError(f"{scene_id}: image-filter prepass M86 burn-down link missing")
+
+    return [
+        {
+            "linear": metadata["linear"],
+            "classification": "image-filter-prepass-gated-expected-unsupported-no-support-claim",
+            "fallbackReason": fallback,
+            "sourceShape": metadata["source"],
+            "supportedSiblingScene": metadata["supportedSiblingScene"],
+            "spec": rel(IMAGE_FILTER_MVP_LANE),
+            "implementationReport": rel(M38_CROP_NONNULL_PREPASS_IMPLEMENTATION),
+            "policyReport": rel(M38_IMAGE_FILTER_POLICY_UPDATE),
+            "generatedEvidenceReport": rel(M41_CROP_IMAGE_FILTER_GENERATED_EVIDENCE),
+            "evidenceReport": rel(M48_EXPECTED_UNSUPPORTED_BREADTH),
+            "routeCpuDiagnostic": rel(cpu_diagnostic_path),
+            "routeGpuDiagnostic": rel(gpu_diagnostic_path),
+            "cpuRoute": metadata["cpuRoute"],
+            "gpuRoute": metadata["gpuRoute"],
+            "gpuCoverageStrategy": route["coverageStrategy"],
+            "gpuPipelineKey": route["pipelineKey"],
+            "m66RefusalId": metadata["m66RefusalId"],
+            "m86RootCause": metadata["m86RootCause"],
+            "generalDagCompilerAdded": False,
+            "cpuReadbackFallbackAdded": False,
+            "requiredSmokeCandidateAllowed": False,
+            "supportScoreIncreased": False,
+        }
+    ]
+
+
 def owner_for(source: str, scene: dict[str, Any]) -> str:
     if source == "d50-visibility":
         return "M89"
@@ -594,6 +719,7 @@ def normalize_scene(source: str, scene: dict[str, Any], indexes: dict[str, Any])
         raise AssertionError(f"{source}:{scene_id}: expected-unsupported row must have fallback reason")
     if support_claim and source != "generated-dashboard":
         raise AssertionError(f"{source}:{scene_id}: policy visibility input must not claim support")
+    links = evidence_links(scene_id, indexes)
 
     return {
         "rowId": scene_id,
@@ -608,11 +734,12 @@ def normalize_scene(source: str, scene: dict[str, Any], indexes: dict[str, Any])
         "routeGpu": route_gpu,
         "artifacts": artifacts(scene),
         "metrics": metrics(scene),
-        "evidenceLinks": evidence_links(scene_id, indexes),
+        "evidenceLinks": links,
         "rowSpecificRefusals": row_specific_refusals(scene_id, fallback, indexes),
         "dependencyGateLinks": dependency_gate_links(scene_id, fallback, indexes),
         "groupedPolicyRefusals": grouped_policy_refusals(source, scene, fallback),
         "edgeBudgetGateLinks": edge_budget_gate_links(source, scene, fallback),
+        "imageFilterPrepassGateLinks": image_filter_prepass_gate_links(source, scene, fallback, indexes),
         "owningMilestone": owner_for(source, scene),
         "nextTicketType": next_ticket_type(scene, status, family),
         "pmImpact": pm_impact(status, family),
@@ -645,6 +772,7 @@ def build_registry() -> dict[str, Any]:
     dependency_gate_link_rows = sum(1 for row in rows if row["dependencyGateLinks"])
     grouped_policy_refusal_rows = sum(1 for row in rows if row["groupedPolicyRefusals"])
     edge_budget_gate_link_rows = sum(1 for row in rows if row["edgeBudgetGateLinks"])
+    image_filter_prepass_gate_link_rows = sum(1 for row in rows if row["imageFilterPrepassGateLinks"])
     m88 = indexes["m88"]
     m88_counters = m88.get("dashboardCounters", {}) if isinstance(m88.get("dashboardCounters"), dict) else {}
 
@@ -665,6 +793,12 @@ def build_registry() -> dict[str, Any]:
             rel(PATH_AA_EDGE_BUDGET_ADR),
             rel(M47_PATH_AA_POLICY),
             rel(M48_EXPECTED_UNSUPPORTED_BREADTH),
+            rel(IMAGE_FILTER_MVP_LANE),
+            rel(M38_CROP_NONNULL_PREPASS_IMPLEMENTATION),
+            rel(M38_IMAGE_FILTER_POLICY_UPDATE),
+            rel(M41_CROP_IMAGE_FILTER_GENERATED_EVIDENCE),
+            rel(IMAGE_FILTER_PREPASS_ROUTE_CPU),
+            rel(IMAGE_FILTER_PREPASS_ROUTE_GPU),
         ],
         "evidencePackages": {
             "m66": {
@@ -708,6 +842,7 @@ def build_registry() -> dict[str, Any]:
             "dependencyGateLinkRows": dependency_gate_link_rows,
             "groupedPolicyRefusalRows": grouped_policy_refusal_rows,
             "edgeBudgetGateLinkRows": edge_budget_gate_link_rows,
+            "imageFilterPrepassGateLinkRows": image_filter_prepass_gate_link_rows,
             "expectedUnsupportedWithFallback": sum(
                 1 for row in rows if row["status"] == "expected-unsupported" and row["fallbackReason"] != "none"
             ),
@@ -736,6 +871,7 @@ def write_markdown(registry: dict[str, Any]) -> None:
         f"- Dependency gate links: `{counters['dependencyGateLinkRows']}`",
         f"- Grouped policy refusal links: `{counters['groupedPolicyRefusalRows']}`",
         f"- Edge-budget gate links: `{counters['edgeBudgetGateLinkRows']}`",
+        f"- Image-filter prepass gate links: `{counters['imageFilterPrepassGateLinkRows']}`",
         f"- Expected unsupported with fallback: `{counters['expectedUnsupportedWithFallback']}`",
         f"- Linked M66 rows: `{counters['linkedM66Rows']}`",
         f"- Linked M86 rows: `{counters['linkedM86Rows']}`",

@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "reports/wgsl-pipeline/m89-gm-registry/registry.json"
 REPORT = ROOT / "reports/wgsl-pipeline/m89-gm-registry/registry.md"
 GENERATED_RESULTS = ROOT / "reports/wgsl-pipeline/scenes/generated/results.json"
+SCENES_DIR = ROOT / "reports/wgsl-pipeline/scenes"
 
 EXPECTED_COUNTERS = {
     "totalRows": 47,
@@ -25,6 +26,7 @@ EXPECTED_COUNTERS = {
     "dependencyGateLinkRows": 4,
     "groupedPolicyRefusalRows": 9,
     "edgeBudgetGateLinkRows": 2,
+    "imageFilterPrepassGateLinkRows": 1,
     "expectedUnsupportedWithFallback": 25,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
@@ -102,6 +104,17 @@ EXPECTED_EDGE_BUDGET_GATES = {
         "cpuRoute": "cpu.path-coverage.dashing-oracle",
     },
 }
+EXPECTED_IMAGE_FILTER_PREPASS_GATES = {
+    "image-filter-crop-nonnull-prepass-required": {
+        "sourceShape": "Crop(input=nonNull)",
+        "supportedSiblingScene": "crop-image-filter-nonnull-prepass",
+        "cpuRoute": "cpu.image-filter.crop-nonnull-reference",
+        "gpuCoverageStrategy": "webgpu.image-filter.refuse",
+        "gpuPipelineKey": "imageFilter=Crop(input=nonNull),prePass=required,selectedM38Shape=false",
+        "m66RefusalId": "m66-image-filter-crop-prepass-refusal",
+        "m86RootCause": "filter.picture-prepass-required",
+    },
+}
 EXPECTED_SOURCE_COUNTS = {
     "d50-visibility": 11,
     "d53-visibility": 9,
@@ -151,6 +164,15 @@ def generated_source_rows() -> dict[str, dict[str, Any]]:
     return rows
 
 
+def route_diagnostic(source_scene: dict[str, Any], backend: str) -> tuple[str, dict[str, Any]]:
+    diagnostics = source_scene.get("routeDiagnostics")
+    require(isinstance(diagnostics, dict), f"{source_scene.get('id')}: missing routeDiagnostics")
+    diagnostic = diagnostics.get(backend)
+    require(isinstance(diagnostic, str) and diagnostic, f"{source_scene.get('id')}: missing {backend} route diagnostic")
+    path = SCENES_DIR / diagnostic
+    return rel(path), load_json(path)
+
+
 def validate_registry() -> None:
     registry = load_json(REGISTRY)
     generated_rows = generated_source_rows()
@@ -174,6 +196,7 @@ def validate_registry() -> None:
     dependency_gate_link_rows = 0
     grouped_policy_refusal_rows = 0
     edge_budget_gate_link_rows = 0
+    image_filter_prepass_gate_link_rows = 0
 
     for index, row in enumerate(rows):
         require(isinstance(row, dict), f"rows[{index}] must be an object")
@@ -192,6 +215,7 @@ def validate_registry() -> None:
         dependency_gate_links = row.get("dependencyGateLinks")
         grouped_policy_refusals = row.get("groupedPolicyRefusals")
         edge_budget_gate_links = row.get("edgeBudgetGateLinks")
+        image_filter_prepass_gate_links = row.get("imageFilterPrepassGateLinks")
 
         require(isinstance(source, str) and source, f"{row_id}: missing source")
         require(isinstance(status, str) and status, f"{row_id}: missing status")
@@ -204,6 +228,7 @@ def validate_registry() -> None:
         require(isinstance(dependency_gate_links, list), f"{row_id}: dependencyGateLinks must be list")
         require(isinstance(grouped_policy_refusals, list), f"{row_id}: groupedPolicyRefusals must be list")
         require(isinstance(edge_budget_gate_links, list), f"{row_id}: edgeBudgetGateLinks must be list")
+        require(isinstance(image_filter_prepass_gate_links, list), f"{row_id}: imageFilterPrepassGateLinks must be list")
         require(row.get("referenceKind") in {"skia-upstream", "skia-derived", "cpu-oracle", "test-oracle", "none"}, f"{row_id}: invalid referenceKind")
         require(row.get("nextTicketType") in {"implementation", "dependency", "fidelity-burndown", "policy-visibility", "performance-gate"}, f"{row_id}: invalid nextTicketType")
         require(row.get("pmImpact") in {"high", "medium", "low"}, f"{row_id}: invalid pmImpact")
@@ -220,6 +245,7 @@ def validate_registry() -> None:
         dependency_gate_link_rows += int(bool(dependency_gate_links))
         grouped_policy_refusal_rows += int(bool(grouped_policy_refusals))
         edge_budget_gate_link_rows += int(bool(edge_budget_gate_links))
+        image_filter_prepass_gate_link_rows += int(bool(image_filter_prepass_gate_links))
 
         if status == "pass":
             require(source == "generated-dashboard", f"{row_id}: only generated dashboard rows may be pass in M89")
@@ -452,6 +478,163 @@ def validate_registry() -> None:
             for linked_path in ("spec", "adr", "policyReport", "evidenceReport"):
                 require((ROOT / gate[linked_path]).is_file(), f"{row_id}: edge-budget {linked_path} file missing")
 
+        expected_prepass_gate = EXPECTED_IMAGE_FILTER_PREPASS_GATES.get(row_id)
+        if expected_prepass_gate is None:
+            require(not image_filter_prepass_gate_links, f"{row_id}: unexpected image-filter prepass gate link")
+        else:
+            require(len(image_filter_prepass_gate_links) == 1, f"{row_id}: expected exactly one image-filter prepass gate link")
+            gate = image_filter_prepass_gate_links[0]
+            require(isinstance(gate, dict), f"{row_id}: image-filter prepass gate link must be object")
+            require(source == "generated-dashboard", f"{row_id}: image-filter prepass gate must remain generated-dashboard")
+            require(family == "image-filter", f"{row_id}: image-filter prepass gate must remain image-filter")
+            require(status == "expected-unsupported", f"{row_id}: image-filter prepass gate row must remain expected-unsupported")
+            require(not support_claim, f"{row_id}: image-filter prepass gate row must not claim support")
+            require(policy_only is False, f"{row_id}: image-filter prepass generated row must not become policy-only")
+            require(row.get("nextTicketType") == "implementation", f"{row_id}: image-filter prepass nextTicketType mismatch")
+            require(
+                fallback == "image-filter.crop-input-nonnull-prepass-required",
+                f"{row_id}: image-filter prepass fallback mismatch",
+            )
+            require(gate.get("linear") == "GRA-284", f"{row_id}: image-filter prepass Linear mismatch")
+            require(
+                gate.get("classification") == "image-filter-prepass-gated-expected-unsupported-no-support-claim",
+                f"{row_id}: image-filter prepass classification mismatch",
+            )
+            require(gate.get("fallbackReason") == fallback, f"{row_id}: image-filter prepass link fallback mismatch")
+            require(gate.get("sourceShape") == expected_prepass_gate["sourceShape"], f"{row_id}: image-filter source shape mismatch")
+            require(
+                gate.get("supportedSiblingScene") == expected_prepass_gate["supportedSiblingScene"],
+                f"{row_id}: image-filter supported sibling mismatch",
+            )
+            require(gate.get("spec") == ".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md", f"{row_id}: image-filter spec mismatch")
+            require(
+                gate.get("implementationReport") == "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
+                f"{row_id}: image-filter implementation report mismatch",
+            )
+            require(
+                gate.get("policyReport") == "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
+                f"{row_id}: image-filter policy report mismatch",
+            )
+            require(
+                gate.get("generatedEvidenceReport") == "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md",
+                f"{row_id}: image-filter generated evidence report mismatch",
+            )
+            require(
+                gate.get("evidenceReport") == "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+                f"{row_id}: image-filter M48 evidence report mismatch",
+            )
+            require(
+                gate.get("routeCpuDiagnostic")
+                == "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
+                f"{row_id}: image-filter CPU route diagnostic path mismatch",
+            )
+            require(
+                gate.get("routeGpuDiagnostic")
+                == "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
+                f"{row_id}: image-filter GPU route diagnostic path mismatch",
+            )
+            require(gate.get("cpuRoute") == expected_prepass_gate["cpuRoute"], f"{row_id}: image-filter CPU route mismatch")
+            require(
+                gate.get("gpuRoute") == "webgpu.image-filter.refuse.prepass-required",
+                f"{row_id}: image-filter GPU route mismatch",
+            )
+            source_scene = generated_rows.get(row_id)
+            require(isinstance(source_scene, dict), f"{row_id}: generated source row missing")
+            source_cpu = source_scene.get("cpu")
+            source_gpu = source_scene.get("gpu")
+            require(isinstance(source_cpu, dict), f"{row_id}: generated CPU diagnostics missing")
+            require(isinstance(source_gpu, dict), f"{row_id}: generated GPU diagnostics missing")
+            source_cpu_route = source_cpu.get("route")
+            source_gpu_route = source_gpu.get("route")
+            require(isinstance(source_cpu_route, dict), f"{row_id}: generated CPU route missing")
+            require(isinstance(source_gpu_route, dict), f"{row_id}: generated GPU route missing")
+            require(
+                gate.get("cpuRoute") == source_cpu_route.get("selectedRoute"),
+                f"{row_id}: image-filter CPU route differs from source dashboard",
+            )
+            require(source_gpu.get("status") == "expected-unsupported", f"{row_id}: generated GPU status mismatch")
+            require(source_gpu_route.get("fallbackReason") == fallback, f"{row_id}: generated GPU fallback mismatch")
+            require(
+                gate.get("gpuCoverageStrategy")
+                == source_gpu_route.get("coverageStrategy")
+                == expected_prepass_gate["gpuCoverageStrategy"],
+                f"{row_id}: image-filter GPU strategy differs from source dashboard",
+            )
+            require(
+                gate.get("gpuPipelineKey") == source_gpu_route.get("pipelineKey") == expected_prepass_gate["gpuPipelineKey"],
+                f"{row_id}: image-filter GPU pipeline key mismatch",
+            )
+            cpu_diagnostic_path, cpu_diagnostic = route_diagnostic(source_scene, "cpu")
+            gpu_diagnostic_path, gpu_diagnostic = route_diagnostic(source_scene, "gpu")
+            require(gate.get("routeCpuDiagnostic") == cpu_diagnostic_path, f"{row_id}: image-filter CPU diagnostic path differs from source dashboard")
+            require(gate.get("routeGpuDiagnostic") == gpu_diagnostic_path, f"{row_id}: image-filter GPU diagnostic path differs from source dashboard")
+            require(cpu_diagnostic.get("sceneId") == row_id, f"{row_id}: CPU diagnostic sceneId mismatch")
+            require(cpu_diagnostic.get("status") == source_cpu.get("status") == "pass", f"{row_id}: CPU diagnostic status mismatch")
+            require(
+                cpu_diagnostic.get("selectedRoute") == source_cpu_route.get("selectedRoute") == gate.get("cpuRoute"),
+                f"{row_id}: CPU diagnostic selected route mismatch",
+            )
+            require(
+                cpu_diagnostic.get("fallbackReason") == source_cpu_route.get("fallbackReason") == "none",
+                f"{row_id}: CPU diagnostic fallback mismatch",
+            )
+            require(gpu_diagnostic.get("sceneId") == row_id, f"{row_id}: GPU diagnostic sceneId mismatch")
+            require(
+                gpu_diagnostic.get("status") == source_gpu.get("status") == "expected-unsupported",
+                f"{row_id}: GPU diagnostic status mismatch",
+            )
+            require(
+                gpu_diagnostic.get("coverageStrategy") == source_gpu_route.get("coverageStrategy") == gate.get("gpuCoverageStrategy"),
+                f"{row_id}: GPU diagnostic strategy mismatch",
+            )
+            require(
+                gpu_diagnostic.get("pipelineKey") == source_gpu_route.get("pipelineKey") == gate.get("gpuPipelineKey"),
+                f"{row_id}: GPU diagnostic pipeline key mismatch",
+            )
+            require(
+                gpu_diagnostic.get("fallbackReason") == source_gpu_route.get("fallbackReason") == gate.get("fallbackReason"),
+                f"{row_id}: GPU diagnostic fallback mismatch",
+            )
+            m66_links = evidence_links.get("m66", [])
+            m86_links = evidence_links.get("m86", [])
+            require(
+                any(
+                    isinstance(link, dict)
+                    and link.get("id") == expected_prepass_gate["m66RefusalId"]
+                    and link.get("status") == "expected-unsupported"
+                    and link.get("fallbackReason") == fallback
+                    for link in m66_links
+                ),
+                f"{row_id}: image-filter M66 refusal link mismatch",
+            )
+            require(
+                any(
+                    isinstance(link, dict)
+                    and link.get("id") == expected_prepass_gate["m66RefusalId"]
+                    and link.get("rootCause") == expected_prepass_gate["m86RootCause"]
+                    and link.get("risk") == "high"
+                    and link.get("fidelityScoreEligible") is False
+                    for link in m86_links
+                ),
+                f"{row_id}: image-filter M86 root cause link mismatch",
+            )
+            require(gate.get("m66RefusalId") == expected_prepass_gate["m66RefusalId"], f"{row_id}: image-filter M66 id mismatch")
+            require(gate.get("m86RootCause") == expected_prepass_gate["m86RootCause"], f"{row_id}: image-filter M86 root cause mismatch")
+            require(gate.get("generalDagCompilerAdded") is False, f"{row_id}: image-filter must not add general DAG compiler")
+            require(gate.get("cpuReadbackFallbackAdded") is False, f"{row_id}: image-filter must not add CPU/readback fallback")
+            require(gate.get("requiredSmokeCandidateAllowed") is False, f"{row_id}: image-filter must not enter required smoke")
+            require(gate.get("supportScoreIncreased") is False, f"{row_id}: image-filter prepass gate must not increase support score")
+            for linked_path in (
+                "spec",
+                "implementationReport",
+                "policyReport",
+                "generatedEvidenceReport",
+                "evidenceReport",
+                "routeCpuDiagnostic",
+                "routeGpuDiagnostic",
+            ):
+                require((ROOT / gate[linked_path]).is_file(), f"{row_id}: image-filter {linked_path} file missing")
+
     duplicates = sorted(row_id for row_id, count in Counter(row_ids).items() if count > 1)
     require(not duplicates, f"duplicate row ids: {duplicates}")
 
@@ -471,6 +654,10 @@ def validate_registry() -> None:
     require(dependency_gate_link_rows == EXPECTED_COUNTERS["dependencyGateLinkRows"], "derived dependency gate link count mismatch")
     require(grouped_policy_refusal_rows == EXPECTED_COUNTERS["groupedPolicyRefusalRows"], "derived grouped policy refusal count mismatch")
     require(edge_budget_gate_link_rows == EXPECTED_COUNTERS["edgeBudgetGateLinkRows"], "derived edge-budget gate link count mismatch")
+    require(
+        image_filter_prepass_gate_link_rows == EXPECTED_COUNTERS["imageFilterPrepassGateLinkRows"],
+        "derived image-filter prepass gate link count mismatch",
+    )
     require(
         expected_unsupported_with_fallback == EXPECTED_COUNTERS["expectedUnsupportedWithFallback"],
         "derived expected-unsupported fallback count mismatch",
@@ -527,6 +714,7 @@ def validate_report() -> None:
         "Dependency gate links: `4`",
         "Grouped policy refusal links: `9`",
         "Edge-budget gate links: `2`",
+        "Image-filter prepass gate links: `1`",
         "`expected-unsupported`: `25`",
         "`pass`: `22`",
         "Linked M66 rows: `18`",

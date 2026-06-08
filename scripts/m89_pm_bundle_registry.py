@@ -34,7 +34,7 @@ def require(condition: bool, message: str) -> None:
 
 def update_readme(readme: Path) -> None:
     marker = "- `registry/m89-gm-registry/`: M89 normalized GM support/refusal registry JSON and Markdown report."
-    note = "- M89 registry counters live in `manifest.json` under `m89GmRegistry`; policy-only visibility rows do not count as support, dependency gates, edge-budget gates, and refusal links remain unsupported, and threshold-only misses remain fidelity burn-down scope."
+    note = "- M89 registry counters live in `manifest.json` under `m89GmRegistry`; policy-only visibility rows do not count as support, dependency gates, edge-budget gates, image-filter prepass gates, and refusal links remain unsupported, and threshold-only misses remain fidelity burn-down scope."
     text = readme.read_text(encoding="utf-8") if readme.is_file() else "# WGSL Pipeline PM Bundle\n"
     if marker in text and note in text:
         return
@@ -65,6 +65,7 @@ def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
     require(counters.get("dependencyGateLinkRows") == 4, "M89 dependencyGateLinkRows must stay 4")
     require(counters.get("groupedPolicyRefusalRows") == 9, "M89 groupedPolicyRefusalRows must stay 9")
     require(counters.get("edgeBudgetGateLinkRows") == 2, "M89 edgeBudgetGateLinkRows must stay 2")
+    require(counters.get("imageFilterPrepassGateLinkRows") == 1, "M89 imageFilterPrepassGateLinkRows must stay 1")
     require(counters.get("expectedUnsupportedWithFallback") == 25, "M89 expectedUnsupportedWithFallback must stay 25")
     require(counters.get("linkedM66Rows") == 18, "M89 linkedM66Rows must stay 18")
     require(counters.get("linkedM86Rows") == 18, "M89 linkedM86Rows must stay 18")
@@ -80,6 +81,7 @@ def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
         "dependencyGateLinkRows": counters.get("dependencyGateLinkRows", 0),
         "groupedPolicyRefusalRows": counters.get("groupedPolicyRefusalRows", 0),
         "edgeBudgetGateLinkRows": counters.get("edgeBudgetGateLinkRows", 0),
+        "imageFilterPrepassGateLinkRows": counters.get("imageFilterPrepassGateLinkRows", 0),
         "expectedUnsupportedWithFallback": counters.get("expectedUnsupportedWithFallback", 0),
         "linkedM66Rows": counters.get("linkedM66Rows", 0),
         "linkedM86Rows": counters.get("linkedM86Rows", 0),
@@ -88,7 +90,7 @@ def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
         "sourceCounts": counters.get("source", {}),
         "registryJson": "registry/m89-gm-registry/registry.json",
         "registryReport": "registry/m89-gm-registry/registry.md",
-        "notice": "M89 normalizes generated dashboard and policy-only GM visibility rows into support/refusal registry evidence. Dependency gates, edge-budget gate links, and row-specific/grouped refusal links remain unsupported evidence; the registry does not promote policy-only rows, weaken thresholds, or change render paths.",
+        "notice": "M89 normalizes generated dashboard and policy-only GM visibility rows into support/refusal registry evidence. Dependency gates, edge-budget gate links, image-filter prepass gate links, and row-specific/grouped refusal links remain unsupported evidence; the registry does not promote policy-only rows, weaken thresholds, or change render paths.",
     }
 
 

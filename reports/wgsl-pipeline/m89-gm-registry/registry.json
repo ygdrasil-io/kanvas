@@ -14,6 +14,7 @@
       "transform-layer": 1
     },
     "groupedPolicyRefusalRows": 9,
+    "imageFilterPrepassGateLinkRows": 1,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
     "policyOnlyRows": 20,
@@ -78,6 +79,7 @@
       "fallbackReason": "image.imagegm.row-specific-artifacts-required",
       "family": "bitmap-image",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim ImageGM, codec, YUV, animation, EXIF, mipmap, tile-mode, or color-managed image support.",
@@ -116,6 +118,7 @@
       "fallbackReason": "image.imagesource.row-specific-artifacts-required",
       "family": "bitmap-image",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim ImageSourceGM, dynamic source image, codec, YUV, animation, EXIF, mipmap, tile-mode, or color-managed image support.",
@@ -154,6 +157,7 @@
       "fallbackReason": "gradient.2ptconical.row-specific-artifacts-required",
       "family": "gradient",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim Gradients2ptConicalGM, two-point conical gradients, or broader gradient-envelope support.",
@@ -192,6 +196,7 @@
       "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
       "family": "image-filter",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim ImageMakeWithFilterGM, arbitrary image-filter DAG, crop prepass, picture prepass, or layer prepass support.",
@@ -230,6 +235,7 @@
       "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
       "family": "image-filter",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad image-filter DAG, crop image-filter, picture prepass, arbitrary layer prepass, or global color pipeline support.",
@@ -268,6 +274,7 @@
       "fallbackReason": "path.pathfill.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad Path AA, convex path, stroke, cap/join, dash, or edge-budget support.",
@@ -306,6 +313,7 @@
       "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim RectPolyStrokeGM, broad stroke, cap/join, dash, or Path AA support.",
@@ -361,6 +369,7 @@
       "fallbackReason": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
       "family": "runtime-effect",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "dependency",
       "nonClaim": "Dashboard visibility only. This row does not claim RuntimeImageFilterGM, arbitrary SkSL, dynamic runtime-effect compilation, or runtime image-filter descriptor support.",
@@ -402,6 +411,7 @@
       "fallbackReason": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
       "family": "runtime-effect",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "dependency",
       "nonClaim": "Dashboard visibility only. This row does not claim arbitrary SkSL, dynamic runtime-effect compilation, or broad runtime intrinsic support.",
@@ -439,6 +449,7 @@
       "fallbackReason": "font.shadertext3.row-specific-artifacts-required",
       "family": "text-glyph",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "dependency",
       "nonClaim": "Dashboard visibility only. This row does not claim ShaderText3GM, shaped text, glyph atlas, text shader behavior, or broad font support.",
@@ -476,6 +487,7 @@
       "fallbackReason": "font.textblobtransforms.row-specific-artifacts-required",
       "family": "text-glyph",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "dependency",
       "nonClaim": "Dashboard visibility only. This row does not claim shaped text, complex text transforms, glyph atlas, color glyph, or broad font support.",
@@ -511,6 +523,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim dashed cubic Path AA, dash effect flattening, broad stroke, cap/join, or edge-budget support.",
@@ -546,6 +559,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad dashing, dash phase parity, dash path effects, cap/join, or edge-budget support.",
@@ -581,6 +595,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad hairline Path AA, subpixel hairline coverage, transform-sensitive hairline width, or edge-budget support.",
@@ -616,6 +631,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim hairline blend-mode parity, hairline coverage across paint modes, cap/join breadth, or broad Path AA support.",
@@ -651,6 +667,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim transform-scaled stroke parity, stroke normalization, cap/join breadth, dash support, or broad Path AA support.",
@@ -686,6 +703,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad stroked-line coverage, all cap styles, line joins, hairline parity, or edge-budget support.",
@@ -721,6 +739,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim stroke-rect parity, miter/cap/join breadth, anisotropic stroke behavior, or broad Path AA support.",
@@ -756,6 +775,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim broad stroked-rect families, mixed stroke widths, joins, hairlines, or edge-budget support.",
@@ -791,6 +811,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "policy-visibility",
       "nonClaim": "Dashboard visibility only. This row does not claim thin stroked-rect parity, subpixel stroke coverage, hairline equivalence, joins, or broad Path AA support.",
@@ -842,6 +863,7 @@
       "fallbackReason": "none",
       "family": "bitmap-image",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -876,6 +898,7 @@
       "fallbackReason": "none",
       "family": "bitmap-image",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -910,6 +933,7 @@
       "fallbackReason": "none",
       "family": "bitmap-image",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -965,6 +989,7 @@
       "fallbackReason": "none",
       "family": "bitmap-image",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -999,6 +1024,7 @@
       "fallbackReason": "none",
       "family": "bitmap-image",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 99.9864,
         "maxChannelDelta": 242,
@@ -1033,6 +1059,7 @@
       "fallbackReason": "none",
       "family": "blend-color",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1088,6 +1115,7 @@
       "fallbackReason": "none",
       "family": "blend-color",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1143,6 +1171,7 @@
       "fallbackReason": "none",
       "family": "gradient",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1177,6 +1206,7 @@
       "fallbackReason": "none",
       "family": "gradient",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1232,6 +1262,7 @@
       "fallbackReason": "none",
       "family": "gradient",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1287,6 +1318,7 @@
       "fallbackReason": "none",
       "family": "image-filter",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 98.44,
         "maxChannelDelta": 110,
@@ -1342,6 +1374,7 @@
       "fallbackReason": "none",
       "family": "image-filter",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1395,6 +1428,32 @@
       "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
       "family": "image-filter",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [
+        {
+          "classification": "image-filter-prepass-gated-expected-unsupported-no-support-claim",
+          "cpuReadbackFallbackAdded": false,
+          "cpuRoute": "cpu.image-filter.crop-nonnull-reference",
+          "evidenceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+          "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+          "generalDagCompilerAdded": false,
+          "generatedEvidenceReport": "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md",
+          "gpuCoverageStrategy": "webgpu.image-filter.refuse",
+          "gpuPipelineKey": "imageFilter=Crop(input=nonNull),prePass=required,selectedM38Shape=false",
+          "gpuRoute": "webgpu.image-filter.refuse.prepass-required",
+          "implementationReport": "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
+          "linear": "GRA-284",
+          "m66RefusalId": "m66-image-filter-crop-prepass-refusal",
+          "m86RootCause": "filter.picture-prepass-required",
+          "policyReport": "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
+          "requiredSmokeCandidateAllowed": false,
+          "routeCpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
+          "routeGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
+          "sourceShape": "Crop(input=nonNull)",
+          "spec": ".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md",
+          "supportScoreIncreased": false,
+          "supportedSiblingScene": "crop-image-filter-nonnull-prepass"
+        }
+      ],
       "metrics": {},
       "nextTicketType": "implementation",
       "nonClaim": "",
@@ -1446,6 +1505,7 @@
       "fallbackReason": "none",
       "family": "path-aa",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1501,6 +1561,7 @@
       "fallbackReason": "none",
       "family": "path-aa",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 84.44,
         "maxChannelDelta": 255,
@@ -1535,6 +1596,7 @@
       "fallbackReason": "none",
       "family": "path-aa",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1569,6 +1631,7 @@
       "fallbackReason": "none",
       "family": "path-aa",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1620,6 +1683,7 @@
       "fallbackReason": "coverage.edge-count-exceeded",
       "family": "path-aa",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "implementation",
       "nonClaim": "",
@@ -1688,6 +1752,7 @@
       "fallbackReason": "coverage.edge-count-exceeded",
       "family": "path-aa",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "implementation",
       "nonClaim": "",
@@ -1739,6 +1804,7 @@
       "fallbackReason": "none",
       "family": "path-aa",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 91.81,
         "maxChannelDelta": 169,
@@ -1794,6 +1860,7 @@
       "fallbackReason": "none",
       "family": "runtime-effect",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1847,6 +1914,7 @@
       "fallbackReason": "font.complex-shaping-requires-explicit-shaper",
       "family": "text-glyph",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "dependency",
       "nonClaim": "",
@@ -1875,6 +1943,7 @@
       "fallbackReason": "font.color-glyph-emoji-unsupported",
       "family": "text-glyph",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {},
       "nextTicketType": "dependency",
       "nonClaim": "",
@@ -1926,6 +1995,7 @@
       "fallbackReason": "none",
       "family": "text-glyph",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -1981,6 +2051,7 @@
       "fallbackReason": "none",
       "family": "text-glyph",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -2036,6 +2107,7 @@
       "fallbackReason": "none",
       "family": "text-glyph",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -2091,6 +2163,7 @@
       "fallbackReason": "none",
       "family": "transform-layer",
       "groupedPolicyRefusals": [],
+      "imageFilterPrepassGateLinks": [],
       "metrics": {
         "gpuSimilarity": 100,
         "maxChannelDelta": 0,
@@ -2141,6 +2214,12 @@
     ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
     ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
     "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md",
-    "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md"
+    "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+    ".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md",
+    "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
+    "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
+    "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json"
   ]
 }
