@@ -43,6 +43,9 @@ FONT_README = ROOT / ".upstream/specs/font/README.md"
 FONT_SHAPING_BOUNDARY = ROOT / ".upstream/specs/font/03-shaping-and-layout-boundary.md"
 FONT_COLOR_EMOJI_POLICY = ROOT / ".upstream/specs/font/05-color-fonts-emoji-and-fixtures.md"
 FONT_VALIDATION_CONFORMANCE = ROOT / ".upstream/specs/font/06-validation-and-conformance.md"
+M90_HAIRLINES_ARTIFACT_HARNESS = GENERATED_DIR / "m90-hairlines-artifact-harness.json"
+M90_HAIRLINES_ADAPTER_GATE = GENERATED_DIR / "m90-hairlines-adapter-backed-gate.json"
+M90_HAIRLINES_EVIDENCE_INTAKE = ROOT / "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json"
 ROW_SPECIFIC_REFUSALS = {
     "skia-gm-image": {
         "linear": "FOR-466",
@@ -326,6 +329,9 @@ def build_evidence_indexes() -> dict[str, Any]:
     m88 = optional_json(M88_RC2)
     text_glyph_dependency_gate = optional_json(TEXT_GLYPH_DEPENDENCY_GATE["json"])
     m89_feature_breadth = optional_json(M89_FEATURE_BREADTH)
+    m90_hairlines_artifact_harness = optional_json(M90_HAIRLINES_ARTIFACT_HARNESS)
+    m90_hairlines_adapter_gate = optional_json(M90_HAIRLINES_ADAPTER_GATE)
+    m90_hairlines_evidence_intake = optional_json(M90_HAIRLINES_EVIDENCE_INTAKE)
 
     m66_by_base: dict[str, list[dict[str, Any]]] = {}
     for scene in m66.get("scenes", []):
@@ -351,6 +357,9 @@ def build_evidence_indexes() -> dict[str, Any]:
         "m86": m86,
         "m86ByBase": m86_by_base,
         "m88": m88,
+        "m90HairlinesArtifactHarness": m90_hairlines_artifact_harness,
+        "m90HairlinesAdapterGate": m90_hairlines_adapter_gate,
+        "m90HairlinesEvidenceIntake": m90_hairlines_evidence_intake,
         "textGlyphDependencyGate": text_glyph_dependency_gate,
         "m89FeatureBreadth": m89_feature_breadth,
         "rowSpecificRefusals": {
@@ -391,6 +400,57 @@ def evidence_links(scene_id: str, indexes: dict[str, Any]) -> dict[str, Any]:
                 "gpuThreshold": row.get("gpuThreshold"),
             }
             for row in m86_rows
+        ]
+    if scene_id == "skia-gm-hairlines":
+        harness = indexes["m90HairlinesArtifactHarness"]
+        adapter_gate = indexes["m90HairlinesAdapterGate"]
+        intake = indexes["m90HairlinesEvidenceIntake"]
+        if not isinstance(harness, dict) or not isinstance(adapter_gate, dict) or not isinstance(intake, dict):
+            raise AssertionError("skia-gm-hairlines: M90 evidence links require harness, adapter gate, and intake JSON")
+        intake_row = intake.get("row")
+        if not isinstance(intake_row, dict) or intake_row.get("rowId") != scene_id:
+            raise AssertionError("skia-gm-hairlines: M90 intake row mismatch")
+        if harness.get("sceneId") != scene_id or adapter_gate.get("sceneId") != scene_id:
+            raise AssertionError("skia-gm-hairlines: M90 evidence scene mismatch")
+        if harness.get("supportClaim") is not False or adapter_gate.get("supportClaim") is not False:
+            raise AssertionError("skia-gm-hairlines: M90 evidence must not claim support")
+        if intake.get("counters", {}).get("newSupportClaims") != 0:
+            raise AssertionError("skia-gm-hairlines: M90 intake must not add support claims")
+        if intake.get("counters", {}).get("readinessDelta") != 0.0:
+            raise AssertionError("skia-gm-hairlines: M90 intake must not move readiness")
+        links["m90"] = [
+            {
+                "id": harness.get("ticket"),
+                "classification": harness.get("classification"),
+                "status": harness.get("status"),
+                "fallbackReason": harness.get("fallbackReason"),
+                "json": rel(M90_HAIRLINES_ARTIFACT_HARNESS),
+                "supportClaim": harness.get("supportClaim"),
+                "newSupportClaims": 0,
+                "readinessDelta": 0.0,
+            },
+            {
+                "id": adapter_gate.get("ticket"),
+                "classification": adapter_gate.get("classification"),
+                "status": adapter_gate.get("status"),
+                "fallbackReason": adapter_gate.get("fallbackReason"),
+                "json": rel(M90_HAIRLINES_ADAPTER_GATE),
+                "supportClaim": adapter_gate.get("supportClaim"),
+                "newSupportClaims": 0,
+                "readinessDelta": 0.0,
+            },
+            {
+                "id": intake.get("ticket"),
+                "classification": intake.get("classification"),
+                "status": intake.get("status"),
+                "fallbackReason": intake.get("row", {}).get("fallbackReason"),
+                "json": rel(M90_HAIRLINES_EVIDENCE_INTAKE),
+                "supportClaim": intake.get("row", {}).get("supportClaim"),
+                "presentEvidenceItems": intake.get("counters", {}).get("presentEvidenceItems"),
+                "missingEvidenceItems": intake.get("counters", {}).get("missingEvidenceItems"),
+                "newSupportClaims": intake.get("counters", {}).get("newSupportClaims"),
+                "readinessDelta": intake.get("counters", {}).get("readinessDelta"),
+            },
         ]
     return links
 
@@ -953,6 +1013,9 @@ def build_registry() -> dict[str, Any]:
             rel(M38_CROP_NONNULL_PREPASS_IMPLEMENTATION),
             rel(M38_IMAGE_FILTER_POLICY_UPDATE),
             rel(M41_CROP_IMAGE_FILTER_GENERATED_EVIDENCE),
+            rel(M90_HAIRLINES_ARTIFACT_HARNESS),
+            rel(M90_HAIRLINES_ADAPTER_GATE),
+            rel(M90_HAIRLINES_EVIDENCE_INTAKE),
             rel(IMAGE_FILTER_PREPASS_ROUTE_CPU),
             rel(IMAGE_FILTER_PREPASS_ROUTE_GPU),
             rel(FONT_README),

@@ -18,6 +18,28 @@ REPORT = ROOT / "reports/wgsl-pipeline/m89-gm-registry/registry.md"
 GENERATED_RESULTS = ROOT / "reports/wgsl-pipeline/scenes/generated/results.json"
 SCENES_DIR = ROOT / "reports/wgsl-pipeline/scenes"
 TEXT_GLYPH_DEPENDENCY_GATE_JSON = ROOT / "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json"
+M90_HAIRLINES_ARTIFACT_HARNESS = "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json"
+M90_HAIRLINES_ADAPTER_GATE = "reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json"
+M90_HAIRLINES_EVIDENCE_INTAKE = "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json"
+EXPECTED_M90_HAIRLINES_LINKS = {
+    M90_HAIRLINES_ARTIFACT_HARNESS: {
+        "id": "M90-PAA-3A-REF",
+        "classification": "hairlines-artifact-harness-added-no-dashboard-promotion",
+        "status": "expected-unsupported",
+    },
+    M90_HAIRLINES_ADAPTER_GATE: {
+        "id": "M90-PAA-3A-REF-GPU",
+        "classification": "hairlines-adapter-backed-artifact-gate-no-support-promotion",
+        "status": "dependency-gated",
+    },
+    M90_HAIRLINES_EVIDENCE_INTAKE: {
+        "id": "M90-PAA-3A",
+        "classification": "path-aa-hairlines-evidence-intake-no-new-rendering-support",
+        "status": "partial-row-specific-evidence-present-non-promotional",
+        "presentEvidenceItems": 8,
+        "missingEvidenceItems": 2,
+    },
+}
 
 EXPECTED_COUNTERS = {
     "totalRows": 47,
@@ -456,6 +478,26 @@ def validate_registry() -> None:
             for link in m86_links:
                 require(isinstance(link.get("rootCause"), str) and link.get("rootCause"), f"{row_id}: m86 link needs rootCause")
                 require(link.get("risk") in {"high", "medium", "dependency-gated"}, f"{row_id}: invalid m86 risk")
+        if row_id == "skia-gm-hairlines":
+            m90_links = evidence_links.get("m90")
+            require(isinstance(m90_links, list) and len(m90_links) == 3, f"{row_id}: m90 evidence links mismatch")
+            expected_paths = set(EXPECTED_M90_HAIRLINES_LINKS)
+            require({link.get("json") for link in m90_links} == expected_paths, f"{row_id}: m90 evidence paths mismatch")
+            for link in m90_links:
+                expected_link = EXPECTED_M90_HAIRLINES_LINKS[str(link.get("json"))]
+                require(link.get("id") == expected_link["id"], f"{row_id}: m90 link id mismatch")
+                require(link.get("classification") == expected_link["classification"], f"{row_id}: m90 link classification mismatch")
+                require(link.get("status") == expected_link["status"], f"{row_id}: m90 link status mismatch")
+                require(link.get("supportClaim") is False, f"{row_id}: m90 link must not claim support")
+                require(link.get("newSupportClaims") == 0, f"{row_id}: m90 link must not add support claims")
+                require(link.get("readinessDelta") == 0.0, f"{row_id}: m90 link must not move readiness")
+                require(link.get("fallbackReason") == "coverage.hairline.row-specific-artifacts-required", f"{row_id}: m90 fallback mismatch")
+                if link.get("json") == M90_HAIRLINES_EVIDENCE_INTAKE:
+                    require(link.get("presentEvidenceItems") == expected_link["presentEvidenceItems"], f"{row_id}: m90 present evidence count mismatch")
+                    require(link.get("missingEvidenceItems") == expected_link["missingEvidenceItems"], f"{row_id}: m90 missing evidence count mismatch")
+                require((ROOT / str(link.get("json"))).is_file(), f"{row_id}: m90 evidence file missing")
+        else:
+            require("m90" not in evidence_links, f"{row_id}: unexpected m90 evidence link")
 
         expected_edge_budget_gate = EXPECTED_EDGE_BUDGET_GATES.get(row_id)
         if expected_edge_budget_gate is None:

@@ -595,7 +595,42 @@
       "artifacts": {},
       "dependencyGateLinks": [],
       "edgeBudgetGateLinks": [],
-      "evidenceLinks": {},
+      "evidenceLinks": {
+        "m90": [
+          {
+            "classification": "hairlines-artifact-harness-added-no-dashboard-promotion",
+            "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+            "id": "M90-PAA-3A-REF",
+            "json": "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json",
+            "newSupportClaims": 0,
+            "readinessDelta": 0.0,
+            "status": "expected-unsupported",
+            "supportClaim": false
+          },
+          {
+            "classification": "hairlines-adapter-backed-artifact-gate-no-support-promotion",
+            "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+            "id": "M90-PAA-3A-REF-GPU",
+            "json": "reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json",
+            "newSupportClaims": 0,
+            "readinessDelta": 0.0,
+            "status": "dependency-gated",
+            "supportClaim": false
+          },
+          {
+            "classification": "path-aa-hairlines-evidence-intake-no-new-rendering-support",
+            "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+            "id": "M90-PAA-3A",
+            "json": "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json",
+            "missingEvidenceItems": 2,
+            "newSupportClaims": 0,
+            "presentEvidenceItems": 8,
+            "readinessDelta": 0.0,
+            "status": "partial-row-specific-evidence-present-non-promotional",
+            "supportClaim": false
+          }
+        ]
+      },
       "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [
@@ -2318,6 +2353,9 @@
     "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
     "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
     "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md",
+    "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json",
+    "reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json",
+    "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json",
     "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
     "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
     ".upstream/specs/font/README.md",
