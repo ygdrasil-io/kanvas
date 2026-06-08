@@ -1,0 +1,180 @@
+{
+  "candidates": [
+    {
+      "candidateKind": "offset-image-filter-gm",
+      "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific graph dump",
+        "intermediate texture ownership",
+        "row-specific Skia/reference artifact",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU render artifacts",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "policyOnly": true,
+      "presentEvidence": [
+        "row-specific refusal link",
+        "CPU expected-unsupported route diagnostic",
+        "WebGPU expected-unsupported route diagnostic"
+      ],
+      "priority": 1,
+      "promotionTicket": "M91-IF-3A",
+      "readyForPromotion": false,
+      "reason": "Smallest policy-only image-filter GM candidate, but still lacks row-specific graph/reference/render/diff/perf evidence.",
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-gpu.json",
+      "rowId": "skia-gm-offsetimagefilter",
+      "sourceGm": "OffsetImageFilterGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    {
+      "candidateKind": "image-make-with-filter-gm",
+      "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+      "missingEvidence": [
+        "row-specific graph dump",
+        "intermediate texture ownership",
+        "row-specific Skia/reference artifact",
+        "CPU route evidence with fallbackReason=none",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU render artifacts",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "policyOnly": true,
+      "presentEvidence": [
+        "row-specific refusal link",
+        "CPU expected-unsupported route diagnostic",
+        "WebGPU expected-unsupported route diagnostic"
+      ],
+      "priority": 2,
+      "promotionTicket": "M91-IF-3B",
+      "readyForPromotion": false,
+      "reason": "Broader source-image ownership case; must follow explicit graph ownership and route evidence.",
+      "routeCpu": "expected-unsupported",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-gpu.json",
+      "rowId": "skia-gm-imagemakewithfilter",
+      "sourceGm": "ImageMakeWithFilterGM",
+      "status": "expected-unsupported",
+      "supportClaim": false
+    },
+    {
+      "candidateKind": "crop-nonnull-prepass-gate",
+      "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+      "inventoryStats": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/stats.json",
+      "missingEvidence": [
+        "row-specific graph dump",
+        "intermediate texture ownership",
+        "WebGPU route evidence with fallbackReason=none",
+        "CPU/GPU render artifacts",
+        "CPU/GPU diff/stat artifacts",
+        "performance impact evidence"
+      ],
+      "policyOnly": false,
+      "presentEvidence": [
+        "CPU oracle route with fallbackReason=none",
+        "static reference/CPU image artifacts",
+        "bounded M38 sibling prepass boundary",
+        "prepass gate proof"
+      ],
+      "priority": 3,
+      "promotionTicket": "M91-IF-3C",
+      "readyForPromotion": false,
+      "reason": "Has bounded sibling evidence but remains an out-of-scope prepass gate for non-selected graph shapes.",
+      "routeCpu": "pass",
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
+      "routeGpu": "expected-unsupported",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
+      "rowId": "image-filter-crop-nonnull-prepass-required",
+      "sourceGm": "Crop(input=nonNull)",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "supportedSiblingBoundary": {
+        "boundary": "M38 bounded Crop(kDecal, input=Offset(null)) prepass only; does not generalize to Crop(input=nonNull) graph shapes.",
+        "routeGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+        "routePrepassDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-prepass.json",
+        "sceneId": "crop-image-filter-nonnull-prepass",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json"
+      }
+    }
+  ],
+  "classification": "image-filter-candidate-readiness-no-new-rendering-support",
+  "counters": {
+    "blockedByMissingEvidenceRows": 3,
+    "candidateRows": 3,
+    "dashboardPromotions": 0,
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0,
+    "readyForPromotionRows": 0,
+    "thresholdChanges": 0
+  },
+  "generatedBy": "scripts/m91_image_filter_candidate_readiness.py",
+  "inputs": {
+    "imageFilterSpec": ".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md",
+    "prepassGateProof": "reports/wgsl-pipeline/m91-image-filter-prepass-gate-proof/summary.json",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "routeDiagnostics": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/summary.json",
+    "selection": "reports/wgsl-pipeline/m91-image-filter-slice/selection.json"
+  },
+  "milestone": "M91",
+  "nextRecommendedTicket": {
+    "id": "M91-IF-3A",
+    "promotionAllowedWithoutEvidence": false,
+    "rowId": "skia-gm-offsetimagefilter",
+    "scope": "Collect row-specific graph dump, intermediate ownership, Skia/reference artifacts, CPU/WebGPU fallbackReason=none routes, render/diff/stat artifacts, and performance impact for OffsetImageFilterGM before any support evaluation.",
+    "supportClaimAllowed": false
+  },
+  "rankingPolicy": {
+    "contract": "M91-IF-3 readiness ranking is a local PM ordering over selected image-filter refusal rows; it does not change registry support status, route status, dashboard counters, or selection membership.",
+    "rowOrder": [
+      "skia-gm-offsetimagefilter",
+      "skia-gm-imagemakewithfilter",
+      "image-filter-crop-nonnull-prepass-required"
+    ],
+    "source": "scripts/m91_image_filter_candidate_readiness.py"
+  },
+  "requiredPromotionEvidence": [
+    "row-specific graph dump",
+    "intermediate texture ownership",
+    "row-specific Skia/reference artifact",
+    "CPU route evidence with fallbackReason=none",
+    "WebGPU route evidence with fallbackReason=none",
+    "CPU/GPU render artifacts",
+    "CPU/GPU diff/stat artifacts",
+    "performance impact evidence"
+  ],
+  "schemaVersion": 1,
+  "status": "generated evidence",
+  "supportGuard": {
+    "arbitraryLayerPrepass": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "cpuReadbackFallbackAdded": false,
+    "dashboardPromoted": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "ganeshPort": false,
+    "generalImageFilterDagSupport": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "policyOnlyPromoted": false,
+    "prepassGatePromoted": false,
+    "readinessMoved": false,
+    "recursiveCropPrepass": false,
+    "requiredSmokeCandidateAllowed": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ticket": "M91-IF-3",
+  "validationCommands": [
+    "rtk python3 scripts/m91_image_filter_candidate_readiness.py",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterCandidateReadiness",
+    "rtk git diff --check"
+  ]
+}

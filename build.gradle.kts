@@ -4716,6 +4716,20 @@ tasks.register<Exec>("pipelineM91ImageFilterPrepassGateProof") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM91ImageFilterCandidateReadiness") {
+    group = "verification"
+    description = "Generates and validates M91 image-filter candidate-readiness evidence without changing support claims."
+    dependsOn("pipelineM91ImageFilterRouteDiagnostics", "pipelineM91ImageFilterPrepassGateProof")
+    commandLine("python3", "scripts/m91_image_filter_candidate_readiness.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_candidate_readiness.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-slice/selection.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-route-diagnostics/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-prepass-gate-proof/summary.json"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-candidate-readiness"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM90PathAaEdgeBudgetProof") {
     group = "verification"
     description = "Generates and validates M90 Path AA edge-budget refusal proof without changing support claims."
