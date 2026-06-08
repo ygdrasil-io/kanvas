@@ -4878,6 +4878,22 @@ tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterReferencePackageP
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterReferenceProvenanceGate") {
+    group = "verification"
+    description = "Generates and validates M91-IF-3B ImageMakeWithFilterGM reference provenance gate without changing support claims."
+    commandLine("python3", "scripts/m91_image_filter_imagemakewithfilter_reference_provenance_gate.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_imagemakewithfilter_reference_provenance_gate.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/reference-plan.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-reference-package-plan/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-evidence-intake/summary.json"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/imagemakewithfilter.png"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_ref.png"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_crop.png"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/imagemakewithfilter_crop_ref.png"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-reference-provenance-gate"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM91ImageFilterOffsetGraphOwnershipProof") {
     group = "verification"
     description = "Generates and validates M91-IF-3A OffsetImageFilterGM graph and ownership proof without changing support claims."
