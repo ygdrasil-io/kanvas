@@ -1,5 +1,6 @@
 {
   "counters": {
+    "dependencyGateLinkRows": 2,
     "expectedUnsupportedWithFallback": 25,
     "family": {
       "bitmap-image": 7,
@@ -70,6 +71,7 @@
   "rows": [
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "image.imagegm.row-specific-artifacts-required",
       "family": "bitmap-image",
@@ -106,6 +108,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "image.imagesource.row-specific-artifacts-required",
       "family": "bitmap-image",
@@ -142,6 +145,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "gradient.2ptconical.row-specific-artifacts-required",
       "family": "gradient",
@@ -164,6 +168,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
       "family": "image-filter",
@@ -186,6 +191,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
       "family": "image-filter",
@@ -222,6 +228,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "path.pathfill.row-specific-artifacts-required",
       "family": "path-aa",
@@ -258,6 +265,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
       "family": "path-aa",
@@ -280,6 +288,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
       "family": "runtime-effect",
@@ -302,6 +311,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
       "family": "runtime-effect",
@@ -324,12 +334,26 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [
+        {
+          "classification": "dependency-gated-expected-unsupported-no-support-claim",
+          "decision": "TEXT_GLYPH_DEPENDENCY_GATE_APPLIED",
+          "fallbackReason": "font.shadertext3.row-specific-artifacts-required",
+          "forbiddenSubstituteCount": 6,
+          "json": "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
+          "linear": "FOR-308",
+          "report": "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md",
+          "requiredFuturePromotionProofCount": 11,
+          "supportDecision": "KEEP_TEXT_GLYPH_DEPENDENCY_GATED_UNTIL_REAL_DELIVERY",
+          "supportScoreIncreased": false
+        }
+      ],
       "evidenceLinks": {},
       "fallbackReason": "font.shadertext3.row-specific-artifacts-required",
       "family": "text-glyph",
       "groupedPolicyRefusals": [],
       "metrics": {},
-      "nextTicketType": "policy-visibility",
+      "nextTicketType": "dependency",
       "nonClaim": "Dashboard visibility only. This row does not claim ShaderText3GM, shaped text, glyph atlas, text shader behavior, or broad font support.",
       "owningMilestone": "M89",
       "pmImpact": "high",
@@ -346,12 +370,26 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [
+        {
+          "classification": "dependency-gated-expected-unsupported-no-support-claim",
+          "decision": "TEXT_GLYPH_DEPENDENCY_GATE_APPLIED",
+          "fallbackReason": "font.textblobtransforms.row-specific-artifacts-required",
+          "forbiddenSubstituteCount": 6,
+          "json": "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
+          "linear": "FOR-308",
+          "report": "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md",
+          "requiredFuturePromotionProofCount": 11,
+          "supportDecision": "KEEP_TEXT_GLYPH_DEPENDENCY_GATED_UNTIL_REAL_DELIVERY",
+          "supportScoreIncreased": false
+        }
+      ],
       "evidenceLinks": {},
       "fallbackReason": "font.textblobtransforms.row-specific-artifacts-required",
       "family": "text-glyph",
       "groupedPolicyRefusals": [],
       "metrics": {},
-      "nextTicketType": "policy-visibility",
+      "nextTicketType": "dependency",
       "nonClaim": "Dashboard visibility only. This row does not claim shaped text, complex text transforms, glyph atlas, color glyph, or broad font support.",
       "owningMilestone": "M89",
       "pmImpact": "high",
@@ -368,6 +406,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
       "family": "path-aa",
@@ -401,6 +440,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
       "family": "path-aa",
@@ -434,6 +474,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
       "family": "path-aa",
@@ -467,6 +508,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
       "family": "path-aa",
@@ -500,6 +542,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
       "family": "path-aa",
@@ -533,6 +576,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
       "family": "path-aa",
@@ -566,6 +610,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
       "family": "path-aa",
@@ -599,6 +644,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
       "family": "path-aa",
@@ -632,6 +678,7 @@
     },
     {
       "artifacts": {},
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
       "family": "path-aa",
@@ -671,6 +718,7 @@
         "gpuDiff": "artifacts/bitmap-rect-nearest/gpu-diff.png",
         "reference": "artifacts/bitmap-rect-nearest/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -724,6 +772,7 @@
         "gpuDiff": "artifacts/bitmap-shader-local-matrix/gpu-diff.png",
         "reference": "artifacts/bitmap-shader-local-matrix/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "bitmap-image",
@@ -756,6 +805,7 @@
         "gpuDiff": "artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
         "reference": "artifacts/bitmap-shader-repeat-tile/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "bitmap-image",
@@ -788,6 +838,7 @@
         "gpuDiff": "artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
         "reference": "artifacts/bitmap-subset-local-matrix-repeat/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -841,6 +892,7 @@
         "gpuDiff": "artifacts/d52-drawminibitmaprect/gpu-diff.png",
         "reference": "artifacts/d52-drawminibitmaprect/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "bitmap-image",
@@ -873,6 +925,7 @@
         "gpuDiff": "artifacts/solid-rect/gpu-diff.png",
         "reference": "artifacts/solid-rect/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "blend-color",
@@ -905,6 +958,7 @@
         "gpuDiff": "artifacts/src-over-stack/gpu-diff.png",
         "reference": "artifacts/src-over-stack/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -958,6 +1012,7 @@
         "gpuDiff": "artifacts/gradient-color-filter-linear-kplus/gpu-diff.png",
         "reference": "artifacts/gradient-color-filter-linear-kplus/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1011,6 +1066,7 @@
         "gpuDiff": "artifacts/linear-gradient-rect/gpu-diff.png",
         "reference": "artifacts/linear-gradient-rect/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "gradient",
@@ -1043,6 +1099,7 @@
         "gpuDiff": "artifacts/sweep-gradient-path-clamp/gpu-diff.png",
         "reference": "artifacts/sweep-gradient-path-clamp/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1096,6 +1153,7 @@
         "gpuDiff": "artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
         "reference": "artifacts/crop-image-filter-nonnull-prepass/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1149,6 +1207,7 @@
         "gpuDiff": "artifacts/image-filter-compose-cf-matrix-transform/gpu-diff.png",
         "reference": "artifacts/image-filter-compose-cf-matrix-transform/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1200,6 +1259,7 @@
         "cpuDiff": "artifacts/image-filter-crop-nonnull-prepass-required/cpu-diff.png",
         "reference": "artifacts/image-filter-crop-nonnull-prepass-required/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1249,6 +1309,7 @@
         "gpuDiff": "artifacts/analytic-aa-convex/gpu-diff.png",
         "reference": "artifacts/analytic-aa-convex/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1302,6 +1363,7 @@
         "gpuDiff": "artifacts/clip-rect-difference/gpu-diff.png",
         "reference": "artifacts/clip-rect-difference/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1355,6 +1417,7 @@
         "gpuDiff": "artifacts/draw-paint-clipped-rect/gpu-diff.png",
         "reference": "artifacts/draw-paint-clipped-rect/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "path-aa",
@@ -1387,6 +1450,7 @@
         "gpuDiff": "artifacts/draw-paint-full-clip/gpu-diff.png",
         "reference": "artifacts/draw-paint-full-clip/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "path-aa",
@@ -1417,6 +1481,7 @@
         "cpuDiff": "artifacts/path-aa-convexpaths-edge-budget/cpu-diff.png",
         "reference": "artifacts/path-aa-convexpaths-edge-budget/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.edge-count-exceeded",
       "family": "path-aa",
@@ -1443,6 +1508,7 @@
         "cpuDiff": "artifacts/path-aa-dashing-edge-budget/cpu-diff.png",
         "reference": "artifacts/path-aa-dashing-edge-budget/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1492,6 +1558,7 @@
         "gpuDiff": "artifacts/path-aa-stroke-primitive/gpu-diff.png",
         "reference": "artifacts/path-aa-stroke-primitive/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1545,6 +1612,7 @@
         "gpuDiff": "artifacts/runtime-effect-simple/gpu-diff.png",
         "reference": "artifacts/runtime-effect-simple/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1596,6 +1664,7 @@
         "cpuDiff": "artifacts/font-complex-shaping-refusal/cpu-diff.png",
         "reference": "artifacts/font-complex-shaping-refusal/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1643,6 +1712,7 @@
         "cpuDiff": "artifacts/font-emoji-color-glyph-refusal/cpu-diff.png",
         "reference": "artifacts/font-emoji-color-glyph-refusal/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "font.color-glyph-emoji-unsupported",
       "family": "text-glyph",
@@ -1671,6 +1741,7 @@
         "gpuDiff": "artifacts/font-kerning-style-fixture/gpu-diff.png",
         "reference": "artifacts/font-kerning-style-fixture/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1724,6 +1795,7 @@
         "gpuDiff": "artifacts/font-latin-outline-drawstring/gpu-diff.png",
         "reference": "artifacts/font-latin-outline-drawstring/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1777,6 +1849,7 @@
         "gpuDiff": "artifacts/font-textblob-positioned-glyph-run/gpu-diff.png",
         "reference": "artifacts/font-textblob-positioned-glyph-run/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1830,6 +1903,7 @@
         "gpuDiff": "artifacts/scaled-rects-transform-stack/gpu-diff.png",
         "reference": "artifacts/scaled-rects-transform-stack/skia.png"
       },
+      "dependencyGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1891,6 +1965,8 @@
     "reports/wgsl-pipeline/2026-06-06-for-466-skia-gm-image-evidence.md",
     "reports/wgsl-pipeline/2026-06-06-for-467-skia-gm-imagesource-evidence.md",
     "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
-    "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md"
+    "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md",
+    "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
+    "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md"
   ]
 }

@@ -59,6 +59,15 @@ D53_GROUPED_POLICY_REFUSALS = {
     "skia-gm-strokerects",
     "skia-gm-thinstrokedrects",
 }
+TEXT_GLYPH_DEPENDENCY_GATES = {
+    "skia-gm-shadertext3",
+    "skia-gm-textblobtransforms",
+}
+TEXT_GLYPH_DEPENDENCY_GATE = {
+    "linear": "FOR-308",
+    "json": ROOT / "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
+    "report": ROOT / "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md",
+}
 
 VALID_STATUSES = {
     "pass",
@@ -216,6 +225,7 @@ def build_evidence_indexes() -> dict[str, Any]:
     m66 = optional_json(M66_PROMOTION)
     m86 = optional_json(M86_BURNDOWN)
     m88 = optional_json(M88_RC2)
+    text_glyph_dependency_gate = optional_json(TEXT_GLYPH_DEPENDENCY_GATE["json"])
 
     m66_by_base: dict[str, list[dict[str, Any]]] = {}
     for scene in m66.get("scenes", []):
@@ -241,6 +251,7 @@ def build_evidence_indexes() -> dict[str, Any]:
         "m86": m86,
         "m86ByBase": m86_by_base,
         "m88": m88,
+        "textGlyphDependencyGate": text_glyph_dependency_gate,
         "rowSpecificRefusals": {
             row_id: {
                 **metadata,
@@ -322,6 +333,39 @@ def row_specific_refusals(scene_id: str, fallback: str, indexes: dict[str, Any])
     ]
 
 
+def dependency_gate_links(scene_id: str, fallback: str, indexes: dict[str, Any]) -> list[dict[str, Any]]:
+    if scene_id not in TEXT_GLYPH_DEPENDENCY_GATES:
+        return []
+    evidence = indexes["textGlyphDependencyGate"]
+    if not isinstance(evidence, dict):
+        raise AssertionError(f"{scene_id}: text/glyph dependency gate evidence must be an object")
+    if evidence.get("decision") != "TEXT_GLYPH_DEPENDENCY_GATE_APPLIED":
+        raise AssertionError(f"{scene_id}: text/glyph dependency gate decision mismatch")
+    if evidence.get("supportDecision") != "KEEP_TEXT_GLYPH_DEPENDENCY_GATED_UNTIL_REAL_DELIVERY":
+        raise AssertionError(f"{scene_id}: text/glyph dependency support decision mismatch")
+    forbidden = evidence.get("forbiddenSubstitutes")
+    required = evidence.get("requiredFuturePromotionProof")
+    if not isinstance(forbidden, list) or not forbidden:
+        raise AssertionError(f"{scene_id}: text/glyph dependency gate needs forbidden substitutes")
+    if not isinstance(required, list) or not required:
+        raise AssertionError(f"{scene_id}: text/glyph dependency gate needs future proof requirements")
+
+    return [
+        {
+            "linear": TEXT_GLYPH_DEPENDENCY_GATE["linear"],
+            "classification": "dependency-gated-expected-unsupported-no-support-claim",
+            "json": rel(TEXT_GLYPH_DEPENDENCY_GATE["json"]),
+            "report": rel(TEXT_GLYPH_DEPENDENCY_GATE["report"]),
+            "fallbackReason": fallback,
+            "decision": evidence.get("decision"),
+            "supportDecision": evidence.get("supportDecision"),
+            "forbiddenSubstituteCount": len(forbidden),
+            "requiredFuturePromotionProofCount": len(required),
+            "supportScoreIncreased": False,
+        }
+    ]
+
+
 def grouped_policy_refusals(source: str, scene: dict[str, Any], fallback: str) -> list[dict[str, Any]]:
     scene_id = str(scene.get("id") or "")
     if source != "d53-visibility" or scene_id not in D53_GROUPED_POLICY_REFUSALS:
@@ -365,6 +409,9 @@ def next_ticket_type(scene: dict[str, Any], status: str, family: str) -> str:
     if status == "pass":
         return "implementation"
     fallback = fallback_reason(scene)
+    scene_id = str(scene.get("id") or "")
+    if scene_id in TEXT_GLYPH_DEPENDENCY_GATES:
+        return "dependency"
     if family == "text-glyph" and ("complex-shaping" in fallback or "emoji" in fallback or "color-glyph" in fallback):
         return "dependency"
     if "row-specific-artifacts-required" in fallback:
@@ -417,6 +464,7 @@ def normalize_scene(source: str, scene: dict[str, Any], indexes: dict[str, Any])
         "metrics": metrics(scene),
         "evidenceLinks": evidence_links(scene_id, indexes),
         "rowSpecificRefusals": row_specific_refusals(scene_id, fallback, indexes),
+        "dependencyGateLinks": dependency_gate_links(scene_id, fallback, indexes),
         "groupedPolicyRefusals": grouped_policy_refusals(source, scene, fallback),
         "owningMilestone": owner_for(source, scene),
         "nextTicketType": next_ticket_type(scene, status, family),
@@ -447,6 +495,7 @@ def build_registry() -> dict[str, Any]:
     linked_m66 = sum(1 for row in rows if "m66" in row["evidenceLinks"])
     linked_m86 = sum(1 for row in rows if "m86" in row["evidenceLinks"])
     row_specific_refusal_rows = sum(1 for row in rows if row["rowSpecificRefusals"])
+    dependency_gate_link_rows = sum(1 for row in rows if row["dependencyGateLinks"])
     grouped_policy_refusal_rows = sum(1 for row in rows if row["groupedPolicyRefusals"])
     m88 = indexes["m88"]
     m88_counters = m88.get("dashboardCounters", {}) if isinstance(m88.get("dashboardCounters"), dict) else {}
@@ -458,7 +507,8 @@ def build_registry() -> dict[str, Any]:
         "sourceInputs": input_paths
         + [rel(M66_PROMOTION), rel(M86_BURNDOWN), rel(M88_RC2)]
         + [rel(metadata["json"]) for metadata in ROW_SPECIFIC_REFUSALS.values()]
-        + [rel(metadata["report"]) for metadata in ROW_SPECIFIC_REFUSALS.values()],
+        + [rel(metadata["report"]) for metadata in ROW_SPECIFIC_REFUSALS.values()]
+        + [rel(TEXT_GLYPH_DEPENDENCY_GATE["json"]), rel(TEXT_GLYPH_DEPENDENCY_GATE["report"])],
         "evidencePackages": {
             "m66": {
                 "path": rel(M66_PROMOTION),
@@ -498,6 +548,7 @@ def build_registry() -> dict[str, Any]:
             "source": dict(sorted(source_counts.items())),
             "policyOnlyRows": sum(1 for row in rows if row["policyOnly"]),
             "rowSpecificRefusalRows": row_specific_refusal_rows,
+            "dependencyGateLinkRows": dependency_gate_link_rows,
             "groupedPolicyRefusalRows": grouped_policy_refusal_rows,
             "expectedUnsupportedWithFallback": sum(
                 1 for row in rows if row["status"] == "expected-unsupported" and row["fallbackReason"] != "none"
@@ -524,6 +575,7 @@ def write_markdown(registry: dict[str, Any]) -> None:
         f"- Support claims: `{counters['supportClaims']}`",
         f"- Policy-only rows: `{counters['policyOnlyRows']}`",
         f"- Row-specific refusal links: `{counters['rowSpecificRefusalRows']}`",
+        f"- Dependency gate links: `{counters['dependencyGateLinkRows']}`",
         f"- Grouped policy refusal links: `{counters['groupedPolicyRefusalRows']}`",
         f"- Expected unsupported with fallback: `{counters['expectedUnsupportedWithFallback']}`",
         f"- Linked M66 rows: `{counters['linkedM66Rows']}`",

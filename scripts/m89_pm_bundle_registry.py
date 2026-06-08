@@ -34,7 +34,7 @@ def require(condition: bool, message: str) -> None:
 
 def update_readme(readme: Path) -> None:
     marker = "- `registry/m89-gm-registry/`: M89 normalized GM support/refusal registry JSON and Markdown report."
-    note = "- M89 registry counters live in `manifest.json` under `m89GmRegistry`; policy-only visibility rows do not count as support, row-specific and grouped refusal links remain unsupported, and threshold-only misses remain fidelity burn-down scope."
+    note = "- M89 registry counters live in `manifest.json` under `m89GmRegistry`; policy-only visibility rows do not count as support, dependency gates and refusal links remain unsupported, and threshold-only misses remain fidelity burn-down scope."
     text = readme.read_text(encoding="utf-8") if readme.is_file() else "# WGSL Pipeline PM Bundle\n"
     if marker in text and note in text:
         return
@@ -62,6 +62,7 @@ def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
     require(counters.get("supportClaims") == 22, "M89 supportClaims must stay 22")
     require(counters.get("policyOnlyRows") == 20, "M89 policyOnlyRows must stay 20")
     require(counters.get("rowSpecificRefusalRows") == 4, "M89 rowSpecificRefusalRows must stay 4")
+    require(counters.get("dependencyGateLinkRows") == 2, "M89 dependencyGateLinkRows must stay 2")
     require(counters.get("groupedPolicyRefusalRows") == 9, "M89 groupedPolicyRefusalRows must stay 9")
     require(counters.get("expectedUnsupportedWithFallback") == 25, "M89 expectedUnsupportedWithFallback must stay 25")
     require(counters.get("linkedM66Rows") == 18, "M89 linkedM66Rows must stay 18")
@@ -75,6 +76,7 @@ def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
         "supportClaims": counters.get("supportClaims", 0),
         "policyOnlyRows": counters.get("policyOnlyRows", 0),
         "rowSpecificRefusalRows": counters.get("rowSpecificRefusalRows", 0),
+        "dependencyGateLinkRows": counters.get("dependencyGateLinkRows", 0),
         "groupedPolicyRefusalRows": counters.get("groupedPolicyRefusalRows", 0),
         "expectedUnsupportedWithFallback": counters.get("expectedUnsupportedWithFallback", 0),
         "linkedM66Rows": counters.get("linkedM66Rows", 0),
@@ -84,7 +86,7 @@ def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
         "sourceCounts": counters.get("source", {}),
         "registryJson": "registry/m89-gm-registry/registry.json",
         "registryReport": "registry/m89-gm-registry/registry.md",
-        "notice": "M89 normalizes generated dashboard and policy-only GM visibility rows into support/refusal registry evidence. Row-specific and grouped refusal links remain unsupported evidence; the registry does not promote policy-only rows, weaken thresholds, or change render paths.",
+        "notice": "M89 normalizes generated dashboard and policy-only GM visibility rows into support/refusal registry evidence. Dependency gates plus row-specific and grouped refusal links remain unsupported evidence; the registry does not promote policy-only rows, weaken thresholds, or change render paths.",
     }
 
 

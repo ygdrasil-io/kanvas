@@ -21,6 +21,7 @@ EXPECTED_COUNTERS = {
     "supportClaims": 22,
     "policyOnlyRows": 20,
     "rowSpecificRefusalRows": 4,
+    "dependencyGateLinkRows": 2,
     "groupedPolicyRefusalRows": 9,
     "expectedUnsupportedWithFallback": 25,
     "linkedM66Rows": 18,
@@ -62,6 +63,10 @@ EXPECTED_GROUPED_POLICY_REFUSALS = {
     "skia-gm-strokerect": "coverage.stroke-rect.row-specific-artifacts-required",
     "skia-gm-strokerects": "coverage.stroke-rects.row-specific-artifacts-required",
     "skia-gm-thinstrokedrects": "coverage.thin-stroked-rects.row-specific-artifacts-required",
+}
+EXPECTED_DEPENDENCY_GATE_LINKS = {
+    "skia-gm-shadertext3": "font.shadertext3.row-specific-artifacts-required",
+    "skia-gm-textblobtransforms": "font.textblobtransforms.row-specific-artifacts-required",
 }
 EXPECTED_SOURCE_COUNTS = {
     "d50-visibility": 11,
@@ -120,6 +125,7 @@ def validate_registry() -> None:
     linked_m66_rows = 0
     linked_m86_rows = 0
     row_specific_refusal_rows = 0
+    dependency_gate_link_rows = 0
     grouped_policy_refusal_rows = 0
 
     for index, row in enumerate(rows):
@@ -136,6 +142,7 @@ def validate_registry() -> None:
         policy_only = row.get("policyOnly")
         evidence_links = row.get("evidenceLinks")
         row_specific_refusals = row.get("rowSpecificRefusals")
+        dependency_gate_links = row.get("dependencyGateLinks")
         grouped_policy_refusals = row.get("groupedPolicyRefusals")
 
         require(isinstance(source, str) and source, f"{row_id}: missing source")
@@ -146,6 +153,7 @@ def validate_registry() -> None:
         require(isinstance(policy_only, bool), f"{row_id}: policyOnly must be boolean")
         require(isinstance(evidence_links, dict), f"{row_id}: evidenceLinks must be object")
         require(isinstance(row_specific_refusals, list), f"{row_id}: rowSpecificRefusals must be list")
+        require(isinstance(dependency_gate_links, list), f"{row_id}: dependencyGateLinks must be list")
         require(isinstance(grouped_policy_refusals, list), f"{row_id}: groupedPolicyRefusals must be list")
         require(row.get("referenceKind") in {"skia-upstream", "skia-derived", "cpu-oracle", "test-oracle", "none"}, f"{row_id}: invalid referenceKind")
         require(row.get("nextTicketType") in {"implementation", "dependency", "fidelity-burndown", "policy-visibility", "performance-gate"}, f"{row_id}: invalid nextTicketType")
@@ -160,6 +168,7 @@ def validate_registry() -> None:
         linked_m66_rows += int("m66" in evidence_links)
         linked_m86_rows += int("m86" in evidence_links)
         row_specific_refusal_rows += int(bool(row_specific_refusals))
+        dependency_gate_link_rows += int(bool(dependency_gate_links))
         grouped_policy_refusal_rows += int(bool(grouped_policy_refusals))
 
         if status == "pass":
@@ -175,7 +184,8 @@ def validate_registry() -> None:
             require(policy_only, f"{row_id}: policy visibility row must be policyOnly")
             require(status == "expected-unsupported", f"{row_id}: policy visibility row must remain expected-unsupported")
             require(not support_claim, f"{row_id}: policy visibility row must not claim support")
-            require(row.get("nextTicketType") == "policy-visibility", f"{row_id}: policy visibility row must keep policy-visibility next action")
+            expected_next_ticket = "dependency" if dependency_gate_links else "policy-visibility"
+            require(row.get("nextTicketType") == expected_next_ticket, f"{row_id}: policy visibility next action mismatch")
 
         expected_refusal = EXPECTED_ROW_SPECIFIC_REFUSALS.get(row_id)
         if expected_refusal is None:
@@ -201,6 +211,46 @@ def validate_registry() -> None:
             require(refusal.get("gpuStatus") == "expected-unsupported", f"{row_id}: GPU status must remain expected-unsupported")
             require(refusal.get("diffStatsStatus") == "not-computed", f"{row_id}: diff/stat must remain not-computed")
             require(refusal.get("supportScoreIncreased") is False, f"{row_id}: row-specific refusal must not increase support score")
+
+        expected_dependency_fallback = EXPECTED_DEPENDENCY_GATE_LINKS.get(row_id)
+        if expected_dependency_fallback is None:
+            require(not dependency_gate_links, f"{row_id}: unexpected dependency gate link")
+        else:
+            require(len(dependency_gate_links) == 1, f"{row_id}: expected exactly one dependency gate link")
+            gate = dependency_gate_links[0]
+            require(isinstance(gate, dict), f"{row_id}: dependency gate link must be object")
+            require(policy_only, f"{row_id}: dependency gate remains attached to policy visibility row")
+            require(family == "text-glyph", f"{row_id}: dependency gate must remain text-glyph")
+            require(status == "expected-unsupported", f"{row_id}: dependency gate row must remain expected-unsupported")
+            require(not support_claim, f"{row_id}: dependency gate row must not claim support")
+            require(row.get("nextTicketType") == "dependency", f"{row_id}: dependency gate nextTicketType mismatch")
+            require(gate.get("linear") == "FOR-308", f"{row_id}: dependency gate Linear mismatch")
+            require(
+                gate.get("classification") == "dependency-gated-expected-unsupported-no-support-claim",
+                f"{row_id}: dependency gate classification mismatch",
+            )
+            require(
+                gate.get("json")
+                == "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
+                f"{row_id}: dependency gate JSON path mismatch",
+            )
+            require(
+                gate.get("report") == "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md",
+                f"{row_id}: dependency gate report path mismatch",
+            )
+            require(gate.get("fallbackReason") == expected_dependency_fallback, f"{row_id}: dependency gate fallback mismatch")
+            require(gate.get("decision") == "TEXT_GLYPH_DEPENDENCY_GATE_APPLIED", f"{row_id}: dependency gate decision mismatch")
+            require(
+                gate.get("supportDecision") == "KEEP_TEXT_GLYPH_DEPENDENCY_GATED_UNTIL_REAL_DELIVERY",
+                f"{row_id}: dependency gate support decision mismatch",
+            )
+            require(isinstance(gate.get("forbiddenSubstituteCount"), int) and gate.get("forbiddenSubstituteCount") >= 6, f"{row_id}: dependency gate forbidden substitute count mismatch")
+            require(
+                isinstance(gate.get("requiredFuturePromotionProofCount"), int)
+                and gate.get("requiredFuturePromotionProofCount") >= 10,
+                f"{row_id}: dependency gate future proof count mismatch",
+            )
+            require(gate.get("supportScoreIncreased") is False, f"{row_id}: dependency gate must not increase support score")
 
         expected_grouped_fallback = EXPECTED_GROUPED_POLICY_REFUSALS.get(row_id)
         if expected_grouped_fallback is None:
@@ -264,6 +314,7 @@ def validate_registry() -> None:
     require(support_claims == EXPECTED_COUNTERS["supportClaims"], "derived support claim count mismatch")
     require(policy_only_rows == EXPECTED_COUNTERS["policyOnlyRows"], "derived policy-only count mismatch")
     require(row_specific_refusal_rows == EXPECTED_COUNTERS["rowSpecificRefusalRows"], "derived row-specific refusal count mismatch")
+    require(dependency_gate_link_rows == EXPECTED_COUNTERS["dependencyGateLinkRows"], "derived dependency gate link count mismatch")
     require(grouped_policy_refusal_rows == EXPECTED_COUNTERS["groupedPolicyRefusalRows"], "derived grouped policy refusal count mismatch")
     require(
         expected_unsupported_with_fallback == EXPECTED_COUNTERS["expectedUnsupportedWithFallback"],
@@ -312,6 +363,7 @@ def validate_report() -> None:
         "Support claims: `22`",
         "Policy-only rows: `20`",
         "Row-specific refusal links: `4`",
+        "Dependency gate links: `2`",
         "Grouped policy refusal links: `9`",
         "`expected-unsupported`: `25`",
         "`pass`: `22`",
