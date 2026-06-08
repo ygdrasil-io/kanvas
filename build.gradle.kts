@@ -4766,6 +4766,7 @@ tasks.register<Exec>("pipelineM91ImageFilterOffsetReferencePackagePlan") {
 tasks.register<Exec>("pipelineM91ImageFilterOffsetReferenceProvenanceGate") {
     group = "verification"
     description = "Generates and validates M91-IF-3A OffsetImageFilterGM reference provenance gate without changing support claims."
+    dependsOn("pipelineM91ImageFilterOffsetReferencePackagePlan")
     commandLine("python3", "scripts/m91_image_filter_offset_reference_provenance_gate.py")
     inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_offset_reference_provenance_gate.py"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/reference-plan.json"))
@@ -4802,6 +4803,21 @@ tasks.register<Exec>("pipelineM91ImageFilterOffsetRenderDiffPerfGate") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-offset-reference-provenance-gate/summary.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-offset-route-evidence-gate/summary.json"))
     outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-offset-render-diff-perf-gate"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<Exec>("pipelineM91ImageFilterOffsetReadinessRecap") {
+    group = "verification"
+    description = "Generates and validates M91-IF-3A OffsetImageFilterGM readiness recap without changing support claims."
+    dependsOn("pipelineM91ImageFilterOffsetRenderDiffPerfGate")
+    commandLine("python3", "scripts/m91_image_filter_offset_readiness_recap.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_offset_readiness_recap.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-offset-evidence-intake/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-offset-reference-package-plan/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-offset-reference-provenance-gate/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-offset-route-evidence-gate/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-offset-render-diff-perf-gate/summary.json"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-offset-readiness-recap"))
     outputs.upToDateWhen { false }
 }
 
