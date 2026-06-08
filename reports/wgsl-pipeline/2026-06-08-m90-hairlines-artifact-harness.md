@@ -22,6 +22,7 @@ Artifact capture is opt-in:
 
 ```text
 rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest
+rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.strokeCapJoin.experimentalRender=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest
 ```
 
 When enabled, the harness writes under:
@@ -40,11 +41,15 @@ Expected files are:
 - `stats.json`
 - `cpu-performance.json`
 - `gpu-performance.json`
-- `gpu.png` and `gpu-diff.png` only when a WebGPU adapter-backed render is produced
+- `gpu.png`
+- `gpu-diff.png`
 
 The M90 Hairlines intake classifies these checked-in files as non-promotional evidence.
-`gpu.png` and `gpu-diff.png` remain absent until an adapter-backed render path produces them.
-That unresolved adapter-backed requirement is tracked explicitly in
+The opt-in WebGPU visual capture now produces `gpu.png` and `gpu-diff.png`, but
+the row remains non-promotional: WebGPU similarity is `98.9581`, below the
+`99.95` promotion threshold, and the route keeps
+`fallbackReason=coverage.hairline.row-specific-artifacts-required`.
+The remaining support gate is tracked explicitly in
 `reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json`.
 
 ## Non-Claims
@@ -64,5 +69,6 @@ rtk python3 scripts/validate_m90_hairlines_artifact_harness.py
 rtk ./gradlew --no-daemon pipelineM90PathAaHairlinesArtifactHarness
 rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest
 rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest
+rtk ./gradlew --no-daemon --rerun-tasks -Dkanvas.sceneEvidence.write=true -Dkanvas.webgpu.strokeCapJoin.experimentalRender=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest
 rtk git diff --check
 ```

@@ -653,11 +653,11 @@
             "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
             "id": "M90-PAA-3A",
             "json": "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json",
-            "missingEvidenceItems": 2,
+            "missingEvidenceItems": 0,
             "newSupportClaims": 0,
-            "presentEvidenceItems": 8,
+            "presentEvidenceItems": 10,
             "readinessDelta": 0.0,
-            "status": "partial-row-specific-evidence-present-non-promotional",
+            "status": "row-specific-evidence-present-non-promotional",
             "supportClaim": false
           }
         ]

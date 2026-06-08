@@ -85,9 +85,9 @@ EXPECTED_M90_HAIRLINES_LINKS = {
     M90_HAIRLINES_EVIDENCE_INTAKE: {
         "id": "M90-PAA-3A",
         "classification": "path-aa-hairlines-evidence-intake-no-new-rendering-support",
-        "status": "partial-row-specific-evidence-present-non-promotional",
-        "presentEvidenceItems": 8,
-        "missingEvidenceItems": 2,
+        "status": "row-specific-evidence-present-non-promotional",
+        "presentEvidenceItems": 10,
+        "missingEvidenceItems": 0,
     },
 }
 
