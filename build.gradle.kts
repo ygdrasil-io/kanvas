@@ -4605,6 +4605,18 @@ tasks.register<Exec>("validateM89GmRegistry") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"))
 }
 
+tasks.register<Exec>("pipelineM89RegistryCloseout") {
+    group = "verification"
+    description = "Generates and validates the M89 GM registry PM closeout without changing support claims."
+    dependsOn("validateM89GmRegistry")
+    commandLine("python3", "scripts/m89_registry_closeout.py")
+    inputs.file(layout.projectDirectory.file("scripts/m89_registry_closeout.py"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m89-gm-registry"))
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/closeout.json"))
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/closeout.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateMepNextFeatureBreadth") {
     group = "verification"
     description = "Validates checked-in MEP-NEXT FOR-189..192 feature breadth evidence without Kadre native dependencies."
@@ -7275,7 +7287,7 @@ tasks.register("pipelinePmBundle") {
 tasks.register<Exec>("pipelinePmBundleM89Registry") {
     group = "verification"
     description = "Adds M89 GM support/refusal registry evidence to the generated PM bundle."
-    dependsOn("validateM89GmRegistry")
+    dependsOn("pipelineM89RegistryCloseout")
     mustRunAfter("pipelinePmBundle")
     commandLine(
         "python3",

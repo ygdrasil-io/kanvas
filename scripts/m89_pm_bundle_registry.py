@@ -34,7 +34,7 @@ def require(condition: bool, message: str) -> None:
 
 def update_readme(readme: Path) -> None:
     marker = "- `registry/m89-gm-registry/`: M89 normalized GM support/refusal registry JSON and Markdown report."
-    note = "- M89 registry counters live in `manifest.json` under `m89GmRegistry`; policy-only visibility rows do not count as support, dependency gates, edge-budget gates, image-filter prepass gates, text/glyph dependency gates, and refusal links remain unsupported, `unlinkedUnsupportedRows` must stay zero, and threshold-only misses remain fidelity burn-down scope."
+    note = "- M89 registry counters and closeout live in `manifest.json` under `m89GmRegistry`; policy-only visibility rows do not count as support, dependency gates, edge-budget gates, image-filter prepass gates, text/glyph dependency gates, and refusal links remain unsupported, `unlinkedUnsupportedRows` must stay zero, threshold-only misses remain fidelity burn-down scope, and M90/M91/M92 are next-slice recommendations only."
     text = readme.read_text(encoding="utf-8") if readme.is_file() else "# WGSL Pipeline PM Bundle\n"
     insertion = f"{marker}\n{note}\n"
     if marker in text:
@@ -50,7 +50,7 @@ def update_readme(readme: Path) -> None:
                 continue
             if skip_stale_note:
                 skip_stale_note = False
-                if line.startswith("- M89 registry counters live in `manifest.json` under `m89GmRegistry`;"):
+                if line.startswith("- M89 registry counters live in `manifest.json` under `m89GmRegistry`;") or line.startswith("- M89 registry counters and closeout live in `manifest.json` under `m89GmRegistry`;"):
                     continue
             rewritten.append(line)
         if replaced:
@@ -111,20 +111,76 @@ def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
         "sourceCounts": counters.get("source", {}),
         "registryJson": "registry/m89-gm-registry/registry.json",
         "registryReport": "registry/m89-gm-registry/registry.md",
+        "closeoutJson": "registry/m89-gm-registry/closeout.json",
+        "closeoutReport": "registry/m89-gm-registry/closeout.md",
         "notice": "M89 normalizes generated dashboard and policy-only GM visibility rows into support/refusal registry evidence. Dependency gates, edge-budget gate links, image-filter prepass gate links, text/glyph dependency gate links, and row-specific/grouped refusal links remain unsupported evidence; unlinked unsupported rows must stay zero, and the registry does not promote policy-only rows, weaken thresholds, or change render paths.",
     }
+
+
+def validate_closeout(closeout: dict[str, Any]) -> None:
+    require(closeout.get("classification") == "pm-closeout-no-new-rendering-support", "M89 closeout classification mismatch")
+    readiness = closeout.get("readiness")
+    support_guard = closeout.get("supportGuard")
+    unsupported_visibility = closeout.get("unsupportedVisibility")
+    non_claims = closeout.get("nonClaims")
+    require(isinstance(readiness, dict), "M89 closeout readiness must be an object")
+    require(readiness.get("readinessBefore") == readiness.get("readinessAfter") == 67.75, "M89 closeout readiness must stay 67.75")
+    require(readiness.get("readinessDelta") == 0.0, "M89 closeout readinessDelta must stay 0.0")
+    require(isinstance(support_guard, dict), "M89 closeout supportGuard must be an object")
+    for field in [
+        "supportClaimsChanged",
+        "renderPathsChanged",
+        "thresholdsChanged",
+        "globalThresholdWeakened",
+        "policyOnlyRowsPromoted",
+        "belowThresholdCountedAsProductionGap",
+    ]:
+        require(support_guard.get(field) is False, f"M89 closeout supportGuard.{field} must stay false")
+    require(support_guard.get("unexpectedFailRows") == 0, "M89 closeout unexpectedFailRows must stay zero")
+    require(support_guard.get("trackedGapRows") == 0, "M89 closeout trackedGapRows must stay zero")
+    require(isinstance(unsupported_visibility, dict), "M89 closeout unsupportedVisibility must be an object")
+    require(unsupported_visibility.get("expectedUnsupportedRows") == 25, "M89 closeout expectedUnsupportedRows must stay 25")
+    require(unsupported_visibility.get("linkedUnsupportedRows") == 25, "M89 closeout linkedUnsupportedRows must stay 25")
+    require(unsupported_visibility.get("unlinkedUnsupportedRows") == 0, "M89 closeout unlinkedUnsupportedRows must stay zero")
+    require(isinstance(non_claims, dict), "M89 closeout nonClaims must be an object")
+    for field, value in non_claims.items():
+        require(value is False, f"M89 closeout nonClaims.{field} must stay false")
+    next_slices = closeout.get("nextRecommendedSlices")
+    require(isinstance(next_slices, list), "M89 closeout nextRecommendedSlices must be a list")
+    require([item.get("milestone") for item in next_slices if isinstance(item, dict)] == ["M90", "M91", "M92"], "M89 closeout next slice order mismatch")
+    for item in next_slices:
+        require(isinstance(item, dict), "M89 closeout next slice entries must be objects")
+        require(item.get("supportClaimAllowedFromCloseout") is False, f"{item.get('milestone')}: M89 closeout cannot authorize support claims")
 
 
 def expose_registry(project_root: Path, bundle_root: Path) -> None:
     source = project_root / "reports/wgsl-pipeline/m89-gm-registry"
     registry_json = source / "registry.json"
     registry_md = source / "registry.md"
+    closeout_json = source / "closeout.json"
+    closeout_md = source / "closeout.md"
     manifest_path = bundle_root / "manifest.json"
     readme_path = bundle_root / "README.md"
     require(source.is_dir(), f"missing M89 registry source dir: {source}")
     require(registry_json.is_file(), f"missing M89 registry JSON: {registry_json}")
     require(registry_md.is_file(), f"missing M89 registry Markdown: {registry_md}")
+    require(closeout_json.is_file(), f"missing M89 registry closeout JSON: {closeout_json}")
+    require(closeout_md.is_file(), f"missing M89 registry closeout Markdown: {closeout_md}")
     require(manifest_path.is_file(), f"missing PM bundle manifest: {manifest_path}")
+
+    registry = load_json(registry_json)
+    closeout = load_json(closeout_json)
+    validate_closeout(closeout)
+    manifest = load_json(manifest_path)
+    manifest_entry = build_manifest_entry(registry)
+    manifest_entry["closeout"] = {
+        "classification": closeout.get("classification"),
+        "readinessBefore": closeout.get("readiness", {}).get("readinessBefore"),
+        "readinessAfter": closeout.get("readiness", {}).get("readinessAfter"),
+        "readinessDelta": closeout.get("readiness", {}).get("readinessDelta"),
+        "nextRecommendedSlices": closeout.get("nextRecommendedSlices", []),
+    }
+    manifest["m89GmRegistry"] = manifest_entry
 
     target = bundle_root / "registry/m89-gm-registry"
     if target.exists():
@@ -132,9 +188,6 @@ def expose_registry(project_root: Path, bundle_root: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, target)
 
-    registry = load_json(registry_json)
-    manifest = load_json(manifest_path)
-    manifest["m89GmRegistry"] = build_manifest_entry(registry)
     write_json(manifest_path, manifest)
     update_readme(readme_path)
 

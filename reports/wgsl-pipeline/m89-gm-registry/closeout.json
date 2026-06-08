@@ -1,0 +1,99 @@
+{
+  "classification": "pm-closeout-no-new-rendering-support",
+  "generatedBy": "scripts/m89_registry_closeout.py",
+  "milestone": "M89",
+  "nextRecommendedSlices": [
+    {
+      "family": "path-aa",
+      "milestone": "M90",
+      "nextAction": "Promote bounded support only with Skia reference and GPU evidence, or add explicit refusal proofs for unsupported clusters.",
+      "scope": "Path AA, strokes, dash, hairline, and clip backlog wave.",
+      "supportClaimAllowedFromCloseout": false
+    },
+    {
+      "family": "image-filter",
+      "milestone": "M91",
+      "nextAction": "Require graph dump, texture ownership, CPU/GPU/reference/diff evidence before any bounded DAG promotion.",
+      "scope": "Image-filter DAG and layer/intermediate ownership wave.",
+      "supportClaimAllowedFromCloseout": false
+    },
+    {
+      "family": "text-glyph",
+      "milestone": "M92",
+      "nextAction": "Keep complex shaping, emoji/color glyphs, fallback stacks, and text GM rows dependency-gated until real implementations land.",
+      "scope": "Text/glyph dependency-gated production slice.",
+      "supportClaimAllowedFromCloseout": false
+    }
+  ],
+  "nonClaims": {
+    "broadImageFilterDAGSupport": false,
+    "broadPathAASupport": false,
+    "broadSkiaParity": false,
+    "broadTextGlyphSupport": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "nativeKadreRequiredForHeadlessValidation": false
+  },
+  "readiness": {
+    "readinessAfter": 67.75,
+    "readinessBefore": 67.75,
+    "readinessDelta": 0.0,
+    "reason": "M89 closes visibility and PM handoff only; it does not add row-specific pass evidence, move denominators, or change release gates."
+  },
+  "registry": {
+    "expectedUnsupportedWithFallback": 25,
+    "familyCounts": {
+      "bitmap-image": 7,
+      "blend-color": 2,
+      "gradient": 4,
+      "image-filter": 5,
+      "path-aa": 18,
+      "runtime-effect": 3,
+      "text-glyph": 7,
+      "transform-layer": 1
+    },
+    "json": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "policyOnlyRows": 20,
+    "report": "reports/wgsl-pipeline/m89-gm-registry/registry.md",
+    "statusCounts": {
+      "expected-unsupported": 25,
+      "pass": 22
+    },
+    "supportClaims": 22,
+    "totalRows": 47,
+    "unlinkedUnsupportedRows": 0
+  },
+  "schemaVersion": 1,
+  "scope": "GM registry normalization closeout and next-slice handoff.",
+  "status": "generated evidence",
+  "supportGuard": {
+    "belowThresholdCountedAsProductionGap": false,
+    "globalThresholdWeakened": false,
+    "policyOnlyRowsPromoted": false,
+    "renderPathsChanged": false,
+    "supportClaimsChanged": false,
+    "thresholdsChanged": false,
+    "trackedGapRows": 0,
+    "unexpectedFailRows": 0
+  },
+  "unsupportedVisibility": {
+    "dependencyGateLinkRows": 4,
+    "edgeBudgetGateLinkRows": 2,
+    "expectedUnsupportedRows": 25,
+    "groupedPolicyRefusalRows": 9,
+    "imageFilterPrepassGateLinkRows": 1,
+    "linkedUnsupportedRows": 25,
+    "rowSpecificRefusalRows": 7,
+    "textGlyphDependencyGateLinkRows": 2,
+    "unlinkedUnsupportedRows": 0
+  },
+  "validationCommands": [
+    "rtk python3 scripts/m89_gm_registry.py",
+    "rtk python3 scripts/validate_m89_gm_registry.py",
+    "rtk python3 scripts/m89_registry_closeout.py",
+    "rtk ./gradlew --no-daemon pipelineM89GmRegistry validateM89GmRegistry pipelineM89RegistryCloseout pipelinePmBundle"
+  ]
+}
