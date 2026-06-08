@@ -151,6 +151,10 @@ val requiredPipelineConformanceSuites = listOf(
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
         className = "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
@@ -341,7 +345,7 @@ fun renderPipelineConformanceReport(
         |The standard conformance entry point completed and produced JUnit evidence for strict generated/registered WGSL,
         |legacy WGSL diagnostic coverage, parser/golden coverage,
         |PipelineKey and BlendPlan contracts, runtime-effect descriptor routing and dispatch-only matrix coverage, CPU descriptor coverage,
-        |bounded simple-Latin text line evidence, bounded simple linear-gradient evidence,
+        |bounded simple-Latin text line evidence, bounded simple linear-gradient evidence, bounded fixture-backed bitmap rect evidence,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -365,6 +369,7 @@ fun renderPipelineConformanceReport(
         |${row("Glyph mask ownership", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest", "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest"), "`GlyphMaskLowering` defines the descriptor boundary for glyph-run mask handoff: text/glyph infrastructure owns discovery, rasterization, atlas lifetime, and invalidation; geometry only consumes an opaque alpha-mask ref or emits `coverage.glyph-mask-dependency-unavailable`; `SkWebGpuGlyphAtlasTest` proves a bounded KAN-010 A8/R8 upload-plan atlas with coordinates and sampling diagnostics; WebGPU still refuses standalone alpha-mask coverage with `coverage.alpha-mask-unsupported`")}
         |${row("Simple Latin text line", status("org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest"), "`SimpleLatinLineSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `text.simple-latin.line.v1`; WebGPU selects `webgpu.text.outline-path.simple-latin` with `fallbackReason=none`, compares against a CPU atlas alpha-mask oracle at local threshold 95%, attaches `SkWebGpuGlyphAtlas` upload evidence, and keeps non-claims for shaping, fallback fonts, emoji/color fonts, SDF/LCD, RTL/BiDi, ligatures, and broad text support")}
         |${row("Simple linear gradient", status("org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest"), "`SimpleLinearGradientSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.linear-gradient.rect.v1`; WebGPU selects `webgpu.generated.linear-gradient.rect` with generated `fs_clamp` WGSL validation, `fallbackReason=none`, compares against an analytic sRGB two-stop oracle at local threshold 99%, and keeps non-claims for wide-gamut color management, all tile modes, gradient meshes, advanced color spaces, broad gradient-family support, color-filter chains, and codec/mipmap work")}
+        |${row("Simple bitmap rect", status("org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest"), "`SimpleBitmapRectSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.bitmap-rect.nearest.fixture.v1`; WebGPU selects `webgpu.image.bitmap-rect.nearest.fixture`, uses fixture-backed `SkCanvas.drawImageRect` with `sampler=nearest`, `tileMode=kClamp`, `srcRectConstraint=kStrict`, `fallbackReason=none`, compares against an analytic strict-nearest fixture oracle at local threshold 99%, and keeps non-claims for broad image support, codec decode, arbitrary textures, mipmaps, tile-mode breadth, color-managed decode, texture atlases, and perspective transforms")}
         |${row("Image rect lowering", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest"), "`ImageRectLowering` captures source rect, destination rect, transform facts, opaque paint-owned sampling payload handoff, and route id; axis-aligned image rects select analytic rect coverage, transformed descriptor tests select path-like coverage without moving sampling/pixels/filtering/colorspace into geometry; CPU oracle covers one axis-aligned image rect and WebGPU selector diagnostics record the adapter-gated image-rect route")}
         |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; matrix counts $runtimeEffectSupportMatrixCounts")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
@@ -406,6 +411,12 @@ fun renderPipelineConformanceReport(
         |  generated `entryPoint=fs_clamp`, `tileMode=kClamp`, `colorSpacePolicy=srgb-unmanaged-test-oracle`,
         |  `fallbackReason=none`, and explicit non-claims for wide-gamut, all tile modes, gradient mesh,
         |  advanced color spaces, broad gradient-family support, color-filter chains, and codec/mipmap work).
+        |- Simple bitmap rect evidence: `reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/`
+        |  (`route-webgpu.json` records `selectedRoute=webgpu.image.bitmap-rect.nearest.fixture`,
+        |  fixture `kanvas-fixture-checker-8x6-rgba8888-v1`, `sampler=nearest`, `tileMode=kClamp`,
+        |  `srcRectConstraint=kStrict`, `colorSpacePolicy=srgb-unmanaged-fixture-oracle`, `fallbackReason=none`,
+        |  and explicit non-claims for broad image, codec decode, arbitrary texture, mipmap, tile-mode breadth,
+        |  color-managed decode, texture atlas, and perspective transform support).
         |- Image rect lowering: `render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt`
         |  (`ImageRectLowering` chooses analytic rect coverage for axis-aligned image rects and path-like
         |  coverage in descriptor tests for transformed image rects while preserving an opaque paint-owned
@@ -460,7 +471,7 @@ project(":cpu-raster").registerPipelineConformanceTest(
 )
 
 project(":gpu-raster").registerPipelineConformanceTest(
-    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, and selector conformance tests.",
+    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, and selector conformance tests.",
     testPatterns = listOf(
         "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
         "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
@@ -472,6 +483,7 @@ project(":gpu-raster").registerPipelineConformanceTest(
         "org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest",
         "org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest",
+        "org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest",
         "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
     ),
 )
@@ -512,7 +524,7 @@ tasks.register("pipelineConformance") {
             |pipelineConformance summary:
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
-            |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, and selector tests: :gpu-raster:pipelineConformanceTest
+            |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, and selector tests: :gpu-raster:pipelineConformanceTest
             |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
             |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
             |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
