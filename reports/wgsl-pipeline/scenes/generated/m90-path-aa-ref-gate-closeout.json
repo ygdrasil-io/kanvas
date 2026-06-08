@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "manual-m90-path-aa-ref-gate-closeout",
+  "ticket": "M90-PAA-3-REF-CLOSEOUT",
+  "milestone": "M90",
+  "classification": "path-aa-ref-gate-closeout-no-support-promotion",
+  "status": "generated evidence",
+  "scope": "Aggregates already-materialized M90 Path AA REF gates and harnesses for coordination visibility only; it does not add rendering support claims or replace row-specific Skia/CPU/WebGPU/diff/stat/perf artifacts.",
+  "inputs": {
+    "candidateIntakeCloseout": "reports/wgsl-pipeline/m90-path-aa-candidate-intake-closeout/summary.json",
+    "hairlines": [
+      "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json",
+      "reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json"
+    ],
+    "rowSpecificGates": [
+      "reports/wgsl-pipeline/scenes/generated/m90-strokerect-row-specific-evidence-gate.json",
+      "reports/wgsl-pipeline/scenes/generated/m90-thinstrokedrects-row-specific-evidence-gate.json",
+      "reports/wgsl-pipeline/scenes/generated/m90-strokedlines-row-specific-evidence-gate.json",
+      "reports/wgsl-pipeline/scenes/generated/m90-strokerects-row-specific-evidence-gate.json",
+      "reports/wgsl-pipeline/scenes/generated/m90-hairmodes-row-specific-evidence-gate.json",
+      "reports/wgsl-pipeline/scenes/generated/m90-scaledstrokes-row-specific-evidence-gate.json",
+      "reports/wgsl-pipeline/scenes/generated/m90-dashing-row-specific-evidence-gate.json",
+      "reports/wgsl-pipeline/scenes/generated/m90-dashcubics-row-specific-evidence-gate.json"
+    ]
+  },
+  "counters": {
+    "candidateRows": 9,
+    "rowsWithRefGateOrHarness": 9,
+    "rowSpecificGateArtifacts": 8,
+    "hairlinesHarnessArtifacts": 2,
+    "supportClaims": 0,
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0,
+    "dashboardPromotions": 0,
+    "thresholdChanges": 0,
+    "edgeBudgetChanges": 0
+  },
+  "rows": [
+    {
+      "order": 1,
+      "ticket": "M90-PAA-3A-REF",
+      "rowId": "skia-gm-hairlines",
+      "sourceGm": "HairlinesGM",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "artifactKind": "artifact-harness-plus-adapter-backed-gate",
+      "artifacts": [
+        {
+          "kind": "artifact-harness",
+          "path": "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json"
+        },
+        {
+          "kind": "adapter-backed-gate",
+          "path": "reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json"
+        }
+      ],
+      "promotionAllowed": false
+    },
+    {
+      "order": 2,
+      "ticket": "M90-PAA-3B-REF",
+      "rowId": "skia-gm-strokerect",
+      "sourceGm": "StrokeRectGM",
+      "status": "dependency-gated",
+      "supportClaim": false,
+      "artifactKind": "row-specific-evidence-gate",
+      "gate": "reports/wgsl-pipeline/scenes/generated/m90-strokerect-row-specific-evidence-gate.json",
+      "promotionAllowed": false
+    },
+    {
+      "order": 3,
+      "ticket": "M90-PAA-3C-REF",
+      "rowId": "skia-gm-thinstrokedrects",
+      "sourceGm": "ThinStrokedRectsGM",
+      "status": "dependency-gated",
+      "supportClaim": false,
+      "artifactKind": "row-specific-evidence-gate",
+      "gate": "reports/wgsl-pipeline/scenes/generated/m90-thinstrokedrects-row-specific-evidence-gate.json",
+      "promotionAllowed": false
+    },
+    {
+      "order": 4,
+      "ticket": "M90-PAA-3D-REF",
+      "rowId": "skia-gm-strokedlines",
+      "sourceGm": "StrokedLinesGM",
+      "status": "dependency-gated",
+      "supportClaim": false,
+      "artifactKind": "row-specific-evidence-gate",
+      "gate": "reports/wgsl-pipeline/scenes/generated/m90-strokedlines-row-specific-evidence-gate.json",
+      "promotionAllowed": false
+    },
+    {
+      "order": 5,
+      "ticket": "M90-PAA-3E-REF",
+      "rowId": "skia-gm-strokerects",
+      "sourceGm": "StrokeRectsGM",
+      "status": "dependency-gated",
+      "supportClaim": false,
+      "artifactKind": "row-specific-evidence-gate",
+      "gate": "reports/wgsl-pipeline/scenes/generated/m90-strokerects-row-specific-evidence-gate.json",
+      "promotionAllowed": false
+    },
+    {
+      "order": 6,
+      "ticket": "M90-PAA-3F-REF",
+      "rowId": "skia-gm-hairmodes",
+      "sourceGm": "HairModesGM",
+      "status": "dependency-gated",
+      "supportClaim": false,
+      "artifactKind": "row-specific-evidence-gate",
+      "gate": "reports/wgsl-pipeline/scenes/generated/m90-hairmodes-row-specific-evidence-gate.json",
+      "promotionAllowed": false
+    },
+    {
+      "order": 7,
+      "ticket": "M90-PAA-3G-REF",
+      "rowId": "skia-gm-scaledstrokes",
+      "sourceGm": "ScaledStrokesGM",
+      "status": "dependency-gated",
+      "supportClaim": false,
+      "artifactKind": "row-specific-evidence-gate",
+      "gate": "reports/wgsl-pipeline/scenes/generated/m90-scaledstrokes-row-specific-evidence-gate.json",
+      "promotionAllowed": false
+    },
+    {
+      "order": 8,
+      "ticket": "M90-PAA-3H-REF",
+      "rowId": "skia-gm-dashing",
+      "sourceGm": "DashingGM",
+      "status": "dependency-gated",
+      "supportClaim": false,
+      "artifactKind": "row-specific-evidence-gate",
+      "gate": "reports/wgsl-pipeline/scenes/generated/m90-dashing-row-specific-evidence-gate.json",
+      "promotionAllowed": false
+    },
+    {
+      "order": 9,
+      "ticket": "M90-PAA-3I-REF",
+      "rowId": "skia-gm-dashcubics",
+      "sourceGm": "DashCubicsGM",
+      "status": "dependency-gated",
+      "supportClaim": false,
+      "artifactKind": "row-specific-evidence-gate",
+      "gate": "reports/wgsl-pipeline/scenes/generated/m90-dashcubics-row-specific-evidence-gate.json",
+      "promotionAllowed": false
+    }
+  ],
+  "activeNextRecommendedTicket": {
+    "id": "M90-PAA-3A",
+    "rowId": "skia-gm-hairlines",
+    "scope": "Collect row-specific Skia reference, CPU/GPU fallbackReason=none route evidence, diff/stat artifacts, and performance impact for HairlinesGM before any support evaluation.",
+    "supportClaimAllowed": false,
+    "promotionAllowedWithoutEvidence": false
+  },
+  "nextHandoff": {
+    "id": "M90-PAA-3A-REF",
+    "rowId": "skia-gm-hairlines",
+    "scope": "Produce row-specific HairlinesGM reference, CPU/WebGPU fallbackReason=none route, render, diff/stat, and performance evidence before any support evaluation.",
+    "supportClaimAllowed": false,
+    "promotionAllowedWithoutEvidence": false
+  },
+  "supportGuard": {
+    "supportClaimAdded": false,
+    "newSupportClaimAdded": false,
+    "registryChanged": false,
+    "dashboardChanged": false,
+    "readinessMoved": false,
+    "thresholdChanged": false,
+    "edgeBudgetChanged": false,
+    "policyOnlyRowsPromoted": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "broadPathAASupport": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadStrokeSupport": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false
+  },
+  "nonClaims": {
+    "rowSupportClaimed": false,
+    "newRenderingSupport": false,
+    "registryPromotion": false,
+    "dashboardPromotion": false,
+    "readinessPromotion": false,
+    "thresholdChange": false,
+    "edgeBudgetChange": false,
+    "broadPathAASupport": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadStrokeSupport": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "belowThresholdCountedAsProductionGap": false
+  },
+  "validationCommands": [
+    "rtk python3 scripts/validate_m90_path_aa_ref_gate_closeout.py --check-worktree-scope",
+    "rtk ./gradlew --no-daemon pipelineM90PathAaRefGateCloseout",
+    "rtk git diff --check"
+  ]
+}
