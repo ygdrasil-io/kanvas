@@ -1,0 +1,141 @@
+{
+  "classification": "image-filter-offset-reference-package-plan-no-new-rendering-support",
+  "counters": {
+    "dashboardPromotions": 0,
+    "diffStatsAdded": 0,
+    "fallbackReasonNoneRoutesAdded": 0,
+    "historicalReferencePromoted": 0,
+    "missingEvidenceItemsStill": 9,
+    "newSupportClaims": 0,
+    "presentEvidenceItemsStill": 2,
+    "readinessDelta": 0.0,
+    "referenceArtifactsAdded": 0,
+    "referencePlans": 1,
+    "renderArtifactsAdded": 0,
+    "thresholdChanges": 0
+  },
+  "generatedBy": "scripts/m91_image_filter_offset_reference_package_plan.py",
+  "historicalReference": {
+    "bitDepth": 16,
+    "colorType": 6,
+    "height": 100,
+    "path": "skia-integration-tests/src/test/resources/original-888/offsetimagefilter.png",
+    "promotableAsDashboardReference": false,
+    "reason": "Historical fixture only; M91 still requires a row-specific packaged Skia/reference artifact with provenance before support evaluation.",
+    "width": 600
+  },
+  "milestone": "M91",
+  "nonClaims": {
+    "adjacentSimpleOffsetEvidenceInherited": false,
+    "arbitraryLayerPrepass": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "cpuReadbackFallbackAdded": false,
+    "cropImageFilterDagSupport": false,
+    "dashboardPromoted": false,
+    "diffStatsAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "fallbackReasonNoneClaimed": false,
+    "ganeshPort": false,
+    "generalImageFilterDagSupport": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "historicalReferencePromoted": false,
+    "performanceGatePromoted": false,
+    "picturePrepassSupport": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "referenceArtifactAdded": false,
+    "renderArtifactsAdded": false,
+    "requiredSmokeCandidateAllowed": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "outputs": {
+    "referencePlan": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/reference-plan.json",
+    "summaryJson": "reports/wgsl-pipeline/m91-image-filter-offset-reference-package-plan/summary.json",
+    "summaryMarkdown": "reports/wgsl-pipeline/m91-image-filter-offset-reference-package-plan/summary.md"
+  },
+  "requiredFutureOutputs": [
+    {
+      "kind": "row-specific Skia/reference artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/skia.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "reference provenance",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/reference-provenance.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-cpu.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "WebGPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-gpu.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU render artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/cpu.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "WebGPU render artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/gpu.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU diff artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/cpu-diff.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "WebGPU diff artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/gpu-diff.png",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/stats.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/performance.json",
+      "requiredBeforePromotion": true,
+      "status": "not-generated"
+    }
+  ],
+  "row": {
+    "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+    "policyOnly": true,
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "rowId": "skia-gm-offsetimagefilter",
+    "sourceGm": "OffsetImageFilterGM",
+    "status": "expected-unsupported",
+    "supportClaim": false
+  },
+  "schemaVersion": 1,
+  "status": "reference-package-plan-written-no-new-rendering-support",
+  "ticket": "M91-IF-3A-REF",
+  "validationCommands": [
+    "rtk python3 scripts/m91_image_filter_offset_reference_package_plan.py",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-m91-offset-reference-plan-pycache python3 -m py_compile scripts/m91_image_filter_offset_reference_package_plan.py",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterOffsetReferencePackagePlan",
+    "rtk git diff --check"
+  ]
+}
