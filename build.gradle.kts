@@ -4789,6 +4789,29 @@ tasks.register<Exec>("pipelineM90PathAaHairModesEvidenceIntake") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaScaledStrokesEvidenceIntake") {
+    group = "verification"
+    description = "Generates and validates M90-PAA-3G ScaledStrokesGM evidence intake without changing support claims."
+    dependsOn("pipelineM90PathAaCandidateReadiness")
+    commandLine("python3", "scripts/m90_path_aa_scaledstrokes_evidence_intake.py")
+    inputs.file(layout.projectDirectory.file("scripts/m90_path_aa_scaledstrokes_evidence_intake.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-scaledstrokes/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-scaledstrokes/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/test-similarity-scores-webgpu.properties"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("cpu-raster/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("kanvas-skia/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/kotlin/org/skia/tests/ScaledStrokesTest.kt"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/ScaledStrokesGM.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ScaledStrokesWebGpuTest.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/ScaledStrokesCrossBackendTest.kt"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m90-path-aa-scaledstrokes-evidence-intake"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateMepNextFeatureBreadth") {
     group = "verification"
     description = "Validates checked-in MEP-NEXT FOR-189..192 feature breadth evidence without Kadre native dependencies."
