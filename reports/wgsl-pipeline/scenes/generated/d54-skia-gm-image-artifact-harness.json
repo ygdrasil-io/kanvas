@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-06-08",
+  "ticket": "D54-1",
+  "sourceDraftMemory": "global/kanvas/tickets/drafts/brouillon-ticket-d54-1-ajouter-un-harnais-artefacts-row-specific-pour-skia-gm-image",
+  "classification": "artifact-harness-added-no-dashboard-promotion",
+  "inventoryId": "skia-gm-image",
+  "sceneId": "d54-skia-gm-image",
+  "status": "expected-unsupported",
+  "fallbackReason": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required",
+  "previousEvidence": {
+    "for466Report": "reports/wgsl-pipeline/2026-06-06-for-466-skia-gm-image-evidence.md",
+    "for466Json": "reports/wgsl-pipeline/scenes/generated/for466-skia-gm-image-evidence.json",
+    "d51Report": "reports/wgsl-pipeline/2026-06-06-d51-2-imagegm-row-specific-evidence.md",
+    "d51Json": "reports/wgsl-pipeline/scenes/generated/d51-imagegm-row-specific-evidence.json",
+    "d51FallbackReason": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required"
+  },
+  "harness": {
+    "testClass": "org.skia.gpu.webgpu.ImageGmSceneCaptureTest",
+    "testFile": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ImageGmSceneCaptureTest.kt",
+    "gmClass": "org.skia.tests.ImageGM",
+    "referenceName": "image-surface",
+    "referencePath": "skia-integration-tests/src/test/resources/original-888/image-surface.png",
+    "cpuRenderer": "TestUtils.runGmTest(ImageGM())",
+    "webgpuRenderer": "WebGpuSink.draw(ctx, ImageGM())",
+    "writeProperty": "kanvas.sceneEvidence.write",
+    "writePropertyRequiredValue": "true",
+    "artifactDir": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image",
+    "cpuMinimumSimilarity": 98.0,
+    "gpuPromotionThreshold": 99.95,
+    "globalThresholdChangeAllowed": false,
+    "globalDashboardPromotionAllowedByD54_1": false,
+    "neighborEvidenceInheritanceAllowed": false
+  },
+  "artifactContract": {
+    "alwaysWrittenWhenEnabled": [
+      "skia.png",
+      "cpu.png",
+      "cpu-diff.png",
+      "route-cpu.json",
+      "route-gpu.json",
+      "stats.json"
+    ],
+    "writtenOnlyWhenWebGpuProducesBitmap": [
+      "gpu.png",
+      "gpu-diff.png"
+    ],
+    "routeCpuRequiredFields": [
+      "sceneId",
+      "inventoryId",
+      "backend",
+      "status",
+      "selectedRoute",
+      "fallbackReason",
+      "similarity",
+      "threshold"
+    ],
+    "routeGpuRequiredFields": [
+      "sceneId",
+      "inventoryId",
+      "backend",
+      "status",
+      "selectedRoute",
+      "fallbackReason",
+      "supportClaim",
+      "globalDashboardPromoted",
+      "globalThresholdChanged",
+      "neighborEvidenceInherited",
+      "broadImageDecodeClaim"
+    ],
+    "statsRequiredFields": [
+      "sceneId",
+      "inventoryId",
+      "status",
+      "fallbackReason",
+      "supportClaim",
+      "globalDashboardPromoted",
+      "cpuSimilarity",
+      "gpuPromotionThreshold",
+      "globalThresholdChanged",
+      "neighborEvidenceInherited",
+      "broadImageDecodeClaim"
+    ]
+  },
+  "promotionGate": {
+    "supportCanBeClaimedByStructureOnly": false,
+    "fallbackReasonNoneAllowedOnlyWhenWebGpuPasses": true,
+    "webGpuPassRequiresBitmap": true,
+    "webGpuPassRequiresGpuDiff": true,
+    "webGpuPassRequiresSimilarityAtLeast": 99.95,
+    "globalDashboardPromotionRequiresSeparateTicket": true,
+    "keepExpectedUnsupportedIfAnyArtifactMissing": true,
+    "stableUnsupportedReason": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required"
+  },
+  "localArtifactRun": {
+    "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.ImageGmSceneCaptureTest",
+    "result": "pass",
+    "adapter": "Apple M2 Max",
+    "artifactsWritten": true,
+    "artifactDir": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image",
+    "cpu": {
+      "status": "pass",
+      "similarity": 98.4826,
+      "threshold": 98.0,
+      "fallbackReason": "none"
+    },
+    "webgpu": {
+      "status": "expected-unsupported",
+      "similarity": 98.5962,
+      "threshold": 99.95,
+      "fallbackReason": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required",
+      "supportClaim": false,
+      "globalDashboardPromoted": false
+    },
+    "decision": "WebGPU produced row-specific artifacts but remains below the local promotion threshold, so D54-1 keeps expected-unsupported and does not change dashboard scoring."
+  },
+  "rowSpecificBoundary": {
+    "imageGmSource": {
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt",
+      "upstreamSource": "gm/image.cpp",
+      "gmName": "image-surface",
+      "gmDimensions": {
+        "width": 960,
+        "height": 1200
+      },
+      "snapshotSurfaceDimensions": {
+        "width": 64,
+        "height": 64
+      },
+      "surfaceKind": "SkSurface.MakeRaster with SkImageInfo.MakeN32 premul",
+      "sampling": "SkSamplingOptions.Default",
+      "rowVariants": [
+        "drawImage original snapshot",
+        "drawImage modified snapshot",
+        "surf.draw current surface",
+        "drawImageRect full-crop",
+        "drawImageRect over-crop",
+        "drawImageRect upper-left",
+        "drawImageRect no-crop"
+      ],
+      "externalEncodedFixture": "none",
+      "decodePath": "not exercised; ImageGM creates SkSurface raster snapshots, not codec-decoded input"
+    },
+    "forbiddenInheritedEvidence": [
+      "skia-gm-bitmappremul",
+      "skia-gm-drawbitmaprect",
+      "skia-gm-drawminibitmaprect",
+      "skia-gm-imagesource",
+      "skia-gm-make_raster_image",
+      "skia-gm-bitmapimage",
+      "neighbor-scenes"
+    ],
+    "neighborEvidenceInherited": false
+  },
+  "scoreImpact": {
+    "supportScoreIncreased": false,
+    "skiaComparableScoreIncreased": false,
+    "readinessScoreIncreased": false,
+    "globalDashboardPromoted": false,
+    "reason": "D54-1 adds a harness and generated artifact evidence. It does not update the dashboard or claim support while the local WebGPU route remains below threshold."
+  },
+  "nonClaims": {
+    "supportClaimAddedByD54_1": false,
+    "webgpuSupportClaimAddedByD54_1ByStructure": false,
+    "skiaComparableClaimAddedByD54_1": false,
+    "dashboardRowAddedByD54_1": false,
+    "globalDashboardPromotedByD54_1": false,
+    "resultsJsonChanged": false,
+    "scenesJsonChanged": false,
+    "d50ManifestChanged": false,
+    "d51EvidenceChanged": false,
+    "d53DashboardChanged": false,
+    "defaultRenderingChanged": false,
+    "thresholdChanged": false,
+    "scoringChanged": false,
+    "fallbackPolicyChanged": false,
+    "pipelineKeyChanged": false,
+    "rendererChanged": false,
+    "productionCodeChanged": false,
+    "wgslProductionChanged": false,
+    "wgsl4kChanged": false,
+    "upstreamSourceChanged": false,
+    "neighborEvidenceInherited": false,
+    "bitmappremulEvidenceInherited": false,
+    "drawbitmaprectEvidenceInherited": false,
+    "drawminibitmaprectEvidenceInherited": false,
+    "imageSourceEvidenceInherited": false,
+    "codecSupportClaim": false,
+    "yuvSupportClaim": false,
+    "animationSupportClaim": false,
+    "exifSupportClaim": false,
+    "mipmapSupportClaim": false,
+    "tileModeSupportClaim": false,
+    "colorManagedImageDecodeSupportClaim": false,
+    "arbitraryImageDecodeSupportClaim": false,
+    "broadImageSupportClaim": false
+  },
+  "expectedChangedFiles": [
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ImageGmSceneCaptureTest.kt",
+    "reports/wgsl-pipeline/2026-06-08-d54-1-skia-gm-image-artifact-harness.md",
+    "reports/wgsl-pipeline/scenes/generated/d54-skia-gm-image-artifact-harness.json",
+    "scripts/validate_d54_skia_gm_image_artifact_harness.py"
+  ],
+  "expectedArtifactFiles": [
+    "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/gpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/gpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/stats.json"
+  ],
+  "validationCommands": [
+    "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ImageGmSceneCaptureTest",
+    "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.ImageGmSceneCaptureTest",
+    "rtk python3 scripts/validate_d54_skia_gm_image_artifact_harness.py",
+    "rtk python3 -m json.tool reports/wgsl-pipeline/scenes/generated/d54-skia-gm-image-artifact-harness.json",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-d54-image-pycache python3 -m py_compile scripts/validate_d54_skia_gm_image_artifact_harness.py",
+    "rtk git diff --check"
+  ]
+}
