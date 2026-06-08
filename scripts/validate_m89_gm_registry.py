@@ -15,6 +15,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "reports/wgsl-pipeline/m89-gm-registry/registry.json"
 REPORT = ROOT / "reports/wgsl-pipeline/m89-gm-registry/registry.md"
+GENERATED_RESULTS = ROOT / "reports/wgsl-pipeline/scenes/generated/results.json"
 
 EXPECTED_COUNTERS = {
     "totalRows": 47,
@@ -23,6 +24,7 @@ EXPECTED_COUNTERS = {
     "rowSpecificRefusalRows": 7,
     "dependencyGateLinkRows": 4,
     "groupedPolicyRefusalRows": 9,
+    "edgeBudgetGateLinkRows": 2,
     "expectedUnsupportedWithFallback": 25,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
@@ -90,6 +92,16 @@ EXPECTED_RUNTIME_EFFECT_DESCRIPTOR_GATES = {
     "skia-gm-runtimeimagefilter": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
     "skia-gm-runtimeintrinsics": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
 }
+EXPECTED_EDGE_BUDGET_GATES = {
+    "path-aa-convexpaths-edge-budget": {
+        "sourceScene": "ConvexPathsGM",
+        "cpuRoute": "cpu.path-coverage.convexpaths-oracle",
+    },
+    "path-aa-dashing-edge-budget": {
+        "sourceScene": "DashingGM",
+        "cpuRoute": "cpu.path-coverage.dashing-oracle",
+    },
+}
 EXPECTED_SOURCE_COUNTS = {
     "d50-visibility": 11,
     "d53-visibility": 9,
@@ -128,8 +140,20 @@ def load_json(path: Path) -> dict[str, Any]:
     return data
 
 
+def generated_source_rows() -> dict[str, dict[str, Any]]:
+    root = load_json(GENERATED_RESULTS)
+    scenes = root.get("scenes")
+    require(isinstance(scenes, list), "generated results scenes must be a list")
+    rows: dict[str, dict[str, Any]] = {}
+    for scene in scenes:
+        if isinstance(scene, dict) and isinstance(scene.get("id"), str):
+            rows[scene["id"]] = scene
+    return rows
+
+
 def validate_registry() -> None:
     registry = load_json(REGISTRY)
+    generated_rows = generated_source_rows()
     require(registry.get("schemaVersion") == 1, "schemaVersion mismatch")
     require(registry.get("generatedBy") == "scripts/m89_gm_registry.py", "generatedBy mismatch")
 
@@ -149,6 +173,7 @@ def validate_registry() -> None:
     row_specific_refusal_rows = 0
     dependency_gate_link_rows = 0
     grouped_policy_refusal_rows = 0
+    edge_budget_gate_link_rows = 0
 
     for index, row in enumerate(rows):
         require(isinstance(row, dict), f"rows[{index}] must be an object")
@@ -166,6 +191,7 @@ def validate_registry() -> None:
         row_specific_refusals = row.get("rowSpecificRefusals")
         dependency_gate_links = row.get("dependencyGateLinks")
         grouped_policy_refusals = row.get("groupedPolicyRefusals")
+        edge_budget_gate_links = row.get("edgeBudgetGateLinks")
 
         require(isinstance(source, str) and source, f"{row_id}: missing source")
         require(isinstance(status, str) and status, f"{row_id}: missing status")
@@ -177,6 +203,7 @@ def validate_registry() -> None:
         require(isinstance(row_specific_refusals, list), f"{row_id}: rowSpecificRefusals must be list")
         require(isinstance(dependency_gate_links, list), f"{row_id}: dependencyGateLinks must be list")
         require(isinstance(grouped_policy_refusals, list), f"{row_id}: groupedPolicyRefusals must be list")
+        require(isinstance(edge_budget_gate_links, list), f"{row_id}: edgeBudgetGateLinks must be list")
         require(row.get("referenceKind") in {"skia-upstream", "skia-derived", "cpu-oracle", "test-oracle", "none"}, f"{row_id}: invalid referenceKind")
         require(row.get("nextTicketType") in {"implementation", "dependency", "fidelity-burndown", "policy-visibility", "performance-gate"}, f"{row_id}: invalid nextTicketType")
         require(row.get("pmImpact") in {"high", "medium", "low"}, f"{row_id}: invalid pmImpact")
@@ -192,6 +219,7 @@ def validate_registry() -> None:
         row_specific_refusal_rows += int(bool(row_specific_refusals))
         dependency_gate_link_rows += int(bool(dependency_gate_links))
         grouped_policy_refusal_rows += int(bool(grouped_policy_refusals))
+        edge_budget_gate_link_rows += int(bool(edge_budget_gate_links))
 
         if status == "pass":
             require(source == "generated-dashboard", f"{row_id}: only generated dashboard rows may be pass in M89")
@@ -360,6 +388,70 @@ def validate_registry() -> None:
                 require(isinstance(link.get("rootCause"), str) and link.get("rootCause"), f"{row_id}: m86 link needs rootCause")
                 require(link.get("risk") in {"high", "medium", "dependency-gated"}, f"{row_id}: invalid m86 risk")
 
+        expected_edge_budget_gate = EXPECTED_EDGE_BUDGET_GATES.get(row_id)
+        if expected_edge_budget_gate is None:
+            require(not edge_budget_gate_links, f"{row_id}: unexpected edge-budget gate link")
+        else:
+            require(len(edge_budget_gate_links) == 1, f"{row_id}: expected exactly one edge-budget gate link")
+            gate = edge_budget_gate_links[0]
+            require(isinstance(gate, dict), f"{row_id}: edge-budget gate link must be object")
+            require(source == "generated-dashboard", f"{row_id}: edge-budget gate must remain generated-dashboard")
+            require(family == "path-aa", f"{row_id}: edge-budget gate must remain path-aa")
+            require(status == "expected-unsupported", f"{row_id}: edge-budget gate row must remain expected-unsupported")
+            require(not support_claim, f"{row_id}: edge-budget gate row must not claim support")
+            require(policy_only is False, f"{row_id}: edge-budget generated row must not become policy-only")
+            require(row.get("nextTicketType") == "implementation", f"{row_id}: edge-budget nextTicketType mismatch")
+            require(fallback == "coverage.edge-count-exceeded", f"{row_id}: edge-budget fallback mismatch")
+            require(gate.get("linear") == "GRA-284", f"{row_id}: edge-budget Linear mismatch")
+            require(
+                gate.get("classification") == "edge-budget-gated-expected-unsupported-no-support-claim",
+                f"{row_id}: edge-budget classification mismatch",
+            )
+            require(gate.get("fallbackReason") == "coverage.edge-count-exceeded", f"{row_id}: edge-budget link fallback mismatch")
+            require(gate.get("sourceScene") == expected_edge_budget_gate["sourceScene"], f"{row_id}: edge-budget source scene mismatch")
+            require(gate.get("edgeBudget") == 256, f"{row_id}: edge-budget value mismatch")
+            require(gate.get("spec") == ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md", f"{row_id}: edge-budget spec mismatch")
+            require(gate.get("adr") == ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md", f"{row_id}: edge-budget ADR mismatch")
+            require(gate.get("policyReport") == "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md", f"{row_id}: edge-budget policy report mismatch")
+            require(gate.get("evidenceReport") == "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md", f"{row_id}: edge-budget evidence report mismatch")
+            require(gate.get("cpuRoute") == expected_edge_budget_gate["cpuRoute"], f"{row_id}: edge-budget CPU route mismatch")
+            require(gate.get("gpuRoute") == "webgpu.coverage.refuse.edge-count", f"{row_id}: edge-budget GPU route mismatch")
+            source_scene = generated_rows.get(row_id)
+            require(isinstance(source_scene, dict), f"{row_id}: generated source row missing")
+            source_cpu = source_scene.get("cpu")
+            source_gpu = source_scene.get("gpu")
+            require(isinstance(source_cpu, dict), f"{row_id}: generated CPU diagnostics missing")
+            require(isinstance(source_gpu, dict), f"{row_id}: generated GPU diagnostics missing")
+            source_cpu_route = source_cpu.get("route")
+            source_gpu_route = source_gpu.get("route")
+            require(isinstance(source_cpu_route, dict), f"{row_id}: generated CPU route missing")
+            require(isinstance(source_gpu_route, dict), f"{row_id}: generated GPU route missing")
+            require(
+                gate.get("cpuRoute") == source_cpu_route.get("selectedRoute"),
+                f"{row_id}: edge-budget CPU route differs from source dashboard",
+            )
+            require(source_gpu.get("status") == "expected-unsupported", f"{row_id}: generated GPU status mismatch")
+            require(
+                source_gpu_route.get("fallbackReason") == "coverage.edge-count-exceeded",
+                f"{row_id}: generated GPU fallback mismatch",
+            )
+            require(
+                gate.get("gpuCoverageStrategy") == source_gpu_route.get("coverageStrategy") == "webgpu.coverage.refuse",
+                f"{row_id}: edge-budget GPU coverage strategy differs from source dashboard",
+            )
+            source_pipeline_key = source_gpu_route.get("pipelineKey")
+            require(isinstance(source_pipeline_key, str), f"{row_id}: generated GPU pipeline key missing")
+            require(gate.get("gpuPipelineKey") == source_pipeline_key, f"{row_id}: edge-budget GPU pipeline key mismatch")
+            require(
+                f"source={expected_edge_budget_gate['sourceScene']}" in source_pipeline_key,
+                f"{row_id}: edge-budget GPU pipeline source mismatch",
+            )
+            require(gate.get("globalEdgeBudgetIncreased") is False, f"{row_id}: edge-budget must not increase global budget")
+            require(gate.get("smokeCandidateAllowed") is False, f"{row_id}: edge-budget must not enter required smoke")
+            require(gate.get("supportScoreIncreased") is False, f"{row_id}: edge-budget gate must not increase support score")
+            for linked_path in ("spec", "adr", "policyReport", "evidenceReport"):
+                require((ROOT / gate[linked_path]).is_file(), f"{row_id}: edge-budget {linked_path} file missing")
+
     duplicates = sorted(row_id for row_id, count in Counter(row_ids).items() if count > 1)
     require(not duplicates, f"duplicate row ids: {duplicates}")
 
@@ -378,6 +470,7 @@ def validate_registry() -> None:
     require(row_specific_refusal_rows == EXPECTED_COUNTERS["rowSpecificRefusalRows"], "derived row-specific refusal count mismatch")
     require(dependency_gate_link_rows == EXPECTED_COUNTERS["dependencyGateLinkRows"], "derived dependency gate link count mismatch")
     require(grouped_policy_refusal_rows == EXPECTED_COUNTERS["groupedPolicyRefusalRows"], "derived grouped policy refusal count mismatch")
+    require(edge_budget_gate_link_rows == EXPECTED_COUNTERS["edgeBudgetGateLinkRows"], "derived edge-budget gate link count mismatch")
     require(
         expected_unsupported_with_fallback == EXPECTED_COUNTERS["expectedUnsupportedWithFallback"],
         "derived expected-unsupported fallback count mismatch",
@@ -433,6 +526,7 @@ def validate_report() -> None:
         "Row-specific refusal links: `7`",
         "Dependency gate links: `4`",
         "Grouped policy refusal links: `9`",
+        "Edge-budget gate links: `2`",
         "`expected-unsupported`: `25`",
         "`pass`: `22`",
         "Linked M66 rows: `18`",

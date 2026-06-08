@@ -1,6 +1,7 @@
 {
   "counters": {
     "dependencyGateLinkRows": 4,
+    "edgeBudgetGateLinkRows": 2,
     "expectedUnsupportedWithFallback": 25,
     "family": {
       "bitmap-image": 7,
@@ -72,6 +73,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "image.imagegm.row-specific-artifacts-required",
       "family": "bitmap-image",
@@ -109,6 +111,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "image.imagesource.row-specific-artifacts-required",
       "family": "bitmap-image",
@@ -146,6 +149,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "gradient.2ptconical.row-specific-artifacts-required",
       "family": "gradient",
@@ -183,6 +187,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
       "family": "image-filter",
@@ -220,6 +225,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
       "family": "image-filter",
@@ -257,6 +263,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "path.pathfill.row-specific-artifacts-required",
       "family": "path-aa",
@@ -294,6 +301,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
       "family": "path-aa",
@@ -348,6 +356,7 @@
           "supportedDescriptor": "runtime.simple_rt"
         }
       ],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
       "family": "runtime-effect",
@@ -388,6 +397,7 @@
           "supportedDescriptor": "runtime.simple_rt"
         }
       ],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
       "family": "runtime-effect",
@@ -424,6 +434,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "font.shadertext3.row-specific-artifacts-required",
       "family": "text-glyph",
@@ -460,6 +471,7 @@
           "supportScoreIncreased": false
         }
       ],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "font.textblobtransforms.row-specific-artifacts-required",
       "family": "text-glyph",
@@ -483,6 +495,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
       "family": "path-aa",
@@ -517,6 +530,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
       "family": "path-aa",
@@ -551,6 +565,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
       "family": "path-aa",
@@ -585,6 +600,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
       "family": "path-aa",
@@ -619,6 +635,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
       "family": "path-aa",
@@ -653,6 +670,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
       "family": "path-aa",
@@ -687,6 +705,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
       "family": "path-aa",
@@ -721,6 +740,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
       "family": "path-aa",
@@ -755,6 +775,7 @@
     {
       "artifacts": {},
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
       "family": "path-aa",
@@ -795,6 +816,7 @@
         "reference": "artifacts/bitmap-rect-nearest/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -849,6 +871,7 @@
         "reference": "artifacts/bitmap-shader-local-matrix/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "bitmap-image",
@@ -882,6 +905,7 @@
         "reference": "artifacts/bitmap-shader-repeat-tile/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "bitmap-image",
@@ -915,6 +939,7 @@
         "reference": "artifacts/bitmap-subset-local-matrix-repeat/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -969,6 +994,7 @@
         "reference": "artifacts/d52-drawminibitmaprect/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "bitmap-image",
@@ -1002,6 +1028,7 @@
         "reference": "artifacts/solid-rect/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "blend-color",
@@ -1035,6 +1062,7 @@
         "reference": "artifacts/src-over-stack/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1089,6 +1117,7 @@
         "reference": "artifacts/gradient-color-filter-linear-kplus/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1143,6 +1172,7 @@
         "reference": "artifacts/linear-gradient-rect/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "gradient",
@@ -1176,6 +1206,7 @@
         "reference": "artifacts/sweep-gradient-path-clamp/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1230,6 +1261,7 @@
         "reference": "artifacts/crop-image-filter-nonnull-prepass/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1284,6 +1316,7 @@
         "reference": "artifacts/image-filter-compose-cf-matrix-transform/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1336,6 +1369,7 @@
         "reference": "artifacts/image-filter-crop-nonnull-prepass-required/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1386,6 +1420,7 @@
         "reference": "artifacts/analytic-aa-convex/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1440,6 +1475,7 @@
         "reference": "artifacts/clip-rect-difference/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1494,6 +1530,7 @@
         "reference": "artifacts/draw-paint-clipped-rect/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "path-aa",
@@ -1527,6 +1564,7 @@
         "reference": "artifacts/draw-paint-full-clip/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "none",
       "family": "path-aa",
@@ -1558,6 +1596,26 @@
         "reference": "artifacts/path-aa-convexpaths-edge-budget/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [
+        {
+          "adr": ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+          "classification": "edge-budget-gated-expected-unsupported-no-support-claim",
+          "cpuRoute": "cpu.path-coverage.convexpaths-oracle",
+          "edgeBudget": 256,
+          "evidenceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+          "fallbackReason": "coverage.edge-count-exceeded",
+          "globalEdgeBudgetIncreased": false,
+          "gpuCoverageStrategy": "webgpu.coverage.refuse",
+          "gpuPipelineKey": "coverageKind=pathCoverageUnsupported,pathFillRule=winding,topology=triangleList,source=ConvexPathsGM",
+          "gpuRoute": "webgpu.coverage.refuse.edge-count",
+          "linear": "GRA-284",
+          "policyReport": "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md",
+          "smokeCandidateAllowed": false,
+          "sourceScene": "ConvexPathsGM",
+          "spec": ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+          "supportScoreIncreased": false
+        }
+      ],
       "evidenceLinks": {},
       "fallbackReason": "coverage.edge-count-exceeded",
       "family": "path-aa",
@@ -1585,6 +1643,26 @@
         "reference": "artifacts/path-aa-dashing-edge-budget/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [
+        {
+          "adr": ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+          "classification": "edge-budget-gated-expected-unsupported-no-support-claim",
+          "cpuRoute": "cpu.path-coverage.dashing-oracle",
+          "edgeBudget": 256,
+          "evidenceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+          "fallbackReason": "coverage.edge-count-exceeded",
+          "globalEdgeBudgetIncreased": false,
+          "gpuCoverageStrategy": "webgpu.coverage.refuse",
+          "gpuPipelineKey": "coverageKind=pathStrokeDashOverflow,pathFillRule=winding,topology=triangleList,source=DashingGM",
+          "gpuRoute": "webgpu.coverage.refuse.edge-count",
+          "linear": "GRA-284",
+          "policyReport": "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md",
+          "smokeCandidateAllowed": false,
+          "sourceScene": "DashingGM",
+          "spec": ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+          "supportScoreIncreased": false
+        }
+      ],
       "evidenceLinks": {
         "m66": [
           {
@@ -1635,6 +1713,7 @@
         "reference": "artifacts/path-aa-stroke-primitive/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1689,6 +1768,7 @@
         "reference": "artifacts/runtime-effect-simple/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1741,6 +1821,7 @@
         "reference": "artifacts/font-complex-shaping-refusal/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1789,6 +1870,7 @@
         "reference": "artifacts/font-emoji-color-glyph-refusal/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {},
       "fallbackReason": "font.color-glyph-emoji-unsupported",
       "family": "text-glyph",
@@ -1818,6 +1900,7 @@
         "reference": "artifacts/font-kerning-style-fixture/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1872,6 +1955,7 @@
         "reference": "artifacts/font-latin-outline-drawstring/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1926,6 +2010,7 @@
         "reference": "artifacts/font-textblob-positioned-glyph-run/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -1980,6 +2065,7 @@
         "reference": "artifacts/scaled-rects-transform-stack/skia.png"
       },
       "dependencyGateLinks": [],
+      "edgeBudgetGateLinks": [],
       "evidenceLinks": {
         "m66": [
           {
@@ -2051,6 +2137,10 @@
     "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
     "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md",
     "reports/wgsl-pipeline/m89-feature-breadth/evidence.json",
-    "reports/wgsl-pipeline/m89-feature-breadth/evidence.md"
+    "reports/wgsl-pipeline/m89-feature-breadth/evidence.md",
+    ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+    ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+    "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md",
+    "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md"
   ]
 }

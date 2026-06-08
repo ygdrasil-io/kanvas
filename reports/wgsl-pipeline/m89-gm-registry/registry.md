@@ -12,6 +12,7 @@ This registry normalizes current generated dashboard rows and policy-only GM vis
 - Row-specific refusal links: `7`
 - Dependency gate links: `4`
 - Grouped policy refusal links: `9`
+- Edge-budget gate links: `2`
 - Expected unsupported with fallback: `25`
 - Linked M66 rows: `18`
 - Linked M86 rows: `18`

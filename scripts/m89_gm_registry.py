@@ -28,6 +28,10 @@ M86_BURNDOWN = ROOT / "reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json
 M88_RC2 = ROOT / "reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"
 M89_FEATURE_BREADTH = ROOT / "reports/wgsl-pipeline/m89-feature-breadth/evidence.json"
 M89_FEATURE_BREADTH_REPORT = ROOT / "reports/wgsl-pipeline/m89-feature-breadth/evidence.md"
+PATH_AA_MVP_BOUNDARY = ROOT / ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md"
+PATH_AA_EDGE_BUDGET_ADR = ROOT / ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md"
+M47_PATH_AA_POLICY = ROOT / "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md"
+M48_EXPECTED_UNSUPPORTED_BREADTH = ROOT / "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md"
 ROW_SPECIFIC_REFUSALS = {
     "skia-gm-image": {
         "linear": "FOR-466",
@@ -88,6 +92,20 @@ TEXT_GLYPH_DEPENDENCY_GATE = {
 RUNTIME_EFFECT_DESCRIPTOR_GATES = {
     "skia-gm-runtimeimagefilter": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
     "skia-gm-runtimeintrinsics": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
+}
+EDGE_BUDGET_GATE_ROWS = {
+    "path-aa-convexpaths-edge-budget": {
+        "linear": "GRA-284",
+        "source": "ConvexPathsGM",
+        "cpuRoute": "cpu.path-coverage.convexpaths-oracle",
+        "gpuRoute": "webgpu.coverage.refuse.edge-count",
+    },
+    "path-aa-dashing-edge-budget": {
+        "linear": "GRA-284",
+        "source": "DashingGM",
+        "cpuRoute": "cpu.path-coverage.dashing-oracle",
+        "gpuRoute": "webgpu.coverage.refuse.edge-count",
+    },
 }
 
 VALID_STATUSES = {
@@ -468,6 +486,55 @@ def grouped_policy_refusals(source: str, scene: dict[str, Any], fallback: str) -
     ]
 
 
+def edge_budget_gate_links(source: str, scene: dict[str, Any], fallback: str) -> list[dict[str, Any]]:
+    scene_id = str(scene.get("id") or "")
+    metadata = EDGE_BUDGET_GATE_ROWS.get(scene_id)
+    if source != "generated-dashboard" or not isinstance(metadata, dict):
+        return []
+    if scene.get("status") != "expected-unsupported":
+        raise AssertionError(f"{scene_id}: edge-budget gate row must remain expected-unsupported")
+    if fallback != "coverage.edge-count-exceeded":
+        raise AssertionError(f"{scene_id}: edge-budget gate fallback mismatch")
+    cpu = scene.get("cpu")
+    if not isinstance(cpu, dict):
+        raise AssertionError(f"{scene_id}: edge-budget CPU route missing")
+    cpu_route = cpu.get("route")
+    if not isinstance(cpu_route, dict) or cpu_route.get("selectedRoute") != metadata["cpuRoute"]:
+        raise AssertionError(f"{scene_id}: edge-budget CPU route mismatch")
+    gpu = scene.get("gpu")
+    if not isinstance(gpu, dict) or gpu.get("status") != "expected-unsupported":
+        raise AssertionError(f"{scene_id}: edge-budget GPU route must remain expected-unsupported")
+    route = gpu.get("route")
+    if not isinstance(route, dict) or route.get("fallbackReason") != "coverage.edge-count-exceeded":
+        raise AssertionError(f"{scene_id}: edge-budget GPU route fallback mismatch")
+    if route.get("coverageStrategy") != "webgpu.coverage.refuse":
+        raise AssertionError(f"{scene_id}: edge-budget GPU coverage strategy mismatch")
+    pipeline_key = route.get("pipelineKey")
+    if not isinstance(pipeline_key, str) or f"source={metadata['source']}" not in pipeline_key:
+        raise AssertionError(f"{scene_id}: edge-budget GPU pipeline source mismatch")
+
+    return [
+        {
+            "linear": metadata["linear"],
+            "classification": "edge-budget-gated-expected-unsupported-no-support-claim",
+            "fallbackReason": fallback,
+            "sourceScene": metadata["source"],
+            "edgeBudget": 256,
+            "spec": rel(PATH_AA_MVP_BOUNDARY),
+            "adr": rel(PATH_AA_EDGE_BUDGET_ADR),
+            "policyReport": rel(M47_PATH_AA_POLICY),
+            "evidenceReport": rel(M48_EXPECTED_UNSUPPORTED_BREADTH),
+            "cpuRoute": metadata["cpuRoute"],
+            "gpuRoute": metadata["gpuRoute"],
+            "gpuCoverageStrategy": route["coverageStrategy"],
+            "gpuPipelineKey": pipeline_key,
+            "globalEdgeBudgetIncreased": False,
+            "smokeCandidateAllowed": False,
+            "supportScoreIncreased": False,
+        }
+    ]
+
+
 def owner_for(source: str, scene: dict[str, Any]) -> str:
     if source == "d50-visibility":
         return "M89"
@@ -545,6 +612,7 @@ def normalize_scene(source: str, scene: dict[str, Any], indexes: dict[str, Any])
         "rowSpecificRefusals": row_specific_refusals(scene_id, fallback, indexes),
         "dependencyGateLinks": dependency_gate_links(scene_id, fallback, indexes),
         "groupedPolicyRefusals": grouped_policy_refusals(source, scene, fallback),
+        "edgeBudgetGateLinks": edge_budget_gate_links(source, scene, fallback),
         "owningMilestone": owner_for(source, scene),
         "nextTicketType": next_ticket_type(scene, status, family),
         "pmImpact": pm_impact(status, family),
@@ -576,6 +644,7 @@ def build_registry() -> dict[str, Any]:
     row_specific_refusal_rows = sum(1 for row in rows if row["rowSpecificRefusals"])
     dependency_gate_link_rows = sum(1 for row in rows if row["dependencyGateLinks"])
     grouped_policy_refusal_rows = sum(1 for row in rows if row["groupedPolicyRefusals"])
+    edge_budget_gate_link_rows = sum(1 for row in rows if row["edgeBudgetGateLinks"])
     m88 = indexes["m88"]
     m88_counters = m88.get("dashboardCounters", {}) if isinstance(m88.get("dashboardCounters"), dict) else {}
 
@@ -592,6 +661,10 @@ def build_registry() -> dict[str, Any]:
             rel(TEXT_GLYPH_DEPENDENCY_GATE["report"]),
             rel(M89_FEATURE_BREADTH),
             rel(M89_FEATURE_BREADTH_REPORT),
+            rel(PATH_AA_MVP_BOUNDARY),
+            rel(PATH_AA_EDGE_BUDGET_ADR),
+            rel(M47_PATH_AA_POLICY),
+            rel(M48_EXPECTED_UNSUPPORTED_BREADTH),
         ],
         "evidencePackages": {
             "m66": {
@@ -634,6 +707,7 @@ def build_registry() -> dict[str, Any]:
             "rowSpecificRefusalRows": row_specific_refusal_rows,
             "dependencyGateLinkRows": dependency_gate_link_rows,
             "groupedPolicyRefusalRows": grouped_policy_refusal_rows,
+            "edgeBudgetGateLinkRows": edge_budget_gate_link_rows,
             "expectedUnsupportedWithFallback": sum(
                 1 for row in rows if row["status"] == "expected-unsupported" and row["fallbackReason"] != "none"
             ),
@@ -661,6 +735,7 @@ def write_markdown(registry: dict[str, Any]) -> None:
         f"- Row-specific refusal links: `{counters['rowSpecificRefusalRows']}`",
         f"- Dependency gate links: `{counters['dependencyGateLinkRows']}`",
         f"- Grouped policy refusal links: `{counters['groupedPolicyRefusalRows']}`",
+        f"- Edge-budget gate links: `{counters['edgeBudgetGateLinkRows']}`",
         f"- Expected unsupported with fallback: `{counters['expectedUnsupportedWithFallback']}`",
         f"- Linked M66 rows: `{counters['linkedM66Rows']}`",
         f"- Linked M86 rows: `{counters['linkedM86Rows']}`",
