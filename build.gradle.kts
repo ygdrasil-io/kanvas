@@ -4769,6 +4769,26 @@ tasks.register<Exec>("pipelineM90PathAaStrokeRectsEvidenceIntake") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaHairModesEvidenceIntake") {
+    group = "verification"
+    description = "Generates and validates M90-PAA-3F HairModesGM evidence intake without changing support claims."
+    dependsOn("pipelineM90PathAaCandidateReadiness")
+    commandLine("python3", "scripts/m90_path_aa_hairmodes_evidence_intake.py")
+    inputs.file(layout.projectDirectory.file("scripts/m90_path_aa_hairmodes_evidence_intake.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairmodes/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairmodes/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("cpu-raster/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("kanvas-skia/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/kotlin/org/skia/tests/Round13Test.kt"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/HairModesGM.kt"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m90-path-aa-hairmodes-evidence-intake"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateMepNextFeatureBreadth") {
     group = "verification"
     description = "Validates checked-in MEP-NEXT FOR-189..192 feature breadth evidence without Kadre native dependencies."
