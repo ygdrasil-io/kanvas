@@ -1,0 +1,59 @@
+            {
+              "sceneId": "paint.linear-gradient.rect.v1",
+              "scopeId": "linear-gradient.clamp.rect.simple.v1",
+              "backend": "WebGPU",
+              "adapter": "Apple M2 Max",
+              "drawKind": "SkCanvas.drawRect",
+              "status": "pass",
+              "supportScope": "simple-bounded-linear-gradient-rect",
+              "supportClaim": true,
+              "selectedRoute": "webgpu.generated.linear-gradient.rect",
+              "shaderFamily": "linearGradient",
+              "tileMode": "kClamp",
+              "gradientStops": [
+                {"position": 0.0, "color": "#FFE02838"},
+                {"position": 1.0, "color": "#FF2868E0"}
+              ],
+              "gradientLine": {
+                "p0": {"x": 20.0, "y": 48.0},
+                "p1": {"x": 172.0, "y": 48.0}
+              },
+              "rect": {
+                "left": 20.0,
+                "top": 20.0,
+                "right": 172.0,
+                "bottom": 76.0
+              },
+              "referenceKind": "analytic-srgb-two-stop-linear-gradient-oracle",
+              "fallbackReason": "none",
+              "colorSpacePolicy": "srgb-unmanaged-test-oracle",
+              "generatedWgslValidated": true,
+              "generatedWgslSha256": "d8f4ba263d2618301bbc32f2a993f3c6b42896e377bb05f2b3e8904085e75777",
+              "generatedWgslFeatureFlag": "kanvas.gpu.generatedLinearGradient.enabled",
+              "pipelineKeyDump": "preimage=pipeline.key v=1 layout=[] code=[generatedPath=true,shaderFamily=linearGradient] state=[];hash=c1b43df0d2f772bb4ffbf41965fd58ef3c62439154fe89bbee05afbe84c12185;uniformFacts=[]\npreimage=pipeline.key v=1 layout=[] code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver];hash=7c61fefc33c27aefe36a32512718f5eeeb4f76584c301ab2626de4767c4bf1d5;uniformFacts=[]",
+              "comparison": {
+  "similarity": 100.000000,
+  "totalPixels": 18432,
+  "matchingPixels": 18432,
+  "mismatchingPixels": 0,
+  "tolerance": 4,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+              "similarityThreshold": 99.00,
+              "globalThresholdChanged": false,
+              "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/reference.png",
+              "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/webgpu.png",
+              "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/webgpu-diff.png",
+              "nonClaims": ["no-wide-gamut-color-management-claim", "no-all-tile-modes-claim", "no-gradient-mesh-claim", "no-advanced-color-space-claim", "no-broad-gradient-family-claim", "no-color-filter-chain-claim", "no-codec-or-mipmap-claim"]
+            }

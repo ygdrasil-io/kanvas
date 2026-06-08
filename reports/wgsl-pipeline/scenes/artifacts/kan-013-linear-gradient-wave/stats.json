@@ -1,0 +1,70 @@
+        {
+          "sceneId": "paint.linear-gradient.rect.v1",
+          "scopeId": "linear-gradient.clamp.rect.simple.v1",
+          "status": "pass",
+          "supportScope": "simple-bounded-linear-gradient-rect",
+          "supportClaim": true,
+          "cpuRouteIdentifier": "cpu.paint.linear-gradient.rect.clamp",
+          "webGpuRouteIdentifier": "webgpu.generated.linear-gradient.rect",
+          "tileMode": "kClamp",
+          "colorSpacePolicy": "srgb-unmanaged-test-oracle",
+          "generatedWgslValidated": true,
+          "generatedWgslSha256": "d8f4ba263d2618301bbc32f2a993f3c6b42896e377bb05f2b3e8904085e75777",
+          "generatedWgslFeatureFlag": "kanvas.gpu.generatedLinearGradient.enabled",
+          "generatedWgslDiagnostics": [],
+          "pipelineKeyDump": "preimage=pipeline.key v=1 layout=[] code=[generatedPath=true,shaderFamily=linearGradient] state=[];hash=c1b43df0d2f772bb4ffbf41965fd58ef3c62439154fe89bbee05afbe84c12185;uniformFacts=[]\npreimage=pipeline.key v=1 layout=[] code=[entryPoint=fs_clamp,generatedPath=true,shaderFamily=linearGradient] state=[blendMode=kSrcOver];hash=7c61fefc33c27aefe36a32512718f5eeeb4f76584c301ab2626de4767c4bf1d5;uniformFacts=[]",
+          "cpuNonWhitePixels": 8512,
+          "webGpuNonWhitePixels": 8512,
+          "tolerance": 4,
+          "cpuSimilarityThreshold": 99.00,
+          "webGpuSimilarityThreshold": 99.00,
+          "cpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 18432,
+  "matchingPixels": 18432,
+  "mismatchingPixels": 0,
+  "tolerance": 4,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "webGpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 18432,
+  "matchingPixels": 18432,
+  "mismatchingPixels": 0,
+  "tolerance": 4,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "globalThresholdChanged": false,
+          "fallbackPolicy": "none-for-supported-simple-kClamp-linear-gradient-rect",
+          "webGpuAdapter": "Apple M2 Max",
+          "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/reference.png",
+          "cpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/cpu.png",
+          "webGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/webgpu.png",
+          "cpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/cpu-diff.png",
+          "webGpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/webgpu-diff.png",
+          "routeCpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/route-cpu.json",
+          "routeWebGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-013-linear-gradient-wave/route-webgpu.json",
+          "nonClaims": ["no-wide-gamut-color-management-claim", "no-all-tile-modes-claim", "no-gradient-mesh-claim", "no-advanced-color-space-claim", "no-broad-gradient-family-claim", "no-color-filter-chain-claim", "no-codec-or-mipmap-claim"]
+        }
