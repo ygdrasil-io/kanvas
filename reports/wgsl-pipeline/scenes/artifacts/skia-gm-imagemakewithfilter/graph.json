@@ -1,0 +1,2814 @@
+{
+  "classification": "image-filter-imagemakewithfilter-graph-dump-no-new-rendering-support",
+  "currentPort": {
+    "makeWithFilterExecuted": false,
+    "reason": "The Kotlin GM currently draws faded mandrill backgrounds and headers only; row-specific filter output artifacts remain absent.",
+    "rendersScaffoldingOnly": true
+  },
+  "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+  "gmDimensions": {
+    "height": 860,
+    "width": 1840
+  },
+  "graph": {
+    "edges": [
+      {
+        "from": "r0-c0-color-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c0-color-make-with-filter"
+      },
+      {
+        "from": "r0-c0-color-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c0-color-output-cell"
+      },
+      {
+        "from": "r0-c1-blur-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c1-blur-make-with-filter"
+      },
+      {
+        "from": "r0-c1-blur-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c1-blur-output-cell"
+      },
+      {
+        "from": "r0-c2-drop-shadow-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c2-drop-shadow-make-with-filter"
+      },
+      {
+        "from": "r0-c2-drop-shadow-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c2-drop-shadow-output-cell"
+      },
+      {
+        "from": "r0-c3-offset-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c3-offset-make-with-filter"
+      },
+      {
+        "from": "r0-c3-offset-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c3-offset-output-cell"
+      },
+      {
+        "from": "r0-c4-dilate-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c4-dilate-make-with-filter"
+      },
+      {
+        "from": "r0-c4-dilate-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c4-dilate-output-cell"
+      },
+      {
+        "from": "r0-c5-erode-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c5-erode-make-with-filter"
+      },
+      {
+        "from": "r0-c5-erode-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c5-erode-output-cell"
+      },
+      {
+        "from": "r0-c6-displacement-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c6-displacement-make-with-filter"
+      },
+      {
+        "from": "r0-c6-displacement-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c6-displacement-output-cell"
+      },
+      {
+        "from": "r0-c7-arithmetic-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c7-arithmetic-make-with-filter"
+      },
+      {
+        "from": "r0-c7-arithmetic-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c7-arithmetic-output-cell"
+      },
+      {
+        "from": "r0-c8-blend-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c8-blend-make-with-filter"
+      },
+      {
+        "from": "r0-c8-blend-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c8-blend-output-cell"
+      },
+      {
+        "from": "r0-c9-convolution-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c9-convolution-make-with-filter"
+      },
+      {
+        "from": "r0-c9-convolution-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c9-convolution-output-cell"
+      },
+      {
+        "from": "r0-c10-matrix-xform-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c10-matrix-xform-make-with-filter"
+      },
+      {
+        "from": "r0-c10-matrix-xform-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c10-matrix-xform-output-cell"
+      },
+      {
+        "from": "r0-c11-lighting-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c11-lighting-make-with-filter"
+      },
+      {
+        "from": "r0-c11-lighting-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c11-lighting-output-cell"
+      },
+      {
+        "from": "r0-c12-tile-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r0-c12-tile-make-with-filter"
+      },
+      {
+        "from": "r0-c12-tile-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r0-c12-tile-output-cell"
+      },
+      {
+        "from": "r1-c0-color-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c0-color-make-with-filter"
+      },
+      {
+        "from": "r1-c0-color-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c0-color-output-cell"
+      },
+      {
+        "from": "r1-c1-blur-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c1-blur-make-with-filter"
+      },
+      {
+        "from": "r1-c1-blur-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c1-blur-output-cell"
+      },
+      {
+        "from": "r1-c2-drop-shadow-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c2-drop-shadow-make-with-filter"
+      },
+      {
+        "from": "r1-c2-drop-shadow-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c2-drop-shadow-output-cell"
+      },
+      {
+        "from": "r1-c3-offset-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c3-offset-make-with-filter"
+      },
+      {
+        "from": "r1-c3-offset-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c3-offset-output-cell"
+      },
+      {
+        "from": "r1-c4-dilate-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c4-dilate-make-with-filter"
+      },
+      {
+        "from": "r1-c4-dilate-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c4-dilate-output-cell"
+      },
+      {
+        "from": "r1-c5-erode-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c5-erode-make-with-filter"
+      },
+      {
+        "from": "r1-c5-erode-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c5-erode-output-cell"
+      },
+      {
+        "from": "r1-c6-displacement-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c6-displacement-make-with-filter"
+      },
+      {
+        "from": "r1-c6-displacement-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c6-displacement-output-cell"
+      },
+      {
+        "from": "r1-c7-arithmetic-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c7-arithmetic-make-with-filter"
+      },
+      {
+        "from": "r1-c7-arithmetic-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c7-arithmetic-output-cell"
+      },
+      {
+        "from": "r1-c8-blend-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c8-blend-make-with-filter"
+      },
+      {
+        "from": "r1-c8-blend-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c8-blend-output-cell"
+      },
+      {
+        "from": "r1-c9-convolution-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c9-convolution-make-with-filter"
+      },
+      {
+        "from": "r1-c9-convolution-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c9-convolution-output-cell"
+      },
+      {
+        "from": "r1-c10-matrix-xform-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c10-matrix-xform-make-with-filter"
+      },
+      {
+        "from": "r1-c10-matrix-xform-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c10-matrix-xform-output-cell"
+      },
+      {
+        "from": "r1-c11-lighting-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c11-lighting-make-with-filter"
+      },
+      {
+        "from": "r1-c11-lighting-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c11-lighting-output-cell"
+      },
+      {
+        "from": "r1-c12-tile-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r1-c12-tile-make-with-filter"
+      },
+      {
+        "from": "r1-c12-tile-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r1-c12-tile-output-cell"
+      },
+      {
+        "from": "r2-c0-color-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c0-color-make-with-filter"
+      },
+      {
+        "from": "r2-c0-color-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c0-color-output-cell"
+      },
+      {
+        "from": "r2-c1-blur-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c1-blur-make-with-filter"
+      },
+      {
+        "from": "r2-c1-blur-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c1-blur-output-cell"
+      },
+      {
+        "from": "r2-c2-drop-shadow-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c2-drop-shadow-make-with-filter"
+      },
+      {
+        "from": "r2-c2-drop-shadow-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c2-drop-shadow-output-cell"
+      },
+      {
+        "from": "r2-c3-offset-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c3-offset-make-with-filter"
+      },
+      {
+        "from": "r2-c3-offset-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c3-offset-output-cell"
+      },
+      {
+        "from": "r2-c4-dilate-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c4-dilate-make-with-filter"
+      },
+      {
+        "from": "r2-c4-dilate-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c4-dilate-output-cell"
+      },
+      {
+        "from": "r2-c5-erode-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c5-erode-make-with-filter"
+      },
+      {
+        "from": "r2-c5-erode-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c5-erode-output-cell"
+      },
+      {
+        "from": "r2-c6-displacement-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c6-displacement-make-with-filter"
+      },
+      {
+        "from": "r2-c6-displacement-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c6-displacement-output-cell"
+      },
+      {
+        "from": "r2-c7-arithmetic-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c7-arithmetic-make-with-filter"
+      },
+      {
+        "from": "r2-c7-arithmetic-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c7-arithmetic-output-cell"
+      },
+      {
+        "from": "r2-c8-blend-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c8-blend-make-with-filter"
+      },
+      {
+        "from": "r2-c8-blend-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c8-blend-output-cell"
+      },
+      {
+        "from": "r2-c9-convolution-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c9-convolution-make-with-filter"
+      },
+      {
+        "from": "r2-c9-convolution-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c9-convolution-output-cell"
+      },
+      {
+        "from": "r2-c10-matrix-xform-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c10-matrix-xform-make-with-filter"
+      },
+      {
+        "from": "r2-c10-matrix-xform-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c10-matrix-xform-output-cell"
+      },
+      {
+        "from": "r2-c11-lighting-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c11-lighting-make-with-filter"
+      },
+      {
+        "from": "r2-c11-lighting-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c11-lighting-output-cell"
+      },
+      {
+        "from": "r2-c12-tile-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r2-c12-tile-make-with-filter"
+      },
+      {
+        "from": "r2-c12-tile-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r2-c12-tile-output-cell"
+      },
+      {
+        "from": "r3-c0-color-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c0-color-make-with-filter"
+      },
+      {
+        "from": "r3-c0-color-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c0-color-output-cell"
+      },
+      {
+        "from": "r3-c1-blur-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c1-blur-make-with-filter"
+      },
+      {
+        "from": "r3-c1-blur-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c1-blur-output-cell"
+      },
+      {
+        "from": "r3-c2-drop-shadow-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c2-drop-shadow-make-with-filter"
+      },
+      {
+        "from": "r3-c2-drop-shadow-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c2-drop-shadow-output-cell"
+      },
+      {
+        "from": "r3-c3-offset-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c3-offset-make-with-filter"
+      },
+      {
+        "from": "r3-c3-offset-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c3-offset-output-cell"
+      },
+      {
+        "from": "r3-c4-dilate-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c4-dilate-make-with-filter"
+      },
+      {
+        "from": "r3-c4-dilate-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c4-dilate-output-cell"
+      },
+      {
+        "from": "r3-c5-erode-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c5-erode-make-with-filter"
+      },
+      {
+        "from": "r3-c5-erode-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c5-erode-output-cell"
+      },
+      {
+        "from": "r3-c6-displacement-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c6-displacement-make-with-filter"
+      },
+      {
+        "from": "r3-c6-displacement-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c6-displacement-output-cell"
+      },
+      {
+        "from": "r3-c7-arithmetic-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c7-arithmetic-make-with-filter"
+      },
+      {
+        "from": "r3-c7-arithmetic-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c7-arithmetic-output-cell"
+      },
+      {
+        "from": "r3-c8-blend-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c8-blend-make-with-filter"
+      },
+      {
+        "from": "r3-c8-blend-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c8-blend-output-cell"
+      },
+      {
+        "from": "r3-c9-convolution-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c9-convolution-make-with-filter"
+      },
+      {
+        "from": "r3-c9-convolution-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c9-convolution-output-cell"
+      },
+      {
+        "from": "r3-c10-matrix-xform-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c10-matrix-xform-make-with-filter"
+      },
+      {
+        "from": "r3-c10-matrix-xform-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c10-matrix-xform-output-cell"
+      },
+      {
+        "from": "r3-c11-lighting-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c11-lighting-make-with-filter"
+      },
+      {
+        "from": "r3-c11-lighting-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c11-lighting-output-cell"
+      },
+      {
+        "from": "r3-c12-tile-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r3-c12-tile-make-with-filter"
+      },
+      {
+        "from": "r3-c12-tile-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r3-c12-tile-output-cell"
+      },
+      {
+        "from": "r4-c0-color-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c0-color-make-with-filter"
+      },
+      {
+        "from": "r4-c0-color-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c0-color-output-cell"
+      },
+      {
+        "from": "r4-c1-blur-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c1-blur-make-with-filter"
+      },
+      {
+        "from": "r4-c1-blur-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c1-blur-output-cell"
+      },
+      {
+        "from": "r4-c2-drop-shadow-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c2-drop-shadow-make-with-filter"
+      },
+      {
+        "from": "r4-c2-drop-shadow-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c2-drop-shadow-output-cell"
+      },
+      {
+        "from": "r4-c3-offset-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c3-offset-make-with-filter"
+      },
+      {
+        "from": "r4-c3-offset-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c3-offset-output-cell"
+      },
+      {
+        "from": "r4-c4-dilate-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c4-dilate-make-with-filter"
+      },
+      {
+        "from": "r4-c4-dilate-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c4-dilate-output-cell"
+      },
+      {
+        "from": "r4-c5-erode-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c5-erode-make-with-filter"
+      },
+      {
+        "from": "r4-c5-erode-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c5-erode-output-cell"
+      },
+      {
+        "from": "r4-c6-displacement-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c6-displacement-make-with-filter"
+      },
+      {
+        "from": "r4-c6-displacement-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c6-displacement-output-cell"
+      },
+      {
+        "from": "r4-c7-arithmetic-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c7-arithmetic-make-with-filter"
+      },
+      {
+        "from": "r4-c7-arithmetic-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c7-arithmetic-output-cell"
+      },
+      {
+        "from": "r4-c8-blend-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c8-blend-make-with-filter"
+      },
+      {
+        "from": "r4-c8-blend-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c8-blend-output-cell"
+      },
+      {
+        "from": "r4-c9-convolution-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c9-convolution-make-with-filter"
+      },
+      {
+        "from": "r4-c9-convolution-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c9-convolution-output-cell"
+      },
+      {
+        "from": "r4-c10-matrix-xform-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c10-matrix-xform-make-with-filter"
+      },
+      {
+        "from": "r4-c10-matrix-xform-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c10-matrix-xform-output-cell"
+      },
+      {
+        "from": "r4-c11-lighting-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c11-lighting-make-with-filter"
+      },
+      {
+        "from": "r4-c11-lighting-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c11-lighting-output-cell"
+      },
+      {
+        "from": "r4-c12-tile-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r4-c12-tile-make-with-filter"
+      },
+      {
+        "from": "r4-c12-tile-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r4-c12-tile-output-cell"
+      },
+      {
+        "from": "r5-c0-color-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c0-color-make-with-filter"
+      },
+      {
+        "from": "r5-c0-color-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c0-color-output-cell"
+      },
+      {
+        "from": "r5-c1-blur-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c1-blur-make-with-filter"
+      },
+      {
+        "from": "r5-c1-blur-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c1-blur-output-cell"
+      },
+      {
+        "from": "r5-c2-drop-shadow-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c2-drop-shadow-make-with-filter"
+      },
+      {
+        "from": "r5-c2-drop-shadow-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c2-drop-shadow-output-cell"
+      },
+      {
+        "from": "r5-c3-offset-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c3-offset-make-with-filter"
+      },
+      {
+        "from": "r5-c3-offset-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c3-offset-output-cell"
+      },
+      {
+        "from": "r5-c4-dilate-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c4-dilate-make-with-filter"
+      },
+      {
+        "from": "r5-c4-dilate-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c4-dilate-output-cell"
+      },
+      {
+        "from": "r5-c5-erode-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c5-erode-make-with-filter"
+      },
+      {
+        "from": "r5-c5-erode-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c5-erode-output-cell"
+      },
+      {
+        "from": "r5-c6-displacement-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c6-displacement-make-with-filter"
+      },
+      {
+        "from": "r5-c6-displacement-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c6-displacement-output-cell"
+      },
+      {
+        "from": "r5-c7-arithmetic-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c7-arithmetic-make-with-filter"
+      },
+      {
+        "from": "r5-c7-arithmetic-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c7-arithmetic-output-cell"
+      },
+      {
+        "from": "r5-c8-blend-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c8-blend-make-with-filter"
+      },
+      {
+        "from": "r5-c8-blend-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c8-blend-output-cell"
+      },
+      {
+        "from": "r5-c9-convolution-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c9-convolution-make-with-filter"
+      },
+      {
+        "from": "r5-c9-convolution-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c9-convolution-output-cell"
+      },
+      {
+        "from": "r5-c10-matrix-xform-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c10-matrix-xform-make-with-filter"
+      },
+      {
+        "from": "r5-c10-matrix-xform-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c10-matrix-xform-output-cell"
+      },
+      {
+        "from": "r5-c11-lighting-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c11-lighting-make-with-filter"
+      },
+      {
+        "from": "r5-c11-lighting-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c11-lighting-output-cell"
+      },
+      {
+        "from": "r5-c12-tile-source",
+        "relationship": "source image passed to MakeWithFilter",
+        "to": "r5-c12-tile-make-with-filter"
+      },
+      {
+        "from": "r5-c12-tile-make-with-filter",
+        "relationship": "filtered output composed into GM grid cell",
+        "to": "r5-c12-tile-output-cell"
+      }
+    ],
+    "nodes": [
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c0-color-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "color",
+        "id": "r0-c0-color-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 0,
+        "id": "r0-c0-color-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c1-blur-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "blur",
+        "id": "r0-c1-blur-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 1,
+        "id": "r0-c1-blur-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c2-drop-shadow-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "drop-shadow",
+        "id": "r0-c2-drop-shadow-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 2,
+        "id": "r0-c2-drop-shadow-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c3-offset-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "offset",
+        "id": "r0-c3-offset-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 3,
+        "id": "r0-c3-offset-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c4-dilate-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "dilate",
+        "id": "r0-c4-dilate-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 4,
+        "id": "r0-c4-dilate-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c5-erode-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "erode",
+        "id": "r0-c5-erode-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 5,
+        "id": "r0-c5-erode-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c6-displacement-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "displacement",
+        "id": "r0-c6-displacement-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 6,
+        "id": "r0-c6-displacement-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c7-arithmetic-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "arithmetic",
+        "id": "r0-c7-arithmetic-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 7,
+        "id": "r0-c7-arithmetic-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c8-blend-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "blend",
+        "id": "r0-c8-blend-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 8,
+        "id": "r0-c8-blend-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c9-convolution-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "convolution",
+        "id": "r0-c9-convolution-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 9,
+        "id": "r0-c9-convolution-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c10-matrix-xform-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "matrix-xform",
+        "id": "r0-c10-matrix-xform-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 10,
+        "id": "r0-c10-matrix-xform-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c11-lighting-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "lighting",
+        "id": "r0-c11-lighting-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 11,
+        "id": "r0-c11-lighting-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r0-c12-tile-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-0",
+        "executedInCurrentPort": false,
+        "filterColumn": "tile",
+        "id": "r0-c12-tile-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 12,
+        "id": "r0-c12-tile-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 0
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c0-color-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "color",
+        "id": "r1-c0-color-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 0,
+        "id": "r1-c0-color-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c1-blur-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "blur",
+        "id": "r1-c1-blur-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 1,
+        "id": "r1-c1-blur-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c2-drop-shadow-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "drop-shadow",
+        "id": "r1-c2-drop-shadow-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 2,
+        "id": "r1-c2-drop-shadow-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c3-offset-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "offset",
+        "id": "r1-c3-offset-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 3,
+        "id": "r1-c3-offset-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c4-dilate-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "dilate",
+        "id": "r1-c4-dilate-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 4,
+        "id": "r1-c4-dilate-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c5-erode-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "erode",
+        "id": "r1-c5-erode-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 5,
+        "id": "r1-c5-erode-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c6-displacement-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "displacement",
+        "id": "r1-c6-displacement-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 6,
+        "id": "r1-c6-displacement-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c7-arithmetic-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "arithmetic",
+        "id": "r1-c7-arithmetic-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 7,
+        "id": "r1-c7-arithmetic-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c8-blend-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "blend",
+        "id": "r1-c8-blend-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 8,
+        "id": "r1-c8-blend-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c9-convolution-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "convolution",
+        "id": "r1-c9-convolution-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 9,
+        "id": "r1-c9-convolution-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c10-matrix-xform-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "matrix-xform",
+        "id": "r1-c10-matrix-xform-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 10,
+        "id": "r1-c10-matrix-xform-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c11-lighting-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "lighting",
+        "id": "r1-c11-lighting-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 11,
+        "id": "r1-c11-lighting-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r1-c12-tile-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-1",
+        "executedInCurrentPort": false,
+        "filterColumn": "tile",
+        "id": "r1-c12-tile-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 12,
+        "id": "r1-c12-tile-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 1
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c0-color-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "color",
+        "id": "r2-c0-color-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 0,
+        "id": "r2-c0-color-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c1-blur-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "blur",
+        "id": "r2-c1-blur-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 1,
+        "id": "r2-c1-blur-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c2-drop-shadow-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "drop-shadow",
+        "id": "r2-c2-drop-shadow-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 2,
+        "id": "r2-c2-drop-shadow-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c3-offset-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "offset",
+        "id": "r2-c3-offset-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 3,
+        "id": "r2-c3-offset-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c4-dilate-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "dilate",
+        "id": "r2-c4-dilate-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 4,
+        "id": "r2-c4-dilate-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c5-erode-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "erode",
+        "id": "r2-c5-erode-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 5,
+        "id": "r2-c5-erode-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c6-displacement-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "displacement",
+        "id": "r2-c6-displacement-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 6,
+        "id": "r2-c6-displacement-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c7-arithmetic-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "arithmetic",
+        "id": "r2-c7-arithmetic-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 7,
+        "id": "r2-c7-arithmetic-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c8-blend-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "blend",
+        "id": "r2-c8-blend-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 8,
+        "id": "r2-c8-blend-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c9-convolution-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "convolution",
+        "id": "r2-c9-convolution-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 9,
+        "id": "r2-c9-convolution-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c10-matrix-xform-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "matrix-xform",
+        "id": "r2-c10-matrix-xform-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 10,
+        "id": "r2-c10-matrix-xform-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c11-lighting-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "lighting",
+        "id": "r2-c11-lighting-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 11,
+        "id": "r2-c11-lighting-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r2-c12-tile-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-2",
+        "executedInCurrentPort": false,
+        "filterColumn": "tile",
+        "id": "r2-c12-tile-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 12,
+        "id": "r2-c12-tile-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 2
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c0-color-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "color",
+        "id": "r3-c0-color-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 0,
+        "id": "r3-c0-color-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c1-blur-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "blur",
+        "id": "r3-c1-blur-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 1,
+        "id": "r3-c1-blur-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c2-drop-shadow-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "drop-shadow",
+        "id": "r3-c2-drop-shadow-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 2,
+        "id": "r3-c2-drop-shadow-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c3-offset-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "offset",
+        "id": "r3-c3-offset-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 3,
+        "id": "r3-c3-offset-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c4-dilate-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "dilate",
+        "id": "r3-c4-dilate-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 4,
+        "id": "r3-c4-dilate-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c5-erode-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "erode",
+        "id": "r3-c5-erode-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 5,
+        "id": "r3-c5-erode-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c6-displacement-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "displacement",
+        "id": "r3-c6-displacement-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 6,
+        "id": "r3-c6-displacement-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c7-arithmetic-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "arithmetic",
+        "id": "r3-c7-arithmetic-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 7,
+        "id": "r3-c7-arithmetic-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c8-blend-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "blend",
+        "id": "r3-c8-blend-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 8,
+        "id": "r3-c8-blend-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c9-convolution-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "convolution",
+        "id": "r3-c9-convolution-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 9,
+        "id": "r3-c9-convolution-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c10-matrix-xform-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "matrix-xform",
+        "id": "r3-c10-matrix-xform-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 10,
+        "id": "r3-c10-matrix-xform-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c11-lighting-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "lighting",
+        "id": "r3-c11-lighting-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 11,
+        "id": "r3-c11-lighting-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r3-c12-tile-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-3",
+        "executedInCurrentPort": false,
+        "filterColumn": "tile",
+        "id": "r3-c12-tile-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 12,
+        "id": "r3-c12-tile-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 3
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c0-color-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "color",
+        "id": "r4-c0-color-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 0,
+        "id": "r4-c0-color-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c1-blur-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "blur",
+        "id": "r4-c1-blur-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 1,
+        "id": "r4-c1-blur-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c2-drop-shadow-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "drop-shadow",
+        "id": "r4-c2-drop-shadow-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 2,
+        "id": "r4-c2-drop-shadow-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c3-offset-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "offset",
+        "id": "r4-c3-offset-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 3,
+        "id": "r4-c3-offset-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c4-dilate-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "dilate",
+        "id": "r4-c4-dilate-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 4,
+        "id": "r4-c4-dilate-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c5-erode-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "erode",
+        "id": "r4-c5-erode-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 5,
+        "id": "r4-c5-erode-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c6-displacement-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "displacement",
+        "id": "r4-c6-displacement-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 6,
+        "id": "r4-c6-displacement-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c7-arithmetic-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "arithmetic",
+        "id": "r4-c7-arithmetic-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 7,
+        "id": "r4-c7-arithmetic-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c8-blend-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "blend",
+        "id": "r4-c8-blend-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 8,
+        "id": "r4-c8-blend-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c9-convolution-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "convolution",
+        "id": "r4-c9-convolution-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 9,
+        "id": "r4-c9-convolution-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c10-matrix-xform-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "matrix-xform",
+        "id": "r4-c10-matrix-xform-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 10,
+        "id": "r4-c10-matrix-xform-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c11-lighting-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "lighting",
+        "id": "r4-c11-lighting-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 11,
+        "id": "r4-c11-lighting-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r4-c12-tile-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-4",
+        "executedInCurrentPort": false,
+        "filterColumn": "tile",
+        "id": "r4-c12-tile-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 12,
+        "id": "r4-c12-tile-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 4
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c0-color-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "color",
+        "id": "r5-c0-color-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 0,
+        "id": "r5-c0-color-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c1-blur-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "blur",
+        "id": "r5-c1-blur-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 1,
+        "id": "r5-c1-blur-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c2-drop-shadow-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "drop-shadow",
+        "id": "r5-c2-drop-shadow-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 2,
+        "id": "r5-c2-drop-shadow-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c3-offset-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "offset",
+        "id": "r5-c3-offset-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 3,
+        "id": "r5-c3-offset-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c4-dilate-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "dilate",
+        "id": "r5-c4-dilate-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 4,
+        "id": "r5-c4-dilate-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c5-erode-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "erode",
+        "id": "r5-c5-erode-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 5,
+        "id": "r5-c5-erode-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c6-displacement-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "displacement",
+        "id": "r5-c6-displacement-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 6,
+        "id": "r5-c6-displacement-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c7-arithmetic-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "arithmetic",
+        "id": "r5-c7-arithmetic-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 7,
+        "id": "r5-c7-arithmetic-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c8-blend-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "blend",
+        "id": "r5-c8-blend-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 8,
+        "id": "r5-c8-blend-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c9-convolution-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "convolution",
+        "id": "r5-c9-convolution-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 9,
+        "id": "r5-c9-convolution-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c10-matrix-xform-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "matrix-xform",
+        "id": "r5-c10-matrix-xform-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 10,
+        "id": "r5-c10-matrix-xform-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c11-lighting-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "lighting",
+        "id": "r5-c11-lighting-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 11,
+        "id": "r5-c11-lighting-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      },
+      {
+        "asset": "images/mandrill_128.png",
+        "currentPortDrawsGhostOnly": true,
+        "id": "r5-c12-tile-source",
+        "kind": "source-image",
+        "resizedTo": {
+          "height": 100,
+          "width": 100
+        }
+      },
+      {
+        "clipRow": "clip-bound-row-5",
+        "executedInCurrentPort": false,
+        "filterColumn": "tile",
+        "id": "r5-c12-tile-make-with-filter",
+        "kind": "SkImages.MakeWithFilter",
+        "requiredBeforePromotion": true
+      },
+      {
+        "column": 12,
+        "id": "r5-c12-tile-output-cell",
+        "kind": "drawImage output cell",
+        "requiresReferenceCapture": true,
+        "row": 5
+      }
+    ]
+  },
+  "grid": {
+    "cells": 78,
+    "clipRows": [
+      "clip-bound-row-0",
+      "clip-bound-row-1",
+      "clip-bound-row-2",
+      "clip-bound-row-3",
+      "clip-bound-row-4",
+      "clip-bound-row-5"
+    ],
+    "columns": 13,
+    "filterColumns": [
+      "color",
+      "blur",
+      "drop-shadow",
+      "offset",
+      "dilate",
+      "erode",
+      "displacement",
+      "arithmetic",
+      "blend",
+      "convolution",
+      "matrix-xform",
+      "lighting",
+      "tile"
+    ],
+    "rows": 6
+  },
+  "milestone": "M91",
+  "nonClaims": {
+    "belowThresholdCountedAsProductionGap": false,
+    "boundedM61M89EvidenceInherited": false,
+    "broadImageFilterDAGSupport": false,
+    "cpuReadbackFallbackAdded": false,
+    "cropPrepassSupport": false,
+    "dashboardPromoted": false,
+    "diffStatsAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "fallbackReasonNoneClaimed": false,
+    "ganeshPort": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "imagemakewithfilterEvidenceInherited": false,
+    "layerPrepassSupport": false,
+    "makeWithFilterExecuted": false,
+    "performanceGatePromoted": false,
+    "picturePrepassSupport": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "renderArtifactsAdded": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "rowId": "skia-gm-imagemakewithfilter",
+  "schemaVersion": 1,
+  "source": {
+    "for470Evidence": "reports/wgsl-pipeline/scenes/generated/for470-skia-gm-imagemakewithfilter-evidence.json",
+    "kotlin": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageMakeWithFilterGM.kt"
+  },
+  "sourceGm": "ImageMakeWithFilterGM",
+  "status": "expected-unsupported",
+  "supportClaim": false,
+  "ticket": "M91-IF-3B-GRAPH"
+}

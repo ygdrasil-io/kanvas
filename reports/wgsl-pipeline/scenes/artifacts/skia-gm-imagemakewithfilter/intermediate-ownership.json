@@ -1,0 +1,85 @@
+{
+  "boundedM61M89EvidenceInherited": false,
+  "classification": "image-filter-imagemakewithfilter-intermediate-ownership-no-new-rendering-support",
+  "cpuReadbackFallbackAdded": false,
+  "currentImplementation": {
+    "cpuRoute": "expected-unsupported",
+    "diffStatsAdded": false,
+    "fallbackReasonNone": false,
+    "makeWithFilterExecuted": false,
+    "performanceEvidenceAdded": false,
+    "renderArtifactsAdded": false,
+    "webgpuRoute": "expected-unsupported"
+  },
+  "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+  "generalDagCompilerAdded": false,
+  "grid": {
+    "cells": 78,
+    "columns": 13,
+    "rows": 6
+  },
+  "milestone": "M91",
+  "nonClaims": {
+    "belowThresholdCountedAsProductionGap": false,
+    "boundedM61M89EvidenceInherited": false,
+    "broadImageFilterDAGSupport": false,
+    "cpuReadbackFallbackAdded": false,
+    "cropPrepassSupport": false,
+    "dashboardPromoted": false,
+    "diffStatsAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "fallbackReasonNoneClaimed": false,
+    "ganeshPort": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "imagemakewithfilterEvidenceInherited": false,
+    "layerPrepassSupport": false,
+    "makeWithFilterExecuted": false,
+    "performanceGatePromoted": false,
+    "picturePrepassSupport": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "renderArtifactsAdded": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ownershipStatus": "requirements-only",
+  "requiredIntermediateOwnership": [
+    {
+      "lifetime": "valid for the row-specific filter evaluation only",
+      "name": "per-cell source image input",
+      "owner": "future bounded CPU/WebGPU image-filter route",
+      "requiredBeforePromotion": true,
+      "scope": "each ImageMakeWithFilterGM grid cell"
+    },
+    {
+      "lifetime": "created for the selected row-specific render pass and released with command submission",
+      "name": "per-cell MakeWithFilter output",
+      "owner": "future bounded WebGPU image-filter route",
+      "requiredBeforePromotion": true,
+      "scope": "13 filter columns x 6 clip-bound rows"
+    },
+    {
+      "lifetime": "serialized with route diagnostics and diff/stat evidence",
+      "name": "clip/output bounds metadata",
+      "owner": "future graph planner",
+      "requiredBeforePromotion": true,
+      "scope": "all ImageMakeWithFilterGM clip rows"
+    },
+    {
+      "lifetime": "bounded to each row-specific filter pass; no long-lived cache ownership is claimed",
+      "name": "filter-family scratch textures",
+      "owner": "future bounded WebGPU image-filter route",
+      "requiredBeforePromotion": true,
+      "scope": "color, blur, drop-shadow, offset, dilate, erode, displacement, arithmetic, blend, convolution, matrix-xform, lighting, tile"
+    }
+  ],
+  "rowId": "skia-gm-imagemakewithfilter",
+  "schemaVersion": 1,
+  "sourceGm": "ImageMakeWithFilterGM",
+  "status": "expected-unsupported",
+  "supportClaim": false,
+  "ticket": "M91-IF-3B-GRAPH"
+}

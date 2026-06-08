@@ -1,0 +1,72 @@
+{
+  "classification": "image-filter-imagemakewithfilter-graph-ownership-proof-no-new-rendering-support",
+  "counters": {
+    "clipRowsDescribed": 6,
+    "dashboardPromotions": 0,
+    "diffStatsAdded": 0,
+    "fallbackReasonNoneRoutesAdded": 0,
+    "filterColumnsDescribed": 13,
+    "graphArtifacts": 1,
+    "gridCellsDescribed": 78,
+    "newSupportClaims": 0,
+    "ownershipArtifacts": 1,
+    "performanceArtifactsAdded": 0,
+    "readinessDelta": 0.0,
+    "renderArtifactsAdded": 0,
+    "thresholdChanges": 0
+  },
+  "generatedBy": "scripts/m91_image_filter_imagemakewithfilter_graph_ownership_proof.py",
+  "inputs": {
+    "candidateReadiness": "reports/wgsl-pipeline/m91-image-filter-candidate-readiness/summary.json",
+    "for470Evidence": "reports/wgsl-pipeline/scenes/generated/for470-skia-gm-imagemakewithfilter-evidence.json",
+    "gmSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageMakeWithFilterGM.kt",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json"
+  },
+  "milestone": "M91",
+  "outputs": {
+    "graph": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/graph.json",
+    "intermediateOwnership": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/intermediate-ownership.json"
+  },
+  "row": {
+    "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+    "rowId": "skia-gm-imagemakewithfilter",
+    "sourceGm": "ImageMakeWithFilterGM",
+    "status": "expected-unsupported",
+    "supportClaim": false
+  },
+  "schemaVersion": 1,
+  "status": "generated evidence",
+  "supportGuard": {
+    "belowThresholdCountedAsProductionGap": false,
+    "boundedM61M89EvidenceInherited": false,
+    "broadImageFilterDAGSupport": false,
+    "cpuReadbackFallbackAdded": false,
+    "cropPrepassSupport": false,
+    "dashboardPromoted": false,
+    "diffStatsAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "fallbackReasonNoneClaimed": false,
+    "ganeshPort": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "imagemakewithfilterEvidenceInherited": false,
+    "layerPrepassSupport": false,
+    "makeWithFilterExecuted": false,
+    "performanceGatePromoted": false,
+    "picturePrepassSupport": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "renderArtifactsAdded": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ticket": "M91-IF-3B-GRAPH",
+  "validationCommands": [
+    "rtk python3 scripts/m91_image_filter_imagemakewithfilter_graph_ownership_proof.py",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterImageMakeWithFilterGraphOwnershipProof",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterImageMakeWithFilterEvidenceIntake",
+    "rtk git diff --check"
+  ]
+}

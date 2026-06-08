@@ -2,29 +2,31 @@
   "classification": "image-filter-imagemakewithfilter-evidence-intake-no-new-rendering-support",
   "counters": {
     "dashboardPromotions": 0,
-    "missingEvidenceItems": 11,
+    "missingEvidenceItems": 9,
     "newSupportClaims": 0,
     "nonPromotionalSignals": 6,
-    "presentEvidenceItems": 0,
+    "presentEvidenceItems": 2,
     "readinessDelta": 0.0,
     "requiredEvidenceItems": 11,
     "thresholdChanges": 0,
-    "validatedNonPromotionalEvidenceItems": 0
+    "validatedNonPromotionalEvidenceItems": 2
   },
   "generatedBy": "scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py",
   "inputs": {
     "candidateReadiness": "reports/wgsl-pipeline/m91-image-filter-candidate-readiness/summary.json",
     "for470Json": "reports/wgsl-pipeline/scenes/generated/for470-skia-gm-imagemakewithfilter-evidence.json",
     "for470Report": "reports/wgsl-pipeline/2026-06-08-for-470-skia-gm-imagemakewithfilter-evidence.md",
+    "graph": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/graph.json",
+    "intermediateOwnership": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/intermediate-ownership.json",
     "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
     "routeCpu": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-cpu.json",
     "routeGpu": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-gpu.json"
   },
   "milestone": "M91",
   "nextRecommendedTicket": {
-    "id": "M91-IF-3B-GRAPH",
+    "id": "M91-IF-3B-REF",
     "promotionAllowedWithoutEvidence": false,
-    "scope": "Produce row-specific ImageMakeWithFilterGM graph dump and intermediate ownership requirements before any reference, route, render, diff/stat, performance, or support evaluation.",
+    "scope": "Produce row-specific ImageMakeWithFilterGM reference/provenance package and keep CPU/WebGPU fallbackReason=none route, render, diff/stat, and performance evidence blocked until their artifacts exist.",
     "supportClaimAllowed": false
   },
   "nonClaims": {
@@ -85,18 +87,18 @@
     {
       "kind": "row-specific graph dump",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/graph.json",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "status": "missing",
-      "validatedNonPromotional": false
+      "status": "present-non-promotional",
+      "validatedNonPromotional": true
     },
     {
       "kind": "intermediate texture ownership",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/intermediate-ownership.json",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "status": "missing",
-      "validatedNonPromotional": false
+      "status": "present-non-promotional",
+      "validatedNonPromotional": true
     },
     {
       "kind": "row-specific Skia/reference artifact",
@@ -182,11 +184,12 @@
     "supportClaim": false
   },
   "schemaVersion": 1,
-  "status": "blocked-by-missing-row-specific-evidence",
+  "status": "partial-row-specific-evidence-present-non-promotional",
   "ticket": "M91-IF-3B",
   "validationCommands": [
     "rtk python3 scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py",
     "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-m91-imagemakewithfilter-intake-pycache python3 -m py_compile scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterImageMakeWithFilterGraphOwnershipProof",
     "rtk ./gradlew --no-daemon pipelineM91ImageFilterImageMakeWithFilterEvidenceIntake",
     "rtk git diff --check"
   ]

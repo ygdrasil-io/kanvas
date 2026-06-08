@@ -1,6 +1,6 @@
 # M91 ImageMakeWithFilterGM Evidence Intake
 
-Status: blocked-by-missing-row-specific-evidence
+Status: partial-row-specific-evidence-present-non-promotional
 
 This report starts `M91-IF-3B` for `skia-gm-imagemakewithfilter`. It aggregates existing refusal and policy-only route evidence, and keeps support evaluation blocked until row-specific graph, ownership, reference, route, render, diff/stat, and performance artifacts exist.
 
@@ -16,28 +16,28 @@ This report starts `M91-IF-3B` for `skia-gm-imagemakewithfilter`. It aggregates 
 ## Counters
 
 - dashboardPromotions: `0`
-- missingEvidenceItems: `11`
+- missingEvidenceItems: `9`
 - newSupportClaims: `0`
 - nonPromotionalSignals: `6`
-- presentEvidenceItems: `0`
+- presentEvidenceItems: `2`
 - readinessDelta: `0.0`
 - requiredEvidenceItems: `11`
 - thresholdChanges: `0`
-- validatedNonPromotionalEvidenceItems: `0`
+- validatedNonPromotionalEvidenceItems: `2`
 
 ## Required Evidence
 
-- `row-specific graph dump`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/graph.json`
-- `intermediate texture ownership`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/intermediate-ownership.json`
-- `row-specific Skia/reference artifact`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/skia.png`
-- `CPU route evidence with fallbackReason=none`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/route-cpu.json`
-- `WebGPU route evidence with fallbackReason=none`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/route-gpu.json`
-- `CPU/GPU render artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/cpu.png`
-- `CPU/GPU render artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/gpu.png`
-- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/cpu-diff.png`
-- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/gpu-diff.png`
-- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/stats.json`
-- `performance impact evidence`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/performance.json`
+- `row-specific graph dump`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/graph.json`; present=`True` promotional=`False`
+- `intermediate texture ownership`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/intermediate-ownership.json`; present=`True` promotional=`False`
+- `row-specific Skia/reference artifact`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/skia.png`; present=`False` promotional=`False`
+- `CPU route evidence with fallbackReason=none`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/route-cpu.json`; present=`False` promotional=`False`
+- `WebGPU route evidence with fallbackReason=none`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/route-gpu.json`; present=`False` promotional=`False`
+- `CPU/GPU render artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/cpu.png`; present=`False` promotional=`False`
+- `CPU/GPU render artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/gpu.png`; present=`False` promotional=`False`
+- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/cpu-diff.png`; present=`False` promotional=`False`
+- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/gpu-diff.png`; present=`False` promotional=`False`
+- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/stats.json`; present=`False` promotional=`False`
+- `performance impact evidence`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/performance.json`; present=`False` promotional=`False`
 
 ## Non-Promotional Signals
 
@@ -50,8 +50,8 @@ This report starts `M91-IF-3B` for `skia-gm-imagemakewithfilter`. It aggregates 
 
 ## Next Recommended Ticket
 
-- ID: `M91-IF-3B-GRAPH`
-- Scope: Produce row-specific ImageMakeWithFilterGM graph dump and intermediate ownership requirements before any reference, route, render, diff/stat, performance, or support evaluation.
+- ID: `M91-IF-3B-REF`
+- Scope: Produce row-specific ImageMakeWithFilterGM reference/provenance package and keep CPU/WebGPU fallbackReason=none route, render, diff/stat, and performance evidence blocked until their artifacts exist.
 - Support claim allowed: `False`
 - Promotion allowed without evidence: `False`
 
@@ -81,5 +81,6 @@ This report starts `M91-IF-3B` for `skia-gm-imagemakewithfilter`. It aggregates 
 
 - `rtk python3 scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py`
 - `rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-m91-imagemakewithfilter-intake-pycache python3 -m py_compile scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py`
+- `rtk ./gradlew --no-daemon pipelineM91ImageFilterImageMakeWithFilterGraphOwnershipProof`
 - `rtk ./gradlew --no-daemon pipelineM91ImageFilterImageMakeWithFilterEvidenceIntake`
 - `rtk git diff --check`

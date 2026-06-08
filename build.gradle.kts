@@ -4824,7 +4824,7 @@ tasks.register<Exec>("pipelineM91ImageFilterOffsetReadinessRecap") {
 tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterEvidenceIntake") {
     group = "verification"
     description = "Generates and validates M91-IF-3B ImageMakeWithFilterGM evidence intake without changing support claims."
-    dependsOn("pipelineM91ImageFilterCandidateReadiness")
+    dependsOn("pipelineM91ImageFilterImageMakeWithFilterGraphOwnershipProof")
     commandLine("python3", "scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py")
     inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
@@ -4836,7 +4836,25 @@ tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterEvidenceIntake") 
     inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/ImageMakeWithFilterGM.kt"))
     inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/kotlin/org/skia/tests/ImageMakeWithFilterTest.kt"))
     inputs.file(layout.projectDirectory.file("skia-integration-tests/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/graph.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/intermediate-ownership.json"))
     outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-evidence-intake"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterGraphOwnershipProof") {
+    group = "verification"
+    description = "Generates and validates M91-IF-3B ImageMakeWithFilterGM graph and ownership proof without changing support claims."
+    dependsOn("pipelineM91ImageFilterCandidateReadiness")
+    commandLine("python3", "scripts/m91_image_filter_imagemakewithfilter_graph_ownership_proof.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_imagemakewithfilter_graph_ownership_proof.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-candidate-readiness/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/for470-skia-gm-imagemakewithfilter-evidence.json"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/ImageMakeWithFilterGM.kt"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-graph-ownership-proof"))
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/graph.json"))
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/intermediate-ownership.json"))
     outputs.upToDateWhen { false }
 }
 

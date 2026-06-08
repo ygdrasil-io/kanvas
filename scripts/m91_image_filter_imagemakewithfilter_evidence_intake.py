@@ -23,6 +23,8 @@ GM_SOURCE = ROOT / "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageM
 GM_TEST = ROOT / "skia-integration-tests/src/test/kotlin/org/skia/tests/ImageMakeWithFilterTest.kt"
 SKIA_SIMILARITY_PROPERTIES = ROOT / "skia-integration-tests/test-similarity-scores.properties"
 ARTIFACT_DIR = ROOT / "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter"
+GRAPH_JSON = ARTIFACT_DIR / "graph.json"
+OWNERSHIP_JSON = ARTIFACT_DIR / "intermediate-ownership.json"
 OUTPUT_DIR = ROOT / "reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-evidence-intake"
 SUMMARY_JSON = OUTPUT_DIR / "summary.json"
 SUMMARY_MD = OUTPUT_DIR / "summary.md"
@@ -267,19 +269,49 @@ def validate_for470(payload: dict[str, Any]) -> None:
     require(row.get("nonClaims") == FOR470_NON_CLAIMS, "FOR-470 row nonClaims changed")
 
 
+def validate_present_artifact(kind: str, path: Path) -> tuple[str, bool]:
+    if not path.exists():
+        return "missing", False
+    require(path in {GRAPH_JSON, OWNERSHIP_JSON}, f"{rel(path)} must remain absent until its scoped evidence ticket lands")
+    payload = load_json(path)
+    require(payload.get("rowId") == ROW_ID, f"{rel(path)} rowId changed")
+    require(payload.get("sourceGm") == SOURCE_GM, f"{rel(path)} sourceGm changed")
+    require(payload.get("status") == "expected-unsupported", f"{rel(path)} status changed")
+    require(payload.get("supportClaim") is False, f"{rel(path)} supportClaim must remain false")
+    require(payload.get("fallbackReason") == FALLBACK, f"{rel(path)} fallback changed")
+    non_claims = payload.get("nonClaims")
+    require(isinstance(non_claims, dict), f"{rel(path)} nonClaims must be an object")
+    for key, value in non_claims.items():
+        require(value is False, f"{rel(path)} nonClaims.{key} must remain false")
+    if path == GRAPH_JSON:
+        require(kind == "row-specific graph dump", "graph kind changed")
+        require(payload.get("classification") == "image-filter-imagemakewithfilter-graph-dump-no-new-rendering-support", "graph classification changed")
+        require(payload.get("currentPort", {}).get("makeWithFilterExecuted") is False, "graph must not claim MakeWithFilter execution")
+        grid = payload.get("grid")
+        require(isinstance(grid, dict), "graph grid must be an object")
+        require(grid.get("cells") == 78, "graph cell count changed")
+    elif path == OWNERSHIP_JSON:
+        require(kind == "intermediate texture ownership", "ownership kind changed")
+        require(payload.get("classification") == "image-filter-imagemakewithfilter-intermediate-ownership-no-new-rendering-support", "ownership classification changed")
+        require(payload.get("ownershipStatus") == "requirements-only", "ownership must remain requirements-only")
+        require(payload.get("generalDagCompilerAdded") is False, "ownership must not add generic DAG compiler")
+        require(payload.get("cpuReadbackFallbackAdded") is False, "ownership must not add CPU/readback fallback")
+    return "present-non-promotional", True
+
+
 def evidence_status() -> list[dict[str, Any]]:
     statuses: list[dict[str, Any]] = []
     for kind, filename in REQUIRED_EVIDENCE:
         path = ARTIFACT_DIR / filename
-        require(not path.exists(), f"{rel(path)} must remain absent for this intake")
+        status, validated = validate_present_artifact(kind, path)
         statuses.append(
             {
                 "kind": kind,
                 "path": rel(path),
-                "present": False,
+                "present": path.exists(),
                 "promotional": False,
-                "validatedNonPromotional": False,
-                "status": "missing",
+                "validatedNonPromotional": validated,
+                "status": status,
             }
         )
     return statuses
@@ -314,13 +346,20 @@ def validate_sources() -> list[dict[str, Any]]:
 def build_summary() -> dict[str, Any]:
     required = evidence_status()
     signals = validate_sources()
+    present_count = sum(1 for item in required if item["present"])
+    missing_count = len(required) - present_count
+    status = "blocked-by-missing-row-specific-evidence"
+    if present_count > 0 and missing_count > 0:
+        status = "partial-row-specific-evidence-present-non-promotional"
+    elif present_count == len(required):
+        status = "row-specific-evidence-present-non-promotional"
     return {
         "schemaVersion": 1,
         "generatedBy": "scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py",
         "milestone": "M91",
         "ticket": "M91-IF-3B",
         "classification": CLASSIFICATION,
-        "status": "blocked-by-missing-row-specific-evidence",
+        "status": status,
         "row": {
             "rowId": ROW_ID,
             "sourceGm": SOURCE_GM,
@@ -338,12 +377,14 @@ def build_summary() -> dict[str, Any]:
             "routeGpu": rel(ROUTE_GPU_JSON),
             "for470Json": rel(FOR470_JSON),
             "for470Report": rel(FOR470_REPORT),
+            "graph": rel(GRAPH_JSON),
+            "intermediateOwnership": rel(OWNERSHIP_JSON),
         },
         "counters": {
             "requiredEvidenceItems": len(required),
-            "presentEvidenceItems": 0,
-            "missingEvidenceItems": len(required),
-            "validatedNonPromotionalEvidenceItems": 0,
+            "presentEvidenceItems": present_count,
+            "missingEvidenceItems": missing_count,
+            "validatedNonPromotionalEvidenceItems": sum(1 for item in required if item["validatedNonPromotional"]),
             "nonPromotionalSignals": len(signals),
             "newSupportClaims": 0,
             "readinessDelta": 0.0,
@@ -353,8 +394,8 @@ def build_summary() -> dict[str, Any]:
         "requiredEvidence": required,
         "nonPromotionalSignals": signals,
         "nextRecommendedTicket": {
-            "id": "M91-IF-3B-GRAPH",
-            "scope": "Produce row-specific ImageMakeWithFilterGM graph dump and intermediate ownership requirements before any reference, route, render, diff/stat, performance, or support evaluation.",
+            "id": "M91-IF-3B-REF",
+            "scope": "Produce row-specific ImageMakeWithFilterGM reference/provenance package and keep CPU/WebGPU fallbackReason=none route, render, diff/stat, and performance evidence blocked until their artifacts exist.",
             "supportClaimAllowed": False,
             "promotionAllowedWithoutEvidence": False,
         },
@@ -362,6 +403,7 @@ def build_summary() -> dict[str, Any]:
         "validationCommands": [
             "rtk python3 scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py",
             "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-m91-imagemakewithfilter-intake-pycache python3 -m py_compile scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py",
+            "rtk ./gradlew --no-daemon pipelineM91ImageFilterImageMakeWithFilterGraphOwnershipProof",
             "rtk ./gradlew --no-daemon pipelineM91ImageFilterImageMakeWithFilterEvidenceIntake",
             "rtk git diff --check",
         ],
@@ -370,20 +412,29 @@ def build_summary() -> dict[str, Any]:
 
 def validate_summary(summary: dict[str, Any]) -> None:
     require(summary.get("classification") == CLASSIFICATION, "summary classification mismatch")
-    require(summary.get("status") == "blocked-by-missing-row-specific-evidence", "summary status mismatch")
+    require(
+        summary.get("status") in {
+            "blocked-by-missing-row-specific-evidence",
+            "partial-row-specific-evidence-present-non-promotional",
+            "row-specific-evidence-present-non-promotional",
+        },
+        "summary status mismatch",
+    )
     validate_row(summary.get("row", {}), "summary")
     counters = summary.get("counters")
     required = summary.get("requiredEvidence")
     ticket = summary.get("nextRecommendedTicket")
     require(isinstance(counters, dict), "summary counters must be an object")
     require(counters.get("requiredEvidenceItems") == len(REQUIRED_EVIDENCE), "required evidence count changed")
-    require(counters.get("presentEvidenceItems") == 0, "present evidence must remain zero")
-    require(counters.get("missingEvidenceItems") == len(REQUIRED_EVIDENCE), "missing evidence count changed")
+    require(0 <= counters.get("presentEvidenceItems") <= len(REQUIRED_EVIDENCE), "present evidence count out of range")
+    require(counters.get("missingEvidenceItems") == len(REQUIRED_EVIDENCE) - counters.get("presentEvidenceItems"), "missing evidence count changed")
+    require(counters.get("validatedNonPromotionalEvidenceItems") == counters.get("presentEvidenceItems"), "present evidence must validate as non-promotional")
     for key in ["newSupportClaims", "dashboardPromotions", "thresholdChanges"]:
         require(counters.get(key) == 0, f"counter {key} must remain zero")
     require(counters.get("readinessDelta") == 0.0, "readiness must not move")
     require(isinstance(required, list) and len(required) == len(REQUIRED_EVIDENCE), "requiredEvidence list changed")
-    require(all(item.get("status") == "missing" and item.get("present") is False for item in required if isinstance(item, dict)), "all support evidence must remain missing")
+    require(all(item.get("promotional") is False for item in required if isinstance(item, dict)), "required evidence must remain non-promotional")
+    require(all(item.get("validatedNonPromotional") == item.get("present") for item in required if isinstance(item, dict)), "present evidence must validate as non-promotional")
     require(isinstance(ticket, dict), "nextRecommendedTicket must be an object")
     require(ticket.get("supportClaimAllowed") is False, "next ticket must not allow support claims")
     require(ticket.get("promotionAllowedWithoutEvidence") is False, "next ticket must block promotion")
@@ -419,7 +470,10 @@ def render_markdown(summary: dict[str, Any]) -> str:
         lines.append(f"- {key}: `{value}`")
     lines.extend(["", "## Required Evidence", ""])
     for item in summary["requiredEvidence"]:
-        lines.append(f"- `{item['kind']}`: `{item['status']}` at `{item['path']}`")
+        lines.append(
+            f"- `{item['kind']}`: `{item['status']}` at `{item['path']}`; "
+            f"present=`{item['present']}` promotional=`{item['promotional']}`"
+        )
     lines.extend(["", "## Non-Promotional Signals", ""])
     for item in summary["nonPromotionalSignals"]:
         observed = f" (`{item['observed']}`)" if "observed" in item else ""
@@ -466,6 +520,7 @@ def main() -> int:
     print(
         "M91 ImageMakeWithFilterGM evidence intake validation passed: "
         f"missingEvidenceItems={reloaded['counters']['missingEvidenceItems']} "
+        f"presentEvidenceItems={reloaded['counters']['presentEvidenceItems']} "
         "newSupportClaims=0 readinessDelta=0.0"
     )
     return 0
