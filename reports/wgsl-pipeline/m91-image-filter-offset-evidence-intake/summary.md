@@ -1,6 +1,6 @@
 # M91 Image Filter Offset Evidence Intake
 
-Status: blocked-by-missing-row-specific-evidence
+Status: partial-row-specific-evidence-present-non-promotional
 
 This report materializes `M91-IF-3A` for `skia-gm-offsetimagefilter`. It inventories current evidence and keeps support evaluation blocked until row-specific graph, ownership, reference, CPU/WebGPU route, render, diff/stat, and performance artifacts exist.
 
@@ -18,9 +18,9 @@ This report materializes `M91-IF-3A` for `skia-gm-offsetimagefilter`. It invento
 ## Counters
 
 - Required evidence items: `11`
-- Present evidence items: `0`
-- Missing evidence items: `11`
-- Validated non-promotional evidence items: `0`
+- Present evidence items: `2`
+- Missing evidence items: `9`
+- Validated non-promotional evidence items: `2`
 - Historical signals: `8`
 - Promotional historical signals: `0`
 - New support claims: `0`
@@ -30,8 +30,8 @@ This report materializes `M91-IF-3A` for `skia-gm-offsetimagefilter`. It invento
 
 ## Required Evidence
 
-- `row-specific graph dump`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/graph.json`; present=`False` promotional=`False`
-- `intermediate texture ownership`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/intermediate-ownership.json`; present=`False` promotional=`False`
+- `row-specific graph dump`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/graph.json`; present=`True` promotional=`False`
+- `intermediate texture ownership`: `present-non-promotional` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/intermediate-ownership.json`; present=`True` promotional=`False`
 - `row-specific Skia/reference artifact`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/skia.png`; present=`False` promotional=`False`
 - `CPU route evidence with fallbackReason=none`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-cpu.json`; present=`False` promotional=`False`
 - `WebGPU route evidence with fallbackReason=none`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-gpu.json`; present=`False` promotional=`False`

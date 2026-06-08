@@ -1,0 +1,63 @@
+{
+  "adjacentSimpleOffsetEvidenceInherited": false,
+  "classification": "image-filter-offset-intermediate-ownership-no-new-rendering-support",
+  "cpuReadbackFallbackAdded": false,
+  "currentImplementation": {
+    "diffStatsAdded": false,
+    "fallbackReasonNone": false,
+    "performanceEvidenceAdded": false,
+    "renderArtifactsAdded": false,
+    "webgpuRoute": "expected-unsupported"
+  },
+  "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+  "generalDagCompilerAdded": false,
+  "milestone": "M91",
+  "nonClaims": {
+    "adjacentSimpleOffsetEvidenceInherited": false,
+    "arbitraryLayerPrepass": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "cpuReadbackFallbackAdded": false,
+    "cropImageFilterDagSupport": false,
+    "dashboardPromoted": false,
+    "diffStatsAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "fallbackReasonNoneClaimed": false,
+    "ganeshPort": false,
+    "generalImageFilterDagSupport": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "performanceGatePromoted": false,
+    "picturePrepassSupport": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "renderArtifactsAdded": false,
+    "requiredSmokeCandidateAllowed": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ownershipStatus": "requirements-only",
+  "requiredIntermediateOwnership": [
+    {
+      "lifetime": "created for the row-specific render pass and released with command submission",
+      "name": "cell-local image-filter intermediate",
+      "owner": "future bounded WebGPU image-filter route",
+      "requiredBeforePromotion": true,
+      "scope": "per OffsetImageFilterGM cell"
+    },
+    {
+      "lifetime": "bounded to the row-specific render pass",
+      "name": "scaled 2x cell crop/clip intermediate",
+      "owner": "future bounded WebGPU image-filter route",
+      "requiredBeforePromotion": true,
+      "scope": "fifth OffsetImageFilterGM cell"
+    }
+  ],
+  "rowId": "skia-gm-offsetimagefilter",
+  "schemaVersion": 1,
+  "sourceGm": "OffsetImageFilterGM",
+  "status": "expected-unsupported",
+  "supportClaim": false,
+  "ticket": "M91-IF-3A-REF"
+}

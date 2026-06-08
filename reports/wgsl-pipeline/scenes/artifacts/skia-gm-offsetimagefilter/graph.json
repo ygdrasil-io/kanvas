@@ -1,0 +1,302 @@
+{
+  "classification": "image-filter-offset-graph-dump-no-new-rendering-support",
+  "d51FallbackReason": "image-filter.offset.crop-prepass-scaled-clipped-webgpu-artifacts-required",
+  "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+  "gmDimensions": {
+    "height": 100,
+    "width": 600
+  },
+  "graph": {
+    "cells": 5,
+    "edges": [
+      {
+        "from": "cell-0-source",
+        "relationship": "image source wrapped as filter input",
+        "to": "cell-0-image-filter"
+      },
+      {
+        "from": "cell-0-image-filter",
+        "relationship": "offset input",
+        "to": "cell-0-offset"
+      },
+      {
+        "from": "cell-0-offset",
+        "relationship": "crop child",
+        "to": "cell-0-crop"
+      },
+      {
+        "from": "cell-0-crop",
+        "relationship": "paint.imageFilter",
+        "to": "cell-0-draw"
+      },
+      {
+        "from": "cell-1-source",
+        "relationship": "image source wrapped as filter input",
+        "to": "cell-1-image-filter"
+      },
+      {
+        "from": "cell-1-image-filter",
+        "relationship": "offset input",
+        "to": "cell-1-offset"
+      },
+      {
+        "from": "cell-1-offset",
+        "relationship": "crop child",
+        "to": "cell-1-crop"
+      },
+      {
+        "from": "cell-1-crop",
+        "relationship": "paint.imageFilter",
+        "to": "cell-1-draw"
+      },
+      {
+        "from": "cell-2-source",
+        "relationship": "image source wrapped as filter input",
+        "to": "cell-2-image-filter"
+      },
+      {
+        "from": "cell-2-image-filter",
+        "relationship": "offset input",
+        "to": "cell-2-offset"
+      },
+      {
+        "from": "cell-2-offset",
+        "relationship": "crop child",
+        "to": "cell-2-crop"
+      },
+      {
+        "from": "cell-2-crop",
+        "relationship": "paint.imageFilter",
+        "to": "cell-2-draw"
+      },
+      {
+        "from": "cell-3-source",
+        "relationship": "image source wrapped as filter input",
+        "to": "cell-3-image-filter"
+      },
+      {
+        "from": "cell-3-image-filter",
+        "relationship": "offset input",
+        "to": "cell-3-offset"
+      },
+      {
+        "from": "cell-3-offset",
+        "relationship": "crop child",
+        "to": "cell-3-crop"
+      },
+      {
+        "from": "cell-3-crop",
+        "relationship": "paint.imageFilter",
+        "to": "cell-3-draw"
+      },
+      {
+        "from": "cell-4-source",
+        "relationship": "null offset input",
+        "to": "cell-4-offset"
+      },
+      {
+        "from": "cell-4-offset",
+        "relationship": "crop child",
+        "to": "cell-4-crop"
+      },
+      {
+        "from": "cell-4-crop",
+        "relationship": "paint.imageFilter",
+        "to": "cell-4-draw"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "cell-0-source",
+        "kind": "source-image",
+        "scale": 1,
+        "source": "string image"
+      },
+      {
+        "enabled": true,
+        "id": "cell-0-image-filter",
+        "kind": "SkImageFilters.Image",
+        "sampling": "nearest"
+      },
+      {
+        "dx": 0,
+        "dy": 0,
+        "id": "cell-0-offset",
+        "kind": "SkImageFilters.Offset"
+      },
+      {
+        "cropRect": "SkIRect.MakeXYWH(0, 0, 80, 80)",
+        "id": "cell-0-crop",
+        "kind": "SkImageFilters.Crop",
+        "tileMode": "kDecal"
+      },
+      {
+        "clip": "image bounds",
+        "debugOverlay": "red 2-pixel stroke on clip/crop intersection",
+        "id": "cell-0-draw",
+        "kind": "drawClippedImage",
+        "scale": 1
+      },
+      {
+        "id": "cell-1-source",
+        "kind": "source-image",
+        "scale": 1,
+        "source": "checkerboard image"
+      },
+      {
+        "enabled": true,
+        "id": "cell-1-image-filter",
+        "kind": "SkImageFilters.Image",
+        "sampling": "nearest"
+      },
+      {
+        "dx": 5,
+        "dy": 10,
+        "id": "cell-1-offset",
+        "kind": "SkImageFilters.Offset"
+      },
+      {
+        "cropRect": "SkIRect.MakeXYWH(12, 8, 72, 68)",
+        "id": "cell-1-crop",
+        "kind": "SkImageFilters.Crop",
+        "tileMode": "kDecal"
+      },
+      {
+        "clip": "image bounds",
+        "debugOverlay": "red 2-pixel stroke on clip/crop intersection",
+        "id": "cell-1-draw",
+        "kind": "drawClippedImage",
+        "scale": 1
+      },
+      {
+        "id": "cell-2-source",
+        "kind": "source-image",
+        "scale": 1,
+        "source": "string image"
+      },
+      {
+        "enabled": true,
+        "id": "cell-2-image-filter",
+        "kind": "SkImageFilters.Image",
+        "sampling": "nearest"
+      },
+      {
+        "dx": 10,
+        "dy": 20,
+        "id": "cell-2-offset",
+        "kind": "SkImageFilters.Offset"
+      },
+      {
+        "cropRect": "SkIRect.MakeXYWH(24, 16, 64, 56)",
+        "id": "cell-2-crop",
+        "kind": "SkImageFilters.Crop",
+        "tileMode": "kDecal"
+      },
+      {
+        "clip": "image bounds",
+        "debugOverlay": "red 2-pixel stroke on clip/crop intersection",
+        "id": "cell-2-draw",
+        "kind": "drawClippedImage",
+        "scale": 1
+      },
+      {
+        "id": "cell-3-source",
+        "kind": "source-image",
+        "scale": 1,
+        "source": "checkerboard image"
+      },
+      {
+        "enabled": true,
+        "id": "cell-3-image-filter",
+        "kind": "SkImageFilters.Image",
+        "sampling": "nearest"
+      },
+      {
+        "dx": 15,
+        "dy": 30,
+        "id": "cell-3-offset",
+        "kind": "SkImageFilters.Offset"
+      },
+      {
+        "cropRect": "SkIRect.MakeXYWH(36, 24, 56, 44)",
+        "id": "cell-3-crop",
+        "kind": "SkImageFilters.Crop",
+        "tileMode": "kDecal"
+      },
+      {
+        "clip": "image bounds",
+        "debugOverlay": "red 2-pixel stroke on clip/crop intersection",
+        "id": "cell-3-draw",
+        "kind": "drawClippedImage",
+        "scale": 1
+      },
+      {
+        "id": "cell-4-source",
+        "kind": "null-input",
+        "scale": 2,
+        "source": "string image"
+      },
+      {
+        "enabled": false,
+        "id": "cell-4-image-filter",
+        "kind": "SkImageFilters.Image",
+        "sampling": "nearest"
+      },
+      {
+        "dx": -5,
+        "dy": -10,
+        "id": "cell-4-offset",
+        "kind": "SkImageFilters.Offset"
+      },
+      {
+        "cropRect": "SkIRect.MakeXYWH(0, 0, 100, 100)",
+        "id": "cell-4-crop",
+        "kind": "SkImageFilters.Crop",
+        "tileMode": "kDecal"
+      },
+      {
+        "clip": "image bounds",
+        "debugOverlay": "red 2-pixel stroke on clip/crop intersection",
+        "id": "cell-4-draw",
+        "kind": "drawClippedImage",
+        "scale": 2
+      }
+    ]
+  },
+  "milestone": "M91",
+  "nonClaims": {
+    "adjacentSimpleOffsetEvidenceInherited": false,
+    "arbitraryLayerPrepass": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "cpuReadbackFallbackAdded": false,
+    "cropImageFilterDagSupport": false,
+    "dashboardPromoted": false,
+    "diffStatsAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "fallbackReasonNoneClaimed": false,
+    "ganeshPort": false,
+    "generalImageFilterDagSupport": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "performanceGatePromoted": false,
+    "picturePrepassSupport": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "renderArtifactsAdded": false,
+    "requiredSmokeCandidateAllowed": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "rowId": "skia-gm-offsetimagefilter",
+  "schemaVersion": 1,
+  "source": {
+    "d51Evidence": "reports/wgsl-pipeline/scenes/generated/d51-offsetimagefilter-row-specific-evidence.json",
+    "kotlin": "skia-integration-tests/src/main/kotlin/org/skia/tests/OffsetImageFilterGM.kt"
+  },
+  "sourceGm": "OffsetImageFilterGM",
+  "status": "expected-unsupported",
+  "supportClaim": false,
+  "ticket": "M91-IF-3A-REF"
+}

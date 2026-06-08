@@ -4733,7 +4733,7 @@ tasks.register<Exec>("pipelineM91ImageFilterCandidateReadiness") {
 tasks.register<Exec>("pipelineM91ImageFilterOffsetEvidenceIntake") {
     group = "verification"
     description = "Generates and validates M91-IF-3A OffsetImageFilterGM evidence intake without changing support claims."
-    dependsOn("pipelineM91ImageFilterCandidateReadiness")
+    dependsOn("pipelineM91ImageFilterOffsetGraphOwnershipProof")
     commandLine("python3", "scripts/m91_image_filter_offset_evidence_intake.py")
     inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_offset_evidence_intake.py"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-candidate-readiness/summary.json"))
@@ -4742,7 +4742,25 @@ tasks.register<Exec>("pipelineM91ImageFilterOffsetEvidenceIntake") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-gpu.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/for468-skia-gm-offsetimagefilter-evidence.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/d51-offsetimagefilter-row-specific-evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/graph.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/intermediate-ownership.json"))
     outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-offset-evidence-intake"))
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<Exec>("pipelineM91ImageFilterOffsetGraphOwnershipProof") {
+    group = "verification"
+    description = "Generates and validates M91-IF-3A OffsetImageFilterGM graph and ownership proof without changing support claims."
+    dependsOn("pipelineM91ImageFilterCandidateReadiness")
+    commandLine("python3", "scripts/m91_image_filter_offset_graph_ownership_proof.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_offset_graph_ownership_proof.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-candidate-readiness/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/d51-offsetimagefilter-row-specific-evidence.json"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/OffsetImageFilterGM.kt"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-offset-graph-ownership-proof"))
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/graph.json"))
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/intermediate-ownership.json"))
     outputs.upToDateWhen { false }
 }
 

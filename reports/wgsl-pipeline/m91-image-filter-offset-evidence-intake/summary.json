@@ -3,14 +3,14 @@
   "counters": {
     "dashboardPromotions": 0,
     "historicalSignals": 8,
-    "missingEvidenceItems": 11,
+    "missingEvidenceItems": 9,
     "newSupportClaims": 0,
-    "presentEvidenceItems": 0,
+    "presentEvidenceItems": 2,
     "promotionalHistoricalSignals": 0,
     "readinessDelta": 0.0,
     "requiredEvidenceItems": 11,
     "thresholdChanges": 0,
-    "validatedNonPromotionalEvidenceItems": 0
+    "validatedNonPromotionalEvidenceItems": 2
   },
   "generatedBy": "scripts/m91_image_filter_offset_evidence_intake.py",
   "historicalSignals": [
@@ -88,18 +88,18 @@
     {
       "kind": "row-specific graph dump",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/graph.json",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "status": "missing",
-      "validatedNonPromotional": false
+      "status": "present-non-promotional",
+      "validatedNonPromotional": true
     },
     {
       "kind": "intermediate texture ownership",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/intermediate-ownership.json",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "status": "missing",
-      "validatedNonPromotional": false
+      "status": "present-non-promotional",
+      "validatedNonPromotional": true
     },
     {
       "kind": "row-specific Skia/reference artifact",
@@ -193,7 +193,7 @@
     "visibilityPolicyOnlyArtifacts": true
   },
   "schemaVersion": 1,
-  "status": "blocked-by-missing-row-specific-evidence",
+  "status": "partial-row-specific-evidence-present-non-promotional",
   "supportGuard": {
     "adjacentSimpleOffsetEvidenceInherited": false,
     "arbitraryLayerPrepass": false,
