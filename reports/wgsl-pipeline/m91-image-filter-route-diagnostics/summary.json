@@ -1,0 +1,67 @@
+{
+  "classification": "image-filter-route-diagnostics-no-new-rendering-support",
+  "counters": {
+    "cpuRouteDiagnostics": 2,
+    "dashboardPromotions": 0,
+    "diagnosticRows": 2,
+    "gpuRouteDiagnostics": 2,
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0,
+    "thresholdChanges": 0
+  },
+  "diagnostics": [
+    {
+      "cpu": "cpu.image-filter.image-make-with-filter.expected-unsupported",
+      "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+      "gpu": "webgpu.image-filter.image-make-with-filter.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-gpu.json",
+      "rowId": "skia-gm-imagemakewithfilter",
+      "sourceGm": "ImageMakeWithFilterGM",
+      "supportClaim": false
+    },
+    {
+      "cpu": "cpu.image-filter.offset-image-filter.expected-unsupported",
+      "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+      "gpu": "webgpu.image-filter.offset-image-filter.expected-unsupported",
+      "policyOnly": true,
+      "routeCpuDiagnostic": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-cpu.json",
+      "routeGpuDiagnostic": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-gpu.json",
+      "rowId": "skia-gm-offsetimagefilter",
+      "sourceGm": "OffsetImageFilterGM",
+      "supportClaim": false
+    }
+  ],
+  "generatedBy": "scripts/m91_image_filter_route_diagnostics.py",
+  "inputs": {
+    "imageFilterSpec": ".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md",
+    "pmSpec": ".upstream/specs/skia-like-realtime/05-pm-demo-and-release-candidate.md",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "selection": "reports/wgsl-pipeline/m91-image-filter-slice/selection.json"
+  },
+  "milestone": "M91",
+  "schemaVersion": 1,
+  "status": "generated evidence",
+  "supportGuard": {
+    "arbitraryLayerPrepass": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "broadImageFilterDAGSupport": false,
+    "cpuReadbackFallbackAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "ganeshPort": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "policyOnlyPromoted": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ticket": "M91-IF-1",
+  "validationCommands": [
+    "rtk python3 scripts/m91_image_filter_route_diagnostics.py",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterRouteDiagnostics",
+    "rtk git diff --check"
+  ]
+}

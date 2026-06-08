@@ -1,0 +1,36 @@
+{
+  "backend": "WebGPU",
+  "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+  "graphFactsRequired": [
+    "offset node bounds",
+    "input image lifetime",
+    "intermediate texture ownership",
+    "row-specific reference/render/diff artifacts"
+  ],
+  "milestone": "M91",
+  "nonClaims": {
+    "arbitraryLayerPrepass": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "broadImageFilterDAGSupport": false,
+    "cpuReadbackFallbackAdded": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "ganeshPort": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "policyOnlyPromoted": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "policy": "Future support requires a row-specific graph dump, intermediate texture ownership, Skia/reference artifacts, CPU/GPU route evidence, render artifacts, diff/stat artifacts, performance impact, and fallbackReason=none without adding a generic image-filter DAG compiler, CPU/readback fallback, threshold change, scoring change, or hidden fallback-policy change.",
+  "policyOnlyArtifact": true,
+  "route": "webgpu.image-filter.offset-image-filter.expected-unsupported",
+  "rowId": "skia-gm-offsetimagefilter",
+  "schemaVersion": 1,
+  "sourceGm": "OffsetImageFilterGM",
+  "sourceRegistry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+  "sourceSelection": "reports/wgsl-pipeline/m91-image-filter-slice/selection.json",
+  "status": "expected-unsupported",
+  "ticket": "M91-IF-1"
+}
