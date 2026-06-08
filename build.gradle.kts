@@ -902,6 +902,22 @@ tasks.register("pipelineM86FidelityBurndown") {
     }
 }
 
+tasks.register<Exec>("pipelineM89GmRegistry") {
+    group = "verification"
+    description = "Generates the M89 normalized GM support/refusal registry without changing support claims."
+    dependsOn("pipelineM66GmPromotionWave", "pipelineM86FidelityBurndown")
+    commandLine("python3", "scripts/m89_gm_registry.py")
+    inputs.file(layout.projectDirectory.file("scripts/m89_gm_registry.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-visibility.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m89-gm-registry"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register("pipelineM57PathAaClipMicroPromotionPack") {
     group = "verification"
     description = "Materializes M57 bounded Path AA / clip micro-promotion generated scene rows and artifacts."
@@ -4574,6 +4590,21 @@ tasks.register<Exec>("validateM88ReleaseCandidate2") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m87-runtime-effect-live-editing/evidence.json"))
 }
 
+tasks.register<Exec>("validateM89GmRegistry") {
+    group = "verification"
+    description = "Validates checked-in M89 GM support/refusal registry evidence."
+    dependsOn("pipelineM89GmRegistry")
+    commandLine("python3", "scripts/validate_m89_gm_registry.py")
+    inputs.file(layout.projectDirectory.file("scripts/validate_m89_gm_registry.py"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m89-gm-registry"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-visibility.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"))
+}
+
 tasks.register<Exec>("validateMepNextFeatureBreadth") {
     group = "verification"
     description = "Validates checked-in MEP-NEXT FOR-189..192 feature breadth evidence without Kadre native dependencies."
@@ -4648,6 +4679,7 @@ tasks.register("pipelinePmBundle") {
     dependsOn(
         "pipelineM65RuntimeSmoke",
         "pipelineM86FidelityBurndown",
+        "validateM89GmRegistry",
         "validateM88ReleaseCandidate2",
         "validateMepNextFeatureBreadth",
         "pipelineSceneDashboardGate",
