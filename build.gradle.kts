@@ -4846,6 +4846,19 @@ tasks.register<Exec>("pipelineM90PathAaHairModesEvidenceIntake") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaHairModesEvidenceGate") {
+    group = "verification"
+    description = "Validates the M90-PAA-3F-REF HairModesGM row-specific evidence gate without changing support claims."
+    commandLine("python3", "scripts/validate_m90_hairmodes_evidence_gate.py", "--check-worktree-scope")
+    inputs.file(layout.projectDirectory.file("scripts/validate_m90_hairmodes_evidence_gate.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-08-m90-hairmodes-evidence-gate.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-hairmodes-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-hairmodes-evidence-intake/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairmodes/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairmodes/route-gpu.json"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM90PathAaScaledStrokesEvidenceIntake") {
     group = "verification"
     description = "Generates and validates M90-PAA-3G ScaledStrokesGM evidence intake without changing support claims."
