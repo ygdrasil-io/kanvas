@@ -4686,6 +4686,27 @@ tasks.register<Exec>("pipelineM90PathAaHairlinesEvidenceIntake") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaStrokeRectEvidenceIntake") {
+    group = "verification"
+    description = "Generates and validates M90-PAA-3B StrokeRectGM evidence intake without changing support claims."
+    dependsOn("pipelineM90PathAaCandidateReadiness")
+    commandLine("python3", "scripts/m90_path_aa_strokerect_evidence_intake.py")
+    inputs.file(layout.projectDirectory.file("scripts/m90_path_aa_strokerect_evidence_intake.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokerect/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-strokerect/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/test-similarity-scores-webgpu.properties"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeRectWebGpuTest.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/StrokeRectCrossBackendTest.kt"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/route-gpu.json"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m90-path-aa-strokerect-evidence-intake"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateMepNextFeatureBreadth") {
     group = "verification"
     description = "Validates checked-in MEP-NEXT FOR-189..192 feature breadth evidence without Kadre native dependencies."
