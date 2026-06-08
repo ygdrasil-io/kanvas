@@ -1,0 +1,72 @@
+        {
+          "sceneId": "paint.bitmap-rect.nearest.fixture.v1",
+          "scopeId": "bitmap-rect.nearest.fixture.simple.v1",
+          "status": "pass",
+          "supportScope": "simple-fixture-backed-bitmap-rect-nearest",
+          "supportClaim": true,
+          "fixtureBacked": true,
+          "fixtureId": "kanvas-fixture-checker-8x6-rgba8888-v1",
+          "fixtureSha256": "bdd9a379cdc796aa06e09414cb757cb60490b01ad99e94bd929aa3951681ec3d",
+          "cpuRouteIdentifier": "cpu.paint.bitmap-rect.nearest.fixture",
+          "webGpuRouteIdentifier": "webgpu.image.bitmap-rect.nearest.fixture",
+          "sampler": "nearest",
+          "filterMode": "kNearest",
+          "tileMode": "kClamp",
+          "srcRectConstraint": "kStrict",
+          "blendMode": "kSrcOver",
+          "colorSpacePolicy": "srgb-unmanaged-fixture-oracle",
+          "cpuSampledPixels": 4608,
+          "webGpuSampledPixels": 4608,
+          "tolerance": 0,
+          "cpuSimilarityThreshold": 99.00,
+          "webGpuSimilarityThreshold": 99.00,
+          "cpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 0,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "webGpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 0,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "globalThresholdChanged": false,
+          "fallbackPolicy": "none-for-supported-simple-fixture-backed-nearest-bitmap-rect",
+          "webGpuAdapter": "Apple M2 Max",
+          "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/reference.png",
+          "cpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/cpu.png",
+          "webGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/webgpu.png",
+          "cpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/cpu-diff.png",
+          "webGpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/webgpu-diff.png",
+          "routeCpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-cpu.json",
+          "routeWebGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-webgpu.json",
+          "nonClaims": ["no-broad-image-claim", "no-codec-decode-claim", "no-arbitrary-texture-claim", "no-mipmap-claim", "no-tile-mode-claim", "no-color-managed-decode-claim", "no-texture-atlas-claim", "no-perspective-transform-claim"]
+        }
