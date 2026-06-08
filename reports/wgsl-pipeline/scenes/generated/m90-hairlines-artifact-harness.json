@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "manual-m90-hairlines-artifact-harness",
+  "milestone": "M90",
+  "ticket": "M90-PAA-3A-REF",
+  "classification": "hairlines-artifact-harness-added-no-dashboard-promotion",
+  "sceneId": "skia-gm-hairlines",
+  "inventoryId": "skia-gm-hairlines",
+  "sourceGm": "HairlinesGM",
+  "status": "expected-unsupported",
+  "supportClaim": false,
+  "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+  "policyOnlyRowRetained": true,
+  "harness": {
+    "testFile": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/HairlinesSceneCaptureTest.kt",
+    "gmClass": "org.skia.tests.HairlinesGM",
+    "referenceName": "hairlines",
+    "referencePath": "skia-integration-tests/src/test/resources/original-888/hairlines.png",
+    "cpuRenderer": "TestUtils.runGmTest(HairlinesGM())",
+    "webgpuRenderer": "WebGpuSink.draw(ctx, HairlinesGM())",
+    "writeProperty": "kanvas.sceneEvidence.write",
+    "artifactDir": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines",
+    "cpuTolerance": 1,
+    "gpuTolerance": "TestUtils.TEXTUAL_GM_TOLERANCE",
+    "cpuMinimumSimilarity": 96.0,
+    "gpuPromotionThreshold": 99.95,
+    "globalDashboardPromotionAllowed": false,
+    "globalThresholdChangeAllowed": false,
+    "neighborEvidenceInheritanceAllowed": false
+  },
+  "artifactContract": {
+    "writeCommand": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
+    "writeMode": "opt-in",
+    "checkedInRenderedArtifactsRequiredByThisItem": false,
+    "alwaysExpectedWhenWriteEnabled": [
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/skia.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-diff.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-cpu.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-gpu.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/stats.json"
+    ],
+    "adapterExpectedWhenRendered": [
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-diff.png"
+    ]
+  },
+  "promotionGate": {
+    "supportByStructure": false,
+    "promotionAllowedWithoutArtifacts": false,
+    "promotionAllowedWithoutFallbackReasonNone": false,
+    "requiredForFuturePromotion": [
+      "row-specific Skia reference PNG",
+      "CPU route with fallbackReason=none",
+      "WebGPU route with fallbackReason=none",
+      "CPU and WebGPU render artifacts",
+      "CPU and WebGPU diff/stat artifacts",
+      "performance impact artifacts",
+      "similarity at or above the row threshold without changing global thresholds"
+    ],
+    "missingArtifactStatus": "expected-unsupported",
+    "stableUnsupportedReason": "coverage.hairline.row-specific-artifacts-required"
+  },
+  "scoreImpact": {
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0,
+    "dashboardPromotion": false,
+    "thresholdChanged": false,
+    "edgeBudgetChanged": false
+  },
+  "nonClaims": {
+    "rowSupportClaimed": false,
+    "broadPathAASupport": false,
+    "broadHairlineSupport": false,
+    "broadStrokeSupport": false,
+    "broadDashSupport": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "dynamicSkSLCompiler": false,
+    "skSLIR": false,
+    "skSLVM": false,
+    "thresholdChanged": false,
+    "dashboardPromoted": false,
+    "edgeBudgetChanged": false,
+    "belowThresholdCountedAsProductionGap": false
+  },
+  "validationCommands": [
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-m90-hairlines-harness-pycache python3 -m py_compile scripts/validate_m90_hairlines_artifact_harness.py",
+    "rtk python3 scripts/validate_m90_hairlines_artifact_harness.py",
+    "rtk ./gradlew --no-daemon pipelineM90PathAaHairlinesArtifactHarness",
+    "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
+    "rtk git diff --check"
+  ],
+  "optionalArtifactValidationCommand": "rtk python3 scripts/validate_m90_hairlines_artifact_harness.py --require-artifacts"
+}

@@ -4891,6 +4891,22 @@ tasks.register<Exec>("pipelineM90PathAaCandidateIntakeCloseout") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaHairlinesArtifactHarness") {
+    group = "verification"
+    description = "Validates the M90-PAA-3A-REF HairlinesGM artifact harness without promoting support claims."
+    commandLine("python3", "scripts/validate_m90_hairlines_artifact_harness.py")
+    inputs.file(layout.projectDirectory.file("scripts/validate_m90_hairlines_artifact_harness.py"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/HairlinesSceneCaptureTest.kt"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-08-m90-hairlines-artifact-harness.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-candidate-intake-closeout/summary.json"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/kotlin/org/skia/tests/Round8Test.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateMepNextFeatureBreadth") {
     group = "verification"
     description = "Validates checked-in MEP-NEXT FOR-189..192 feature breadth evidence without Kadre native dependencies."
