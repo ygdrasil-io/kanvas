@@ -836,6 +836,36 @@ tasks.register("pipelineD50Lot1DashboardVisibilityPack") {
     }
 }
 
+tasks.register("pipelineDashHairlineStrokeDashboardVisibilityPack") {
+    group = "verification"
+    description = "Materializes policy-only dash/hairline/stroke GM rows so unsupported candidates remain visible in the scene dashboard."
+
+    val scriptFile = layout.projectDirectory.file("scripts/m54_hard_feature_depth_pack.py")
+    val contractFile = layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json")
+    val sourceArtifactDir = layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts")
+    val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-dash-hairline-stroke-generated")
+    inputs.file(scriptFile)
+    inputs.file(contractFile)
+    inputs.dir(sourceArtifactDir)
+    outputs.dir(outputDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        providers.exec {
+            commandLine(
+                "python3",
+                scriptFile.asFile.absolutePath,
+                "--project-root",
+                rootDir.absolutePath,
+                "--contract",
+                contractFile.asFile.relativeTo(rootDir).path,
+                "--output-dir",
+                outputDir.get().asFile.relativeTo(rootDir).path,
+            )
+        }.result.get().assertNormalExitValue()
+    }
+}
+
 tasks.register("pipelineM86FidelityBurndown") {
     group = "verification"
     description = "Generates M86 fidelity burn-down ranking, root-cause classification, and PM evidence."
@@ -1132,6 +1162,7 @@ tasks.register("pipelineGeneratedSceneExport") {
     val m64GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m64-generated")
     val m66GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m66-generated")
     val d50GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-d50-lot1-generated")
+    val dashHairlineStrokeGeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-dash-hairline-stroke-generated")
     val m57GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m57-generated")
     val m60GeneratedDir = layout.buildDirectory.dir("reports/wgsl-pipeline-m60-generated")
     val outputDir = layout.buildDirectory.dir("reports/wgsl-pipeline-generated-scenes")
@@ -1145,6 +1176,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         "pipelineM64RegisteredRuntimeEffectsPack",
         "pipelineM66GmPromotionWave",
         "pipelineD50Lot1DashboardVisibilityPack",
+        "pipelineDashHairlineStrokeDashboardVisibilityPack",
         "pipelineM57PathAaClipMicroPromotionPack",
         "pipelineM60NestedClipPathAaPromotionPack",
     )
@@ -1160,6 +1192,7 @@ tasks.register("pipelineGeneratedSceneExport") {
     inputs.dir(m64GeneratedDir)
     inputs.dir(m66GeneratedDir)
     inputs.dir(d50GeneratedDir)
+    inputs.dir(dashHairlineStrokeGeneratedDir)
     inputs.dir(m57GeneratedDir)
     inputs.dir(m60GeneratedDir)
     outputs.dir(outputDir)
@@ -1177,6 +1210,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         val m64GeneratedRoot = m64GeneratedDir.get().asFile
         val m66GeneratedRoot = m66GeneratedDir.get().asFile
         val d50GeneratedRoot = d50GeneratedDir.get().asFile
+        val dashHairlineStrokeGeneratedRoot = dashHairlineStrokeGeneratedDir.get().asFile
         val m57GeneratedRoot = m57GeneratedDir.get().asFile
         val m60GeneratedRoot = m60GeneratedDir.get().asFile
         val manifest = manifestFile.asFile
@@ -1221,6 +1255,7 @@ tasks.register("pipelineGeneratedSceneExport") {
             val normalized = relativePath.replace('\\', '/')
             return listOf(
                 m60GeneratedRoot.resolve(normalized),
+                dashHairlineStrokeGeneratedRoot.resolve(normalized),
                 d50GeneratedRoot.resolve(normalized),
                 m66GeneratedRoot.resolve(normalized),
                 m64GeneratedRoot.resolve(normalized),
@@ -1369,6 +1404,15 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
+        val dashHairlineStrokeManifest = dashHairlineStrokeGeneratedRoot.resolve("data/dash-hairline-stroke-generated-scenes.json")
+        val dashHairlineStrokeScenes = if (dashHairlineStrokeManifest.isFile) {
+            val dashHairlineStrokeRoot = JsonSlurper().parse(dashHairlineStrokeManifest) as? Map<*, *>
+                ?: throw GradleException("Dash/hairline/stroke generated scene manifest root must be a JSON object: ${dashHairlineStrokeManifest.relativeTo(rootDir)}")
+            dashHairlineStrokeRoot["scenes"] as? List<*>
+                ?: throw GradleException("Dash/hairline/stroke generated scene manifest must contain a `scenes` array: ${dashHairlineStrokeManifest.relativeTo(rootDir)}")
+        } else {
+            emptyList<Any?>()
+        }
         val m60Manifest = m60GeneratedRoot.resolve("data/m60-generated-scenes.json")
         val m60Scenes = if (m60Manifest.isFile) {
             val m60Root = JsonSlurper().parse(m60Manifest) as? Map<*, *>
@@ -1378,7 +1422,7 @@ tasks.register("pipelineGeneratedSceneExport") {
         } else {
             emptyList<Any?>()
         }
-        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes + m60Scenes + m61Scenes + m62Scenes + m63Scenes + m64Scenes + m66Scenes + d50Scenes
+        val allGeneratedScenes = scenes + m52Scenes + m53Scenes + m54Scenes + m57Scenes + m60Scenes + m61Scenes + m62Scenes + m63Scenes + m64Scenes + m66Scenes + d50Scenes + dashHairlineStrokeScenes
         val normalizedScenes = mutableListOf<Any?>()
 
         allGeneratedScenes.forEachIndexed { index, rawScene ->
@@ -1459,6 +1503,8 @@ tasks.register("pipelineGeneratedSceneExport") {
                 "build/reports/wgsl-pipeline-m54-generated/data/m54-generated-scenes.json",
                 "build/reports/wgsl-pipeline-m57-generated/data/m57-generated-scenes.json",
                 "build/reports/wgsl-pipeline-m66-generated/data/m66-generated-scenes.json",
+                "build/reports/wgsl-pipeline-d50-lot1-generated/data/d50-gm-dashboard-generated-scenes.json",
+                "build/reports/wgsl-pipeline-dash-hairline-stroke-generated/data/dash-hairline-stroke-generated-scenes.json",
             ),
             "scenes" to normalizedScenes,
         )
@@ -3051,7 +3097,6 @@ tasks.register("pipelineSceneDashboardGate") {
             "m66-path-aa-dashing-edge-budget-refusal" to "coverage.edge-count-exceeded",
             "m66-image-filter-crop-prepass-refusal" to "image-filter.crop-input-nonnull-prepass-required",
             "m66-font-complex-shaping-refusal" to "font.complex-shaping-requires-explicit-shaper",
-            "skia-gm-drawminibitmaprect" to "bitmap.drawminibitmaprect.row-specific-artifacts-required",
             "skia-gm-image" to "image.imagegm.row-specific-artifacts-required",
             "skia-gm-imagesource" to "image.imagesource.row-specific-artifacts-required",
             "skia-gm-offsetimagefilter" to "image-filter.offset.row-specific-artifacts-required",
@@ -3063,6 +3108,15 @@ tasks.register("pipelineSceneDashboardGate") {
             "skia-gm-runtimeimagefilter" to "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
             "skia-gm-shadertext3" to "font.shadertext3.row-specific-artifacts-required",
             "skia-gm-gradients2ptconical" to "gradient.2ptconical.row-specific-artifacts-required",
+            "skia-gm-dashcubics" to "coverage.dash-cubic.row-specific-artifacts-required",
+            "skia-gm-dashing" to "coverage.dashing.row-specific-artifacts-required",
+            "skia-gm-hairlines" to "coverage.hairline.row-specific-artifacts-required",
+            "skia-gm-hairmodes" to "coverage.hairmode.row-specific-artifacts-required",
+            "skia-gm-scaledstrokes" to "coverage.scaled-stroke.row-specific-artifacts-required",
+            "skia-gm-strokedlines" to "coverage.stroked-lines.row-specific-artifacts-required",
+            "skia-gm-strokerect" to "coverage.stroke-rect.row-specific-artifacts-required",
+            "skia-gm-strokerects" to "coverage.stroke-rects.row-specific-artifacts-required",
+            "skia-gm-thinstrokedrects" to "coverage.thin-stroked-rects.row-specific-artifacts-required",
         )
         val staticPathAaSentinels = mapOf(
             "path-aa-stroke-outline-fallback" to "coverage.stroke-outline-edge-count-exceeded",

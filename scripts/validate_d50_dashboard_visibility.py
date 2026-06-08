@@ -19,7 +19,6 @@ DASHBOARD = ROOT / "build/reports/wgsl-pipeline-scenes/data/scenes.json"
 GENERATED = ROOT / "build/reports/wgsl-pipeline-d50-lot1-generated/data/d50-gm-dashboard-generated-scenes.json"
 
 EXPECTED_ROWS = {
-    "skia-gm-drawminibitmaprect": "bitmap.drawminibitmaprect.row-specific-artifacts-required",
     "skia-gm-image": "image.imagegm.row-specific-artifacts-required",
     "skia-gm-imagesource": "image.imagesource.row-specific-artifacts-required",
     "skia-gm-offsetimagefilter": "image-filter.offset.row-specific-artifacts-required",
@@ -32,11 +31,29 @@ EXPECTED_ROWS = {
     "skia-gm-shadertext3": "font.shadertext3.row-specific-artifacts-required",
     "skia-gm-gradients2ptconical": "gradient.2ptconical.row-specific-artifacts-required",
 }
-EXPECTED_PROJECTED = {
+FORBIDDEN_EXPECTED_UNSUPPORTED_ROWS = {"skia-gm-drawminibitmaprect"}
+DASH_HAIRLINE_ROWS = {
+    "skia-gm-dashcubics",
+    "skia-gm-dashing",
+    "skia-gm-hairlines",
+    "skia-gm-hairmodes",
+    "skia-gm-scaledstrokes",
+    "skia-gm-strokedlines",
+    "skia-gm-strokerect",
+    "skia-gm-strokerects",
+    "skia-gm-thinstrokedrects",
+}
+EXPECTED_D50_PROJECTED = {
     "total": 105,
-    "pass": 70,
-    "expected-unsupported": 35,
+    "pass": 71,
+    "expected-unsupported": 34,
     "inventoryDerived": 57,
+}
+EXPECTED_D53_PROJECTED = {
+    "total": 114,
+    "pass": 71,
+    "expected-unsupported": 43,
+    "inventoryDerived": 66,
 }
 EXPECTED_REMAPS = {
     "skia-gm-runtimeintrinsics": "diagnostic-only",
@@ -82,7 +99,6 @@ def validate_gradle_wiring() -> None:
         "reports/wgsl-pipeline-d50-lot1-generated",
         "d50-gm-dashboard-visibility.json",
         "data/d50-gm-dashboard-generated-scenes.json",
-        "skia-gm-drawminibitmaprect\" to \"bitmap.drawminibitmaprect.row-specific-artifacts-required",
         "skia-gm-image\" to \"image.imagegm.row-specific-artifacts-required",
         "skia-gm-imagesource\" to \"image.imagesource.row-specific-artifacts-required",
         "skia-gm-offsetimagefilter\" to \"image-filter.offset.row-specific-artifacts-required",
@@ -97,14 +113,27 @@ def validate_gradle_wiring() -> None:
     ]
     for marker in markers:
         require(marker in text, f"build.gradle.kts missing marker: {marker}")
+    require(
+        'skia-gm-drawminibitmaprect" to "bitmap.drawminibitmaprect.row-specific-artifacts-required' not in text,
+        "build.gradle.kts must not allow an active skia-gm-drawminibitmaprect expected-unsupported row after D52-5",
+    )
 
 
 def validate_contract() -> None:
     root = load_json(CONTRACT)
     require(root.get("generatedBy") == "pipelineD50Lot1DashboardVisibilityPack", "contract generatedBy mismatch")
     require(root.get("outputManifest") == "data/d50-gm-dashboard-generated-scenes.json", "contract outputManifest mismatch")
+    require(root.get("selectedCandidateCount") == len(EXPECTED_ROWS), "contract selectedCandidateCount mismatch")
+    d52 = root.get("d52Interaction")
+    require(isinstance(d52, dict), "contract must document D52-5 interaction")
+    require(d52.get("excludedRow") == "skia-gm-drawminibitmaprect", "contract D52 excluded row mismatch")
+    require(d52.get("activePassRow") == "d52-drawminibitmaprect", "contract D52 active pass row mismatch")
     scenes = scenes_from(CONTRACT)
     require([scene.get("id") for scene in scenes] == list(EXPECTED_ROWS), "contract row order mismatch")
+    require(
+        not FORBIDDEN_EXPECTED_UNSUPPORTED_ROWS.intersection(scene.get("id") for scene in scenes),
+        "contract must not contain skia-gm-drawminibitmaprect expected-unsupported after D52-5",
+    )
     for scene in scenes:
         scene_id = scene["id"]
         fallback = EXPECTED_ROWS[scene_id]
@@ -143,6 +172,10 @@ def validate_generated_projection() -> None:
     generated = scenes_from(GENERATED)
     generated_by_id = {scene["id"]: scene for scene in generated}
     require(set(generated_by_id) == set(EXPECTED_ROWS), f"generated row ids mismatch: {sorted(generated_by_id)}")
+    require(
+        not FORBIDDEN_EXPECTED_UNSUPPORTED_ROWS.intersection(generated_by_id),
+        "generated D50 rows must not include skia-gm-drawminibitmaprect after D52-5",
+    )
     for scene_id, fallback in EXPECTED_ROWS.items():
         scene = generated_by_id[scene_id]
         require(scene.get("status") == "expected-unsupported", f"{scene_id}: generated status mismatch")
@@ -160,9 +193,16 @@ def validate_generated_projection() -> None:
 
     dashboard = scenes_from(DASHBOARD)
     dashboard_ids = {scene["id"] for scene in dashboard}
-    overlap = dashboard_ids.intersection(EXPECTED_ROWS)
-    require(not overlap, f"D50 visibility rows already exist before projection: {sorted(overlap)}")
-    projected = dashboard + generated
+    forbidden = sorted(dashboard_ids.intersection(FORBIDDEN_EXPECTED_UNSUPPORTED_ROWS))
+    require(not forbidden, f"dashboard must not contain contradictory expected-unsupported rows: {forbidden}")
+    dashboard_d50_rows = dashboard_ids.intersection(EXPECTED_ROWS)
+    if dashboard_d50_rows:
+        require(dashboard_d50_rows == set(EXPECTED_ROWS), f"dashboard D50 row set mismatch: {sorted(dashboard_d50_rows)}")
+        projected = dashboard
+        expected = EXPECTED_D53_PROJECTED if dashboard_ids.intersection(DASH_HAIRLINE_ROWS) else EXPECTED_D50_PROJECTED
+    else:
+        projected = dashboard + generated
+        expected = EXPECTED_D50_PROJECTED
     status_counts = Counter(scene.get("status") for scene in projected)
     inventory_derived = sum(
         1
@@ -175,7 +215,7 @@ def validate_generated_projection() -> None:
         "expected-unsupported": status_counts["expected-unsupported"],
         "inventoryDerived": inventory_derived,
     }
-    require(counters == EXPECTED_PROJECTED, f"projected counters mismatch: {counters} != {EXPECTED_PROJECTED}")
+    require(counters == expected, f"projected counters mismatch: {counters} != {expected}")
 
 
 def main() -> int:
