@@ -4681,6 +4681,11 @@ tasks.register<Exec>("pipelineM90PathAaHairlinesEvidenceIntake") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-gpu.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
     inputs.file(layout.projectDirectory.file("gpu-raster/test-similarity-scores-webgpu.properties"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("cpu-raster/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("kanvas-skia/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/kotlin/org/skia/tests/Round8Test.kt"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt"))
     inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt"))
     outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake"))
     outputs.upToDateWhen { false }

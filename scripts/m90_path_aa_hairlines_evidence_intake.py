@@ -18,7 +18,12 @@ CANDIDATE_READINESS_JSON = ROOT / "reports/wgsl-pipeline/m90-path-aa-candidate-r
 ROUTE_CPU_JSON = ROOT / "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-cpu.json"
 ROUTE_GPU_JSON = ROOT / "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-gpu.json"
 DASH_HAIRLINE_VISIBILITY_JSON = ROOT / "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"
-SIMILARITY_PROPERTIES = ROOT / "gpu-raster/test-similarity-scores-webgpu.properties"
+GPU_SIMILARITY_PROPERTIES = ROOT / "gpu-raster/test-similarity-scores-webgpu.properties"
+CPU_SIMILARITY_PROPERTIES = ROOT / "skia-integration-tests/test-similarity-scores.properties"
+CPU_RASTER_SIMILARITY_PROPERTIES = ROOT / "cpu-raster/test-similarity-scores.properties"
+KANVAS_SKIA_SIMILARITY_PROPERTIES = ROOT / "kanvas-skia/test-similarity-scores.properties"
+HISTORICAL_CPU_TEST = ROOT / "skia-integration-tests/src/test/kotlin/org/skia/tests/Round8Test.kt"
+HISTORICAL_GM_SOURCE = ROOT / "skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt"
 HISTORICAL_CROSSBACKEND_TEST = ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt"
 OUTPUT_DIR = ROOT / "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake"
 SUMMARY_JSON = OUTPUT_DIR / "summary.json"
@@ -115,7 +120,22 @@ def load_json(path: Path) -> dict[str, Any]:
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def load_property_value(path: Path, key: str) -> str:
+    values: list[str] = []
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        current_key, value = line.split("=", 1)
+        if current_key.strip() == key:
+            values.append(value.strip())
+    require(len(values) == 1, f"{rel(path)} must contain exactly one {key} entry")
+    return values[0]
 
 
 def registry_row(registry: dict[str, Any]) -> dict[str, Any]:
@@ -192,23 +212,79 @@ def visibility_row(visibility: dict[str, Any]) -> dict[str, Any]:
 
 
 def historical_signals() -> list[dict[str, Any]]:
-    require(HISTORICAL_CROSSBACKEND_TEST.is_file(), f"missing historical crossbackend test: {rel(HISTORICAL_CROSSBACKEND_TEST)}")
-    require(SIMILARITY_PROPERTIES.is_file(), f"missing similarity properties: {rel(SIMILARITY_PROPERTIES)}")
-    similarity_text = SIMILARITY_PROPERTIES.read_text(encoding="utf-8")
-    require("HairlinesGM=98.97" in similarity_text, "HairlinesGM historical score changed or missing")
+    for path in [
+        HISTORICAL_CPU_TEST,
+        HISTORICAL_GM_SOURCE,
+        HISTORICAL_CROSSBACKEND_TEST,
+        GPU_SIMILARITY_PROPERTIES,
+        CPU_SIMILARITY_PROPERTIES,
+        CPU_RASTER_SIMILARITY_PROPERTIES,
+        KANVAS_SKIA_SIMILARITY_PROPERTIES,
+    ]:
+        require(path.is_file(), f"missing historical signal: {rel(path)}")
+    cpu_test = HISTORICAL_CPU_TEST.read_text(encoding="utf-8")
+    gm_source = HISTORICAL_GM_SOURCE.read_text(encoding="utf-8")
+    crossbackend_test = HISTORICAL_CROSSBACKEND_TEST.read_text(encoding="utf-8")
+    require('runGm(HairlinesGM(), "HairlinesGM", 96.0)' in cpu_test, "Hairlines CPU test floor changed or missing")
+    require("public class HairlinesGM" in gm_source, "HairlinesGM source class changed or missing")
+    require('override fun getName(): String = "hairlines"' in gm_source, "HairlinesGM name changed")
+    require("SkISize.Make(1250, 1250)" in gm_source, "HairlinesGM size changed")
+    require("val widths = floatArrayOf(0f, 0.5f, 1.5f)" in gm_source, "HairlinesGM width set changed")
+    require("val alphaValue = intArrayOf(0xFF, 0x40)" in gm_source, "HairlinesGM alpha set changed")
+    require("gm = HairlinesGM()" in crossbackend_test, "Hairlines crossbackend GM changed or missing")
+    require("rasterFloor = 97.63" in crossbackend_test, "Hairlines crossbackend raster floor changed or missing")
+    require("gpuFloor = 98.92" in crossbackend_test, "Hairlines crossbackend GPU floor changed or missing")
+    require("rasterTolerance = 1" in crossbackend_test, "Hairlines crossbackend raster tolerance changed or missing")
+    require(load_property_value(GPU_SIMILARITY_PROPERTIES, SOURCE_GM) == "98.97", "HairlinesGM GPU historical score changed or missing")
+    require(load_property_value(CPU_SIMILARITY_PROPERTIES, SOURCE_GM) == "97.678016", "HairlinesGM CPU historical score changed or missing")
+    require(load_property_value(CPU_RASTER_SIMILARITY_PROPERTIES, SOURCE_GM) == "97.678016", "HairlinesGM cpu-raster score changed or missing")
+    require(load_property_value(KANVAS_SKIA_SIMILARITY_PROPERTIES, SOURCE_GM) == "97.690624", "HairlinesGM kanvas-skia score changed or missing")
     return [
+        {
+            "kind": "historical-cpu-test",
+            "path": rel(HISTORICAL_CPU_TEST),
+            "promotional": False,
+            "reason": "Historical CPU HairlinesGM test is not a M90 row-specific CPU/WebGPU artifact bundle and does not update the M89 registry row.",
+        },
+        {
+            "kind": "historical-gm-source-port",
+            "path": rel(HISTORICAL_GM_SOURCE),
+            "promotional": False,
+            "reason": "The existing Kotlin GM source is a historical port signal only; it is not row-specific route, diff/stat, or performance evidence.",
+        },
         {
             "kind": "historical-crossbackend-test",
             "path": rel(HISTORICAL_CROSSBACKEND_TEST),
             "promotional": False,
-            "reason": "Historical test signal is not row-specific M90 evidence and does not provide current skia/cpu/gpu/diff/stat/perf artifacts.",
+            "reason": "Historical cross-backend floors are provenance only; they do not replace current skia/cpu/gpu/diff/stat/perf evidence.",
         },
         {
-            "kind": "historical-similarity-floor",
-            "path": rel(SIMILARITY_PROPERTIES),
+            "kind": "historical-gpu-similarity-floor",
+            "path": rel(GPU_SIMILARITY_PROPERTIES),
             "observed": "HairlinesGM=98.97",
             "promotional": False,
             "reason": "A historical similarity score is not a support claim; below-threshold/tolerance-only status is not counted as a production missing feature.",
+        },
+        {
+            "kind": "historical-cpu-similarity-floor",
+            "path": rel(CPU_SIMILARITY_PROPERTIES),
+            "observed": "HairlinesGM=97.678016",
+            "promotional": False,
+            "reason": "A historical CPU score is not a M90 support promotion or a replacement for row-specific route artifacts.",
+        },
+        {
+            "kind": "historical-cpu-raster-score-mirror",
+            "path": rel(CPU_RASTER_SIMILARITY_PROPERTIES),
+            "observed": "HairlinesGM=97.678016",
+            "promotional": False,
+            "reason": "A mirrored historical score file is consistency evidence only, not a CPU/WebGPU promotion artifact.",
+        },
+        {
+            "kind": "historical-kanvas-skia-score-mirror",
+            "path": rel(KANVAS_SKIA_SIMILARITY_PROPERTIES),
+            "observed": "HairlinesGM=97.690624",
+            "promotional": False,
+            "reason": "A mirrored kanvas-skia score is consistency evidence only and does not clear the row-specific M90 evidence contract.",
         },
     ]
 
@@ -257,8 +333,19 @@ def build_summary(
             "routeCpu": rel(ROUTE_CPU_JSON),
             "routeGpu": rel(ROUTE_GPU_JSON),
             "visibility": rel(DASH_HAIRLINE_VISIBILITY_JSON),
-            "similarityProperties": rel(SIMILARITY_PROPERTIES),
+            "gpuSimilarityProperties": rel(GPU_SIMILARITY_PROPERTIES),
+            "cpuSimilarityProperties": rel(CPU_SIMILARITY_PROPERTIES),
+            "cpuRasterSimilarityProperties": rel(CPU_RASTER_SIMILARITY_PROPERTIES),
+            "kanvasSkiaSimilarityProperties": rel(KANVAS_SKIA_SIMILARITY_PROPERTIES),
+            "historicalCpuTest": rel(HISTORICAL_CPU_TEST),
+            "historicalGmSource": rel(HISTORICAL_GM_SOURCE),
             "historicalCrossBackendTest": rel(HISTORICAL_CROSSBACKEND_TEST),
+        },
+        "upstreamReadinessState": {
+            "activeNextRecommendedTicket": "M90-PAA-3A",
+            "activeNextRecommendedRow": ROW_ID,
+            "thisIntakeIsOutOfOrder": False,
+            "reason": "M90-PAA-3A remains the active candidate-readiness recommendation, but this intake is still non-promotional and only inventories missing row-specific evidence.",
         },
         "row": {
             "rowId": ROW_ID,
@@ -338,6 +425,18 @@ def render_markdown(summary: dict[str, Any]) -> str:
     for item in summary["historicalSignals"]:
         observed = f" (`{item['observed']}`)" if "observed" in item else ""
         lines.append(f"- `{item['kind']}`{observed}: `{item['path']}`; promotional=`{item['promotional']}`. {item['reason']}")
+    upstream = summary["upstreamReadinessState"]
+    lines.extend(
+        [
+            "",
+            "## Upstream Readiness State",
+            "",
+            f"- Active next recommended ticket: `{upstream['activeNextRecommendedTicket']}`",
+            f"- Active next recommended row: `{upstream['activeNextRecommendedRow']}`",
+            f"- This intake is out of order: `{upstream['thisIntakeIsOutOfOrder']}`",
+            f"- Reason: {upstream['reason']}",
+        ]
+    )
     ticket = summary["nextRecommendedTicket"]
     lines.extend(
         [
@@ -371,7 +470,7 @@ def validate_summary(summary: dict[str, Any]) -> None:
     require(counters.get("requiredEvidenceItems") == len(REQUIRED_EVIDENCE), "required evidence count changed")
     require(counters.get("presentEvidenceItems") == 0, "present evidence count must remain zero for intake")
     require(counters.get("missingEvidenceItems") == len(REQUIRED_EVIDENCE), "missing evidence count changed")
-    require(counters.get("historicalSignals") == 2, "historical signal count changed")
+    require(counters.get("historicalSignals") == 7, "historical signal count changed")
     require(counters.get("promotionalHistoricalSignals") == 0, "historical signals must remain non-promotional")
     require(counters.get("newSupportClaims") == 0, "intake must not add support claims")
     require(counters.get("readinessDelta") == 0.0, "intake must not move readiness")
@@ -383,11 +482,16 @@ def validate_summary(summary: dict[str, Any]) -> None:
     require(row.get("routeGpu") == "expected-unsupported", "routeGpu must remain expected-unsupported")
     require(isinstance(required, list) and len(required) == len(REQUIRED_EVIDENCE), "requiredEvidence list changed")
     require(all(item.get("present") is False for item in required if isinstance(item, dict)), "required evidence must remain absent")
-    require(isinstance(signals, list) and len(signals) == 2, "historicalSignals list changed")
+    require(isinstance(signals, list) and len(signals) == 7, "historicalSignals list changed")
     require(all(item.get("promotional") is False for item in signals if isinstance(item, dict)), "historical signals must be non-promotional")
     require(isinstance(ticket, dict), "nextRecommendedTicket must be an object")
     require(ticket.get("supportClaimAllowed") is False, "next ticket must not allow support claims")
     require(ticket.get("promotionAllowedWithoutEvidence") is False, "next ticket must block promotion without evidence")
+    upstream = summary.get("upstreamReadinessState")
+    require(isinstance(upstream, dict), "upstreamReadinessState must be an object")
+    require(upstream.get("activeNextRecommendedTicket") == "M90-PAA-3A", "upstream active next ticket changed")
+    require(upstream.get("activeNextRecommendedRow") == ROW_ID, "upstream active next row changed")
+    require(upstream.get("thisIntakeIsOutOfOrder") is False, "Hairlines intake must remain the active recommendation")
     require(summary.get("supportGuard") == NON_CLAIMS, "supportGuard must match the full non-claims contract")
     expected_files = {SUMMARY_JSON, SUMMARY_MD}
     actual_files = {path for path in OUTPUT_DIR.rglob("*") if path.is_file()}
@@ -405,8 +509,10 @@ def main() -> int:
             shutil.rmtree(OUTPUT_DIR)
         summary = build_summary(registry, readiness, route_cpu, route_gpu, visibility)
         write_json(SUMMARY_JSON, summary)
-        SUMMARY_MD.write_text(render_markdown(summary), encoding="utf-8")
-        validate_summary(load_json(SUMMARY_JSON))
+        reloaded = load_json(SUMMARY_JSON)
+        SUMMARY_MD.write_text(render_markdown(reloaded), encoding="utf-8")
+        validate_summary(reloaded)
+        require(SUMMARY_MD.read_text(encoding="utf-8") == render_markdown(reloaded), "summary markdown is not deterministic from summary json")
     except AssertionError as error:
         print(f"m90_path_aa_hairlines_evidence_intake: FAIL: {error}", file=sys.stderr)
         return 1

@@ -20,7 +20,7 @@ This report materializes the `M90-PAA-3A` intake for `skia-gm-hairlines`. It rec
 - Required evidence items: `10`
 - Present evidence items: `0`
 - Missing evidence items: `10`
-- Historical signals: `2`
+- Historical signals: `7`
 - Promotional historical signals: `0`
 - New support claims: `0`
 - Readiness delta: `0.0`
@@ -40,8 +40,20 @@ This report materializes the `M90-PAA-3A` intake for `skia-gm-hairlines`. It rec
 
 ## Historical Signals
 
-- `historical-crossbackend-test`: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt`; promotional=`False`. Historical test signal is not row-specific M90 evidence and does not provide current skia/cpu/gpu/diff/stat/perf artifacts.
-- `historical-similarity-floor` (`HairlinesGM=98.97`): `gpu-raster/test-similarity-scores-webgpu.properties`; promotional=`False`. A historical similarity score is not a support claim; below-threshold/tolerance-only status is not counted as a production missing feature.
+- `historical-cpu-test`: `skia-integration-tests/src/test/kotlin/org/skia/tests/Round8Test.kt`; promotional=`False`. Historical CPU HairlinesGM test is not a M90 row-specific CPU/WebGPU artifact bundle and does not update the M89 registry row.
+- `historical-gm-source-port`: `skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt`; promotional=`False`. The existing Kotlin GM source is a historical port signal only; it is not row-specific route, diff/stat, or performance evidence.
+- `historical-crossbackend-test`: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt`; promotional=`False`. Historical cross-backend floors are provenance only; they do not replace current skia/cpu/gpu/diff/stat/perf evidence.
+- `historical-gpu-similarity-floor` (`HairlinesGM=98.97`): `gpu-raster/test-similarity-scores-webgpu.properties`; promotional=`False`. A historical similarity score is not a support claim; below-threshold/tolerance-only status is not counted as a production missing feature.
+- `historical-cpu-similarity-floor` (`HairlinesGM=97.678016`): `skia-integration-tests/test-similarity-scores.properties`; promotional=`False`. A historical CPU score is not a M90 support promotion or a replacement for row-specific route artifacts.
+- `historical-cpu-raster-score-mirror` (`HairlinesGM=97.678016`): `cpu-raster/test-similarity-scores.properties`; promotional=`False`. A mirrored historical score file is consistency evidence only, not a CPU/WebGPU promotion artifact.
+- `historical-kanvas-skia-score-mirror` (`HairlinesGM=97.690624`): `kanvas-skia/test-similarity-scores.properties`; promotional=`False`. A mirrored kanvas-skia score is consistency evidence only and does not clear the row-specific M90 evidence contract.
+
+## Upstream Readiness State
+
+- Active next recommended ticket: `M90-PAA-3A`
+- Active next recommended row: `skia-gm-hairlines`
+- This intake is out of order: `False`
+- Reason: M90-PAA-3A remains the active candidate-readiness recommendation, but this intake is still non-promotional and only inventories missing row-specific evidence.
 
 ## Next Recommended Ticket
 

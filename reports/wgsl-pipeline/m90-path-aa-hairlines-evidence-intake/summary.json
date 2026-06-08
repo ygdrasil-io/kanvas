@@ -1,45 +1,50 @@
 {
-  "classification": "path-aa-hairlines-evidence-intake-no-new-rendering-support",
-  "counters": {
-    "historicalSignals": 2,
-    "missingEvidenceItems": 10,
-    "newSupportClaims": 0,
-    "presentEvidenceItems": 0,
-    "promotionalHistoricalSignals": 0,
-    "readinessDelta": 0.0,
-    "requiredEvidenceItems": 10
-  },
+  "schemaVersion": 1,
   "generatedBy": "scripts/m90_path_aa_hairlines_evidence_intake.py",
-  "historicalSignals": [
-    {
-      "kind": "historical-crossbackend-test",
-      "path": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt",
-      "promotional": false,
-      "reason": "Historical test signal is not row-specific M90 evidence and does not provide current skia/cpu/gpu/diff/stat/perf artifacts."
-    },
-    {
-      "kind": "historical-similarity-floor",
-      "observed": "HairlinesGM=98.97",
-      "path": "gpu-raster/test-similarity-scores-webgpu.properties",
-      "promotional": false,
-      "reason": "A historical similarity score is not a support claim; below-threshold/tolerance-only status is not counted as a production missing feature."
-    }
-  ],
+  "milestone": "M90",
+  "ticket": "M90-PAA-3A",
+  "classification": "path-aa-hairlines-evidence-intake-no-new-rendering-support",
+  "status": "blocked-by-missing-row-specific-evidence",
   "inputs": {
-    "candidateReadiness": "reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json",
-    "historicalCrossBackendTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt",
     "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "candidateReadiness": "reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json",
     "routeCpu": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-cpu.json",
     "routeGpu": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-gpu.json",
-    "similarityProperties": "gpu-raster/test-similarity-scores-webgpu.properties",
-    "visibility": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"
+    "visibility": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+    "gpuSimilarityProperties": "gpu-raster/test-similarity-scores-webgpu.properties",
+    "cpuSimilarityProperties": "skia-integration-tests/test-similarity-scores.properties",
+    "cpuRasterSimilarityProperties": "cpu-raster/test-similarity-scores.properties",
+    "kanvasSkiaSimilarityProperties": "kanvas-skia/test-similarity-scores.properties",
+    "historicalCpuTest": "skia-integration-tests/src/test/kotlin/org/skia/tests/Round8Test.kt",
+    "historicalGmSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt",
+    "historicalCrossBackendTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt"
   },
-  "milestone": "M90",
-  "nextRecommendedTicket": {
-    "id": "M90-PAA-3A-REF",
-    "promotionAllowedWithoutEvidence": false,
-    "scope": "Produce row-specific HairlinesGM Skia reference plus CPU/WebGPU fallbackReason=none route, render, diff/stat, and performance artifacts before any support evaluation.",
-    "supportClaimAllowed": false
+  "upstreamReadinessState": {
+    "activeNextRecommendedTicket": "M90-PAA-3A",
+    "activeNextRecommendedRow": "skia-gm-hairlines",
+    "thisIntakeIsOutOfOrder": false,
+    "reason": "M90-PAA-3A remains the active candidate-readiness recommendation, but this intake is still non-promotional and only inventories missing row-specific evidence."
+  },
+  "row": {
+    "rowId": "skia-gm-hairlines",
+    "sourceGm": "HairlinesGM",
+    "status": "expected-unsupported",
+    "supportClaim": false,
+    "policyOnly": true,
+    "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "candidatePriority": 1,
+    "visibilityPolicyOnlyArtifacts": true
+  },
+  "counters": {
+    "requiredEvidenceItems": 10,
+    "presentEvidenceItems": 0,
+    "missingEvidenceItems": 10,
+    "historicalSignals": 7,
+    "promotionalHistoricalSignals": 0,
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0
   },
   "requiredEvidence": [
     {
@@ -113,35 +118,74 @@
       "status": "missing"
     }
   ],
-  "row": {
-    "candidatePriority": 1,
-    "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
-    "policyOnly": true,
-    "routeCpu": "expected-unsupported",
-    "routeGpu": "expected-unsupported",
-    "rowId": "skia-gm-hairlines",
-    "sourceGm": "HairlinesGM",
-    "status": "expected-unsupported",
-    "supportClaim": false,
-    "visibilityPolicyOnlyArtifacts": true
+  "historicalSignals": [
+    {
+      "kind": "historical-cpu-test",
+      "path": "skia-integration-tests/src/test/kotlin/org/skia/tests/Round8Test.kt",
+      "promotional": false,
+      "reason": "Historical CPU HairlinesGM test is not a M90 row-specific CPU/WebGPU artifact bundle and does not update the M89 registry row."
+    },
+    {
+      "kind": "historical-gm-source-port",
+      "path": "skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt",
+      "promotional": false,
+      "reason": "The existing Kotlin GM source is a historical port signal only; it is not row-specific route, diff/stat, or performance evidence."
+    },
+    {
+      "kind": "historical-crossbackend-test",
+      "path": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt",
+      "promotional": false,
+      "reason": "Historical cross-backend floors are provenance only; they do not replace current skia/cpu/gpu/diff/stat/perf evidence."
+    },
+    {
+      "kind": "historical-gpu-similarity-floor",
+      "path": "gpu-raster/test-similarity-scores-webgpu.properties",
+      "observed": "HairlinesGM=98.97",
+      "promotional": false,
+      "reason": "A historical similarity score is not a support claim; below-threshold/tolerance-only status is not counted as a production missing feature."
+    },
+    {
+      "kind": "historical-cpu-similarity-floor",
+      "path": "skia-integration-tests/test-similarity-scores.properties",
+      "observed": "HairlinesGM=97.678016",
+      "promotional": false,
+      "reason": "A historical CPU score is not a M90 support promotion or a replacement for row-specific route artifacts."
+    },
+    {
+      "kind": "historical-cpu-raster-score-mirror",
+      "path": "cpu-raster/test-similarity-scores.properties",
+      "observed": "HairlinesGM=97.678016",
+      "promotional": false,
+      "reason": "A mirrored historical score file is consistency evidence only, not a CPU/WebGPU promotion artifact."
+    },
+    {
+      "kind": "historical-kanvas-skia-score-mirror",
+      "path": "kanvas-skia/test-similarity-scores.properties",
+      "observed": "HairlinesGM=97.690624",
+      "promotional": false,
+      "reason": "A mirrored kanvas-skia score is consistency evidence only and does not clear the row-specific M90 evidence contract."
+    }
+  ],
+  "nextRecommendedTicket": {
+    "id": "M90-PAA-3A-REF",
+    "scope": "Produce row-specific HairlinesGM Skia reference plus CPU/WebGPU fallbackReason=none route, render, diff/stat, and performance artifacts before any support evaluation.",
+    "supportClaimAllowed": false,
+    "promotionAllowedWithoutEvidence": false
   },
-  "schemaVersion": 1,
-  "status": "blocked-by-missing-row-specific-evidence",
   "supportGuard": {
+    "supportClaimAdded": false,
+    "readinessMoved": false,
+    "policyOnlyPromoted": false,
+    "thresholdChanged": false,
+    "edgeBudgetChanged": false,
     "belowThresholdCountedAsProductionGap": false,
+    "broadPathAASupport": false,
     "broadDashSupport": false,
     "broadHairlineSupport": false,
-    "broadPathAASupport": false,
     "broadStrokeSupport": false,
-    "edgeBudgetChanged": false,
     "ganeshPort": false,
-    "graphitePort": false,
-    "policyOnlyPromoted": false,
-    "readinessMoved": false,
-    "supportClaimAdded": false,
-    "thresholdChanged": false
+    "graphitePort": false
   },
-  "ticket": "M90-PAA-3A",
   "validationCommands": [
     "rtk python3 scripts/m90_path_aa_hairlines_evidence_intake.py",
     "rtk ./gradlew --no-daemon pipelineM90PathAaHairlinesEvidenceIntake",

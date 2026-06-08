@@ -28,7 +28,7 @@
     "requiredEvidenceItems": 90,
     "presentEvidenceItems": 0,
     "missingEvidenceItems": 90,
-    "historicalSignals": 53,
+    "historicalSignals": 58,
     "promotionalHistoricalSignals": 0,
     "newSupportClaims": 0,
     "readinessDelta": 0.0
@@ -45,12 +45,12 @@
       "requiredEvidenceItems": 10,
       "presentEvidenceItems": 0,
       "missingEvidenceItems": 10,
-      "historicalSignals": 2,
+      "historicalSignals": 7,
       "promotionalHistoricalSignals": 0,
       "newSupportClaims": 0,
       "readinessDelta": 0.0,
       "nextEvidenceTicket": "M90-PAA-3A-REF",
-      "upstreamReadinessStatePresent": false
+      "upstreamReadinessStatePresent": true
     },
     {
       "ticket": "M90-PAA-3B",
