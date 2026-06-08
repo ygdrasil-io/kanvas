@@ -31,7 +31,7 @@
   "artifactContract": {
     "writeCommand": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
     "writeMode": "opt-in",
-    "checkedInRenderedArtifactsRequiredByThisItem": false,
+    "checkedInRenderedArtifactsRequiredByThisItem": true,
     "alwaysExpectedWhenWriteEnabled": [
       "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/skia.png",
       "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu.png",
@@ -94,5 +94,5 @@
     "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
     "rtk git diff --check"
   ],
-  "optionalArtifactValidationCommand": "rtk python3 scripts/validate_m90_hairlines_artifact_harness.py --require-artifacts"
+  "artifactValidationCommand": "rtk python3 scripts/validate_m90_hairlines_artifact_harness.py --require-artifacts"
 }

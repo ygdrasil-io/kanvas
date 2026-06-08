@@ -26,6 +26,16 @@ TEST_FILE = ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/HairlinesScen
 REPORT = ROOT / "reports/wgsl-pipeline/2026-06-08-m90-hairlines-artifact-harness.md"
 EVIDENCE = ROOT / "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json"
 ARTIFACT_DIR = ROOT / "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines"
+EXPECTED_ARTIFACT_FILES = {
+    "cpu-diff.png",
+    "cpu-performance.json",
+    "cpu.png",
+    "gpu-performance.json",
+    "route-cpu.json",
+    "route-gpu.json",
+    "skia.png",
+    "stats.json",
+}
 GM_FILE = ROOT / "skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt"
 CPU_TEST = ROOT / "skia-integration-tests/src/test/kotlin/org/skia/tests/Round8Test.kt"
 CROSSBACKEND_TEST = ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt"
@@ -210,7 +220,7 @@ def validate_evidence_json() -> None:
     contract = data.get("artifactContract")
     require(isinstance(contract, dict), "evidence missing artifactContract")
     require(contract.get("writeMode") == "opt-in", "artifact write mode must remain opt-in")
-    require(contract.get("checkedInRenderedArtifactsRequiredByThisItem") is False, "static item must not require checked-in rendered artifacts")
+    require(contract.get("checkedInRenderedArtifactsRequiredByThisItem") is True, "checked-in artifact item must require rendered artifacts")
     expected_artifacts = "\n".join(contract.get("alwaysExpectedWhenWriteEnabled", []) + contract.get("adapterExpectedWhenRendered", []))
     for name in [
         "skia.png",
@@ -277,7 +287,7 @@ def validate_report() -> None:
             "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
             "cpu-performance.json",
             "gpu-performance.json",
-            "intake is updated to classify present artifact files as non-promotional evidence",
+            "checked-in files as non-promotional evidence",
             "No Ganesh or Graphite port",
             "No dynamic SkSL compiler, IR, or VM",
             "No global threshold reduction",
@@ -293,6 +303,8 @@ def png_header(path: Path) -> None:
 
 def validate_optional_artifacts() -> None:
     require(ARTIFACT_DIR.is_dir(), f"missing artifact directory: {rel(ARTIFACT_DIR)}")
+    actual = {path.name for path in ARTIFACT_DIR.iterdir() if path.is_file()}
+    require(actual == EXPECTED_ARTIFACT_FILES, f"artifact file set changed: expected={sorted(EXPECTED_ARTIFACT_FILES)} actual={sorted(actual)}")
     for name in ["skia.png", "cpu.png", "cpu-diff.png"]:
         png_header(ARTIFACT_DIR / name)
     for name in ["route-cpu.json", "route-gpu.json", "stats.json", "cpu-performance.json", "gpu-performance.json"]:
@@ -346,9 +358,10 @@ def validate_worktree_scope(allow_artifacts: bool = False) -> None:
         path = raw[3:] if len(raw) > 3 else raw.strip()
         if path == "tmp/" or path.startswith("tmp/"):
             continue
-        if allow_artifacts and raw.startswith("?? ") and (
-            path == rel(ARTIFACT_DIR) + "/" or path.startswith(rel(ARTIFACT_DIR) + "/")
-        ):
+        if allow_artifacts and (path == rel(ARTIFACT_DIR) + "/" or path.startswith(rel(ARTIFACT_DIR) + "/")):
+            if path == rel(ARTIFACT_DIR) + "/":
+                continue
+            require(Path(path).name in EXPECTED_ARTIFACT_FILES, f"unexpected Hairlines artifact path: {path}")
             continue
         if path in FORBIDDEN_PROMOTION_FILES:
             seen_forbidden.append(path)
@@ -367,9 +380,10 @@ def main() -> None:
     validate_existing_evidence()
     validate_evidence_json()
     validate_report()
-    if args.require_artifacts:
+    artifacts_present = ARTIFACT_DIR.exists()
+    if args.require_artifacts or artifacts_present:
         validate_optional_artifacts()
-    validate_worktree_scope(allow_artifacts=args.require_artifacts)
+    validate_worktree_scope(allow_artifacts=args.require_artifacts or artifacts_present)
     print(f"validated {TICKET} HairlinesGM artifact harness contract")
 
 

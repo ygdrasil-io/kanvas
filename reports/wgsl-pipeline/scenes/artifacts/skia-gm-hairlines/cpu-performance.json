@@ -1,0 +1,22 @@
+{
+  "sceneId": "skia-gm-hairlines",
+  "inventoryId": "skia-gm-hairlines",
+  "backend": "CPU",
+  "drawKind": "HairlinesGM",
+  "status": "pass",
+  "fallbackReason": "none",
+  "supportClaim": false,
+  "sampleCount": 1,
+  "warmup": false,
+  "elapsedNanos": 81848750,
+  "elapsedMillis": 81.8488,
+  "similarity": 97.6780,
+  "threshold": 96.0,
+  "rawMetrics": "artifacts/skia-gm-hairlines/cpu-performance.json",
+  "globalDashboardPromoted": false,
+  "globalThresholdChanged": false,
+  "neighborEvidenceInherited": false,
+  "broadPathAASupport": false,
+  "broadHairlineSupport": false,
+  "test": "org.skia.gpu.webgpu.HairlinesSceneCaptureTest#hairlines captures row specific reference cpu and webgpu evidence"
+}

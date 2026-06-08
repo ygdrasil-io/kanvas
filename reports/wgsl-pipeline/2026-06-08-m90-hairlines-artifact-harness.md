@@ -42,8 +42,8 @@ Expected files are:
 - `gpu-performance.json`
 - `gpu.png` and `gpu-diff.png` only when a WebGPU adapter-backed render is produced
 
-The current M90 Hairlines intake still expects the row-specific artifact directory to be absent.
-Do not check in captured artifacts until the intake is updated to classify present artifact files as non-promotional evidence instead of an unexpected promotion.
+The M90 Hairlines intake classifies these checked-in files as non-promotional evidence.
+`gpu.png` and `gpu-diff.png` remain absent until an adapter-backed render path produces them.
 
 ## Non-Claims
 

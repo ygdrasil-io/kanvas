@@ -12,8 +12,8 @@ This closeout freezes the M90-PAA-3 candidate intake wave. It aggregates the nin
 - Policy-only rows: `9`
 - Support claims: `0`
 - Required evidence items: `90`
-- Present evidence items: `0`
-- Missing evidence items: `90`
+- Present evidence items: `8`
+- Missing evidence items: `82`
 - Historical signals: `58`
 - Promotional historical signals: `0`
 - New support claims: `0`
@@ -21,7 +21,7 @@ This closeout freezes the M90-PAA-3 candidate intake wave. It aggregates the nin
 
 ## Rows
 
-- `M90-PAA-3A` / `skia-gm-hairlines` / `HairlinesGM`: status=`expected-unsupported`, missingEvidence=`10`, historicalSignals=`7`, supportClaim=`False`
+- `M90-PAA-3A` / `skia-gm-hairlines` / `HairlinesGM`: status=`expected-unsupported`, missingEvidence=`2`, historicalSignals=`7`, supportClaim=`False`
 - `M90-PAA-3B` / `skia-gm-strokerect` / `StrokeRectGM`: status=`expected-unsupported`, missingEvidence=`10`, historicalSignals=`6`, supportClaim=`False`
 - `M90-PAA-3C` / `skia-gm-thinstrokedrects` / `ThinStrokedRectsGM`: status=`expected-unsupported`, missingEvidence=`10`, historicalSignals=`4`, supportClaim=`False`
 - `M90-PAA-3D` / `skia-gm-strokedlines` / `StrokedLinesGM`: status=`expected-unsupported`, missingEvidence=`10`, historicalSignals=`6`, supportClaim=`False`

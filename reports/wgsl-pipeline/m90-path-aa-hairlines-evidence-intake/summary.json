@@ -4,7 +4,7 @@
   "milestone": "M90",
   "ticket": "M90-PAA-3A",
   "classification": "path-aa-hairlines-evidence-intake-no-new-rendering-support",
-  "status": "blocked-by-missing-row-specific-evidence",
+  "status": "partial-row-specific-evidence-present-non-promotional",
   "inputs": {
     "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
     "candidateReadiness": "reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json",
@@ -39,9 +39,9 @@
   },
   "counters": {
     "requiredEvidenceItems": 10,
-    "presentEvidenceItems": 0,
-    "missingEvidenceItems": 10,
-    "validatedNonPromotionalEvidenceItems": 0,
+    "presentEvidenceItems": 8,
+    "missingEvidenceItems": 2,
+    "validatedNonPromotionalEvidenceItems": 8,
     "historicalSignals": 7,
     "promotionalHistoricalSignals": 0,
     "newSupportClaims": 0,
@@ -51,34 +51,34 @@
     {
       "kind": "row-specific Skia reference",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/skia.png",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "validatedNonPromotional": false,
-      "status": "missing"
+      "validatedNonPromotional": true,
+      "status": "present-non-promotional"
     },
     {
       "kind": "CPU route evidence with fallbackReason=none",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-cpu.json",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "validatedNonPromotional": false,
-      "status": "missing"
+      "validatedNonPromotional": true,
+      "status": "present-non-promotional"
     },
     {
       "kind": "WebGPU route evidence with fallbackReason=none",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-gpu.json",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "validatedNonPromotional": false,
-      "status": "missing"
+      "validatedNonPromotional": true,
+      "status": "present-non-promotional"
     },
     {
       "kind": "CPU/GPU rendered artifacts",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu.png",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "validatedNonPromotional": false,
-      "status": "missing"
+      "validatedNonPromotional": true,
+      "status": "present-non-promotional"
     },
     {
       "kind": "CPU/GPU rendered artifacts",
@@ -91,10 +91,10 @@
     {
       "kind": "CPU/GPU diff/stat artifacts",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-diff.png",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "validatedNonPromotional": false,
-      "status": "missing"
+      "validatedNonPromotional": true,
+      "status": "present-non-promotional"
     },
     {
       "kind": "CPU/GPU diff/stat artifacts",
@@ -107,26 +107,26 @@
     {
       "kind": "CPU/GPU diff/stat artifacts",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/stats.json",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "validatedNonPromotional": false,
-      "status": "missing"
+      "validatedNonPromotional": true,
+      "status": "present-non-promotional"
     },
     {
       "kind": "performance impact evidence",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-performance.json",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "validatedNonPromotional": false,
-      "status": "missing"
+      "validatedNonPromotional": true,
+      "status": "present-non-promotional"
     },
     {
       "kind": "performance impact evidence",
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-performance.json",
-      "present": false,
+      "present": true,
       "promotional": false,
-      "validatedNonPromotional": false,
-      "status": "missing"
+      "validatedNonPromotional": true,
+      "status": "present-non-promotional"
     }
   ],
   "historicalSignals": [
