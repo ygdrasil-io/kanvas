@@ -4917,6 +4917,19 @@ tasks.register<Exec>("pipelineM90PathAaDashingEvidenceIntake") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaDashingEvidenceGate") {
+    group = "verification"
+    description = "Validates the M90-PAA-3H-REF DashingGM row-specific evidence gate without changing support claims."
+    commandLine("python3", "scripts/validate_m90_dashing_evidence_gate.py", "--check-worktree-scope")
+    inputs.file(layout.projectDirectory.file("scripts/validate_m90_dashing_evidence_gate.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-08-m90-dashing-evidence-gate.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m90-dashing-row-specific-evidence-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-dashing-evidence-intake/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashing/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-dashing/route-gpu.json"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM90PathAaDashCubicsEvidenceIntake") {
     group = "verification"
     description = "Generates and validates M90-PAA-3I DashCubicsGM evidence intake without changing support claims."
