@@ -100,7 +100,7 @@ class WgslValidationReportTest {
             .sorted()
 
         assertEquals(expected, actual)
-        assertEquals(28, actual.size)
+        assertEquals(30, actual.size)
     }
 
     private fun verifyUniformLayout(expectedByName: Map<String, Int>, reflectedByName: Map<String, Int>) {
