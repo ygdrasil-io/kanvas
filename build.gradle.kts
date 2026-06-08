@@ -7732,6 +7732,21 @@ tasks.register<Exec>("pipelinePmBundleM89Registry") {
     outputs.dir(layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle/registry/m89-gm-registry"))
 }
 
+tasks.register<Exec>("validateM89PmBundleCounters") {
+    group = "verification"
+    description = "Validates M89 PM counters exposure in the generated PM bundle without changing support claims."
+    dependsOn("pipelinePmBundleM89Registry")
+    commandLine("python3", "scripts/validate_m89_pm_bundle_counters.py")
+    inputs.file(layout.projectDirectory.file("scripts/validate_m89_pm_bundle_counters.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/pm-counters.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/pm-counters.md"))
+    inputs.file(layout.buildDirectory.file("reports/wgsl-pipeline-pm-bundle/manifest.json"))
+    inputs.file(layout.buildDirectory.file("reports/wgsl-pipeline-pm-bundle/README.md"))
+    inputs.file(layout.buildDirectory.file("reports/wgsl-pipeline-pm-bundle/registry/m89-gm-registry/pm-counters.json"))
+    inputs.file(layout.buildDirectory.file("reports/wgsl-pipeline-pm-bundle/registry/m89-gm-registry/pm-counters.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.named("pipelinePmBundle") {
     finalizedBy("pipelinePmBundleM89Registry")
 }
