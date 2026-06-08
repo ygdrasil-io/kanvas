@@ -93,6 +93,8 @@ def validate_test() -> None:
             "route-cpu.json",
             "route-gpu.json",
             "stats.json",
+            "cpu-performance.json",
+            "gpu-performance.json",
             FALLBACK_REASON,
             '"supportClaim": false',
             "globalDashboardPromoted",
@@ -195,7 +197,18 @@ def validate_evidence_json() -> None:
     require(contract.get("writeMode") == "opt-in", "artifact write mode must remain opt-in")
     require(contract.get("checkedInRenderedArtifactsRequiredByThisItem") is False, "static item must not require checked-in rendered artifacts")
     expected_artifacts = "\n".join(contract.get("alwaysExpectedWhenWriteEnabled", []) + contract.get("adapterExpectedWhenRendered", []))
-    for name in ["skia.png", "cpu.png", "cpu-diff.png", "gpu.png", "gpu-diff.png", "route-cpu.json", "route-gpu.json", "stats.json"]:
+    for name in [
+        "skia.png",
+        "cpu.png",
+        "cpu-diff.png",
+        "gpu.png",
+        "gpu-diff.png",
+        "route-cpu.json",
+        "route-gpu.json",
+        "stats.json",
+        "cpu-performance.json",
+        "gpu-performance.json",
+    ]:
         require(name in expected_artifacts, f"artifact contract missing {name}")
 
     gate = data.get("promotionGate")
@@ -247,6 +260,9 @@ def validate_report() -> None:
             f"`fallbackReason={FALLBACK_REASON}`",
             "No checked-in dashboard row, registry row, similarity threshold, edge budget, or fallback policy was changed",
             "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
+            "cpu-performance.json",
+            "gpu-performance.json",
+            "intake is updated to classify present artifact files as non-promotional evidence",
             "No Ganesh or Graphite port",
             "No dynamic SkSL compiler, IR, or VM",
             "No global threshold reduction",
@@ -264,11 +280,13 @@ def validate_optional_artifacts() -> None:
     require(ARTIFACT_DIR.is_dir(), f"missing artifact directory: {rel(ARTIFACT_DIR)}")
     for name in ["skia.png", "cpu.png", "cpu-diff.png"]:
         png_header(ARTIFACT_DIR / name)
-    for name in ["route-cpu.json", "route-gpu.json", "stats.json"]:
+    for name in ["route-cpu.json", "route-gpu.json", "stats.json", "cpu-performance.json", "gpu-performance.json"]:
         require((ARTIFACT_DIR / name).is_file(), f"missing artifact metadata: {rel(ARTIFACT_DIR / name)}")
     cpu = load_json(ARTIFACT_DIR / "route-cpu.json")
     gpu = load_json(ARTIFACT_DIR / "route-gpu.json")
     stats = load_json(ARTIFACT_DIR / "stats.json")
+    cpu_perf = load_json(ARTIFACT_DIR / "cpu-performance.json")
+    gpu_perf = load_json(ARTIFACT_DIR / "gpu-performance.json")
     require(cpu.get("sceneId") == SCENE_ID, "CPU route scene mismatch")
     require(cpu.get("backend") == "CPU", "CPU route backend mismatch")
     require(cpu.get("fallbackReason") == "none", "CPU route must have fallbackReason=none")
@@ -280,12 +298,23 @@ def validate_optional_artifacts() -> None:
     require(stats.get("sceneId") == SCENE_ID, "stats scene mismatch")
     require(stats.get("globalDashboardPromoted") is False, "optional stats must not promote dashboard")
     require(stats.get("supportClaim") is False, "optional stats must remain non-promotional")
+    require(cpu_perf.get("sceneId") == SCENE_ID, "CPU perf scene mismatch")
+    require(cpu_perf.get("backend") == "CPU", "CPU perf backend mismatch")
+    require(cpu_perf.get("supportClaim") is False, "CPU perf must remain non-promotional")
+    require(cpu_perf.get("globalDashboardPromoted") is False, "CPU perf must not promote dashboard")
+    require(isinstance(cpu_perf.get("elapsedNanos"), int) and cpu_perf["elapsedNanos"] > 0, "CPU perf must record elapsedNanos")
+    require(gpu_perf.get("sceneId") == SCENE_ID, "GPU perf scene mismatch")
+    require(gpu_perf.get("backend") == "WebGPU", "GPU perf backend mismatch")
+    require(gpu_perf.get("supportClaim") is False, "GPU perf must remain non-promotional")
+    require(gpu_perf.get("globalDashboardPromoted") is False, "GPU perf must not promote dashboard")
+    if gpu_perf.get("elapsedNanos") is not None:
+        require(isinstance(gpu_perf.get("elapsedNanos"), int) and gpu_perf["elapsedNanos"] > 0, "GPU perf elapsedNanos must be positive when present")
     if (ARTIFACT_DIR / "gpu.png").exists():
         png_header(ARTIFACT_DIR / "gpu.png")
         png_header(ARTIFACT_DIR / "gpu-diff.png")
 
 
-def validate_worktree_scope() -> None:
+def validate_worktree_scope(allow_artifacts: bool = False) -> None:
     proc = subprocess.run(
         ["git", "status", "--short"],
         cwd=ROOT,
@@ -301,6 +330,10 @@ def validate_worktree_scope() -> None:
             continue
         path = raw[3:] if len(raw) > 3 else raw.strip()
         if path == "tmp/" or path.startswith("tmp/"):
+            continue
+        if allow_artifacts and raw.startswith("?? ") and (
+            path == rel(ARTIFACT_DIR) + "/" or path.startswith(rel(ARTIFACT_DIR) + "/")
+        ):
             continue
         if path in FORBIDDEN_PROMOTION_FILES:
             seen_forbidden.append(path)
@@ -319,9 +352,9 @@ def main() -> None:
     validate_existing_evidence()
     validate_evidence_json()
     validate_report()
-    validate_worktree_scope()
     if args.require_artifacts:
         validate_optional_artifacts()
+    validate_worktree_scope(allow_artifacts=args.require_artifacts)
     print(f"validated {TICKET} HairlinesGM artifact harness contract")
 
 

@@ -38,7 +38,12 @@ Expected files are:
 - `route-cpu.json`
 - `route-gpu.json`
 - `stats.json`
+- `cpu-performance.json`
+- `gpu-performance.json`
 - `gpu.png` and `gpu-diff.png` only when a WebGPU adapter-backed render is produced
+
+The current M90 Hairlines intake still expects the row-specific artifact directory to be absent.
+Do not check in captured artifacts until the intake is updated to classify present artifact files as non-promotional evidence instead of an unexpected promotion.
 
 ## Non-Claims
 
@@ -56,5 +61,6 @@ rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-m90-hairlines-harness-pycache python3 -m
 rtk python3 scripts/validate_m90_hairlines_artifact_harness.py
 rtk ./gradlew --no-daemon pipelineM90PathAaHairlinesArtifactHarness
 rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest
+rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest
 rtk git diff --check
 ```

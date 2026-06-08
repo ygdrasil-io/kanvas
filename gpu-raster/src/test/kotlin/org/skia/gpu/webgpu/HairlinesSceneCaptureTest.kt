@@ -17,7 +17,9 @@ class HairlinesSceneCaptureTest {
         val gm = HairlinesGM()
         val reference = TestUtils.loadReferenceBitmap(gm.name())
             ?: error("original-888/${gm.name()}.png missing")
+        val cpuStart = System.nanoTime()
         val cpuBitmap = TestUtils.runGmTest(gm)
+        val cpuElapsedNanos = System.nanoTime() - cpuStart
         val cpuCmp = TestUtils.compareBitmapsDetailed(cpuBitmap, reference, tolerance = CPU_TOLERANCE)
         val gpuOutcome = renderWebGpu(gm, reference)
 
@@ -31,6 +33,7 @@ class HairlinesSceneCaptureTest {
                 reference = reference,
                 cpuBitmap = cpuBitmap,
                 cpuCmp = cpuCmp,
+                cpuElapsedNanos = cpuElapsedNanos,
                 gpuOutcome = gpuOutcome,
             )
         }
@@ -50,9 +53,11 @@ class HairlinesSceneCaptureTest {
         val context = WebGpuContext.createOrNull()
             ?: return GpuOutcome.missingAdapter()
 
+        val start = System.nanoTime()
         return try {
             context.use { ctx ->
                 val gpuBitmap = WebGpuSink.draw(ctx, gm)
+                val elapsedNanos = System.nanoTime() - start
                 val cmp = TestUtils.compareBitmapsDetailed(
                     gpuBitmap,
                     reference,
@@ -66,11 +71,12 @@ class HairlinesSceneCaptureTest {
                     adapter = ctx.adapterInfo ?: "unknown-adapter",
                     status = status,
                     fallbackReason = fallbackReason,
+                    elapsedNanos = elapsedNanos,
                     failure = null,
                 )
             }
         } catch (t: Throwable) {
-            GpuOutcome.failed(t)
+            GpuOutcome.failed(t, System.nanoTime() - start)
         }
     }
 
@@ -78,6 +84,7 @@ class HairlinesSceneCaptureTest {
         reference: SkBitmap,
         cpuBitmap: SkBitmap,
         cpuCmp: BitmapComparison,
+        cpuElapsedNanos: Long,
         gpuOutcome: GpuOutcome,
     ) {
         val dir = repoFile(ARTIFACT_DIR).apply { mkdirs() }
@@ -91,6 +98,8 @@ class HairlinesSceneCaptureTest {
         File(dir, "route-cpu.json").writeText(cpuRouteJson(cpuCmp))
         File(dir, "route-gpu.json").writeText(gpuRouteJson(gpuOutcome))
         File(dir, "stats.json").writeText(statsJson(cpuCmp, gpuOutcome))
+        File(dir, "cpu-performance.json").writeText(cpuPerformanceJson(cpuCmp, cpuElapsedNanos))
+        File(dir, "gpu-performance.json").writeText(gpuPerformanceJson(gpuOutcome))
     }
 
     private fun writePng(file: File, bitmap: SkBitmap) {
@@ -116,6 +125,31 @@ class HairlinesSceneCaptureTest {
           "matchingPixels": ${cpuCmp.matchingPixels},
           "totalPixels": ${cpuCmp.totalPixels},
           "maxChannelDelta": ${cpuCmp.maxChannelDiff.max()},
+          "test": "org.skia.gpu.webgpu.HairlinesSceneCaptureTest#hairlines captures row specific reference cpu and webgpu evidence"
+        }
+    """.trimIndent() + "\n"
+
+    private fun cpuPerformanceJson(cpuCmp: BitmapComparison, elapsedNanos: Long): String = """
+        {
+          "sceneId": "$SCENE_ID",
+          "inventoryId": "$INVENTORY_ID",
+          "backend": "CPU",
+          "drawKind": "HairlinesGM",
+          "status": "pass",
+          "fallbackReason": "none",
+          "supportClaim": false,
+          "sampleCount": 1,
+          "warmup": false,
+          "elapsedNanos": $elapsedNanos,
+          "elapsedMillis": ${elapsedNanos.millisJsonNumber()},
+          "similarity": ${cpuCmp.similarity.jsonNumber()},
+          "threshold": $CPU_MINIMUM_SIMILARITY,
+          "rawMetrics": "artifacts/$SCENE_ID/cpu-performance.json",
+          "globalDashboardPromoted": false,
+          "globalThresholdChanged": false,
+          "neighborEvidenceInherited": false,
+          "broadPathAASupport": false,
+          "broadHairlineSupport": false,
           "test": "org.skia.gpu.webgpu.HairlinesSceneCaptureTest#hairlines captures row specific reference cpu and webgpu evidence"
         }
     """.trimIndent() + "\n"
@@ -188,11 +222,48 @@ class HairlinesSceneCaptureTest {
           "cpuMaxChannelDelta": ${cpuCmp.maxChannelDiff.max()}$gpuStats,
           "cpuThreshold": $CPU_MINIMUM_SIMILARITY,
           "gpuPromotionThreshold": $GPU_PROMOTION_THRESHOLD,
+          "cpuPerformanceArtifact": "$ARTIFACT_DIR/cpu-performance.json",
+          "gpuPerformanceArtifact": "$ARTIFACT_DIR/gpu-performance.json",
           "globalThresholdChanged": false,
           "neighborEvidenceInherited": false,
           "broadPathAASupport": false,
           "broadHairlineSupport": false,
           "command": "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest"
+        }
+        """.trimIndent() + "\n"
+    }
+
+    private fun gpuPerformanceJson(gpuOutcome: GpuOutcome): String {
+        val comparison = gpuOutcome.comparison
+        val similarityLine = comparison?.let { """,
+          "similarity": ${it.similarity.jsonNumber()},
+          "threshold": $GPU_PROMOTION_THRESHOLD""" } ?: ""
+        val elapsedLine = gpuOutcome.elapsedNanos?.let { """,
+          "elapsedNanos": $it,
+          "elapsedMillis": ${it.millisJsonNumber()}""" } ?: """,
+          "elapsedNanos": null,
+          "elapsedMillis": null"""
+        val failureLine = gpuOutcome.failure?.let { """,
+          "failure": ${it.jsonString()}""" } ?: ""
+        return """
+        {
+          "sceneId": "$SCENE_ID",
+          "inventoryId": "$INVENTORY_ID",
+          "backend": "WebGPU",
+          "adapter": ${gpuOutcome.adapter.jsonString()},
+          "drawKind": "HairlinesGM",
+          "status": ${gpuOutcome.status.jsonString()},
+          "fallbackReason": ${gpuOutcome.fallbackReason.jsonString()},
+          "supportClaim": false,
+          "sampleCount": 1,
+          "warmup": false$elapsedLine$similarityLine$failureLine,
+          "rawMetrics": "artifacts/$SCENE_ID/gpu-performance.json",
+          "globalDashboardPromoted": false,
+          "globalThresholdChanged": false,
+          "neighborEvidenceInherited": false,
+          "broadPathAASupport": false,
+          "broadHairlineSupport": false,
+          "test": "org.skia.gpu.webgpu.HairlinesSceneCaptureTest#hairlines captures row specific reference cpu and webgpu evidence"
         }
         """.trimIndent() + "\n"
     }
@@ -211,6 +282,7 @@ class HairlinesSceneCaptureTest {
         val adapter: String,
         val status: String,
         val fallbackReason: String,
+        val elapsedNanos: Long?,
         val failure: String?,
     ) {
         val summary: String
@@ -223,21 +295,25 @@ class HairlinesSceneCaptureTest {
                 adapter = "no-webgpu-adapter",
                 status = "expected-unsupported",
                 fallbackReason = FALLBACK_REASON,
+                elapsedNanos = null,
                 failure = "No WebGPU adapter",
             )
 
-            fun failed(t: Throwable): GpuOutcome = GpuOutcome(
+            fun failed(t: Throwable, elapsedNanos: Long): GpuOutcome = GpuOutcome(
                 bitmap = null,
                 comparison = null,
                 adapter = "webgpu-render-failed",
                 status = "expected-unsupported",
                 fallbackReason = FALLBACK_REASON,
+                elapsedNanos = elapsedNanos,
                 failure = "${t::class.qualifiedName}: ${t.message ?: "no message"}",
             )
         }
     }
 
     private fun Double.jsonNumber(): String = String.format(Locale.US, "%.4f", this)
+
+    private fun Long.millisJsonNumber(): String = String.format(Locale.US, "%.4f", this / 1_000_000.0)
 
     private fun String.jsonString(): String = buildString {
         append('"')
