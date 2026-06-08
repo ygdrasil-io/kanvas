@@ -28,6 +28,7 @@ HISTORICAL_CROSSBACKEND_TEST = ROOT / "gpu-raster/src/test/kotlin/org/skia/gpu/w
 OUTPUT_DIR = ROOT / "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake"
 SUMMARY_JSON = OUTPUT_DIR / "summary.json"
 SUMMARY_MD = OUTPUT_DIR / "summary.md"
+ARTIFACT_DIR = ROOT / "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines"
 ROW_ID = "skia-gm-hairlines"
 SOURCE_GM = "HairlinesGM"
 FALLBACK = "coverage.hairline.row-specific-artifacts-required"
@@ -289,17 +290,59 @@ def historical_signals() -> list[dict[str, Any]]:
     ]
 
 
+def png_present(path: Path) -> bool:
+    return path.is_file() and path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def validate_present_artifact(item: dict[str, str], path: Path) -> tuple[str, bool]:
+    required_path = item["requiredPath"]
+    kind = item["kind"]
+    if not path.exists():
+        return "missing", False
+    if required_path.endswith(".png"):
+        require(png_present(path), f"{required_path}: present PNG has an invalid header")
+        return "present-non-promotional", True
+    if required_path.endswith(".json"):
+        payload = load_json(path)
+        require(payload.get("sceneId") == ROW_ID, f"{required_path}: sceneId changed")
+        require(payload.get("supportClaim") is False, f"{required_path}: supportClaim must remain false")
+        require(payload.get("globalDashboardPromoted", False) is False, f"{required_path}: must not promote dashboard")
+        if required_path.endswith("route-cpu.json"):
+            require(payload.get("backend") == "CPU", f"{required_path}: backend mismatch")
+            require(payload.get("status") == "pass", f"{required_path}: CPU route must pass")
+            require(payload.get("fallbackReason") == "none", f"{required_path}: CPU route must have fallbackReason=none")
+        elif required_path.endswith("route-gpu.json"):
+            require(payload.get("backend") == "WebGPU", f"{required_path}: backend mismatch")
+            require(
+                payload.get("status") == "pass" or payload.get("fallbackReason") == FALLBACK,
+                f"{required_path}: GPU route must pass or retain stable refusal",
+            )
+        elif required_path.endswith("stats.json"):
+            require(payload.get("supportClaim") is False, f"{required_path}: stats must remain non-promotional")
+        elif required_path.endswith("cpu-performance.json"):
+            require(payload.get("backend") == "CPU", f"{required_path}: backend mismatch")
+            require(isinstance(payload.get("elapsedNanos"), int) and payload["elapsedNanos"] > 0, f"{required_path}: elapsedNanos must be positive")
+        elif required_path.endswith("gpu-performance.json"):
+            require(payload.get("backend") == "WebGPU", f"{required_path}: backend mismatch")
+            if payload.get("elapsedNanos") is not None:
+                require(isinstance(payload.get("elapsedNanos"), int) and payload["elapsedNanos"] > 0, f"{required_path}: elapsedNanos must be positive when present")
+        return "present-non-promotional", True
+    return f"present-unvalidated-{kind}", False
+
+
 def evidence_status() -> list[dict[str, Any]]:
     statuses: list[dict[str, Any]] = []
     for item in REQUIRED_EVIDENCE:
         path = ROOT / str(item["requiredPath"])
+        status, validated = validate_present_artifact(item, path)
         statuses.append(
             {
                 "kind": item["kind"],
                 "path": item["requiredPath"],
                 "present": path.exists(),
                 "promotional": False,
-                "status": "missing" if not path.exists() else "present-but-not-validated",
+                "validatedNonPromotional": validated,
+                "status": status,
             }
         )
     return statuses
@@ -318,7 +361,13 @@ def build_summary(
     validate_route_payload(route_cpu, "CPU")
     validate_route_payload(route_gpu, "WebGPU")
     required = evidence_status()
-    require(all(item["present"] is False for item in required), "M90-PAA-3A intake found unexpected row-specific artifacts")
+    present_count = sum(1 for item in required if item["present"])
+    missing_count = sum(1 for item in required if not item["present"])
+    status = "blocked-by-missing-row-specific-evidence"
+    if present_count > 0 and missing_count > 0:
+        status = "partial-row-specific-evidence-present-non-promotional"
+    elif present_count == len(required):
+        status = "row-specific-evidence-present-non-promotional"
     signals = historical_signals()
     return {
         "schemaVersion": 1,
@@ -326,7 +375,7 @@ def build_summary(
         "milestone": "M90",
         "ticket": "M90-PAA-3A",
         "classification": "path-aa-hairlines-evidence-intake-no-new-rendering-support",
-        "status": "blocked-by-missing-row-specific-evidence",
+        "status": status,
         "inputs": {
             "registry": rel(REGISTRY_JSON),
             "candidateReadiness": rel(CANDIDATE_READINESS_JSON),
@@ -361,8 +410,9 @@ def build_summary(
         },
         "counters": {
             "requiredEvidenceItems": len(required),
-            "presentEvidenceItems": sum(1 for item in required if item["present"]),
-            "missingEvidenceItems": sum(1 for item in required if not item["present"]),
+            "presentEvidenceItems": present_count,
+            "missingEvidenceItems": missing_count,
+            "validatedNonPromotionalEvidenceItems": sum(1 for item in required if item["validatedNonPromotional"]),
             "historicalSignals": len(signals),
             "promotionalHistoricalSignals": sum(1 for item in signals if item["promotional"]),
             "newSupportClaims": 0,
@@ -379,6 +429,7 @@ def build_summary(
         "supportGuard": NON_CLAIMS,
         "validationCommands": [
             "rtk python3 scripts/m90_path_aa_hairlines_evidence_intake.py",
+            "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
             "rtk ./gradlew --no-daemon pipelineM90PathAaHairlinesEvidenceIntake",
             "rtk git diff --check",
         ],
@@ -391,7 +442,7 @@ def render_markdown(summary: dict[str, Any]) -> str:
     lines = [
         "# M90 Path AA Hairlines Evidence Intake",
         "",
-        "Status: blocked by missing row-specific evidence",
+        f"Status: {summary['status']}",
         "",
         "This report materializes the `M90-PAA-3A` intake for `skia-gm-hairlines`. It records the active refusal state, inventories historical HairlinesGM signals as non-promotional, and keeps support evaluation blocked until row-specific artifacts exist.",
         "",
@@ -411,6 +462,7 @@ def render_markdown(summary: dict[str, Any]) -> str:
         f"- Required evidence items: `{counters['requiredEvidenceItems']}`",
         f"- Present evidence items: `{counters['presentEvidenceItems']}`",
         f"- Missing evidence items: `{counters['missingEvidenceItems']}`",
+        f"- Validated non-promotional evidence items: `{counters['validatedNonPromotionalEvidenceItems']}`",
         f"- Historical signals: `{counters['historicalSignals']}`",
         f"- Promotional historical signals: `{counters['promotionalHistoricalSignals']}`",
         f"- New support claims: `{counters['newSupportClaims']}`",
@@ -420,7 +472,10 @@ def render_markdown(summary: dict[str, Any]) -> str:
         "",
     ]
     for item in summary["requiredEvidence"]:
-        lines.append(f"- `{item['kind']}`: `{item['status']}` at `{item['path']}`")
+        lines.append(
+            f"- `{item['kind']}`: `{item['status']}` at `{item['path']}`; "
+            f"present=`{item['present']}` promotional=`{item['promotional']}`"
+        )
     lines.extend(["", "## Historical Signals", ""])
     for item in summary["historicalSignals"]:
         observed = f" (`{item['observed']}`)" if "observed" in item else ""
@@ -460,7 +515,14 @@ def render_markdown(summary: dict[str, Any]) -> str:
 
 def validate_summary(summary: dict[str, Any]) -> None:
     require(summary.get("classification") == "path-aa-hairlines-evidence-intake-no-new-rendering-support", "classification mismatch")
-    require(summary.get("status") == "blocked-by-missing-row-specific-evidence", "status mismatch")
+    require(
+        summary.get("status") in {
+            "blocked-by-missing-row-specific-evidence",
+            "partial-row-specific-evidence-present-non-promotional",
+            "row-specific-evidence-present-non-promotional",
+        },
+        "status mismatch",
+    )
     counters = summary.get("counters")
     row = summary.get("row")
     required = summary.get("requiredEvidence")
@@ -468,8 +530,9 @@ def validate_summary(summary: dict[str, Any]) -> None:
     ticket = summary.get("nextRecommendedTicket")
     require(isinstance(counters, dict), "counters must be an object")
     require(counters.get("requiredEvidenceItems") == len(REQUIRED_EVIDENCE), "required evidence count changed")
-    require(counters.get("presentEvidenceItems") == 0, "present evidence count must remain zero for intake")
-    require(counters.get("missingEvidenceItems") == len(REQUIRED_EVIDENCE), "missing evidence count changed")
+    require(0 <= counters.get("presentEvidenceItems") <= len(REQUIRED_EVIDENCE), "present evidence count out of range")
+    require(counters.get("missingEvidenceItems") == len(REQUIRED_EVIDENCE) - counters.get("presentEvidenceItems"), "missing evidence count mismatch")
+    require(counters.get("validatedNonPromotionalEvidenceItems") == counters.get("presentEvidenceItems"), "present evidence must validate as non-promotional")
     require(counters.get("historicalSignals") == 7, "historical signal count changed")
     require(counters.get("promotionalHistoricalSignals") == 0, "historical signals must remain non-promotional")
     require(counters.get("newSupportClaims") == 0, "intake must not add support claims")
@@ -481,7 +544,8 @@ def validate_summary(summary: dict[str, Any]) -> None:
     require(row.get("routeCpu") == "expected-unsupported", "routeCpu must remain expected-unsupported")
     require(row.get("routeGpu") == "expected-unsupported", "routeGpu must remain expected-unsupported")
     require(isinstance(required, list) and len(required) == len(REQUIRED_EVIDENCE), "requiredEvidence list changed")
-    require(all(item.get("present") is False for item in required if isinstance(item, dict)), "required evidence must remain absent")
+    require(all(item.get("promotional") is False for item in required if isinstance(item, dict)), "required evidence must remain non-promotional")
+    require(all(item.get("validatedNonPromotional") == item.get("present") for item in required if isinstance(item, dict)), "present evidence must be validated non-promotional")
     require(isinstance(signals, list) and len(signals) == 7, "historicalSignals list changed")
     require(all(item.get("promotional") is False for item in signals if isinstance(item, dict)), "historical signals must be non-promotional")
     require(isinstance(ticket, dict), "nextRecommendedTicket must be an object")
@@ -516,7 +580,12 @@ def main() -> int:
     except AssertionError as error:
         print(f"m90_path_aa_hairlines_evidence_intake: FAIL: {error}", file=sys.stderr)
         return 1
-    print("M90 Path AA Hairlines evidence intake validation passed: missingEvidenceItems=10 newSupportClaims=0 readinessDelta=0.0")
+    print(
+        "M90 Path AA Hairlines evidence intake validation passed: "
+        f"presentEvidenceItems={reloaded['counters']['presentEvidenceItems']} "
+        f"missingEvidenceItems={reloaded['counters']['missingEvidenceItems']} "
+        "newSupportClaims=0 readinessDelta=0.0"
+    )
     return 0
 
 

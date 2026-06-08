@@ -1,6 +1,6 @@
 # M90 Path AA Hairlines Evidence Intake
 
-Status: blocked by missing row-specific evidence
+Status: blocked-by-missing-row-specific-evidence
 
 This report materializes the `M90-PAA-3A` intake for `skia-gm-hairlines`. It records the active refusal state, inventories historical HairlinesGM signals as non-promotional, and keeps support evaluation blocked until row-specific artifacts exist.
 
@@ -20,6 +20,7 @@ This report materializes the `M90-PAA-3A` intake for `skia-gm-hairlines`. It rec
 - Required evidence items: `10`
 - Present evidence items: `0`
 - Missing evidence items: `10`
+- Validated non-promotional evidence items: `0`
 - Historical signals: `7`
 - Promotional historical signals: `0`
 - New support claims: `0`
@@ -27,16 +28,16 @@ This report materializes the `M90-PAA-3A` intake for `skia-gm-hairlines`. It rec
 
 ## Required Evidence
 
-- `row-specific Skia reference`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/skia.png`
-- `CPU route evidence with fallbackReason=none`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-cpu.json`
-- `WebGPU route evidence with fallbackReason=none`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-gpu.json`
-- `CPU/GPU rendered artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu.png`
-- `CPU/GPU rendered artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu.png`
-- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-diff.png`
-- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-diff.png`
-- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/stats.json`
-- `performance impact evidence`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-performance.json`
-- `performance impact evidence`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-performance.json`
+- `row-specific Skia reference`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/skia.png`; present=`False` promotional=`False`
+- `CPU route evidence with fallbackReason=none`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-cpu.json`; present=`False` promotional=`False`
+- `WebGPU route evidence with fallbackReason=none`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-gpu.json`; present=`False` promotional=`False`
+- `CPU/GPU rendered artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu.png`; present=`False` promotional=`False`
+- `CPU/GPU rendered artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu.png`; present=`False` promotional=`False`
+- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-diff.png`; present=`False` promotional=`False`
+- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-diff.png`; present=`False` promotional=`False`
+- `CPU/GPU diff/stat artifacts`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/stats.json`; present=`False` promotional=`False`
+- `performance impact evidence`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-performance.json`; present=`False` promotional=`False`
+- `performance impact evidence`: `missing` at `reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-performance.json`; present=`False` promotional=`False`
 
 ## Historical Signals
 
@@ -80,5 +81,6 @@ This report materializes the `M90-PAA-3A` intake for `skia-gm-hairlines`. It rec
 ## Validation Commands
 
 - `rtk python3 scripts/m90_path_aa_hairlines_evidence_intake.py`
+- `rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest`
 - `rtk ./gradlew --no-daemon pipelineM90PathAaHairlinesEvidenceIntake`
 - `rtk git diff --check`

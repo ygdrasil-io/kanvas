@@ -119,6 +119,7 @@ class HairlinesSceneCaptureTest {
           "referenceKind": "skia-upstream-png",
           "referencePath": "skia-integration-tests/src/test/resources/original-888/hairlines.png",
           "fallbackReason": "none",
+          "supportClaim": false,
           "similarity": ${cpuCmp.similarity.jsonNumber()},
           "threshold": $CPU_MINIMUM_SIMILARITY,
           "tolerance": $CPU_TOLERANCE,

@@ -41,8 +41,14 @@ FORBIDDEN_PROMOTION_FILES = {
 ALLOWED_STATUS_PATHS = {
     "build.gradle.kts",
     "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/HairlinesSceneCaptureTest.kt",
+    "scripts/m90_path_aa_candidate_intake_closeout.py",
+    "scripts/m90_path_aa_hairlines_evidence_intake.py",
     "scripts/validate_m90_hairlines_artifact_harness.py",
     "reports/wgsl-pipeline/2026-06-08-m90-hairlines-artifact-harness.md",
+    "reports/wgsl-pipeline/m90-path-aa-candidate-intake-closeout/summary.json",
+    "reports/wgsl-pipeline/m90-path-aa-candidate-intake-closeout/summary.md",
+    "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json",
+    "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.md",
     "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json",
 }
 
@@ -140,7 +146,14 @@ def validate_existing_evidence() -> None:
     intake = load_json(INTAKE)
     require(intake.get("ticket") == "M90-PAA-3A", "hairlines intake ticket changed")
     require(intake.get("classification") == "path-aa-hairlines-evidence-intake-no-new-rendering-support", "hairlines intake classification changed")
-    require(intake.get("status") == "blocked-by-missing-row-specific-evidence", "hairlines intake status changed")
+    require(
+        intake.get("status") in {
+            "blocked-by-missing-row-specific-evidence",
+            "partial-row-specific-evidence-present-non-promotional",
+            "row-specific-evidence-present-non-promotional",
+        },
+        "hairlines intake status changed",
+    )
     row = intake.get("row")
     require(isinstance(row, dict), "hairlines intake missing row")
     require(row.get("rowId") == ROW_ID, "hairlines intake row changed")
@@ -149,8 +162,10 @@ def validate_existing_evidence() -> None:
     require(row.get("fallbackReason") == FALLBACK_REASON, "hairlines intake fallback changed")
     counters = intake.get("counters")
     require(isinstance(counters, dict), "hairlines intake missing counters")
-    require(counters.get("presentEvidenceItems") == 0, "hairlines intake must not gain checked-in rendered evidence")
-    require(counters.get("missingEvidenceItems") == 10, "hairlines intake missing-evidence count changed")
+    require(0 <= counters.get("presentEvidenceItems") <= 10, "hairlines intake present-evidence count out of range")
+    require(counters.get("missingEvidenceItems") == 10 - counters.get("presentEvidenceItems"), "hairlines intake missing-evidence count mismatch")
+    if "validatedNonPromotionalEvidenceItems" in counters:
+        require(counters.get("validatedNonPromotionalEvidenceItems") == counters.get("presentEvidenceItems"), "hairlines intake present evidence must be validated non-promotional")
     require(counters.get("historicalSignals") == 7, "hairlines intake historical-signal count changed")
     require(counters.get("newSupportClaims") == 0, "hairlines intake must not add support claims")
     require(counters.get("readinessDelta") == 0.0, "hairlines intake readiness delta changed")

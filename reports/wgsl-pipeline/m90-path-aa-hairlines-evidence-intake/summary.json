@@ -41,6 +41,7 @@
     "requiredEvidenceItems": 10,
     "presentEvidenceItems": 0,
     "missingEvidenceItems": 10,
+    "validatedNonPromotionalEvidenceItems": 0,
     "historicalSignals": 7,
     "promotionalHistoricalSignals": 0,
     "newSupportClaims": 0,
@@ -52,6 +53,7 @@
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/skia.png",
       "present": false,
       "promotional": false,
+      "validatedNonPromotional": false,
       "status": "missing"
     },
     {
@@ -59,6 +61,7 @@
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-cpu.json",
       "present": false,
       "promotional": false,
+      "validatedNonPromotional": false,
       "status": "missing"
     },
     {
@@ -66,6 +69,7 @@
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-gpu.json",
       "present": false,
       "promotional": false,
+      "validatedNonPromotional": false,
       "status": "missing"
     },
     {
@@ -73,6 +77,7 @@
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu.png",
       "present": false,
       "promotional": false,
+      "validatedNonPromotional": false,
       "status": "missing"
     },
     {
@@ -80,6 +85,7 @@
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu.png",
       "present": false,
       "promotional": false,
+      "validatedNonPromotional": false,
       "status": "missing"
     },
     {
@@ -87,6 +93,7 @@
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-diff.png",
       "present": false,
       "promotional": false,
+      "validatedNonPromotional": false,
       "status": "missing"
     },
     {
@@ -94,6 +101,7 @@
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-diff.png",
       "present": false,
       "promotional": false,
+      "validatedNonPromotional": false,
       "status": "missing"
     },
     {
@@ -101,6 +109,7 @@
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/stats.json",
       "present": false,
       "promotional": false,
+      "validatedNonPromotional": false,
       "status": "missing"
     },
     {
@@ -108,6 +117,7 @@
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-performance.json",
       "present": false,
       "promotional": false,
+      "validatedNonPromotional": false,
       "status": "missing"
     },
     {
@@ -115,6 +125,7 @@
       "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-performance.json",
       "present": false,
       "promotional": false,
+      "validatedNonPromotional": false,
       "status": "missing"
     }
   ],
@@ -188,6 +199,7 @@
   },
   "validationCommands": [
     "rtk python3 scripts/m90_path_aa_hairlines_evidence_intake.py",
+    "rtk ./gradlew --no-daemon -Dkanvas.sceneEvidence.write=true :gpu-raster:test --tests org.skia.gpu.webgpu.HairlinesSceneCaptureTest",
     "rtk ./gradlew --no-daemon pipelineM90PathAaHairlinesEvidenceIntake",
     "rtk git diff --check"
   ]

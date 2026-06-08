@@ -96,7 +96,14 @@ def validate_intake(ticket: str, row_id: str, source_gm: str, directory: str) ->
     intake = load_json(path)
     require(intake.get("milestone") == "M90", f"{ticket}: milestone changed")
     require(intake.get("ticket") == ticket, f"{ticket}: ticket mismatch")
-    require(intake.get("status") == "blocked-by-missing-row-specific-evidence", f"{ticket}: intake status changed")
+    require(
+        intake.get("status") in {
+            "blocked-by-missing-row-specific-evidence",
+            "partial-row-specific-evidence-present-non-promotional",
+            "row-specific-evidence-present-non-promotional",
+        },
+        f"{ticket}: intake status changed",
+    )
     require(str(intake.get("classification", "")).endswith("-evidence-intake-no-new-rendering-support"), f"{ticket}: classification changed")
 
     row = intake.get("row")
@@ -117,16 +124,28 @@ def validate_intake(ticket: str, row_id: str, source_gm: str, directory: str) ->
 
     require(isinstance(counters, dict), f"{ticket}: counters must be an object")
     require(counters.get("requiredEvidenceItems") == 10, f"{ticket}: required evidence count changed")
-    require(counters.get("presentEvidenceItems") == 0, f"{ticket}: present evidence count must stay zero")
-    require(counters.get("missingEvidenceItems") == 10, f"{ticket}: missing evidence count changed")
+    require(0 <= counters.get("presentEvidenceItems") <= 10, f"{ticket}: present evidence count out of range")
+    require(counters.get("missingEvidenceItems") == 10 - counters.get("presentEvidenceItems"), f"{ticket}: missing evidence count mismatch")
+    if "validatedNonPromotionalEvidenceItems" in counters:
+        require(
+            counters.get("validatedNonPromotionalEvidenceItems") == counters.get("presentEvidenceItems"),
+            f"{ticket}: present evidence must validate as non-promotional",
+        )
     require(counters.get("newSupportClaims") == 0, f"{ticket}: new support claims changed")
     require(counters.get("readinessDelta") == 0.0, f"{ticket}: readiness delta changed")
     require(counters.get("promotionalHistoricalSignals") == 0, f"{ticket}: historical signals became promotional")
 
     require(isinstance(required, list) and len(required) == 10, f"{ticket}: required evidence list changed")
-    require(all(isinstance(item, dict) and item.get("present") is False for item in required), f"{ticket}: required evidence must remain absent")
     require(all(isinstance(item, dict) and item.get("promotional") is False for item in required), f"{ticket}: required evidence cannot be promotional")
-    require(all(isinstance(item, dict) and item.get("status") == "missing" for item in required), f"{ticket}: required evidence status must stay missing")
+    require(
+        all(isinstance(item, dict) and item.get("status") in {"missing", "present-non-promotional"} for item in required),
+        f"{ticket}: required evidence status must stay missing or non-promotional",
+    )
+    if any(isinstance(item, dict) and item.get("present") is True for item in required):
+        require(
+            all(item.get("validatedNonPromotional") is True for item in required if isinstance(item, dict) and item.get("present") is True),
+            f"{ticket}: present evidence must be validated non-promotional",
+        )
 
     require(isinstance(signals, list), f"{ticket}: historicalSignals must be a list")
     require(len(signals) == counters.get("historicalSignals"), f"{ticket}: historical signal count mismatch")
@@ -314,8 +333,8 @@ def validate_closeout(closeout: dict[str, Any]) -> None:
     require(counters.get("policyOnlyRows") == 9, "policy-only count changed")
     require(counters.get("supportClaims") == 0, "support claims changed")
     require(counters.get("requiredEvidenceItems") == 90, "required evidence total changed")
-    require(counters.get("presentEvidenceItems") == 0, "present evidence total must stay zero")
-    require(counters.get("missingEvidenceItems") == 90, "missing evidence total changed")
+    require(0 <= counters.get("presentEvidenceItems") <= 90, "present evidence total out of range")
+    require(counters.get("missingEvidenceItems") == 90 - counters.get("presentEvidenceItems"), "missing evidence total mismatch")
     require(counters.get("promotionalHistoricalSignals") == 0, "historical signals became promotional")
     require(counters.get("newSupportClaims") == 0, "new support claims changed")
     require(counters.get("readinessDelta") == 0.0, "readiness moved")
@@ -345,7 +364,12 @@ def main() -> int:
     except AssertionError as error:
         print(f"m90_path_aa_candidate_intake_closeout: FAIL: {error}", file=sys.stderr)
         return 1
-    print("M90 Path AA candidate intake closeout validation passed: intakeReports=9 missingEvidenceItems=90 newSupportClaims=0 readinessDelta=0.0")
+    print(
+        "M90 Path AA candidate intake closeout validation passed: "
+        f"intakeReports=9 presentEvidenceItems={closeout['counters']['presentEvidenceItems']} "
+        f"missingEvidenceItems={closeout['counters']['missingEvidenceItems']} "
+        "newSupportClaims=0 readinessDelta=0.0"
+    )
     return 0
 
 
