@@ -30,6 +30,7 @@ EXPECTED_COUNTERS = {
     "expectedUnsupportedWithFallback": 25,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
+    "linkedM90Rows": 9,
 }
 EXPECTED_STATUS = {
     "expected-unsupported": 25,
@@ -146,6 +147,7 @@ def build_closeout(registry: dict[str, Any]) -> dict[str, Any]:
             "expectedUnsupportedWithFallback": counters["expectedUnsupportedWithFallback"],
             "policyOnlyRows": counters["policyOnlyRows"],
             "unlinkedUnsupportedRows": counters["unlinkedUnsupportedRows"],
+            "linkedM90Rows": counters["linkedM90Rows"],
             "statusCounts": counters["status"],
             "familyCounts": counters["family"],
         },
@@ -175,6 +177,7 @@ def build_closeout(registry: dict[str, Any]) -> dict[str, Any]:
             "edgeBudgetGateLinkRows": counters["edgeBudgetGateLinkRows"],
             "imageFilterPrepassGateLinkRows": counters["imageFilterPrepassGateLinkRows"],
             "textGlyphDependencyGateLinkRows": counters["textGlyphDependencyGateLinkRows"],
+            "linkedM90Rows": counters["linkedM90Rows"],
         },
         "nextRecommendedSlices": NEXT_SLICES,
         "nonClaims": {
@@ -217,6 +220,7 @@ def render_markdown(closeout: dict[str, Any]) -> str:
         f"- Expected unsupported with fallback: `{registry['expectedUnsupportedWithFallback']}`",
         f"- Policy-only rows: `{registry['policyOnlyRows']}`",
         f"- Unlinked unsupported rows: `{registry['unlinkedUnsupportedRows']}`",
+        f"- Linked M90 rows: `{registry['linkedM90Rows']}`",
         "",
         "## Unsupported Visibility",
         "",
@@ -227,6 +231,7 @@ def render_markdown(closeout: dict[str, Any]) -> str:
         f"- Edge-budget gate link rows: `{visibility['edgeBudgetGateLinkRows']}`",
         f"- Image-filter prepass gate link rows: `{visibility['imageFilterPrepassGateLinkRows']}`",
         f"- Text/glyph dependency gate link rows: `{visibility['textGlyphDependencyGateLinkRows']}`",
+        f"- Linked M90 rows: `{visibility['linkedM90Rows']}`",
         "",
         "## Readiness",
         "",
@@ -297,6 +302,7 @@ def validate_closeout(closeout: dict[str, Any]) -> None:
     require(visibility.get("expectedUnsupportedRows") == 25, "expected unsupported count changed")
     require(visibility.get("linkedUnsupportedRows") == 25, "linked unsupported count changed")
     require(visibility.get("unlinkedUnsupportedRows") == 0, "unlinked unsupported rows changed")
+    require(visibility.get("linkedM90Rows") == 9, "linked M90 rows changed")
     require(isinstance(non_claims, dict), "nonClaims must be an object")
     for key, value in non_claims.items():
         require(value is False, f"non-claim changed: {key}")

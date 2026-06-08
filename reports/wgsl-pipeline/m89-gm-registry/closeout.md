@@ -11,6 +11,7 @@ This closeout freezes the M89 registry visibility contract and hands off the nex
 - Expected unsupported with fallback: `25`
 - Policy-only rows: `20`
 - Unlinked unsupported rows: `0`
+- Linked M90 rows: `9`
 
 ## Unsupported Visibility
 
@@ -21,6 +22,7 @@ This closeout freezes the M89 registry visibility contract and hands off the nex
 - Edge-budget gate link rows: `2`
 - Image-filter prepass gate link rows: `1`
 - Text/glyph dependency gate link rows: `2`
+- Linked M90 rows: `9`
 
 ## Readiness
 

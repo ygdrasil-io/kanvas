@@ -242,6 +242,7 @@ def validate_closeout(closeout: dict[str, Any]) -> None:
     require(unsupported_visibility.get("expectedUnsupportedRows") == 25, "M89 closeout expectedUnsupportedRows must stay 25")
     require(unsupported_visibility.get("linkedUnsupportedRows") == 25, "M89 closeout linkedUnsupportedRows must stay 25")
     require(unsupported_visibility.get("unlinkedUnsupportedRows") == 0, "M89 closeout unlinkedUnsupportedRows must stay zero")
+    require(unsupported_visibility.get("linkedM90Rows") == 9, "M89 closeout linkedM90Rows must stay 9")
     require(isinstance(non_claims, dict), "M89 closeout nonClaims must be an object")
     for field, value in non_claims.items():
         require(value is False, f"M89 closeout nonClaims.{field} must stay false")
@@ -283,6 +284,7 @@ def expose_registry(project_root: Path, bundle_root: Path) -> None:
         "readinessBefore": closeout.get("readiness", {}).get("readinessBefore"),
         "readinessAfter": closeout.get("readiness", {}).get("readinessAfter"),
         "readinessDelta": closeout.get("readiness", {}).get("readinessDelta"),
+        "linkedM90Rows": closeout.get("unsupportedVisibility", {}).get("linkedM90Rows"),
         "nextRecommendedSlices": closeout.get("nextRecommendedSlices", []),
     }
     manifest["m89GmRegistry"] = manifest_entry

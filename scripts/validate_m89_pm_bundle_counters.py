@@ -136,6 +136,7 @@ def validate_manifest() -> None:
     require(isinstance(closeout, dict), "manifest missing M89 closeout summary")
     require(closeout.get("readinessBefore") == closeout.get("readinessAfter") == 67.75, "M89 closeout readiness changed")
     require(closeout.get("readinessDelta") == 0.0, "M89 closeout readiness delta changed")
+    require(closeout.get("linkedM90Rows") == 9, "M89 closeout linkedM90Rows changed")
     require("M90" in str(closeout.get("nextRecommendedSlices")), "M89 closeout must keep M90 next slice visible")
 
 
