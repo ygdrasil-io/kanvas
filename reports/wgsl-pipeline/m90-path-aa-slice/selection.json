@@ -1,0 +1,255 @@
+{
+  "classification": "path-aa-backlog-selection-no-new-rendering-support",
+  "clusters": {
+    "edgeBudgetRefusals": [
+      {
+        "fallbackReason": "coverage.edge-count-exceeded",
+        "nextTicketType": "implementation",
+        "policyOnly": false,
+        "rowId": "path-aa-convexpaths-edge-budget",
+        "source": "generated-dashboard",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      },
+      {
+        "fallbackReason": "coverage.edge-count-exceeded",
+        "nextTicketType": "implementation",
+        "policyOnly": false,
+        "rowId": "path-aa-dashing-edge-budget",
+        "source": "generated-dashboard",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      }
+    ],
+    "existingBoundedSupportBaseline": [
+      {
+        "fallbackReason": "none",
+        "nextTicketType": "implementation",
+        "policyOnly": false,
+        "rowId": "analytic-aa-convex",
+        "source": "generated-dashboard",
+        "status": "pass",
+        "supportClaim": true
+      },
+      {
+        "fallbackReason": "none",
+        "nextTicketType": "implementation",
+        "policyOnly": false,
+        "rowId": "clip-rect-difference",
+        "source": "generated-dashboard",
+        "status": "pass",
+        "supportClaim": true
+      },
+      {
+        "fallbackReason": "none",
+        "nextTicketType": "implementation",
+        "policyOnly": false,
+        "rowId": "draw-paint-clipped-rect",
+        "source": "generated-dashboard",
+        "status": "pass",
+        "supportClaim": true
+      },
+      {
+        "fallbackReason": "none",
+        "nextTicketType": "implementation",
+        "policyOnly": false,
+        "rowId": "draw-paint-full-clip",
+        "source": "generated-dashboard",
+        "status": "pass",
+        "supportClaim": true
+      },
+      {
+        "fallbackReason": "none",
+        "nextTicketType": "implementation",
+        "policyOnly": false,
+        "rowId": "path-aa-stroke-primitive",
+        "source": "generated-dashboard",
+        "status": "pass",
+        "supportClaim": true
+      }
+    ],
+    "groupedDashHairlineStrokePolicyRefusals": [
+      {
+        "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-dashcubics",
+        "source": "d53-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      },
+      {
+        "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-dashing",
+        "source": "d53-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      },
+      {
+        "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-hairlines",
+        "source": "d53-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      },
+      {
+        "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-hairmodes",
+        "source": "d53-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      },
+      {
+        "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-scaledstrokes",
+        "source": "d53-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      },
+      {
+        "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-strokedlines",
+        "source": "d53-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      },
+      {
+        "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-strokerect",
+        "source": "d53-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      },
+      {
+        "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-strokerects",
+        "source": "d53-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      },
+      {
+        "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-thinstrokedrects",
+        "source": "d53-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      }
+    ],
+    "rowSpecificRefusals": [
+      {
+        "fallbackReason": "path.pathfill.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-pathfill",
+        "source": "d50-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      },
+      {
+        "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
+        "nextTicketType": "policy-visibility",
+        "policyOnly": true,
+        "rowId": "skia-gm-rectpolystroke",
+        "source": "d50-visibility",
+        "status": "expected-unsupported",
+        "supportClaim": false
+      }
+    ]
+  },
+  "counters": {
+    "edgeBudgetRefusalRows": 2,
+    "existingPassRows": 5,
+    "groupedPolicyRefusalRows": 9,
+    "newSupportClaims": 0,
+    "pathAaRows": 18,
+    "readinessDelta": 0.0,
+    "rowSpecificRefusalRows": 2
+  },
+  "generatedBy": "scripts/m90_path_aa_slice.py",
+  "inputs": {
+    "edgeBudgetAdr": ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+    "m89Closeout": "reports/wgsl-pipeline/m89-gm-registry/closeout.json",
+    "pathAaBoundarySpec": ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json"
+  },
+  "milestone": "M90",
+  "nextTickets": [
+    {
+      "id": "M90-PAA-1",
+      "rows": [
+        "skia-gm-dashcubics",
+        "skia-gm-dashing",
+        "skia-gm-hairlines",
+        "skia-gm-hairmodes",
+        "skia-gm-scaledstrokes",
+        "skia-gm-strokedlines",
+        "skia-gm-strokerect",
+        "skia-gm-strokerects",
+        "skia-gm-thinstrokedrects"
+      ],
+      "scope": "Add route diagnostics for dash, hairline, scaled-stroke, and stroke-rect GM policy rows without changing support claims.",
+      "supportClaimAllowed": false,
+      "type": "policy-visibility"
+    },
+    {
+      "id": "M90-PAA-2",
+      "rows": [
+        "path-aa-convexpaths-edge-budget",
+        "path-aa-dashing-edge-budget"
+      ],
+      "scope": "Refresh edge-budget refusal proof for ConvexPathsGM and DashingGM; keep 256-edge budget unless benchmark/ADR evidence justifies change.",
+      "supportClaimAllowed": false,
+      "type": "implementation-or-refusal-proof"
+    },
+    {
+      "id": "M90-PAA-3",
+      "rows": [
+        "skia-gm-dashcubics",
+        "skia-gm-dashing",
+        "skia-gm-hairlines",
+        "skia-gm-hairmodes",
+        "skia-gm-scaledstrokes",
+        "skia-gm-strokedlines",
+        "skia-gm-strokerect",
+        "skia-gm-strokerects",
+        "skia-gm-thinstrokedrects"
+      ],
+      "scope": "Only after row-specific Skia reference, CPU/GPU route, diff/stat, and performance impact evidence exists, evaluate one bounded dash or hairline slice for support.",
+      "supportClaimAllowed": false,
+      "type": "bounded-promotion-candidate"
+    }
+  ],
+  "schemaVersion": 1,
+  "status": "generated evidence",
+  "supportGuard": {
+    "belowThresholdCountedAsProductionGap": false,
+    "broadPathAASupportClaimed": false,
+    "edgeBudgetChanged": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "policyOnlyRowsPromoted": false,
+    "supportClaimsChanged": false,
+    "thresholdsChanged": false
+  },
+  "validationCommands": [
+    "rtk python3 scripts/m90_path_aa_slice.py",
+    "rtk ./gradlew --no-daemon pipelineM90PathAaSlice",
+    "rtk git diff --check"
+  ]
+}

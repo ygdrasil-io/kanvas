@@ -4617,6 +4617,18 @@ tasks.register<Exec>("pipelineM89RegistryCloseout") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM90PathAaSlice") {
+    group = "verification"
+    description = "Generates and validates the first M90 Path AA backlog slice without changing support claims."
+    dependsOn("pipelineM89RegistryCloseout")
+    commandLine("python3", "scripts/m90_path_aa_slice.py")
+    inputs.file(layout.projectDirectory.file("scripts/m90_path_aa_slice.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/closeout.json"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m90-path-aa-slice"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateMepNextFeatureBreadth") {
     group = "verification"
     description = "Validates checked-in MEP-NEXT FOR-189..192 feature breadth evidence without Kadre native dependencies."
