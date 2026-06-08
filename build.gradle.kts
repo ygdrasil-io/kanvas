@@ -4730,6 +4730,22 @@ tasks.register<Exec>("pipelineM91ImageFilterCandidateReadiness") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM91ImageFilterOffsetEvidenceIntake") {
+    group = "verification"
+    description = "Generates and validates M91-IF-3A OffsetImageFilterGM evidence intake without changing support claims."
+    dependsOn("pipelineM91ImageFilterCandidateReadiness")
+    commandLine("python3", "scripts/m91_image_filter_offset_evidence_intake.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_offset_evidence_intake.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-candidate-readiness/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/for468-skia-gm-offsetimagefilter-evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/d51-offsetimagefilter-row-specific-evidence.json"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-offset-evidence-intake"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM90PathAaEdgeBudgetProof") {
     group = "verification"
     description = "Generates and validates M90 Path AA edge-budget refusal proof without changing support claims."

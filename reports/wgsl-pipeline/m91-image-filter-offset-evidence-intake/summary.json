@@ -1,0 +1,230 @@
+{
+  "classification": "image-filter-offset-evidence-intake-no-new-rendering-support",
+  "counters": {
+    "dashboardPromotions": 0,
+    "historicalSignals": 8,
+    "missingEvidenceItems": 11,
+    "newSupportClaims": 0,
+    "presentEvidenceItems": 0,
+    "promotionalHistoricalSignals": 0,
+    "readinessDelta": 0.0,
+    "requiredEvidenceItems": 11,
+    "thresholdChanges": 0,
+    "validatedNonPromotionalEvidenceItems": 0
+  },
+  "generatedBy": "scripts/m91_image_filter_offset_evidence_intake.py",
+  "historicalSignals": [
+    {
+      "kind": "FOR-468 row-specific refusal",
+      "path": "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
+      "promotional": false,
+      "reason": "FOR-468 formalizes the expected-unsupported refusal and missing row-specific artifacts."
+    },
+    {
+      "kind": "FOR-468 structured evidence",
+      "path": "reports/wgsl-pipeline/scenes/generated/for468-skia-gm-offsetimagefilter-evidence.json",
+      "promotional": false,
+      "reason": "Structured refusal evidence keeps reference, CPU, GPU, and diff/stat unavailable."
+    },
+    {
+      "kind": "D51 row-specific precision evidence",
+      "path": "reports/wgsl-pipeline/2026-06-06-d51-4-offsetimagefilter-row-specific-evidence.md",
+      "promotional": false,
+      "reason": "D51 narrows the missing artifact contract without promoting OffsetImageFilterGM."
+    },
+    {
+      "kind": "OffsetImageFilterGM Kotlin source",
+      "path": "skia-integration-tests/src/main/kotlin/org/skia/tests/OffsetImageFilterGM.kt",
+      "promotional": false,
+      "reason": "A source port is provenance only; it is not route, render, diff/stat, or performance evidence."
+    },
+    {
+      "kind": "OffsetImageFilterGM historical test",
+      "path": "skia-integration-tests/src/test/kotlin/org/skia/tests/OffsetImageFilterTest.kt",
+      "promotional": false,
+      "reason": "Historical CPU similarity coverage is not M91 row-specific CPU/WebGPU route evidence."
+    },
+    {
+      "kind": "historical skia similarity",
+      "observed": "OffsetImageFilterGM=84.515",
+      "path": "skia-integration-tests/test-similarity-scores.properties",
+      "promotional": false,
+      "reason": "A historical below-threshold similarity signal is not counted as a production feature gap or support proof."
+    },
+    {
+      "kind": "historical cpu-raster similarity",
+      "observed": "OffsetImageFilterGM=84.505",
+      "path": "cpu-raster/test-similarity-scores.properties",
+      "promotional": false,
+      "reason": "Mirrored historical score only preserves provenance."
+    },
+    {
+      "kind": "historical kanvas-skia similarity",
+      "observed": "OffsetImageFilterGM=84.505",
+      "path": "kanvas-skia/test-similarity-scores.properties",
+      "promotional": false,
+      "reason": "Mirrored historical score only preserves provenance."
+    }
+  ],
+  "inputs": {
+    "candidateReadiness": "reports/wgsl-pipeline/m91-image-filter-candidate-readiness/summary.json",
+    "d51Json": "reports/wgsl-pipeline/scenes/generated/d51-offsetimagefilter-row-specific-evidence.json",
+    "d51Report": "reports/wgsl-pipeline/2026-06-06-d51-4-offsetimagefilter-row-specific-evidence.md",
+    "for468Json": "reports/wgsl-pipeline/scenes/generated/for468-skia-gm-offsetimagefilter-evidence.json",
+    "for468Report": "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "routeCpu": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-cpu.json",
+    "routeGpu": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-offsetimagefilter/route-gpu.json",
+    "visibility": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-visibility.json"
+  },
+  "milestone": "M91",
+  "nextRecommendedTicket": {
+    "id": "M91-IF-3A-REF",
+    "promotionAllowedWithoutEvidence": false,
+    "scope": "Produce row-specific OffsetImageFilterGM graph dump, intermediate ownership, Skia/reference, CPU/WebGPU fallbackReason=none routes, render, diff/stat, and performance artifacts before any support evaluation.",
+    "supportClaimAllowed": false
+  },
+  "requiredEvidence": [
+    {
+      "kind": "row-specific graph dump",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/graph.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "intermediate texture ownership",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/intermediate-ownership.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "row-specific Skia/reference artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/skia.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-cpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "WebGPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/route-gpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU/GPU render artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/cpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU/GPU render artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/gpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/cpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/gpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/stats.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-offsetimagefilter/performance.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    }
+  ],
+  "routeDiagnostics": {
+    "cpu": "cpu.image-filter.offset-image-filter.expected-unsupported",
+    "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+    "gpu": "webgpu.image-filter.offset-image-filter.expected-unsupported",
+    "status": "expected-unsupported"
+  },
+  "row": {
+    "candidatePriority": 1,
+    "fallbackReason": "image-filter.offset.row-specific-artifacts-required",
+    "policyOnly": true,
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "rowId": "skia-gm-offsetimagefilter",
+    "sourceGm": "OffsetImageFilterGM",
+    "status": "expected-unsupported",
+    "supportClaim": false,
+    "visibilityPolicyOnlyArtifacts": true
+  },
+  "schemaVersion": 1,
+  "status": "blocked-by-missing-row-specific-evidence",
+  "supportGuard": {
+    "adjacentSimpleOffsetEvidenceInherited": false,
+    "arbitraryLayerPrepass": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "cpuReadbackFallbackAdded": false,
+    "cropImageFilterDagSupport": false,
+    "dashboardPromoted": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "ganeshPort": false,
+    "generalImageFilterDagSupport": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "picturePrepassSupport": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "requiredSmokeCandidateAllowed": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ticket": "M91-IF-3A",
+  "upstreamReadinessState": {
+    "activeNextRecommendedRow": "skia-gm-offsetimagefilter",
+    "activeNextRecommendedTicket": "M91-IF-3A",
+    "reason": "M91-IF-3A is the active candidate-readiness recommendation; this intake inventories evidence and remains non-promotional.",
+    "thisIntakeIsOutOfOrder": false
+  },
+  "validationCommands": [
+    "rtk python3 scripts/m91_image_filter_offset_evidence_intake.py",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterOffsetEvidenceIntake",
+    "rtk git diff --check"
+  ]
+}
