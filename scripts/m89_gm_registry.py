@@ -54,6 +54,11 @@ ROW_SPECIFIC_REFUSALS = {
         "json": GENERATED_DIR / "for469-skia-gm-pathfill-evidence.json",
         "report": ROOT / "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md",
     },
+    "skia-gm-rectpolystroke": {
+        "linear": "FOR-471",
+        "json": GENERATED_DIR / "for471-skia-gm-rectpolystroke-evidence.json",
+        "report": ROOT / "reports/wgsl-pipeline/2026-06-08-for-471-skia-gm-rectpolystroke-evidence.md",
+    },
 }
 D53_GROUPED_POLICY_REFUSALS = {
     "skia-gm-dashcubics",

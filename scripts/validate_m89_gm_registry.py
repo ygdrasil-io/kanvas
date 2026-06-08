@@ -20,7 +20,7 @@ EXPECTED_COUNTERS = {
     "totalRows": 47,
     "supportClaims": 22,
     "policyOnlyRows": 20,
-    "rowSpecificRefusalRows": 5,
+    "rowSpecificRefusalRows": 6,
     "dependencyGateLinkRows": 4,
     "groupedPolicyRefusalRows": 9,
     "expectedUnsupportedWithFallback": 25,
@@ -57,6 +57,12 @@ EXPECTED_ROW_SPECIFIC_REFUSALS = {
         "fallbackReason": "path-aa.fill.row-specific-artifacts-required",
         "json": "reports/wgsl-pipeline/scenes/generated/for469-skia-gm-pathfill-evidence.json",
         "report": "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md",
+    },
+    "skia-gm-rectpolystroke": {
+        "linear": "FOR-471",
+        "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/for471-skia-gm-rectpolystroke-evidence.json",
+        "report": "reports/wgsl-pipeline/2026-06-08-for-471-skia-gm-rectpolystroke-evidence.md",
     },
 }
 EXPECTED_GROUPED_POLICY_REFUSALS = {
@@ -418,7 +424,7 @@ def validate_report() -> None:
         "Total rows: `47`",
         "Support claims: `22`",
         "Policy-only rows: `20`",
-        "Row-specific refusal links: `5`",
+        "Row-specific refusal links: `6`",
         "Dependency gate links: `4`",
         "Grouped policy refusal links: `9`",
         "`expected-unsupported`: `25`",

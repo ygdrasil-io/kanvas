@@ -1,0 +1,131 @@
+{
+  "classification": "row-specific-expected-unsupported-no-support-claim",
+  "date": "2026-06-08",
+  "linear": "FOR-471",
+  "nonClaims": {
+    "broadPathAaSupportClaimAddedByFor471": false,
+    "broadStrokeSupportClaimAddedByFor471": false,
+    "capJoinDashSupportClaimAddedByFor471": false,
+    "dashboardRowAddedByFor471": false,
+    "dashboardStatusChangedByFor471": false,
+    "edgeBudgetSupportClaimAddedByFor471": false,
+    "fallbackPolicyChanged": false,
+    "pathStrokerSupportClaimAddedByFor471": false,
+    "pipelineKeyChanged": false,
+    "productionCodeChanged": false,
+    "rectPolyStrokeEvidenceInherited": false,
+    "scoringChanged": false,
+    "skiaComparableClaimAddedByFor471": false,
+    "supportClaimAddedByFor471": false,
+    "thresholdChanged": false,
+    "upstreamSourceChanged": false,
+    "wgslProductionChanged": false
+  },
+  "row": {
+    "cpu": {
+      "artifact": "not-generated",
+      "expectation": "CPU Path AA/stroke oracle with rect-vs-path proc, join, rotation, and degenerate-rect diagnostics recorded.",
+      "refusalReason": "row-specific CPU stroke artifact is missing",
+      "required": true,
+      "route": "cpu.path.rectpolystroke.expected-unsupported",
+      "status": "expected-unsupported"
+    },
+    "diffStats": {
+      "reason": "diff/stat payload cannot be computed without row-specific reference, CPU, and GPU artifacts",
+      "required": true,
+      "status": "not-computed"
+    },
+    "displayName": "RectPolyStroke",
+    "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
+    "family": "clip/transform/path-aa",
+    "gpu": {
+      "artifact": "not-generated",
+      "expectation": "WebGPU bounded stroke/coverage route with join, rotated rect, degenerate rect, and hairline overlay diagnostics.",
+      "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
+      "refusalReason": "row-specific WebGPU artifact is missing",
+      "required": true,
+      "route": "webgpu.path.rectpolystroke.expected-unsupported",
+      "status": "expected-unsupported"
+    },
+    "inventoryId": "skia-gm-rectpolystroke",
+    "linear": "FOR-471",
+    "nonClaims": {
+      "broadPathAaSupportClaimAddedByFor471": false,
+      "broadStrokeSupportClaimAddedByFor471": false,
+      "capJoinDashSupportClaimAddedByFor471": false,
+      "dashboardRowAddedByFor471": false,
+      "dashboardStatusChangedByFor471": false,
+      "edgeBudgetSupportClaimAddedByFor471": false,
+      "fallbackPolicyChanged": false,
+      "pathStrokerSupportClaimAddedByFor471": false,
+      "pipelineKeyChanged": false,
+      "productionCodeChanged": false,
+      "rectPolyStrokeEvidenceInherited": false,
+      "scoringChanged": false,
+      "skiaComparableClaimAddedByFor471": false,
+      "supportClaimAddedByFor471": false,
+      "thresholdChanged": false,
+      "upstreamSourceChanged": false,
+      "wgslProductionChanged": false
+    },
+    "rank": 18,
+    "reason": "coverage.rectpolystroke.row-specific-artifacts-required",
+    "rectPolyStrokeProvenance": {
+      "cellMatrix": "48 cells: 3 joins x 4 rect shapes including degenerate cases x 2 rotations x 2 draw procs, plus 0-width green hairline overlays.",
+      "crossBackendTests": [
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RectPolyStrokeWebGpuTest.kt",
+        "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/RectPolyStrokeCrossBackendTest.kt"
+      ],
+      "fixtureAvailability": "A Kotlin GM port, historical similarity reports, and adapter-gated tests exist, but no row-specific M89 registry reference/CPU/GPU artifacts are generated.",
+      "historicalSimilarity": "RectPolyStrokeGM=97.4320415879017 in skia-integration-tests/test-similarity-scores.properties; this is historical evidence only and is not treated as a production missing feature when the only signal is tolerance.",
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/RectPolyStrokeGM.kt",
+      "scene": "RectPolyStrokeGM",
+      "unsupportedBroadClaims": [
+        "broad Path AA",
+        "broad stroke",
+        "cap/join/dash",
+        "path stroker parity",
+        "edge-budget promotion",
+        "historical WebGPU/cross-backend evidence inheritance"
+      ],
+      "upstreamSource": "gm/rect_poly_stroke.cpp"
+    },
+    "reference": {
+      "plan": "Skia GM capture for bounded RectPolyStrokeGM cells with rect-vs-path, join, rotation, and degenerate-rect coverage.",
+      "refusalReason": "candidate-specific Skia GM reference capture is missing",
+      "required": true,
+      "status": "not-generated"
+    },
+    "routeDiagnostics": {
+      "cpu": "cpu.path.rectpolystroke.expected-unsupported",
+      "fallbackReason": "coverage.rectpolystroke.row-specific-artifacts-required",
+      "gpu": "webgpu.path.rectpolystroke.expected-unsupported",
+      "policy": "Historical RectPolyStrokeGM similarity, the Kotlin GM port, and adapter-gated WebGPU/cross-backend tests are not M89 registry row-specific proof for skia-gm-rectpolystroke. The row stays unsupported until a candidate-specific Skia reference capture, CPU Path AA/stroke artifact, WebGPU bounded coverage artifact, diff/stat payload, and fallbackReason=none exist without threshold, scoring, edge-budget, or fallback policy changes."
+    },
+    "source": {
+      "candidateInventory": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-candidate-inventory.json",
+      "crossBackendTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/RectPolyStrokeCrossBackendTest.kt",
+      "gpuTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RectPolyStrokeWebGpuTest.kt",
+      "kotlinSource": "skia-integration-tests/src/main/kotlin/org/skia/tests/RectPolyStrokeGM.kt",
+      "similarityScores": "skia-integration-tests/test-similarity-scores.properties",
+      "upstreamSource": "gm/rect_poly_stroke.cpp"
+    },
+    "status": "expected-unsupported"
+  },
+  "schemaVersion": 1,
+  "scoreImpact": {
+    "reason": "The row is a visible expected-unsupported refusal, not a supported rendering row.",
+    "supportScoreIncreased": false
+  },
+  "sourceManifest": "reports/wgsl-pipeline/scenes/generated/d50-gm-dashboard-visibility.json",
+  "validationCommands": [
+    "rtk python3 scripts/validate_for471_skia_gm_rectpolystroke_evidence.py",
+    "rtk python3 scripts/m89_gm_registry.py",
+    "rtk python3 scripts/validate_m89_gm_registry.py",
+    "rtk python3 scripts/m89_pm_bundle_registry.py --project-root /Users/chaos/.codex/worktrees/ce14/kanvas --bundle-root build/reports/wgsl-pipeline-pm-bundle",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-for471-pycache python3 -m py_compile scripts/validate_for471_skia_gm_rectpolystroke_evidence.py scripts/m89_gm_registry.py scripts/validate_m89_gm_registry.py scripts/m89_pm_bundle_registry.py",
+    "rtk ./gradlew --no-daemon pipelineM89GmRegistry validateM89GmRegistry",
+    "rtk ./gradlew --no-daemon pipelinePmBundle",
+    "rtk git diff --check"
+  ]
+}
