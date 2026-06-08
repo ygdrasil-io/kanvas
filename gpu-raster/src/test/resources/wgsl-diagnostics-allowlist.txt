@@ -3,7 +3,9 @@
 # kind is `parser` for parser diagnostics and `reflection` for lowerer/layouter diagnostics.
 # This file intentionally tracks legacy handwritten WGSL diagnostics only.
 src/main/resources/shaders/aa_polygon.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=8266, end=8267)
-src/main/resources/shaders/aa_stencil_cover.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=4957, end=4958)
+src/main/resources/shaders/aa_stencil_cover.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=5087, end=5088)
+src/main/resources/shaders/aa_stencil_cover.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=6221, end=6223)
+src/main/resources/shaders/aa_stencil_cover.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=6334, end=6336)
 src/main/resources/shaders/aa_stencil_cover_bitmap_shader.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=7996, end=7997)
 src/main/resources/shaders/aa_stencil_cover_conical_focal_gradient.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=4213, end=4214)
 src/main/resources/shaders/aa_stencil_cover_conical_focal_gradient.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=7315, end=7316)
@@ -15,9 +17,9 @@ src/main/resources/shaders/aa_stencil_cover_radial_gradient.wgsl|parser|Expected
 src/main/resources/shaders/aa_stencil_cover_radial_gradient.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=5239, end=5240)
 src/main/resources/shaders/aa_stencil_cover_sweep_gradient.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=4402, end=4403)
 src/main/resources/shaders/aa_stencil_cover_sweep_gradient.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=5868, end=5869)
-src/main/resources/shaders/blur_gaussian.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=5855, end=5856)
-src/main/resources/shaders/blur_gaussian.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=7408, end=7409)
-src/main/resources/shaders/blur_gaussian.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=10602, end=10603)
+src/main/resources/shaders/blur_gaussian.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=7544, end=7545)
+src/main/resources/shaders/blur_gaussian.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=9097, end=9098)
+src/main/resources/shaders/blur_gaussian.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=12335, end=12336)
 src/main/resources/shaders/blur_image_filter.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=7669, end=7670)
 src/main/resources/shaders/blur_image_filter.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=8759, end=8760)
 src/main/resources/shaders/blur_mask_filter_shaded.wgsl|parser|Expected SEMICOLON, found IDENTIFIER span=Span(start=6910, end=6911)
