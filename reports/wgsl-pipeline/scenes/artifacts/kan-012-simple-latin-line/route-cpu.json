@@ -1,0 +1,48 @@
+            {
+              "sceneId": "text.simple-latin.line.v1",
+              "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+              "backend": "CPU",
+              "drawKind": "SkTextBlob.simple-positioned-run",
+              "status": "pass",
+              "supportScope": "simple-latin-line-visible",
+              "supportClaim": true,
+              "selectedRoute": "cpu.text.outline-path.simple-latin",
+              "glyphRoute": "font.glyph.outline-path",
+              "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+              "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+              "atlasUploadByteCount": 12928,
+              "referenceKind": "cpu-atlas-alpha-mask-oracle",
+              "fallbackReason": "none",
+              "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+              "fontFamily": "Liberation Sans",
+              "fontSize": 32.0,
+              "text": "Kanvas Latin 0123456789 ABC xyz.",
+              "shapingMode": "simple-codepoint-order",
+              "glyphInventoryCount": 32,
+              "dedupedGlyphCount": 26,
+              "comparison": {
+  "similarity": 99.054362,
+  "totalPixels": 61440,
+  "matchingPixels": 60859,
+  "mismatchingPixels": 581,
+  "tolerance": 8,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 255,
+    "g": 255,
+    "b": 255
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 40,
+    "g": 40,
+    "b": 40
+  }
+},
+              "similarityThreshold": 95.00,
+              "globalThresholdChanged": false,
+              "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+              "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+              "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+              "nonClaims": ["no-shaping-claim", "no-fallback-font-claim", "no-emoji-or-color-font-claim", "no-sdf-or-lcd-claim", "no-rtl-or-bidi-claim", "no-ligature-claim", "no-broad-text-claim"]
+            }
