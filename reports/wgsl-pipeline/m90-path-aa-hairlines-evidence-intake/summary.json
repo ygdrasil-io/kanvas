@@ -1,0 +1,150 @@
+{
+  "classification": "path-aa-hairlines-evidence-intake-no-new-rendering-support",
+  "counters": {
+    "historicalSignals": 2,
+    "missingEvidenceItems": 10,
+    "newSupportClaims": 0,
+    "presentEvidenceItems": 0,
+    "promotionalHistoricalSignals": 0,
+    "readinessDelta": 0.0,
+    "requiredEvidenceItems": 10
+  },
+  "generatedBy": "scripts/m90_path_aa_hairlines_evidence_intake.py",
+  "historicalSignals": [
+    {
+      "kind": "historical-crossbackend-test",
+      "path": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt",
+      "promotional": false,
+      "reason": "Historical test signal is not row-specific M90 evidence and does not provide current skia/cpu/gpu/diff/stat/perf artifacts."
+    },
+    {
+      "kind": "historical-similarity-floor",
+      "observed": "HairlinesGM=98.97",
+      "path": "gpu-raster/test-similarity-scores-webgpu.properties",
+      "promotional": false,
+      "reason": "A historical similarity score is not a support claim; below-threshold/tolerance-only status is not counted as a production missing feature."
+    }
+  ],
+  "inputs": {
+    "candidateReadiness": "reports/wgsl-pipeline/m90-path-aa-candidate-readiness/summary.json",
+    "historicalCrossBackendTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "routeCpu": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-cpu.json",
+    "routeGpu": "reports/wgsl-pipeline/m90-path-aa-route-diagnostics/routes/skia-gm-hairlines/route-gpu.json",
+    "similarityProperties": "gpu-raster/test-similarity-scores-webgpu.properties",
+    "visibility": "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"
+  },
+  "milestone": "M90",
+  "nextRecommendedTicket": {
+    "id": "M90-PAA-3A-REF",
+    "promotionAllowedWithoutEvidence": false,
+    "scope": "Produce row-specific HairlinesGM Skia reference plus CPU/WebGPU fallbackReason=none route, render, diff/stat, and performance artifacts before any support evaluation.",
+    "supportClaimAllowed": false
+  },
+  "requiredEvidence": [
+    {
+      "kind": "row-specific Skia reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/skia.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-cpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "WebGPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/route-gpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU rendered artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU rendered artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/stats.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/cpu-performance.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-hairlines/gpu-performance.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing"
+    }
+  ],
+  "row": {
+    "candidatePriority": 1,
+    "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+    "policyOnly": true,
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "rowId": "skia-gm-hairlines",
+    "sourceGm": "HairlinesGM",
+    "status": "expected-unsupported",
+    "supportClaim": false,
+    "visibilityPolicyOnlyArtifacts": true
+  },
+  "schemaVersion": 1,
+  "status": "blocked-by-missing-row-specific-evidence",
+  "supportGuard": {
+    "belowThresholdCountedAsProductionGap": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadPathAASupport": false,
+    "broadStrokeSupport": false,
+    "edgeBudgetChanged": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ticket": "M90-PAA-3A",
+  "validationCommands": [
+    "rtk python3 scripts/m90_path_aa_hairlines_evidence_intake.py",
+    "rtk ./gradlew --no-daemon pipelineM90PathAaHairlinesEvidenceIntake",
+    "rtk git diff --check"
+  ]
+}
