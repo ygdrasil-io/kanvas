@@ -1,0 +1,87 @@
+{
+  "classification": "image-filter-prepass-gate-proof-no-new-rendering-support",
+  "counters": {
+    "cpuOraclePassRows": 1,
+    "dashboardPromotions": 0,
+    "gpuExpectedUnsupportedRows": 1,
+    "newSupportClaims": 0,
+    "prepassGateRows": 1,
+    "proofRows": 1,
+    "readinessDelta": 0.0,
+    "requiredSmokeCandidatesAdded": 0,
+    "thresholdChanges": 0
+  },
+  "generatedBy": "scripts/m91_image_filter_prepass_gate_proof.py",
+  "inputs": {
+    "imageFilterSpec": ".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md",
+    "refusalArtifactRoot": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "selection": "reports/wgsl-pipeline/m91-image-filter-slice/selection.json",
+    "supportedSiblingArtifactRoot": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass"
+  },
+  "milestone": "M91",
+  "proofs": [
+    {
+      "cpuReadbackFallbackAdded": false,
+      "cpuRoute": "cpu.image-filter.crop-nonnull-reference",
+      "evidenceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+      "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+      "generalDagCompilerAdded": false,
+      "generatedEvidenceReport": "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md",
+      "gpuCoverageStrategy": "webgpu.image-filter.refuse",
+      "gpuPipelineKey": "imageFilter=Crop(input=nonNull),prePass=required,selectedM38Shape=false",
+      "gpuRoute": "webgpu.image-filter.refuse.prepass-required",
+      "implementationReport": "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
+      "policyOnly": false,
+      "policyReport": "reports/wgsl-pipeline/2026-05-28-m38-image-filter-policy-update.md",
+      "refusalArtifacts": {
+        "cpuStatus": "pass",
+        "gpuStatus": "expected-unsupported",
+        "inventoryStats": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/stats.json",
+        "routeCpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
+        "routeGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json"
+      },
+      "requiredSmokeCandidateAllowed": false,
+      "routeCpu": "pass",
+      "routeGpu": "expected-unsupported",
+      "rowId": "image-filter-crop-nonnull-prepass-required",
+      "sourceShape": "Crop(input=nonNull)",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "supportScoreIncreased": false,
+      "supportedSiblingBoundary": {
+        "boundary": "M38 bounded Crop(kDecal, input=Offset(null)) prepass only; does not generalize to Crop(input=nonNull) graph shapes.",
+        "routeGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+        "routePrepassDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-prepass.json",
+        "sceneId": "crop-image-filter-nonnull-prepass",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json"
+      },
+      "supportedSiblingScene": "crop-image-filter-nonnull-prepass"
+    }
+  ],
+  "schemaVersion": 1,
+  "status": "generated evidence",
+  "supportGuard": {
+    "arbitraryLayerPrepass": false,
+    "belowThresholdCountedAsProductionGap": false,
+    "cpuReadbackFallbackAdded": false,
+    "dashboardPromoted": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "ganeshPort": false,
+    "generalImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "readinessMoved": false,
+    "recursiveCropPrepass": false,
+    "requiredSmokeCandidateAllowed": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ticket": "M91-IF-2",
+  "validationCommands": [
+    "rtk python3 scripts/m91_image_filter_prepass_gate_proof.py",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterPrepassGateProof",
+    "rtk git diff --check"
+  ]
+}

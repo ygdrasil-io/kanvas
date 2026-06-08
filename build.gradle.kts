@@ -4702,6 +4702,20 @@ tasks.register<Exec>("pipelineM91ImageFilterRouteDiagnostics") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM91ImageFilterPrepassGateProof") {
+    group = "verification"
+    description = "Generates and validates M91 image-filter prepass dependency-gate proof without changing support claims."
+    dependsOn("pipelineM91ImageFilterSlice")
+    commandLine("python3", "scripts/m91_image_filter_prepass_gate_proof.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_prepass_gate_proof.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-slice/selection.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-prepass-gate-proof"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM90PathAaEdgeBudgetProof") {
     group = "verification"
     description = "Generates and validates M90 Path AA edge-budget refusal proof without changing support claims."
