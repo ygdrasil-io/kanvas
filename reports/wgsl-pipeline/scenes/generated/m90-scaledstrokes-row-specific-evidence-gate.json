@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "manual-m90-scaledstrokes-row-specific-evidence-gate",
+  "milestone": "M90",
+  "ticket": "M90-PAA-3G-REF",
+  "parentTicket": "M90-PAA-3G",
+  "classification": "scaledstrokes-row-specific-evidence-gate-no-support-promotion",
+  "sceneId": "skia-gm-scaledstrokes",
+  "inventoryId": "skia-gm-scaledstrokes",
+  "sourceGm": "ScaledStrokesGM",
+  "status": "dependency-gated",
+  "supportClaim": false,
+  "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
+  "evidenceGate": {
+    "kind": "row-specific-reference-cpu-webgpu-artifact-bundle",
+    "requiredRouteStatus": "pass",
+    "requiredFallbackReason": "none",
+    "requiredArtifacts": [
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-scaledstrokes/skia.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-scaledstrokes/route-cpu.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-scaledstrokes/route-gpu.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-scaledstrokes/cpu.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-scaledstrokes/gpu.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-scaledstrokes/cpu-diff.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-scaledstrokes/gpu-diff.png",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-scaledstrokes/stats.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-scaledstrokes/cpu-performance.json",
+      "reports/wgsl-pipeline/scenes/artifacts/skia-gm-scaledstrokes/gpu-performance.json"
+    ],
+    "currentlyPresentArtifacts": [],
+    "historicalSignalsOnly": [
+      "skia-integration-tests/src/test/kotlin/org/skia/tests/ScaledStrokesTest.kt",
+      "skia-integration-tests/src/main/kotlin/org/skia/tests/ScaledStrokesGM.kt",
+      "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ScaledStrokesWebGpuTest.kt",
+      "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/ScaledStrokesCrossBackendTest.kt",
+      "gpu-raster/test-similarity-scores-webgpu.properties#ScaledStrokesGM=96.49",
+      "skia-integration-tests/test-similarity-scores.properties#ScaledStrokesGM=96.02783203125",
+      "cpu-raster/test-similarity-scores.properties#ScaledStrokesGM=96.02783203125",
+      "kanvas-skia/test-similarity-scores.properties#ScaledStrokesGM=96.05859375"
+    ]
+  },
+  "promotionGate": {
+    "promotionAllowed": false,
+    "supportAllowedFromToleranceOnly": false,
+    "supportAllowedFromHistoricalSignalsOnly": false,
+    "supportAllowedWithoutRowSpecificArtifactBundle": false,
+    "supportAllowedWithoutFallbackReasonNone": false
+  },
+  "scoreImpact": {
+    "newSupportClaims": 0,
+    "readinessDelta": 0.0,
+    "dashboardPromotion": false,
+    "thresholdChanged": false,
+    "edgeBudgetChanged": false
+  },
+  "nonClaims": {
+    "rowSupportClaimed": false,
+    "broadPathAASupport": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadStrokeSupport": false,
+    "broadScaledStrokeSupport": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "dynamicSkSLCompiler": false,
+    "thresholdChanged": false,
+    "dashboardPromoted": false,
+    "belowThresholdCountedAsProductionGap": false
+  }
+}
