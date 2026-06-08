@@ -7726,6 +7726,8 @@ tasks.register<Exec>("pipelinePmBundleM89Registry") {
     )
     inputs.file(layout.projectDirectory.file("scripts/m89_pm_bundle_registry.py"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m89-gm-registry"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/pm-counters.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/pm-counters.md"))
     inputs.file(layout.buildDirectory.file("reports/wgsl-pipeline-pm-bundle/manifest.json"))
     outputs.dir(layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle/registry/m89-gm-registry"))
 }

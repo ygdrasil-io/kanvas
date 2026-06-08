@@ -13,6 +13,35 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 
+EXPECTED_PM_COUNTERS = {
+    "totalRows": 47,
+    "supportClaims": 22,
+    "policyOnlyRows": 20,
+    "expectedUnsupportedWithFallback": 25,
+    "unlinkedUnsupportedRows": 0,
+    "linkedM66Rows": 18,
+    "linkedM86Rows": 18,
+}
+EXPECTED_STATUS_COUNTS = {
+    "expected-unsupported": 25,
+    "pass": 22,
+}
+EXPECTED_FAMILY_COUNTS = {
+    "bitmap-image": 7,
+    "blend-color": 2,
+    "gradient": 4,
+    "image-filter": 5,
+    "path-aa": 18,
+    "runtime-effect": 3,
+    "text-glyph": 7,
+    "transform-layer": 1,
+}
+EXPECTED_SOURCE_COUNTS = {
+    "d50-visibility": 11,
+    "d53-visibility": 9,
+    "generated-dashboard": 27,
+}
+
 
 def load_json(path: Path) -> dict[str, Any]:
     if not path.is_file():
@@ -34,7 +63,7 @@ def require(condition: bool, message: str) -> None:
 
 def update_readme(readme: Path) -> None:
     marker = "- `registry/m89-gm-registry/`: M89 normalized GM support/refusal registry JSON and Markdown report."
-    note = "- M89 registry counters and closeout live in `manifest.json` under `m89GmRegistry`; policy-only visibility rows do not count as support, dependency gates, edge-budget gates, image-filter prepass gates, text/glyph dependency gates, and refusal links remain unsupported, `unlinkedUnsupportedRows` must stay zero, threshold-only misses remain fidelity burn-down scope, and M90/M91/M92 are next-slice recommendations only."
+    note = "- M89 registry counters, PM counters, and closeout live in `manifest.json` under `m89GmRegistry`; PM counters are reporting-only evidence with no registry row mutation or support promotion. Policy-only visibility rows do not count as support, dependency gates, edge-budget gates, image-filter prepass gates, text/glyph dependency gates, and refusal links remain unsupported, `unlinkedUnsupportedRows` must stay zero, threshold-only misses remain fidelity burn-down scope, and M90/M91/M92 are next-slice recommendations only."
     text = readme.read_text(encoding="utf-8") if readme.is_file() else "# WGSL Pipeline PM Bundle\n"
     insertion = f"{marker}\n{note}\n"
     if marker in text:
@@ -50,7 +79,11 @@ def update_readme(readme: Path) -> None:
                 continue
             if skip_stale_note:
                 skip_stale_note = False
-                if line.startswith("- M89 registry counters live in `manifest.json` under `m89GmRegistry`;") or line.startswith("- M89 registry counters and closeout live in `manifest.json` under `m89GmRegistry`;"):
+                if (
+                    line.startswith("- M89 registry counters live in `manifest.json` under `m89GmRegistry`;")
+                    or line.startswith("- M89 registry counters and closeout live in `manifest.json` under `m89GmRegistry`;")
+                    or line.startswith("- M89 registry counters, PM counters, and closeout live in `manifest.json` under `m89GmRegistry`;")
+                ):
                     continue
             rewritten.append(line)
         if replaced:
@@ -66,7 +99,55 @@ def update_readme(readme: Path) -> None:
     readme.write_text(text, encoding="utf-8")
 
 
-def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
+def require_false_map(root: dict[str, Any], path: str) -> None:
+    require(isinstance(root, dict), f"{path} must be an object")
+    for field, value in root.items():
+        require(value is False, f"{path}.{field} must stay false")
+
+
+def validate_pm_counters(pm_counters: dict[str, Any], registry: dict[str, Any]) -> dict[str, Any]:
+    require(pm_counters.get("ticket") == "M89-PM-COUNTERS", "PM counters ticket mismatch")
+    require(
+        pm_counters.get("classification") == "gm-registry-pm-counters-reporting-only-no-support-promotion",
+        "PM counters classification mismatch",
+    )
+    require(pm_counters.get("status") == "generated evidence", "PM counters status mismatch")
+    require(
+        pm_counters.get("inputs", {}).get("registryJson") == "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+        "PM counters registry input mismatch",
+    )
+
+    registry_counters = registry.get("counters")
+    counters = pm_counters.get("counters")
+    require(isinstance(registry_counters, dict), "registry counters must be an object")
+    require(isinstance(counters, dict), "PM counters must be an object")
+    for key, expected in EXPECTED_PM_COUNTERS.items():
+        require(registry_counters.get(key) == expected, f"registry counter changed: {key}")
+        require(counters.get(key) == expected, f"PM counter changed: {key}")
+
+    for key, expected in [
+        ("status", EXPECTED_STATUS_COUNTS),
+        ("family", EXPECTED_FAMILY_COUNTS),
+        ("source", EXPECTED_SOURCE_COUNTS),
+    ]:
+        require(registry_counters.get(key) == expected, f"registry {key} map changed")
+        require(counters.get(key) == expected, f"PM counters {key} map changed")
+
+    require_false_map(pm_counters.get("nonClaims"), "PM counters nonClaims")
+    summary = pm_counters.get("supportRefusalSummary")
+    require(isinstance(summary, dict), "PM counters supportRefusalSummary must be an object")
+    require(summary.get("reportingOnly", {}).get("statusRows") == 0, "PM counters reportingOnly.statusRows must stay zero")
+    require(summary.get("policyOnlyVisibility", {}).get("rows") == 20, "PM counters policyOnlyVisibility.rows must stay 20")
+    require(summary.get("dependencyGated", {}).get("statusRows") == 0, "PM counters dependencyGated.statusRows must stay zero")
+    require(summary.get("dependencyGated", {}).get("linkedRows") == 6, "PM counters dependencyGated.linkedRows must stay 6")
+    require(
+        summary.get("belowThresholdExcluded", {}).get("countedAsProductionGap") is False,
+        "PM counters belowThresholdExcluded.countedAsProductionGap must stay false",
+    )
+    return counters
+
+
+def build_manifest_entry(registry: dict[str, Any], pm_counters: dict[str, Any]) -> dict[str, Any]:
     counters = registry.get("counters")
     evidence = registry.get("evidencePackages")
     require(isinstance(counters, dict), "registry counters must be an object")
@@ -91,6 +172,7 @@ def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
     require(m86.get("globalThresholdWeakened") is False, "M89 must preserve M86 globalThresholdWeakened=false")
     require(m88.get("failRows") == 0, "M89 must preserve M88 failRows=0")
     require(m88.get("trackedGapRows") == 0, "M89 must preserve M88 trackedGapRows=0")
+    pm_summary_counters = validate_pm_counters(pm_counters, registry)
 
     return {
         "totalRows": counters.get("totalRows", 0),
@@ -113,6 +195,20 @@ def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
         "registryReport": "registry/m89-gm-registry/registry.md",
         "closeoutJson": "registry/m89-gm-registry/closeout.json",
         "closeoutReport": "registry/m89-gm-registry/closeout.md",
+        "pmCountersJson": "registry/m89-gm-registry/pm-counters.json",
+        "pmCountersReport": "registry/m89-gm-registry/pm-counters.md",
+        "pmCounters": {
+            "classification": pm_counters.get("classification"),
+            "status": pm_counters.get("status"),
+            "totalRows": pm_summary_counters.get("totalRows"),
+            "supportClaims": pm_summary_counters.get("supportClaims"),
+            "policyOnlyRows": pm_summary_counters.get("policyOnlyRows"),
+            "expectedUnsupportedWithFallback": pm_summary_counters.get("expectedUnsupportedWithFallback"),
+            "unlinkedUnsupportedRows": pm_summary_counters.get("unlinkedUnsupportedRows"),
+            "linkedM66Rows": pm_summary_counters.get("linkedM66Rows"),
+            "linkedM86Rows": pm_summary_counters.get("linkedM86Rows"),
+            "nonClaims": pm_counters.get("nonClaims", {}),
+        },
         "notice": "M89 normalizes generated dashboard and policy-only GM visibility rows into support/refusal registry evidence. Dependency gates, edge-budget gate links, image-filter prepass gate links, text/glyph dependency gate links, and row-specific/grouped refusal links remain unsupported evidence; unlinked unsupported rows must stay zero, and the registry does not promote policy-only rows, weaken thresholds, or change render paths.",
     }
 
@@ -159,6 +255,8 @@ def expose_registry(project_root: Path, bundle_root: Path) -> None:
     registry_md = source / "registry.md"
     closeout_json = source / "closeout.json"
     closeout_md = source / "closeout.md"
+    pm_counters_json = source / "pm-counters.json"
+    pm_counters_md = source / "pm-counters.md"
     manifest_path = bundle_root / "manifest.json"
     readme_path = bundle_root / "README.md"
     require(source.is_dir(), f"missing M89 registry source dir: {source}")
@@ -166,13 +264,16 @@ def expose_registry(project_root: Path, bundle_root: Path) -> None:
     require(registry_md.is_file(), f"missing M89 registry Markdown: {registry_md}")
     require(closeout_json.is_file(), f"missing M89 registry closeout JSON: {closeout_json}")
     require(closeout_md.is_file(), f"missing M89 registry closeout Markdown: {closeout_md}")
+    require(pm_counters_json.is_file(), f"missing M89 PM counters JSON: {pm_counters_json}")
+    require(pm_counters_md.is_file(), f"missing M89 PM counters Markdown: {pm_counters_md}")
     require(manifest_path.is_file(), f"missing PM bundle manifest: {manifest_path}")
 
     registry = load_json(registry_json)
     closeout = load_json(closeout_json)
+    pm_counters = load_json(pm_counters_json)
     validate_closeout(closeout)
     manifest = load_json(manifest_path)
-    manifest_entry = build_manifest_entry(registry)
+    manifest_entry = build_manifest_entry(registry, pm_counters)
     manifest_entry["closeout"] = {
         "classification": closeout.get("classification"),
         "readinessBefore": closeout.get("readiness", {}).get("readinessBefore"),
