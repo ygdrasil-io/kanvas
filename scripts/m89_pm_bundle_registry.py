@@ -62,7 +62,7 @@ def build_manifest_entry(registry: dict[str, Any]) -> dict[str, Any]:
     require(counters.get("supportClaims") == 22, "M89 supportClaims must stay 22")
     require(counters.get("policyOnlyRows") == 20, "M89 policyOnlyRows must stay 20")
     require(counters.get("rowSpecificRefusalRows") == 4, "M89 rowSpecificRefusalRows must stay 4")
-    require(counters.get("dependencyGateLinkRows") == 2, "M89 dependencyGateLinkRows must stay 2")
+    require(counters.get("dependencyGateLinkRows") == 4, "M89 dependencyGateLinkRows must stay 4")
     require(counters.get("groupedPolicyRefusalRows") == 9, "M89 groupedPolicyRefusalRows must stay 9")
     require(counters.get("expectedUnsupportedWithFallback") == 25, "M89 expectedUnsupportedWithFallback must stay 25")
     require(counters.get("linkedM66Rows") == 18, "M89 linkedM66Rows must stay 18")

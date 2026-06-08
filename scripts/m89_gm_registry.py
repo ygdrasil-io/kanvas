@@ -26,6 +26,8 @@ INPUTS = [
 M66_PROMOTION = GENERATED_DIR / "m66-gm-promotion-wave.json"
 M86_BURNDOWN = ROOT / "reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json"
 M88_RC2 = ROOT / "reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"
+M89_FEATURE_BREADTH = ROOT / "reports/wgsl-pipeline/m89-feature-breadth/evidence.json"
+M89_FEATURE_BREADTH_REPORT = ROOT / "reports/wgsl-pipeline/m89-feature-breadth/evidence.md"
 ROW_SPECIFIC_REFUSALS = {
     "skia-gm-image": {
         "linear": "FOR-466",
@@ -67,6 +69,10 @@ TEXT_GLYPH_DEPENDENCY_GATE = {
     "linear": "FOR-308",
     "json": ROOT / "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
     "report": ROOT / "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md",
+}
+RUNTIME_EFFECT_DESCRIPTOR_GATES = {
+    "skia-gm-runtimeimagefilter": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
+    "skia-gm-runtimeintrinsics": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
 }
 
 VALID_STATUSES = {
@@ -226,6 +232,7 @@ def build_evidence_indexes() -> dict[str, Any]:
     m86 = optional_json(M86_BURNDOWN)
     m88 = optional_json(M88_RC2)
     text_glyph_dependency_gate = optional_json(TEXT_GLYPH_DEPENDENCY_GATE["json"])
+    m89_feature_breadth = optional_json(M89_FEATURE_BREADTH)
 
     m66_by_base: dict[str, list[dict[str, Any]]] = {}
     for scene in m66.get("scenes", []):
@@ -252,6 +259,7 @@ def build_evidence_indexes() -> dict[str, Any]:
         "m86ByBase": m86_by_base,
         "m88": m88,
         "textGlyphDependencyGate": text_glyph_dependency_gate,
+        "m89FeatureBreadth": m89_feature_breadth,
         "rowSpecificRefusals": {
             row_id: {
                 **metadata,
@@ -334,6 +342,60 @@ def row_specific_refusals(scene_id: str, fallback: str, indexes: dict[str, Any])
 
 
 def dependency_gate_links(scene_id: str, fallback: str, indexes: dict[str, Any]) -> list[dict[str, Any]]:
+    if scene_id in RUNTIME_EFFECT_DESCRIPTOR_GATES:
+        if fallback != RUNTIME_EFFECT_DESCRIPTOR_GATES[scene_id]:
+            raise AssertionError(f"{scene_id}: runtime-effect descriptor gate fallback mismatch")
+        evidence = indexes["m89FeatureBreadth"]
+        if not isinstance(evidence, dict):
+            raise AssertionError(f"{scene_id}: M89 runtime-effect feature-breadth evidence must be an object")
+        families = evidence.get("families")
+        if not isinstance(families, list):
+            raise AssertionError(f"{scene_id}: M89 feature-breadth evidence must contain families[]")
+        runtime_family = next(
+            (
+                family
+                for family in families
+                if isinstance(family, dict)
+                and family.get("issue") == "FOR-192"
+                and family.get("family") == "Registered WGSL runtime effects"
+            ),
+            None,
+        )
+        if not isinstance(runtime_family, dict):
+            raise AssertionError(f"{scene_id}: missing FOR-192 registered WGSL runtime-effects family")
+        stable_refusals = set(runtime_family.get("stableRefusals", []))
+        if "runtime-effect.arbitrary-sksl-unsupported" not in stable_refusals:
+            raise AssertionError(f"{scene_id}: runtime-effect arbitrary SkSL refusal missing")
+        if "runtime-effect.wgsl-descriptor-missing" not in stable_refusals:
+            raise AssertionError(f"{scene_id}: runtime-effect missing WGSL descriptor refusal missing")
+        non_claims = [str(item) for item in runtime_family.get("nonClaims", [])]
+        if not any("No dynamic SkSL compiler" in item for item in non_claims):
+            raise AssertionError(f"{scene_id}: runtime-effect no-SkSL-compiler non-claim missing")
+        validation_rows = {
+            row.get("id"): row
+            for row in evidence.get("validationRows", [])
+            if isinstance(row, dict)
+        }
+        validation = validation_rows.get("for-192-registered-wgsl-runtime-effect")
+        if not isinstance(validation, dict) or validation.get("status") != "pass":
+            raise AssertionError(f"{scene_id}: FOR-192 runtime-effect validation row must pass")
+
+        return [
+            {
+                "linear": "FOR-192",
+                "classification": "runtime-effect-descriptor-gated-expected-unsupported-no-support-claim",
+                "json": rel(M89_FEATURE_BREADTH),
+                "report": rel(M89_FEATURE_BREADTH_REPORT),
+                "fallbackReason": fallback,
+                "supportedDescriptor": "runtime.simple_rt",
+                "requiredRefusals": sorted(stable_refusals),
+                "implementationTarget": "WGSL",
+                "skSLPolicy": "compatibility-refusal-only",
+                "supportDecision": "KEEP_RUNTIME_EFFECT_DESCRIPTOR_GATED_UNTIL_ROW_SPECIFIC_KOTLIN_WGSL_PROOF",
+                "supportScoreIncreased": False,
+            }
+        ]
+
     if scene_id not in TEXT_GLYPH_DEPENDENCY_GATES:
         return []
     evidence = indexes["textGlyphDependencyGate"]
@@ -411,6 +473,8 @@ def next_ticket_type(scene: dict[str, Any], status: str, family: str) -> str:
     fallback = fallback_reason(scene)
     scene_id = str(scene.get("id") or "")
     if scene_id in TEXT_GLYPH_DEPENDENCY_GATES:
+        return "dependency"
+    if scene_id in RUNTIME_EFFECT_DESCRIPTOR_GATES:
         return "dependency"
     if family == "text-glyph" and ("complex-shaping" in fallback or "emoji" in fallback or "color-glyph" in fallback):
         return "dependency"
@@ -508,7 +572,12 @@ def build_registry() -> dict[str, Any]:
         + [rel(M66_PROMOTION), rel(M86_BURNDOWN), rel(M88_RC2)]
         + [rel(metadata["json"]) for metadata in ROW_SPECIFIC_REFUSALS.values()]
         + [rel(metadata["report"]) for metadata in ROW_SPECIFIC_REFUSALS.values()]
-        + [rel(TEXT_GLYPH_DEPENDENCY_GATE["json"]), rel(TEXT_GLYPH_DEPENDENCY_GATE["report"])],
+        + [
+            rel(TEXT_GLYPH_DEPENDENCY_GATE["json"]),
+            rel(TEXT_GLYPH_DEPENDENCY_GATE["report"]),
+            rel(M89_FEATURE_BREADTH),
+            rel(M89_FEATURE_BREADTH_REPORT),
+        ],
         "evidencePackages": {
             "m66": {
                 "path": rel(M66_PROMOTION),

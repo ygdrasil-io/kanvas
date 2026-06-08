@@ -1,6 +1,6 @@
 {
   "counters": {
-    "dependencyGateLinkRows": 2,
+    "dependencyGateLinkRows": 4,
     "expectedUnsupportedWithFallback": 25,
     "family": {
       "bitmap-image": 7,
@@ -288,13 +288,30 @@
     },
     {
       "artifacts": {},
-      "dependencyGateLinks": [],
+      "dependencyGateLinks": [
+        {
+          "classification": "runtime-effect-descriptor-gated-expected-unsupported-no-support-claim",
+          "fallbackReason": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
+          "implementationTarget": "WGSL",
+          "json": "reports/wgsl-pipeline/m89-feature-breadth/evidence.json",
+          "linear": "FOR-192",
+          "report": "reports/wgsl-pipeline/m89-feature-breadth/evidence.md",
+          "requiredRefusals": [
+            "runtime-effect.arbitrary-sksl-unsupported",
+            "runtime-effect.wgsl-descriptor-missing"
+          ],
+          "skSLPolicy": "compatibility-refusal-only",
+          "supportDecision": "KEEP_RUNTIME_EFFECT_DESCRIPTOR_GATED_UNTIL_ROW_SPECIFIC_KOTLIN_WGSL_PROOF",
+          "supportScoreIncreased": false,
+          "supportedDescriptor": "runtime.simple_rt"
+        }
+      ],
       "evidenceLinks": {},
       "fallbackReason": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
       "family": "runtime-effect",
       "groupedPolicyRefusals": [],
       "metrics": {},
-      "nextTicketType": "policy-visibility",
+      "nextTicketType": "dependency",
       "nonClaim": "Dashboard visibility only. This row does not claim RuntimeImageFilterGM, arbitrary SkSL, dynamic runtime-effect compilation, or runtime image-filter descriptor support.",
       "owningMilestone": "M89",
       "pmImpact": "high",
@@ -311,13 +328,30 @@
     },
     {
       "artifacts": {},
-      "dependencyGateLinks": [],
+      "dependencyGateLinks": [
+        {
+          "classification": "runtime-effect-descriptor-gated-expected-unsupported-no-support-claim",
+          "fallbackReason": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
+          "implementationTarget": "WGSL",
+          "json": "reports/wgsl-pipeline/m89-feature-breadth/evidence.json",
+          "linear": "FOR-192",
+          "report": "reports/wgsl-pipeline/m89-feature-breadth/evidence.md",
+          "requiredRefusals": [
+            "runtime-effect.arbitrary-sksl-unsupported",
+            "runtime-effect.wgsl-descriptor-missing"
+          ],
+          "skSLPolicy": "compatibility-refusal-only",
+          "supportDecision": "KEEP_RUNTIME_EFFECT_DESCRIPTOR_GATED_UNTIL_ROW_SPECIFIC_KOTLIN_WGSL_PROOF",
+          "supportScoreIncreased": false,
+          "supportedDescriptor": "runtime.simple_rt"
+        }
+      ],
       "evidenceLinks": {},
       "fallbackReason": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
       "family": "runtime-effect",
       "groupedPolicyRefusals": [],
       "metrics": {},
-      "nextTicketType": "policy-visibility",
+      "nextTicketType": "dependency",
       "nonClaim": "Dashboard visibility only. This row does not claim arbitrary SkSL, dynamic runtime-effect compilation, or broad runtime intrinsic support.",
       "owningMilestone": "M89",
       "pmImpact": "high",
@@ -1967,6 +2001,8 @@
     "reports/wgsl-pipeline/2026-06-06-for-468-skia-gm-offsetimagefilter-evidence.md",
     "reports/wgsl-pipeline/2026-06-06-for-469-skia-gm-pathfill-evidence.md",
     "reports/wgsl-pipeline/scenes/artifacts/text-glyph-dependency-gate-for308/text-glyph-dependency-gate-for308.json",
-    "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md"
+    "reports/wgsl-pipeline/2026-06-04-for-308-text-glyph-dependency-gate.md",
+    "reports/wgsl-pipeline/m89-feature-breadth/evidence.json",
+    "reports/wgsl-pipeline/m89-feature-breadth/evidence.md"
   ]
 }

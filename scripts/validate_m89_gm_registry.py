@@ -21,7 +21,7 @@ EXPECTED_COUNTERS = {
     "supportClaims": 22,
     "policyOnlyRows": 20,
     "rowSpecificRefusalRows": 4,
-    "dependencyGateLinkRows": 2,
+    "dependencyGateLinkRows": 4,
     "groupedPolicyRefusalRows": 9,
     "expectedUnsupportedWithFallback": 25,
     "linkedM66Rows": 18,
@@ -67,6 +67,10 @@ EXPECTED_GROUPED_POLICY_REFUSALS = {
 EXPECTED_DEPENDENCY_GATE_LINKS = {
     "skia-gm-shadertext3": "font.shadertext3.row-specific-artifacts-required",
     "skia-gm-textblobtransforms": "font.textblobtransforms.row-specific-artifacts-required",
+}
+EXPECTED_RUNTIME_EFFECT_DESCRIPTOR_GATES = {
+    "skia-gm-runtimeimagefilter": "runtime-effect.runtimeimagefilter.row-specific-artifacts-required",
+    "skia-gm-runtimeintrinsics": "runtime-effect.runtimeintrinsics.row-specific-artifacts-required",
 }
 EXPECTED_SOURCE_COUNTS = {
     "d50-visibility": 11,
@@ -213,8 +217,46 @@ def validate_registry() -> None:
             require(refusal.get("supportScoreIncreased") is False, f"{row_id}: row-specific refusal must not increase support score")
 
         expected_dependency_fallback = EXPECTED_DEPENDENCY_GATE_LINKS.get(row_id)
+        expected_runtime_descriptor_fallback = EXPECTED_RUNTIME_EFFECT_DESCRIPTOR_GATES.get(row_id)
         if expected_dependency_fallback is None:
-            require(not dependency_gate_links, f"{row_id}: unexpected dependency gate link")
+            if expected_runtime_descriptor_fallback is None:
+                require(not dependency_gate_links, f"{row_id}: unexpected dependency gate link")
+            else:
+                require(len(dependency_gate_links) == 1, f"{row_id}: expected exactly one runtime-effect descriptor gate link")
+                gate = dependency_gate_links[0]
+                require(isinstance(gate, dict), f"{row_id}: runtime-effect descriptor gate link must be object")
+                require(policy_only, f"{row_id}: runtime-effect descriptor gate remains attached to policy visibility row")
+                require(family == "runtime-effect", f"{row_id}: runtime-effect descriptor gate must remain runtime-effect")
+                require(status == "expected-unsupported", f"{row_id}: runtime-effect descriptor gate row must remain expected-unsupported")
+                require(not support_claim, f"{row_id}: runtime-effect descriptor gate row must not claim support")
+                require(row.get("nextTicketType") == "dependency", f"{row_id}: runtime-effect descriptor gate nextTicketType mismatch")
+                require(gate.get("linear") == "FOR-192", f"{row_id}: runtime-effect descriptor gate Linear mismatch")
+                require(
+                    gate.get("classification") == "runtime-effect-descriptor-gated-expected-unsupported-no-support-claim",
+                    f"{row_id}: runtime-effect descriptor gate classification mismatch",
+                )
+                require(
+                    gate.get("json") == "reports/wgsl-pipeline/m89-feature-breadth/evidence.json",
+                    f"{row_id}: runtime-effect descriptor gate JSON path mismatch",
+                )
+                require(
+                    gate.get("report") == "reports/wgsl-pipeline/m89-feature-breadth/evidence.md",
+                    f"{row_id}: runtime-effect descriptor gate report path mismatch",
+                )
+                require(gate.get("fallbackReason") == expected_runtime_descriptor_fallback, f"{row_id}: runtime-effect descriptor gate fallback mismatch")
+                require(gate.get("supportedDescriptor") == "runtime.simple_rt", f"{row_id}: runtime-effect supported descriptor mismatch")
+                required_refusals = set(gate.get("requiredRefusals", []))
+                require(
+                    {"runtime-effect.arbitrary-sksl-unsupported", "runtime-effect.wgsl-descriptor-missing"} <= required_refusals,
+                    f"{row_id}: runtime-effect descriptor gate must preserve stable refusals",
+                )
+                require(gate.get("implementationTarget") == "WGSL", f"{row_id}: runtime-effect descriptor gate implementation target mismatch")
+                require(gate.get("skSLPolicy") == "compatibility-refusal-only", f"{row_id}: runtime-effect descriptor gate SkSL policy mismatch")
+                require(
+                    gate.get("supportDecision") == "KEEP_RUNTIME_EFFECT_DESCRIPTOR_GATED_UNTIL_ROW_SPECIFIC_KOTLIN_WGSL_PROOF",
+                    f"{row_id}: runtime-effect descriptor gate support decision mismatch",
+                )
+                require(gate.get("supportScoreIncreased") is False, f"{row_id}: runtime-effect descriptor gate must not increase support score")
         else:
             require(len(dependency_gate_links) == 1, f"{row_id}: expected exactly one dependency gate link")
             gate = dependency_gate_links[0]
@@ -363,7 +405,7 @@ def validate_report() -> None:
         "Support claims: `22`",
         "Policy-only rows: `20`",
         "Row-specific refusal links: `4`",
-        "Dependency gate links: `2`",
+        "Dependency gate links: `4`",
         "Grouped policy refusal links: `9`",
         "`expected-unsupported`: `25`",
         "`pass`: `22`",
