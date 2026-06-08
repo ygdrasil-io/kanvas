@@ -1,0 +1,125 @@
+{
+  "classification": "gm-registry-pm-counters-reporting-only-no-support-promotion",
+  "counters": {
+    "expectedUnsupportedWithFallback": 25,
+    "family": {
+      "bitmap-image": 7,
+      "blend-color": 2,
+      "gradient": 4,
+      "image-filter": 5,
+      "path-aa": 18,
+      "runtime-effect": 3,
+      "text-glyph": 7,
+      "transform-layer": 1
+    },
+    "linkedM66Rows": 18,
+    "linkedM86Rows": 18,
+    "policyOnlyRows": 20,
+    "source": {
+      "d50-visibility": 11,
+      "d53-visibility": 9,
+      "generated-dashboard": 27
+    },
+    "status": {
+      "expected-unsupported": 25,
+      "pass": 22
+    },
+    "supportClaims": 22,
+    "totalRows": 47,
+    "unlinkedUnsupportedRows": 0
+  },
+  "familyStatus": {
+    "bitmap-image": {
+      "expected-unsupported": 2,
+      "pass": 5
+    },
+    "blend-color": {
+      "expected-unsupported": 0,
+      "pass": 2
+    },
+    "gradient": {
+      "expected-unsupported": 1,
+      "pass": 3
+    },
+    "image-filter": {
+      "expected-unsupported": 3,
+      "pass": 2
+    },
+    "path-aa": {
+      "expected-unsupported": 13,
+      "pass": 5
+    },
+    "runtime-effect": {
+      "expected-unsupported": 2,
+      "pass": 1
+    },
+    "text-glyph": {
+      "expected-unsupported": 4,
+      "pass": 3
+    },
+    "transform-layer": {
+      "expected-unsupported": 0,
+      "pass": 1
+    }
+  },
+  "generatedBy": "scripts/m89_gm_registry_pm_counters.py",
+  "inputs": {
+    "registryJson": "reports/wgsl-pipeline/m89-gm-registry/registry.json"
+  },
+  "nonClaims": {
+    "belowThresholdCountedAsProductionGap": false,
+    "broadDashSupport": false,
+    "broadHairlineSupport": false,
+    "broadPathAASupport": false,
+    "broadStrokeSupport": false,
+    "dashboardPromotion": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "edgeBudgetChange": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "readinessPromotion": false,
+    "registryRowMutation": false,
+    "supportPromotion": false,
+    "thresholdChange": false
+  },
+  "schemaVersion": 1,
+  "status": "generated evidence",
+  "supportRefusalSummary": {
+    "belowThresholdExcluded": {
+      "count": 0,
+      "countedAsProductionGap": false
+    },
+    "dependencyGated": {
+      "linkedRows": 6,
+      "linkedRowsNoSupportClaims": 6,
+      "statusRows": 0
+    },
+    "expectedUnsupported": {
+      "noSupportClaims": 25,
+      "supportClaims": 0,
+      "withFallback": 25
+    },
+    "pass": {
+      "noSupportClaims": 0,
+      "supportClaims": 22
+    },
+    "policyOnlyVisibility": {
+      "rows": 20,
+      "supportClaims": 0
+    },
+    "reportingOnly": {
+      "statusRows": 0,
+      "supportClaims": 0
+    }
+  },
+  "ticket": "M89-PM-COUNTERS",
+  "validationCommands": [
+    "rtk python3 scripts/m89_gm_registry_pm_counters.py",
+    "rtk python3 scripts/validate_m89_gm_registry_pm_counters.py --check-worktree-scope",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-m89-pm-counters-pycache python3 -m py_compile scripts/m89_gm_registry_pm_counters.py scripts/validate_m89_gm_registry_pm_counters.py",
+    "rtk ./gradlew --no-daemon pipelineM89GmRegistryPmCounters",
+    "rtk git diff --check"
+  ]
+}

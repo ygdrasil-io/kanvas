@@ -4617,6 +4617,18 @@ tasks.register<Exec>("pipelineM89RegistryCloseout") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM89GmRegistryPmCounters") {
+    group = "verification"
+    description = "Generates and validates PM-friendly M89 GM registry counters without changing support claims."
+    commandLine("python3", "scripts/validate_m89_gm_registry_pm_counters.py", "--generate", "--check-worktree-scope")
+    inputs.file(layout.projectDirectory.file("scripts/m89_gm_registry_pm_counters.py"))
+    inputs.file(layout.projectDirectory.file("scripts/validate_m89_gm_registry_pm_counters.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/pm-counters.json"))
+    outputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/pm-counters.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM90PathAaSlice") {
     group = "verification"
     description = "Generates and validates the first M90 Path AA backlog slice without changing support claims."
