@@ -1,0 +1,92 @@
+{
+  "classification": "path-aa-edge-budget-refusal-proof-no-new-rendering-support",
+  "counters": {
+    "cpuOraclePassRows": 2,
+    "edgeBudget": 256,
+    "gpuExpectedUnsupportedRows": 2,
+    "newSupportClaims": 0,
+    "proofRows": 2,
+    "readinessDelta": 0.0
+  },
+  "generatedBy": "scripts/m90_path_aa_edge_budget_proof.py",
+  "inputs": {
+    "edgeBudgetAdr": ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+    "pathAaBoundarySpec": ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "selection": "reports/wgsl-pipeline/m90-path-aa-slice/selection.json"
+  },
+  "milestone": "M90",
+  "proofs": [
+    {
+      "artifacts": {
+        "identityEvidence": "route diagnostics and registry edgeBudgetGateLinks; stats are inventory counters only",
+        "inventoryStats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/stats.json",
+        "routeCpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/route-cpu.json",
+        "routeGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/route-gpu.json"
+      },
+      "cpuRoute": "cpu.path-coverage.convexpaths-oracle",
+      "edgeBudget": 256,
+      "evidenceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+      "fallbackReason": "coverage.edge-count-exceeded",
+      "globalEdgeBudgetIncreased": false,
+      "gpuCoverageStrategy": "webgpu.coverage.refuse",
+      "gpuPipelineKey": "coverageKind=pathCoverageUnsupported,pathFillRule=winding,topology=triangleList,source=ConvexPathsGM",
+      "gpuRoute": "webgpu.coverage.refuse.edge-count",
+      "policyReport": "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md",
+      "routeCpu": "pass",
+      "routeGpu": "expected-unsupported",
+      "rowId": "path-aa-convexpaths-edge-budget",
+      "smokeCandidateAllowed": false,
+      "sourceScene": "ConvexPathsGM",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "supportScoreIncreased": false
+    },
+    {
+      "artifacts": {
+        "identityEvidence": "route diagnostics and registry edgeBudgetGateLinks; stats are inventory counters only",
+        "inventoryStats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/stats.json",
+        "routeCpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-cpu.json",
+        "routeGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-gpu.json"
+      },
+      "cpuRoute": "cpu.path-coverage.dashing-oracle",
+      "edgeBudget": 256,
+      "evidenceReport": "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+      "fallbackReason": "coverage.edge-count-exceeded",
+      "globalEdgeBudgetIncreased": false,
+      "gpuCoverageStrategy": "webgpu.coverage.refuse",
+      "gpuPipelineKey": "coverageKind=pathStrokeDashOverflow,pathFillRule=winding,topology=triangleList,source=DashingGM",
+      "gpuRoute": "webgpu.coverage.refuse.edge-count",
+      "policyReport": "reports/wgsl-pipeline/2026-05-31-m47-path-aa-expected-unsupported-policy-validation.md",
+      "routeCpu": "pass",
+      "routeGpu": "expected-unsupported",
+      "rowId": "path-aa-dashing-edge-budget",
+      "smokeCandidateAllowed": false,
+      "sourceScene": "DashingGM",
+      "status": "expected-unsupported",
+      "supportClaim": false,
+      "supportScoreIncreased": false
+    }
+  ],
+  "schemaVersion": 1,
+  "status": "generated evidence",
+  "supportGuard": {
+    "belowThresholdCountedAsProductionGap": false,
+    "broadDashSupport": false,
+    "broadPathAASupport": false,
+    "broadStrokeSupport": false,
+    "edgeBudgetChanged": false,
+    "ganeshPort": false,
+    "graphitePort": false,
+    "readinessMoved": false,
+    "smokeCandidateAllowed": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "ticket": "M90-PAA-2",
+  "validationCommands": [
+    "rtk python3 scripts/m90_path_aa_edge_budget_proof.py",
+    "rtk ./gradlew --no-daemon pipelineM90PathAaEdgeBudgetProof",
+    "rtk git diff --check"
+  ]
+}
