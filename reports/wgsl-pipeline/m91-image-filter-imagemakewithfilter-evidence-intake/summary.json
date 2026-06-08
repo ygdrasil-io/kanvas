@@ -1,0 +1,193 @@
+{
+  "classification": "image-filter-imagemakewithfilter-evidence-intake-no-new-rendering-support",
+  "counters": {
+    "dashboardPromotions": 0,
+    "missingEvidenceItems": 11,
+    "newSupportClaims": 0,
+    "nonPromotionalSignals": 6,
+    "presentEvidenceItems": 0,
+    "readinessDelta": 0.0,
+    "requiredEvidenceItems": 11,
+    "thresholdChanges": 0,
+    "validatedNonPromotionalEvidenceItems": 0
+  },
+  "generatedBy": "scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py",
+  "inputs": {
+    "candidateReadiness": "reports/wgsl-pipeline/m91-image-filter-candidate-readiness/summary.json",
+    "for470Json": "reports/wgsl-pipeline/scenes/generated/for470-skia-gm-imagemakewithfilter-evidence.json",
+    "for470Report": "reports/wgsl-pipeline/2026-06-08-for-470-skia-gm-imagemakewithfilter-evidence.md",
+    "registry": "reports/wgsl-pipeline/m89-gm-registry/registry.json",
+    "routeCpu": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-cpu.json",
+    "routeGpu": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-gpu.json"
+  },
+  "milestone": "M91",
+  "nextRecommendedTicket": {
+    "id": "M91-IF-3B-GRAPH",
+    "promotionAllowedWithoutEvidence": false,
+    "scope": "Produce row-specific ImageMakeWithFilterGM graph dump and intermediate ownership requirements before any reference, route, render, diff/stat, performance, or support evaluation.",
+    "supportClaimAllowed": false
+  },
+  "nonClaims": {
+    "belowThresholdCountedAsProductionGap": false,
+    "boundedM61M89EvidenceInherited": false,
+    "broadImageFilterDAGSupport": false,
+    "cpuReadbackFallbackAdded": false,
+    "cropPrepassSupport": false,
+    "dashboardPromoted": false,
+    "dynamicSkSLCompiler": false,
+    "dynamicSkSLIR": false,
+    "dynamicSkSLVM": false,
+    "ganeshPort": false,
+    "genericImageFilterDagCompiler": false,
+    "graphitePort": false,
+    "imagemakewithfilterEvidenceInherited": false,
+    "layerPrepassSupport": false,
+    "picturePrepassSupport": false,
+    "policyOnlyPromoted": false,
+    "readinessMoved": false,
+    "supportClaimAdded": false,
+    "thresholdChanged": false
+  },
+  "nonPromotionalSignals": [
+    {
+      "kind": "FOR-470 row-specific refusal",
+      "path": "reports/wgsl-pipeline/2026-06-08-for-470-skia-gm-imagemakewithfilter-evidence.md",
+      "promotional": false
+    },
+    {
+      "kind": "FOR-470 structured evidence",
+      "path": "reports/wgsl-pipeline/scenes/generated/for470-skia-gm-imagemakewithfilter-evidence.json",
+      "promotional": false
+    },
+    {
+      "kind": "CPU expected-unsupported route diagnostic",
+      "path": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-cpu.json",
+      "promotional": false
+    },
+    {
+      "kind": "WebGPU expected-unsupported route diagnostic",
+      "path": "reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-gpu.json",
+      "promotional": false
+    },
+    {
+      "kind": "ImageMakeWithFilterGM Kotlin source",
+      "path": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageMakeWithFilterGM.kt",
+      "promotional": false
+    },
+    {
+      "kind": "historical skia similarity",
+      "observed": "ImageMakeWithFilterGM=84.35382962588474",
+      "path": "skia-integration-tests/test-similarity-scores.properties",
+      "promotional": false
+    }
+  ],
+  "requiredEvidence": [
+    {
+      "kind": "row-specific graph dump",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/graph.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "intermediate texture ownership",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/intermediate-ownership.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "row-specific Skia/reference artifact",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/skia.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/route-cpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "WebGPU route evidence with fallbackReason=none",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/route-gpu.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU/GPU render artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/cpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU/GPU render artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/gpu.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/cpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/gpu-diff.png",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "CPU/GPU diff/stat artifacts",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/stats.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    },
+    {
+      "kind": "performance impact evidence",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/skia-gm-imagemakewithfilter/performance.json",
+      "present": false,
+      "promotional": false,
+      "status": "missing",
+      "validatedNonPromotional": false
+    }
+  ],
+  "row": {
+    "fallbackReason": "image-filter.imagemakewithfilter.row-specific-artifacts-required",
+    "policyOnly": true,
+    "routeCpu": "expected-unsupported",
+    "routeGpu": "expected-unsupported",
+    "rowId": "skia-gm-imagemakewithfilter",
+    "sourceGm": "ImageMakeWithFilterGM",
+    "status": "expected-unsupported",
+    "supportClaim": false
+  },
+  "schemaVersion": 1,
+  "status": "blocked-by-missing-row-specific-evidence",
+  "ticket": "M91-IF-3B",
+  "validationCommands": [
+    "rtk python3 scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py",
+    "rtk env PYTHONPYCACHEPREFIX=/tmp/kanvas-m91-imagemakewithfilter-intake-pycache python3 -m py_compile scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py",
+    "rtk ./gradlew --no-daemon pipelineM91ImageFilterImageMakeWithFilterEvidenceIntake",
+    "rtk git diff --check"
+  ]
+}

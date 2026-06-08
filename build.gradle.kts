@@ -4821,6 +4821,25 @@ tasks.register<Exec>("pipelineM91ImageFilterOffsetReadinessRecap") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineM91ImageFilterImageMakeWithFilterEvidenceIntake") {
+    group = "verification"
+    description = "Generates and validates M91-IF-3B ImageMakeWithFilterGM evidence intake without changing support claims."
+    dependsOn("pipelineM91ImageFilterCandidateReadiness")
+    commandLine("python3", "scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py")
+    inputs.file(layout.projectDirectory.file("scripts/m91_image_filter_imagemakewithfilter_evidence_intake.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-candidate-readiness/summary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m91-image-filter-route-diagnostics/routes/skia-gm-imagemakewithfilter/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/for470-skia-gm-imagemakewithfilter-evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-08-for-470-skia-gm-imagemakewithfilter-evidence.md"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/ImageMakeWithFilterGM.kt"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/kotlin/org/skia/tests/ImageMakeWithFilterTest.kt"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/test-similarity-scores.properties"))
+    outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m91-image-filter-imagemakewithfilter-evidence-intake"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("pipelineM91ImageFilterOffsetGraphOwnershipProof") {
     group = "verification"
     description = "Generates and validates M91-IF-3A OffsetImageFilterGM graph and ownership proof without changing support claims."
