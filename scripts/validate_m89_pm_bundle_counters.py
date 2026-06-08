@@ -30,6 +30,7 @@ EXPECTED_COUNTERS = {
     "unlinkedUnsupportedRows": 0,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
+    "linkedM90Rows": 9,
 }
 EXPECTED_NON_CLAIMS = {
     "supportPromotion": False,

@@ -46,6 +46,16 @@ FONT_VALIDATION_CONFORMANCE = ROOT / ".upstream/specs/font/06-validation-and-con
 M90_HAIRLINES_ARTIFACT_HARNESS = GENERATED_DIR / "m90-hairlines-artifact-harness.json"
 M90_HAIRLINES_ADAPTER_GATE = GENERATED_DIR / "m90-hairlines-adapter-backed-gate.json"
 M90_HAIRLINES_EVIDENCE_INTAKE = ROOT / "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json"
+M90_PATH_AA_ROW_SPECIFIC_GATES = {
+    "skia-gm-strokerect": GENERATED_DIR / "m90-strokerect-row-specific-evidence-gate.json",
+    "skia-gm-thinstrokedrects": GENERATED_DIR / "m90-thinstrokedrects-row-specific-evidence-gate.json",
+    "skia-gm-strokedlines": GENERATED_DIR / "m90-strokedlines-row-specific-evidence-gate.json",
+    "skia-gm-strokerects": GENERATED_DIR / "m90-strokerects-row-specific-evidence-gate.json",
+    "skia-gm-hairmodes": GENERATED_DIR / "m90-hairmodes-row-specific-evidence-gate.json",
+    "skia-gm-scaledstrokes": GENERATED_DIR / "m90-scaledstrokes-row-specific-evidence-gate.json",
+    "skia-gm-dashing": GENERATED_DIR / "m90-dashing-row-specific-evidence-gate.json",
+    "skia-gm-dashcubics": GENERATED_DIR / "m90-dashcubics-row-specific-evidence-gate.json",
+}
 ROW_SPECIFIC_REFUSALS = {
     "skia-gm-image": {
         "linear": "FOR-466",
@@ -332,6 +342,10 @@ def build_evidence_indexes() -> dict[str, Any]:
     m90_hairlines_artifact_harness = optional_json(M90_HAIRLINES_ARTIFACT_HARNESS)
     m90_hairlines_adapter_gate = optional_json(M90_HAIRLINES_ADAPTER_GATE)
     m90_hairlines_evidence_intake = optional_json(M90_HAIRLINES_EVIDENCE_INTAKE)
+    m90_path_aa_row_specific_gates = {
+        row_id: optional_json(path)
+        for row_id, path in M90_PATH_AA_ROW_SPECIFIC_GATES.items()
+    }
 
     m66_by_base: dict[str, list[dict[str, Any]]] = {}
     for scene in m66.get("scenes", []):
@@ -360,6 +374,7 @@ def build_evidence_indexes() -> dict[str, Any]:
         "m90HairlinesArtifactHarness": m90_hairlines_artifact_harness,
         "m90HairlinesAdapterGate": m90_hairlines_adapter_gate,
         "m90HairlinesEvidenceIntake": m90_hairlines_evidence_intake,
+        "m90PathAaRowSpecificGates": m90_path_aa_row_specific_gates,
         "textGlyphDependencyGate": text_glyph_dependency_gate,
         "m89FeatureBreadth": m89_feature_breadth,
         "rowSpecificRefusals": {
@@ -451,6 +466,52 @@ def evidence_links(scene_id: str, indexes: dict[str, Any]) -> dict[str, Any]:
                 "newSupportClaims": intake.get("counters", {}).get("newSupportClaims"),
                 "readinessDelta": intake.get("counters", {}).get("readinessDelta"),
             },
+        ]
+    if scene_id in M90_PATH_AA_ROW_SPECIFIC_GATES:
+        gate = indexes["m90PathAaRowSpecificGates"].get(scene_id)
+        if not isinstance(gate, dict) or not gate:
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate JSON missing")
+        if gate.get("sceneId") != scene_id or gate.get("inventoryId") != scene_id:
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate row mismatch")
+        if gate.get("status") != "dependency-gated":
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate must remain dependency-gated")
+        if gate.get("supportClaim") is not False:
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate must not claim support")
+        score_impact = gate.get("scoreImpact")
+        if not isinstance(score_impact, dict):
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate scoreImpact missing")
+        if score_impact.get("newSupportClaims") != 0:
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate must not add support claims")
+        if score_impact.get("readinessDelta") != 0.0:
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate must not move readiness")
+        if score_impact.get("dashboardPromotion") is not False:
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate must not promote dashboard support")
+        if score_impact.get("thresholdChanged") is not False or score_impact.get("edgeBudgetChanged") is not False:
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate must not change threshold or edge budget")
+        promotion_gate = gate.get("promotionGate")
+        if not isinstance(promotion_gate, dict) or promotion_gate.get("promotionAllowed") is not False:
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate must keep promotion disabled")
+        evidence_gate = gate.get("evidenceGate")
+        if not isinstance(evidence_gate, dict):
+            raise AssertionError(f"{scene_id}: M90 row-specific evidenceGate missing")
+        if evidence_gate.get("requiredFallbackReason") != "none":
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate future fallback requirement mismatch")
+        currently_present = evidence_gate.get("currentlyPresentArtifacts")
+        if not isinstance(currently_present, list) or currently_present:
+            raise AssertionError(f"{scene_id}: M90 row-specific evidence gate must not list present artifacts")
+        links["m90"] = [
+            {
+                "id": gate.get("ticket"),
+                "classification": gate.get("classification"),
+                "status": gate.get("status"),
+                "fallbackReason": gate.get("fallbackReason"),
+                "json": rel(M90_PATH_AA_ROW_SPECIFIC_GATES[scene_id]),
+                "supportClaim": gate.get("supportClaim"),
+                "newSupportClaims": score_impact.get("newSupportClaims"),
+                "readinessDelta": score_impact.get("readinessDelta"),
+                "requiredFallbackReason": evidence_gate.get("requiredFallbackReason"),
+                "currentlyPresentArtifacts": currently_present,
+            }
         ]
     return links
 
@@ -978,6 +1039,7 @@ def build_registry() -> dict[str, Any]:
     support_claims = sum(1 for row in rows if row["supportClaim"])
     linked_m66 = sum(1 for row in rows if "m66" in row["evidenceLinks"])
     linked_m86 = sum(1 for row in rows if "m86" in row["evidenceLinks"])
+    linked_m90 = sum(1 for row in rows if "m90" in row["evidenceLinks"])
     row_specific_refusal_rows = sum(1 for row in rows if row["rowSpecificRefusals"])
     dependency_gate_link_rows = sum(1 for row in rows if row["dependencyGateLinks"])
     grouped_policy_refusal_rows = sum(1 for row in rows if row["groupedPolicyRefusals"])
@@ -1016,6 +1078,7 @@ def build_registry() -> dict[str, Any]:
             rel(M90_HAIRLINES_ARTIFACT_HARNESS),
             rel(M90_HAIRLINES_ADAPTER_GATE),
             rel(M90_HAIRLINES_EVIDENCE_INTAKE),
+            *[rel(path) for path in M90_PATH_AA_ROW_SPECIFIC_GATES.values()],
             rel(IMAGE_FILTER_PREPASS_ROUTE_CPU),
             rel(IMAGE_FILTER_PREPASS_ROUTE_GPU),
             rel(FONT_README),
@@ -1073,6 +1136,7 @@ def build_registry() -> dict[str, Any]:
             ),
             "linkedM66Rows": linked_m66,
             "linkedM86Rows": linked_m86,
+            "linkedM90Rows": linked_m90,
         },
         "rows": sorted(rows, key=lambda row: (row["source"], row["family"], row["rowId"])),
     }
@@ -1102,6 +1166,7 @@ def write_markdown(registry: dict[str, Any]) -> None:
         f"- Expected unsupported with fallback: `{counters['expectedUnsupportedWithFallback']}`",
         f"- Linked M66 rows: `{counters['linkedM66Rows']}`",
         f"- Linked M86 rows: `{counters['linkedM86Rows']}`",
+        f"- Linked M90 rows: `{counters['linkedM90Rows']}`",
         "",
         "### Status",
         "",

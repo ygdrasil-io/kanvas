@@ -25,6 +25,7 @@ EXPECTED_COUNTERS = {
     "unlinkedUnsupportedRows": 0,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
+    "linkedM90Rows": 9,
 }
 
 NON_CLAIMS = {
@@ -231,6 +232,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Unlinked unsupported rows: `{counters['unlinkedUnsupportedRows']}`",
         f"- Linked M66 rows: `{counters['linkedM66Rows']}`",
         f"- Linked M86 rows: `{counters['linkedM86Rows']}`",
+        f"- Linked M90 rows: `{counters['linkedM90Rows']}`",
         "",
         "## Status Counts",
         "",

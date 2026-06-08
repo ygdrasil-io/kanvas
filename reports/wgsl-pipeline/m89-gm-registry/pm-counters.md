@@ -13,6 +13,7 @@ This PM report derives counters from the existing M89 GM registry. It does not m
 - Unlinked unsupported rows: `0`
 - Linked M66 rows: `18`
 - Linked M86 rows: `18`
+- Linked M90 rows: `9`
 
 ## Status Counts
 

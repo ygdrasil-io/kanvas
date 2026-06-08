@@ -21,6 +21,7 @@ EXPECTED_PM_COUNTERS = {
     "unlinkedUnsupportedRows": 0,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
+    "linkedM90Rows": 9,
 }
 EXPECTED_STATUS_COUNTS = {
     "expected-unsupported": 25,
@@ -169,6 +170,7 @@ def build_manifest_entry(registry: dict[str, Any], pm_counters: dict[str, Any]) 
     require(counters.get("expectedUnsupportedWithFallback") == 25, "M89 expectedUnsupportedWithFallback must stay 25")
     require(counters.get("linkedM66Rows") == 18, "M89 linkedM66Rows must stay 18")
     require(counters.get("linkedM86Rows") == 18, "M89 linkedM86Rows must stay 18")
+    require(counters.get("linkedM90Rows") == 9, "M89 linkedM90Rows must stay 9")
     require(m86.get("globalThresholdWeakened") is False, "M89 must preserve M86 globalThresholdWeakened=false")
     require(m88.get("failRows") == 0, "M89 must preserve M88 failRows=0")
     require(m88.get("trackedGapRows") == 0, "M89 must preserve M88 trackedGapRows=0")
@@ -188,6 +190,7 @@ def build_manifest_entry(registry: dict[str, Any], pm_counters: dict[str, Any]) 
         "expectedUnsupportedWithFallback": counters.get("expectedUnsupportedWithFallback", 0),
         "linkedM66Rows": counters.get("linkedM66Rows", 0),
         "linkedM86Rows": counters.get("linkedM86Rows", 0),
+        "linkedM90Rows": counters.get("linkedM90Rows", 0),
         "statusCounts": counters.get("status", {}),
         "familyCounts": counters.get("family", {}),
         "sourceCounts": counters.get("source", {}),
@@ -207,6 +210,7 @@ def build_manifest_entry(registry: dict[str, Any], pm_counters: dict[str, Any]) 
             "unlinkedUnsupportedRows": pm_summary_counters.get("unlinkedUnsupportedRows"),
             "linkedM66Rows": pm_summary_counters.get("linkedM66Rows"),
             "linkedM86Rows": pm_summary_counters.get("linkedM86Rows"),
+            "linkedM90Rows": pm_summary_counters.get("linkedM90Rows"),
             "nonClaims": pm_counters.get("nonClaims", {}),
         },
         "notice": "M89 normalizes generated dashboard and policy-only GM visibility rows into support/refusal registry evidence. Dependency gates, edge-budget gate links, image-filter prepass gate links, text/glyph dependency gate links, and row-specific/grouped refusal links remain unsupported evidence; unlinked unsupported rows must stay zero, and the registry does not promote policy-only rows, weaken thresholds, or change render paths.",

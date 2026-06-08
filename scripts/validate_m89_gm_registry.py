@@ -21,6 +21,56 @@ TEXT_GLYPH_DEPENDENCY_GATE_JSON = ROOT / "reports/wgsl-pipeline/scenes/artifacts
 M90_HAIRLINES_ARTIFACT_HARNESS = "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json"
 M90_HAIRLINES_ADAPTER_GATE = "reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json"
 M90_HAIRLINES_EVIDENCE_INTAKE = "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json"
+EXPECTED_M90_PATH_AA_ROW_GATES = {
+    "skia-gm-strokerect": {
+        "id": "M90-PAA-3B-REF",
+        "classification": "strokerect-row-specific-evidence-gate-no-support-promotion",
+        "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/m90-strokerect-row-specific-evidence-gate.json",
+    },
+    "skia-gm-thinstrokedrects": {
+        "id": "M90-PAA-3C-REF",
+        "classification": "thinstrokedrects-row-specific-evidence-gate-no-support-promotion",
+        "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/m90-thinstrokedrects-row-specific-evidence-gate.json",
+    },
+    "skia-gm-strokedlines": {
+        "id": "M90-PAA-3D-REF",
+        "classification": "strokedlines-row-specific-evidence-gate-no-support-promotion",
+        "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/m90-strokedlines-row-specific-evidence-gate.json",
+    },
+    "skia-gm-strokerects": {
+        "id": "M90-PAA-3E-REF",
+        "classification": "strokerects-row-specific-evidence-gate-no-support-promotion",
+        "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/m90-strokerects-row-specific-evidence-gate.json",
+    },
+    "skia-gm-hairmodes": {
+        "id": "M90-PAA-3F-REF",
+        "classification": "hairmodes-row-specific-evidence-gate-no-support-promotion",
+        "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/m90-hairmodes-row-specific-evidence-gate.json",
+    },
+    "skia-gm-scaledstrokes": {
+        "id": "M90-PAA-3G-REF",
+        "classification": "scaledstrokes-row-specific-evidence-gate-no-support-promotion",
+        "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/m90-scaledstrokes-row-specific-evidence-gate.json",
+    },
+    "skia-gm-dashing": {
+        "id": "M90-PAA-3H-REF",
+        "classification": "dashing-row-specific-evidence-gate-no-support-promotion",
+        "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/m90-dashing-row-specific-evidence-gate.json",
+    },
+    "skia-gm-dashcubics": {
+        "id": "M90-PAA-3I-REF",
+        "classification": "dashcubics-row-specific-evidence-gate-no-support-promotion",
+        "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
+        "json": "reports/wgsl-pipeline/scenes/generated/m90-dashcubics-row-specific-evidence-gate.json",
+    },
+}
 EXPECTED_M90_HAIRLINES_LINKS = {
     M90_HAIRLINES_ARTIFACT_HARNESS: {
         "id": "M90-PAA-3A-REF",
@@ -55,6 +105,7 @@ EXPECTED_COUNTERS = {
     "expectedUnsupportedWithFallback": 25,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
+    "linkedM90Rows": 9,
 }
 EXPECTED_ROW_SPECIFIC_REFUSALS = {
     "skia-gm-image": {
@@ -240,6 +291,7 @@ def validate_registry() -> None:
     expected_unsupported_with_fallback = 0
     linked_m66_rows = 0
     linked_m86_rows = 0
+    linked_m90_rows = 0
     row_specific_refusal_rows = 0
     dependency_gate_link_rows = 0
     grouped_policy_refusal_rows = 0
@@ -293,6 +345,7 @@ def validate_registry() -> None:
         expected_unsupported_with_fallback += int(status == "expected-unsupported" and fallback != "none")
         linked_m66_rows += int("m66" in evidence_links)
         linked_m86_rows += int("m86" in evidence_links)
+        linked_m90_rows += int("m90" in evidence_links)
         row_specific_refusal_rows += int(bool(row_specific_refusals))
         dependency_gate_link_rows += int(bool(dependency_gate_links))
         grouped_policy_refusal_rows += int(bool(grouped_policy_refusals))
@@ -478,6 +531,7 @@ def validate_registry() -> None:
             for link in m86_links:
                 require(isinstance(link.get("rootCause"), str) and link.get("rootCause"), f"{row_id}: m86 link needs rootCause")
                 require(link.get("risk") in {"high", "medium", "dependency-gated"}, f"{row_id}: invalid m86 risk")
+        expected_m90_row_gate = EXPECTED_M90_PATH_AA_ROW_GATES.get(row_id)
         if row_id == "skia-gm-hairlines":
             m90_links = evidence_links.get("m90")
             require(isinstance(m90_links, list) and len(m90_links) == 3, f"{row_id}: m90 evidence links mismatch")
@@ -496,6 +550,45 @@ def validate_registry() -> None:
                     require(link.get("presentEvidenceItems") == expected_link["presentEvidenceItems"], f"{row_id}: m90 present evidence count mismatch")
                     require(link.get("missingEvidenceItems") == expected_link["missingEvidenceItems"], f"{row_id}: m90 missing evidence count mismatch")
                 require((ROOT / str(link.get("json"))).is_file(), f"{row_id}: m90 evidence file missing")
+        elif expected_m90_row_gate is not None:
+            m90_links = evidence_links.get("m90")
+            require(isinstance(m90_links, list) and len(m90_links) == 1, f"{row_id}: m90 row-specific evidence link mismatch")
+            link = m90_links[0]
+            require(isinstance(link, dict), f"{row_id}: m90 row-specific evidence link must be object")
+            require(policy_only, f"{row_id}: m90 row-specific gate must remain attached to D53 policy row")
+            require(source == "d53-visibility", f"{row_id}: m90 row-specific gate must stay D53 visibility")
+            require(status == "expected-unsupported", f"{row_id}: m90 row-specific gate row must remain expected-unsupported")
+            require(not support_claim, f"{row_id}: m90 row-specific gate row must not claim support")
+            require(fallback == expected_m90_row_gate["fallbackReason"], f"{row_id}: m90 row-specific registry fallback mismatch")
+            require(link.get("id") == expected_m90_row_gate["id"], f"{row_id}: m90 row-specific link id mismatch")
+            require(link.get("classification") == expected_m90_row_gate["classification"], f"{row_id}: m90 row-specific classification mismatch")
+            require(link.get("status") == "dependency-gated", f"{row_id}: m90 row-specific status mismatch")
+            require(link.get("fallbackReason") == expected_m90_row_gate["fallbackReason"], f"{row_id}: m90 row-specific fallback mismatch")
+            require(link.get("json") == expected_m90_row_gate["json"], f"{row_id}: m90 row-specific JSON path mismatch")
+            require(link.get("supportClaim") is False, f"{row_id}: m90 row-specific link must not claim support")
+            require(link.get("newSupportClaims") == 0, f"{row_id}: m90 row-specific link must not add support claims")
+            require(link.get("readinessDelta") == 0.0, f"{row_id}: m90 row-specific link must not move readiness")
+            require(link.get("requiredFallbackReason") == "none", f"{row_id}: m90 row-specific promotion fallback requirement mismatch")
+            require(link.get("currentlyPresentArtifacts") == [], f"{row_id}: m90 row-specific link must not list present artifacts")
+            gate_artifact = load_json(ROOT / expected_m90_row_gate["json"])
+            require(gate_artifact.get("sceneId") == row_id, f"{row_id}: m90 row-specific artifact scene mismatch")
+            require(gate_artifact.get("inventoryId") == row_id, f"{row_id}: m90 row-specific artifact inventory mismatch")
+            require(gate_artifact.get("status") == "dependency-gated", f"{row_id}: m90 row-specific artifact status mismatch")
+            require(gate_artifact.get("supportClaim") is False, f"{row_id}: m90 row-specific artifact must not claim support")
+            score_impact = gate_artifact.get("scoreImpact")
+            require(isinstance(score_impact, dict), f"{row_id}: m90 row-specific scoreImpact missing")
+            require(score_impact.get("newSupportClaims") == 0, f"{row_id}: m90 row-specific artifact must not add support claims")
+            require(score_impact.get("readinessDelta") == 0.0, f"{row_id}: m90 row-specific artifact must not move readiness")
+            require(score_impact.get("dashboardPromotion") is False, f"{row_id}: m90 row-specific artifact must not promote dashboard")
+            require(score_impact.get("thresholdChanged") is False, f"{row_id}: m90 row-specific artifact must not change threshold")
+            require(score_impact.get("edgeBudgetChanged") is False, f"{row_id}: m90 row-specific artifact must not change edge budget")
+            promotion_gate = gate_artifact.get("promotionGate")
+            require(isinstance(promotion_gate, dict), f"{row_id}: m90 row-specific promotionGate missing")
+            require(promotion_gate.get("promotionAllowed") is False, f"{row_id}: m90 row-specific promotion must stay disabled")
+            evidence_gate = gate_artifact.get("evidenceGate")
+            require(isinstance(evidence_gate, dict), f"{row_id}: m90 row-specific evidenceGate missing")
+            require(evidence_gate.get("requiredFallbackReason") == "none", f"{row_id}: m90 row-specific required fallback mismatch")
+            require(evidence_gate.get("currentlyPresentArtifacts") == [], f"{row_id}: m90 row-specific present artifacts mismatch")
         else:
             require("m90" not in evidence_links, f"{row_id}: unexpected m90 evidence link")
 
@@ -868,6 +961,7 @@ def validate_registry() -> None:
     )
     require(linked_m66_rows == EXPECTED_COUNTERS["linkedM66Rows"], "derived M66 link count mismatch")
     require(linked_m86_rows == EXPECTED_COUNTERS["linkedM86Rows"], "derived M86 link count mismatch")
+    require(linked_m90_rows == EXPECTED_COUNTERS["linkedM90Rows"], "derived M90 link count mismatch")
 
     evidence_packages = registry.get("evidencePackages")
     require(isinstance(evidence_packages, dict), "missing evidencePackages object")

@@ -17,6 +17,7 @@
     "imageFilterPrepassGateLinkRows": 1,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
+    "linkedM90Rows": 9,
     "policyOnlyRows": 20,
     "rowSpecificRefusalRows": 7,
     "source": {
@@ -521,7 +522,22 @@
       "artifacts": {},
       "dependencyGateLinks": [],
       "edgeBudgetGateLinks": [],
-      "evidenceLinks": {},
+      "evidenceLinks": {
+        "m90": [
+          {
+            "classification": "dashcubics-row-specific-evidence-gate-no-support-promotion",
+            "currentlyPresentArtifacts": [],
+            "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
+            "id": "M90-PAA-3I-REF",
+            "json": "reports/wgsl-pipeline/scenes/generated/m90-dashcubics-row-specific-evidence-gate.json",
+            "newSupportClaims": 0,
+            "readinessDelta": 0.0,
+            "requiredFallbackReason": "none",
+            "status": "dependency-gated",
+            "supportClaim": false
+          }
+        ]
+      },
       "fallbackReason": "coverage.dash-cubic.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [
@@ -558,7 +574,22 @@
       "artifacts": {},
       "dependencyGateLinks": [],
       "edgeBudgetGateLinks": [],
-      "evidenceLinks": {},
+      "evidenceLinks": {
+        "m90": [
+          {
+            "classification": "dashing-row-specific-evidence-gate-no-support-promotion",
+            "currentlyPresentArtifacts": [],
+            "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
+            "id": "M90-PAA-3H-REF",
+            "json": "reports/wgsl-pipeline/scenes/generated/m90-dashing-row-specific-evidence-gate.json",
+            "newSupportClaims": 0,
+            "readinessDelta": 0.0,
+            "requiredFallbackReason": "none",
+            "status": "dependency-gated",
+            "supportClaim": false
+          }
+        ]
+      },
       "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [
@@ -667,7 +698,22 @@
       "artifacts": {},
       "dependencyGateLinks": [],
       "edgeBudgetGateLinks": [],
-      "evidenceLinks": {},
+      "evidenceLinks": {
+        "m90": [
+          {
+            "classification": "hairmodes-row-specific-evidence-gate-no-support-promotion",
+            "currentlyPresentArtifacts": [],
+            "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
+            "id": "M90-PAA-3F-REF",
+            "json": "reports/wgsl-pipeline/scenes/generated/m90-hairmodes-row-specific-evidence-gate.json",
+            "newSupportClaims": 0,
+            "readinessDelta": 0.0,
+            "requiredFallbackReason": "none",
+            "status": "dependency-gated",
+            "supportClaim": false
+          }
+        ]
+      },
       "fallbackReason": "coverage.hairmode.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [
@@ -704,7 +750,22 @@
       "artifacts": {},
       "dependencyGateLinks": [],
       "edgeBudgetGateLinks": [],
-      "evidenceLinks": {},
+      "evidenceLinks": {
+        "m90": [
+          {
+            "classification": "scaledstrokes-row-specific-evidence-gate-no-support-promotion",
+            "currentlyPresentArtifacts": [],
+            "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
+            "id": "M90-PAA-3G-REF",
+            "json": "reports/wgsl-pipeline/scenes/generated/m90-scaledstrokes-row-specific-evidence-gate.json",
+            "newSupportClaims": 0,
+            "readinessDelta": 0.0,
+            "requiredFallbackReason": "none",
+            "status": "dependency-gated",
+            "supportClaim": false
+          }
+        ]
+      },
       "fallbackReason": "coverage.scaled-stroke.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [
@@ -741,7 +802,22 @@
       "artifacts": {},
       "dependencyGateLinks": [],
       "edgeBudgetGateLinks": [],
-      "evidenceLinks": {},
+      "evidenceLinks": {
+        "m90": [
+          {
+            "classification": "strokedlines-row-specific-evidence-gate-no-support-promotion",
+            "currentlyPresentArtifacts": [],
+            "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
+            "id": "M90-PAA-3D-REF",
+            "json": "reports/wgsl-pipeline/scenes/generated/m90-strokedlines-row-specific-evidence-gate.json",
+            "newSupportClaims": 0,
+            "readinessDelta": 0.0,
+            "requiredFallbackReason": "none",
+            "status": "dependency-gated",
+            "supportClaim": false
+          }
+        ]
+      },
       "fallbackReason": "coverage.stroked-lines.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [
@@ -778,7 +854,22 @@
       "artifacts": {},
       "dependencyGateLinks": [],
       "edgeBudgetGateLinks": [],
-      "evidenceLinks": {},
+      "evidenceLinks": {
+        "m90": [
+          {
+            "classification": "strokerect-row-specific-evidence-gate-no-support-promotion",
+            "currentlyPresentArtifacts": [],
+            "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
+            "id": "M90-PAA-3B-REF",
+            "json": "reports/wgsl-pipeline/scenes/generated/m90-strokerect-row-specific-evidence-gate.json",
+            "newSupportClaims": 0,
+            "readinessDelta": 0.0,
+            "requiredFallbackReason": "none",
+            "status": "dependency-gated",
+            "supportClaim": false
+          }
+        ]
+      },
       "fallbackReason": "coverage.stroke-rect.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [
@@ -815,7 +906,22 @@
       "artifacts": {},
       "dependencyGateLinks": [],
       "edgeBudgetGateLinks": [],
-      "evidenceLinks": {},
+      "evidenceLinks": {
+        "m90": [
+          {
+            "classification": "strokerects-row-specific-evidence-gate-no-support-promotion",
+            "currentlyPresentArtifacts": [],
+            "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
+            "id": "M90-PAA-3E-REF",
+            "json": "reports/wgsl-pipeline/scenes/generated/m90-strokerects-row-specific-evidence-gate.json",
+            "newSupportClaims": 0,
+            "readinessDelta": 0.0,
+            "requiredFallbackReason": "none",
+            "status": "dependency-gated",
+            "supportClaim": false
+          }
+        ]
+      },
       "fallbackReason": "coverage.stroke-rects.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [
@@ -852,7 +958,22 @@
       "artifacts": {},
       "dependencyGateLinks": [],
       "edgeBudgetGateLinks": [],
-      "evidenceLinks": {},
+      "evidenceLinks": {
+        "m90": [
+          {
+            "classification": "thinstrokedrects-row-specific-evidence-gate-no-support-promotion",
+            "currentlyPresentArtifacts": [],
+            "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
+            "id": "M90-PAA-3C-REF",
+            "json": "reports/wgsl-pipeline/scenes/generated/m90-thinstrokedrects-row-specific-evidence-gate.json",
+            "newSupportClaims": 0,
+            "readinessDelta": 0.0,
+            "requiredFallbackReason": "none",
+            "status": "dependency-gated",
+            "supportClaim": false
+          }
+        ]
+      },
       "fallbackReason": "coverage.thin-stroked-rects.row-specific-artifacts-required",
       "family": "path-aa",
       "groupedPolicyRefusals": [
@@ -2356,6 +2477,14 @@
     "reports/wgsl-pipeline/scenes/generated/m90-hairlines-artifact-harness.json",
     "reports/wgsl-pipeline/scenes/generated/m90-hairlines-adapter-backed-gate.json",
     "reports/wgsl-pipeline/m90-path-aa-hairlines-evidence-intake/summary.json",
+    "reports/wgsl-pipeline/scenes/generated/m90-strokerect-row-specific-evidence-gate.json",
+    "reports/wgsl-pipeline/scenes/generated/m90-thinstrokedrects-row-specific-evidence-gate.json",
+    "reports/wgsl-pipeline/scenes/generated/m90-strokedlines-row-specific-evidence-gate.json",
+    "reports/wgsl-pipeline/scenes/generated/m90-strokerects-row-specific-evidence-gate.json",
+    "reports/wgsl-pipeline/scenes/generated/m90-hairmodes-row-specific-evidence-gate.json",
+    "reports/wgsl-pipeline/scenes/generated/m90-scaledstrokes-row-specific-evidence-gate.json",
+    "reports/wgsl-pipeline/scenes/generated/m90-dashing-row-specific-evidence-gate.json",
+    "reports/wgsl-pipeline/scenes/generated/m90-dashcubics-row-specific-evidence-gate.json",
     "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-cpu.json",
     "reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required/route-gpu.json",
     ".upstream/specs/font/README.md",

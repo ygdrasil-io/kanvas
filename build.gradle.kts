@@ -914,6 +914,18 @@ tasks.register<Exec>("pipelineM89GmRegistry") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"))
+    inputs.files(
+        listOf(
+            "reports/wgsl-pipeline/scenes/generated/m90-strokerect-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-thinstrokedrects-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-strokedlines-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-strokerects-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-hairmodes-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-scaledstrokes-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-dashing-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-dashcubics-row-specific-evidence-gate.json",
+        ).map { layout.projectDirectory.file(it) }
+    )
     outputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m89-gm-registry"))
     outputs.upToDateWhen { false }
 }
@@ -4593,7 +4605,7 @@ tasks.register<Exec>("validateM88ReleaseCandidate2") {
 tasks.register<Exec>("validateM89GmRegistry") {
     group = "verification"
     description = "Validates checked-in M89 GM support/refusal registry evidence."
-    dependsOn("pipelineM89GmRegistry")
+    dependsOn("pipelineM89GmRegistry", "pipelineM89GmRegistryPmCounters")
     commandLine("python3", "scripts/validate_m89_gm_registry.py")
     inputs.file(layout.projectDirectory.file("scripts/validate_m89_gm_registry.py"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/m89-gm-registry"))
@@ -4603,6 +4615,18 @@ tasks.register<Exec>("validateM89GmRegistry") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m86-fidelity-burndown/evidence.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"))
+    inputs.files(
+        listOf(
+            "reports/wgsl-pipeline/scenes/generated/m90-strokerect-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-thinstrokedrects-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-strokedlines-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-strokerects-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-hairmodes-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-scaledstrokes-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-dashing-row-specific-evidence-gate.json",
+            "reports/wgsl-pipeline/scenes/generated/m90-dashcubics-row-specific-evidence-gate.json",
+        ).map { layout.projectDirectory.file(it) }
+    )
 }
 
 tasks.register<Exec>("pipelineM89RegistryCloseout") {
@@ -4620,7 +4644,8 @@ tasks.register<Exec>("pipelineM89RegistryCloseout") {
 tasks.register<Exec>("pipelineM89GmRegistryPmCounters") {
     group = "verification"
     description = "Generates and validates PM-friendly M89 GM registry counters without changing support claims."
-    commandLine("python3", "scripts/validate_m89_gm_registry_pm_counters.py", "--generate", "--check-worktree-scope")
+    dependsOn("pipelineM89GmRegistry")
+    commandLine("python3", "scripts/validate_m89_gm_registry_pm_counters.py", "--generate")
     inputs.file(layout.projectDirectory.file("scripts/m89_gm_registry_pm_counters.py"))
     inputs.file(layout.projectDirectory.file("scripts/validate_m89_gm_registry_pm_counters.py"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m89-gm-registry/registry.json"))

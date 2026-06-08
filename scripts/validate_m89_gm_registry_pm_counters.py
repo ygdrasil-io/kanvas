@@ -27,6 +27,7 @@ EXPECTED_COUNTERS = {
     "unlinkedUnsupportedRows": 0,
     "linkedM66Rows": 18,
     "linkedM86Rows": 18,
+    "linkedM90Rows": 9,
 }
 EXPECTED_STATUS = {
     "expected-unsupported": 25,
@@ -285,6 +286,7 @@ def validate_artifact() -> None:
         "Total rows: `47`",
         "Support claims: `22`",
         "Expected unsupported with fallback: `25`",
+        "Linked M90 rows: `9`",
         "| Family | expected-unsupported | pass |",
         "| path-aa | `13` | `5` |",
         "`generated-dashboard`: `27`",
