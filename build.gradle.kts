@@ -159,6 +159,10 @@ val requiredPipelineConformanceSuites = listOf(
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
         className = "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
@@ -350,7 +354,7 @@ fun renderPipelineConformanceReport(
         |legacy WGSL diagnostic coverage, parser/golden coverage,
         |PipelineKey and BlendPlan contracts, runtime-effect descriptor routing and dispatch-only matrix coverage, CPU descriptor coverage,
         |bounded simple-Latin text line evidence, bounded simple linear-gradient evidence, bounded fixture-backed bitmap rect evidence,
-        |bounded SrcOver partial-alpha evidence,
+        |bounded SrcOver partial-alpha evidence, bounded simple Blend(kPlus) ColorFilter direct-rect evidence,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -376,6 +380,7 @@ fun renderPipelineConformanceReport(
         |${row("Simple linear gradient", status("org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest"), "`SimpleLinearGradientSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.linear-gradient.rect.v1`; WebGPU selects `webgpu.generated.linear-gradient.rect` with generated `fs_clamp` WGSL validation, `fallbackReason=none`, compares against an analytic sRGB two-stop oracle at local threshold 99%, and keeps non-claims for wide-gamut color management, all tile modes, gradient meshes, advanced color spaces, broad gradient-family support, color-filter chains, and codec/mipmap work")}
         |${row("Simple bitmap rect", status("org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest"), "`SimpleBitmapRectSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.bitmap-rect.nearest.fixture.v1`; WebGPU selects `webgpu.image.bitmap-rect.nearest.fixture`, uses fixture-backed `SkCanvas.drawImageRect` with `sampler=nearest`, `tileMode=kClamp`, `srcRectConstraint=kStrict`, `fallbackReason=none`, compares against an analytic strict-nearest fixture oracle at local threshold 99%, and keeps non-claims for broad image support, codec decode, arbitrary textures, mipmaps, tile-mode breadth, color-managed decode, texture atlases, and perspective transforms")}
         |${row("Simple SrcOver alpha", status("org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest"), "`SimpleSrcOverAlphaSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.src-over-alpha.rect-stack.v1`; WebGPU selects `webgpu.blend.src-over.partial-alpha.fixed-function`, validates generated solid-rect WGSL, records `blendPlan=FixedFunction`, uses two `kSrcOver` partial-alpha rect commands, `fallbackReason=none`, compares against an analytic SrcOver oracle at local threshold 99%, and keeps non-claims for arbitrary blend modes, advanced blend chains, saveLayer blend composition, shader destination reads, wide/color-managed color pipeline, and broad layer compositing")}
+        |${row("Simple ColorFilter", status("org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest"), "`SimpleColorFilterSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.color-filter.blend-kplus.rect.v1`; WebGPU selects `webgpu.paint.color-filter.blend-kplus.solid-color`, validates handwritten `solid_color.wgsl`, records generated solid-rect fallback `generated solid rect does not support colorFilter` while the selected route has `fallbackReason=none`, compares against an analytic sRGB Blend(kPlus) ColorFilter oracle at local threshold 99%, and keeps non-claims for broad ColorFilter support, ColorFilter chains, color-managed/wide pipeline, saveLayer/gradient/bitmap/runtime/table ColorFilters, and global threshold/color-policy changes")}
         |${row("Image rect lowering", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest"), "`ImageRectLowering` captures source rect, destination rect, transform facts, opaque paint-owned sampling payload handoff, and route id; axis-aligned image rects select analytic rect coverage, transformed descriptor tests select path-like coverage without moving sampling/pixels/filtering/colorspace into geometry; CPU oracle covers one axis-aligned image rect and WebGPU selector diagnostics record the adapter-gated image-rect route")}
         |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; matrix counts $runtimeEffectSupportMatrixCounts")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
@@ -430,6 +435,15 @@ fun renderPipelineConformanceReport(
         |  unsupported blend policy `blend.unsupported-mode.requires-explicit-allowlist`, and explicit non-claims
         |  for arbitrary blend modes, advanced blend chains, saveLayer blend composition, shader destination reads,
         |  wide/color-managed color pipeline, and broad layer compositing).
+        |- Simple ColorFilter evidence: `reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/`
+        |  (`route-webgpu.json` records `selectedRoute=webgpu.paint.color-filter.blend-kplus.solid-color`,
+        |  `colorFilterKind=Blend`, `colorFilterBlendMode=kPlus`, `paintBlendMode=kSrcOver`, handwritten
+        |  `solid_color.wgsl` validation, `colorSpacePolicy=srgb-unmanaged-color-filter-oracle`,
+        |  selected-route `fallbackReason=none`, generated solid-rect fallback
+        |  `generated solid rect does not support colorFilter`, unsupported ColorFilter policy
+        |  `color-filter.chain.not-promoted`, and explicit non-claims for broad ColorFilter support,
+        |  ColorFilter chains, color-managed/wide pipelines, saveLayer/gradient/bitmap/runtime/table ColorFilters,
+        |  and global threshold/color-policy changes).
         |- Image rect lowering: `render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt`
         |  (`ImageRectLowering` chooses analytic rect coverage for axis-aligned image rects and path-like
         |  coverage in descriptor tests for transformed image rects while preserving an opaque paint-owned
@@ -484,7 +498,7 @@ project(":cpu-raster").registerPipelineConformanceTest(
 )
 
 project(":gpu-raster").registerPipelineConformanceTest(
-    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, and selector conformance tests.",
+    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, and selector conformance tests.",
     testPatterns = listOf(
         "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
         "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
@@ -498,6 +512,7 @@ project(":gpu-raster").registerPipelineConformanceTest(
         "org.skia.gpu.webgpu.SimpleLinearGradientSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest",
+        "org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest",
         "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
     ),
 )
@@ -538,7 +553,7 @@ tasks.register("pipelineConformance") {
             |pipelineConformance summary:
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
-            |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, and selector tests: :gpu-raster:pipelineConformanceTest
+            |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, and selector tests: :gpu-raster:pipelineConformanceTest
             |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
             |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
             |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
