@@ -1,0 +1,97 @@
+        {
+          "sceneId": "runtime.simple_rt.descriptor.rect.v1",
+          "scopeId": "runtime-effect.simple-rt.registered-descriptor.rect.v1",
+          "status": "pass",
+          "supportScope": "registered-simple-rt-descriptor-rect",
+          "supportClaim": true,
+          "descriptorBacked": true,
+          "parserReflected": true,
+          "cpuRouteIdentifier": "cpu.runtime-effect.descriptor.simple_rt",
+          "webGpuRouteIdentifier": "webgpu.runtime-effect.descriptor.simple_rt",
+          "runtimeEffectStableId": "runtime.simple_rt",
+          "cpuImplementationId": "kotlin/simple_rt",
+          "wgslImplementationId": "wgsl/runtime_simple_rt",
+          "uniformLayout": {
+            "gColor": 0
+          },
+          "uniformBytes": 16,
+          "runtimeWgslValidated": true,
+          "runtimeWgslSha256": "0001a83c66bcc0e5b912072961c0e8bb65dd2227c2dcad37553153715f094b63",
+          "runtimeWgslEntryPoints": ["vertex:vs_main", "fragment:fs_main"],
+          "runtimeWgslDiagnostics": [],
+          "colorSpacePolicy": "srgb-unmanaged-simple-rt-oracle",
+          "fallbackPolicy": "descriptor-backed-simple-rt-wgsl-route",
+          "stableRefusals": [
+  {
+    "reason": "runtime-effect.wgsl-descriptor-missing",
+    "status": "expected-unsupported",
+    "evidence": "RuntimeEffectDescriptorWebGpuTest#registered runtime shader without descriptor fails with stable diagnostic",
+    "policy": "registered runtime shader without WGSL descriptor fails with stable diagnostic"
+  },
+  {
+    "reason": "runtime-effect.arbitrary-sksl-unsupported",
+    "status": "expected-unsupported",
+    "evidence": "Spec 06 runtime effects descriptor non-goal",
+    "policy": "SkRuntimeEffect remains a compatibility facade backed by registered Kotlin/WGSL implementations"
+  }
+],
+          "nonBackgroundPixels": 4096,
+          "tolerance": 1,
+          "similarityThreshold": 99.95,
+          "cpuSimilarityThreshold": 99.95,
+          "webGpuSimilarityThreshold": 99.95,
+          "cpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 4096,
+  "matchingPixels": 4096,
+  "mismatchingPixels": 0,
+  "tolerance": 1,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "webGpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 4096,
+  "matchingPixels": 4096,
+  "mismatchingPixels": 0,
+  "tolerance": 1,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "globalThresholdChanged": false,
+          "globalColorPolicyChanged": false,
+          "webGpuAdapter": "Apple M2 Max",
+          "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-017-simple-rt/reference.png",
+          "cpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-017-simple-rt/cpu.png",
+          "webGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-017-simple-rt/webgpu.png",
+          "cpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-017-simple-rt/cpu-diff.png",
+          "webGpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-017-simple-rt/webgpu-diff.png",
+          "routeCpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-017-simple-rt/route-cpu.json",
+          "routeWebGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-017-simple-rt/route-webgpu.json",
+          "performanceArtifacts": {
+  "cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/cpu-performance.json",
+  "gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu-performance.json",
+  "gate": "reporting-only"
+},
+          "nonClaims": ["no-dynamic-sksl-compilation-claim", "no-sksl-ir-or-vm-claim", "no-arbitrary-runtime-effect-claim", "no-broad-runtime-effect-claim", "no-spiral-rt-promotion-claim", "no-runtime-effect-color-filter-claim", "no-runtime-effect-blender-claim", "no-runtime-effect-image-filter-claim", "no-live-editing-breadth-claim"]
+        }
