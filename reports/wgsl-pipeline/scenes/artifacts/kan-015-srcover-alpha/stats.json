@@ -1,0 +1,78 @@
+        {
+          "sceneId": "paint.src-over-alpha.rect-stack.v1",
+          "scopeId": "src-over.partial-alpha.rect-stack.simple.v1",
+          "status": "pass",
+          "supportScope": "simple-bounded-src-over-partial-alpha-rect-stack",
+          "supportClaim": true,
+          "cpuRouteIdentifier": "cpu.paint.src-over.partial-alpha.rect-stack",
+          "webGpuRouteIdentifier": "webgpu.blend.src-over.partial-alpha.fixed-function",
+          "blendMode": "kSrcOver",
+          "blendPlan": "FixedFunction",
+          "alphaPolicy": "partial",
+          "partialAlphaCommandCount": 2,
+          "overlapPixelCount": 1748,
+          "colorSpacePolicy": "srgb-unmanaged-src-over-oracle",
+          "generatedSolidRectWgslValidated": true,
+          "generatedSolidRectWgslSha256": "2a15aeab075d4d88b4a8583cccbae008abb67c71a6f5d232f438a158b4cc249d",
+          "generatedWgslFeatureFlag": "kanvas.gpu.generatedSolidRect.enabled",
+          "generatedSolidRectWgslDiagnostics": [],
+          "pipelineKeyDump": "preimage=pipeline.key v=1 layout=[] code=[generatedPath=true,shaderFamily=solidRect] state=[];hash=1de5e33f4453bcf029ef5fbb443e01803f35205e7c74d646fc89678c5e00ad29;uniformFacts=[]\npreimage=pipeline.key v=1 layout=[] code=[generatedPath=true] state=[blendMode=kSrcOver];hash=90a82334bb243115a4a7b055f2e173e596519af44f74bda0d63f1a55ee3ded2a;uniformFacts=[]",
+          "unsupportedBlendMode": "kModulate",
+          "unsupportedBlendReason": "blend.unsupported-mode.requires-explicit-allowlist",
+          "unsupportedBlendPlan": "ShaderLayerComposite",
+          "cpuNonBackgroundPixels": 6676,
+          "webGpuNonBackgroundPixels": 6676,
+          "tolerance": 2,
+          "cpuSimilarityThreshold": 99.00,
+          "webGpuSimilarityThreshold": 99.00,
+          "cpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "webGpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "globalThresholdChanged": false,
+          "globalBlendPolicyChanged": false,
+          "fallbackPolicy": "none-for-supported-simple-src-over-partial-alpha-fixed-function",
+          "webGpuAdapter": "Apple M2 Max",
+          "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/reference.png",
+          "cpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/cpu.png",
+          "webGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/webgpu.png",
+          "cpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/cpu-diff.png",
+          "webGpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/webgpu-diff.png",
+          "routeCpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/route-cpu.json",
+          "routeWebGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/route-webgpu.json",
+          "nonClaims": ["no-arbitrary-blend-mode-claim", "no-advanced-blend-chain-claim", "no-saveLayer-blend-composition-claim", "no-shader-destination-read-claim", "no-wide-color-pipeline-claim", "no-color-managed-blend-claim", "no-broad-layer-compositing-claim"]
+        }
