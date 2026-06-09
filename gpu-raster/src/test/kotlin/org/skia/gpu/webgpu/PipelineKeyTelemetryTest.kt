@@ -2,19 +2,36 @@ package org.skia.gpu.webgpu
 
 import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SkRect
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
 import org.skia.foundation.SkPaint
 import org.skia.gpu.webgpu.tools.GeneratedSolidRectWgsl
 
 class PipelineKeyTelemetryTest {
-    init {
+    private var previousGeneratedSolidRectFlag: String? = null
+
+    @BeforeEach
+    fun disableGeneratedSolidRectForTelemetryFixtures() {
+        previousGeneratedSolidRectFlag = System.getProperty(GeneratedSolidRectWgsl.FEATURE_FLAG)
         System.setProperty(GeneratedSolidRectWgsl.FEATURE_FLAG, "false")
     }
+
+    @AfterEach
+    fun restoreGeneratedSolidRectFlag() {
+        val previous = previousGeneratedSolidRectFlag
+        if (previous == null) {
+            System.clearProperty(GeneratedSolidRectWgsl.FEATURE_FLAG)
+        } else {
+            System.setProperty(GeneratedSolidRectWgsl.FEATURE_FLAG, previous)
+        }
+    }
+
     @Test
     fun `pipeline key serialization is deterministic across map order`() {
         val context = WebGpuContext.createOrNull()
