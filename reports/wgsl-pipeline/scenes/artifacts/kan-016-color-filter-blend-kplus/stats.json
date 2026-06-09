@@ -1,0 +1,81 @@
+        {
+          "sceneId": "paint.color-filter.blend-kplus.rect.v1",
+          "scopeId": "color-filter.blend-kplus.direct-rect.simple.v1",
+          "status": "pass",
+          "supportScope": "simple-direct-rect-blend-kplus-color-filter",
+          "supportClaim": true,
+          "cpuRouteIdentifier": "cpu.paint.color-filter.blend-kplus.direct-rect",
+          "webGpuRouteIdentifier": "webgpu.paint.color-filter.blend-kplus.solid-color",
+          "paintBlendMode": "kSrcOver",
+          "colorFilterKind": "Blend",
+          "colorFilterBlendMode": "kPlus",
+          "filterBlendColor": "#FFFF0000",
+          "paintSourceColor": "#FF00FF00",
+          "filteredOutputColor": "#FFFFFF00",
+          "filteredCommandCount": 1,
+          "controlPixelCount": 2800,
+          "filteredPixelCount": 2800,
+          "colorSpacePolicy": "srgb-unmanaged-color-filter-oracle",
+          "fallbackPolicy": "supported-via-handwritten-solid-color-color-filter-route",
+          "generatedSolidRectFallbackReason": "generated solid rect does not support colorFilter",
+          "solidColorWgslValidated": true,
+          "solidColorWgslSha256": "8134be03d74f41168210b4100b3477e76d513b66de960999c6e59038de9c2224",
+          "solidColorWgslEntryPoints": ["vertex:vs_main", "fragment:fs_main"],
+          "solidColorWgslDiagnostics": [],
+          "routeFacts": "shaderFamily=solidColor colorFilter=Blend(kPlus) paintBlendMode=kSrcOver",
+          "unsupportedColorFilterPolicy": "color-filter.chain.not-promoted",
+          "cpuNonBackgroundPixels": 5600,
+          "webGpuNonBackgroundPixels": 5600,
+          "tolerance": 2,
+          "cpuSimilarityThreshold": 99.00,
+          "webGpuSimilarityThreshold": 99.00,
+          "cpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "webGpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "globalThresholdChanged": false,
+          "globalColorPolicyChanged": false,
+          "webGpuAdapter": "Apple M2 Max",
+          "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/reference.png",
+          "cpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/cpu.png",
+          "webGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/webgpu.png",
+          "cpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/cpu-diff.png",
+          "webGpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/webgpu-diff.png",
+          "routeCpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/route-cpu.json",
+          "routeWebGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/route-webgpu.json",
+          "nonClaims": ["no-broad-color-filter-claim", "no-color-filter-chain-claim", "no-working-color-space-color-filter-claim", "no-table-color-filter-claim", "no-runtime-color-filter-claim", "no-color-managed-pipeline-claim", "no-wide-color-pipeline-claim", "no-saveLayer-color-filter-claim", "no-gradient-color-filter-claim", "no-bitmap-color-filter-claim"]
+        }

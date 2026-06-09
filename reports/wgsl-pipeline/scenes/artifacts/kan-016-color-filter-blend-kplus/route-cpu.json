@@ -1,0 +1,76 @@
+            {
+              "sceneId": "paint.color-filter.blend-kplus.rect.v1",
+              "scopeId": "color-filter.blend-kplus.direct-rect.simple.v1",
+              "backend": "CPU",
+              "drawKind": "SkCanvas.drawRect",
+              "status": "pass",
+              "supportScope": "simple-direct-rect-blend-kplus-color-filter",
+              "supportClaim": true,
+              "selectedRoute": "cpu.paint.color-filter.blend-kplus.direct-rect",
+              "paintBlendMode": "kSrcOver",
+              "colorFilterKind": "Blend",
+              "colorFilterBlendMode": "kPlus",
+              "filterBlendColor": "#FFFF0000",
+              "paintSourceColor": "#FF00FF00",
+              "filteredOutputColor": "#FFFFFF00",
+              "filteredCommandCount": 1,
+              "commands": [{
+  "label": "control-green-no-filter",
+  "paintBlendMode": "kSrcOver",
+  "colorFilterKind": "none",
+  "colorFilterBlendMode": null,
+  "sourceColor": "#FF00FF00",
+  "outputColor": "#FF00FF00",
+  "rect": {
+    "left": 22.0,
+    "top": 20.0,
+    "right": 72.0,
+    "bottom": 76.0
+  }
+}, {
+  "label": "blend-red-kplus-filtered-yellow",
+  "paintBlendMode": "kSrcOver",
+  "colorFilterKind": "Blend",
+  "colorFilterBlendMode": "kPlus",
+  "sourceColor": "#FF00FF00",
+  "outputColor": "#FFFFFF00",
+  "rect": {
+    "left": 90.0,
+    "top": 20.0,
+    "right": 140.0,
+    "bottom": 76.0
+  }
+}],
+              "stageOrder": "shader/color -> colorFilter -> alpha modulation -> blender -> color-space/store",
+              "referenceKind": "analytic-srgb-blend-kplus-color-filter-oracle",
+              "fallbackReason": "none",
+              "fallbackPolicy": "supported-via-handwritten-solid-color-color-filter-route",
+              "colorSpacePolicy": "srgb-unmanaged-color-filter-oracle",
+              "unsupportedColorFilterPolicy": "color-filter.chain.not-promoted",
+              "comparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+              "similarityThreshold": 99.00,
+              "globalThresholdChanged": false,
+              "globalColorPolicyChanged": false,
+              "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/reference.png",
+              "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/cpu.png",
+              "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/cpu-diff.png",
+              "nonClaims": ["no-broad-color-filter-claim", "no-color-filter-chain-claim", "no-working-color-space-color-filter-claim", "no-table-color-filter-claim", "no-runtime-color-filter-claim", "no-color-managed-pipeline-claim", "no-wide-color-pipeline-claim", "no-saveLayer-color-filter-claim", "no-gradient-color-filter-claim", "no-bitmap-color-filter-claim"]
+            }
