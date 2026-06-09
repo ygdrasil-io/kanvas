@@ -1,0 +1,76 @@
+            {
+              "sceneId": "runtime.simple_rt.descriptor.rect.v1",
+              "scopeId": "runtime-effect.simple-rt.registered-descriptor.rect.v1",
+              "backend": "WebGPU",
+              "adapter": "Apple M2 Max",
+              "drawKind": "SkCanvas.drawRect",
+              "status": "pass",
+              "supportScope": "registered-simple-rt-descriptor-rect",
+              "supportClaim": true,
+              "selectedRoute": "webgpu.runtime-effect.descriptor.simple_rt",
+              "coverageStrategy": "webgpu.coverage.analytic-rect",
+              "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl parserReflected=true state=[blendMode=kSrcOver]",
+              "paintBlendMode": "kSrcOver",
+              "runtimeEffectStableId": "runtime.simple_rt",
+              "cpuImplementationId": "kotlin/simple_rt",
+              "wgslImplementationId": "wgsl/runtime_simple_rt",
+              "descriptorBacked": true,
+              "uniformLayout": {
+                "gColor": 0
+              },
+              "uniformBytes": 16,
+              "referenceKind": "analytic-simple-rt-coordinate-color-oracle",
+              "fallbackReason": "none",
+              "fallbackPolicy": "descriptor-backed-simple-rt-wgsl-route",
+              "colorSpacePolicy": "srgb-unmanaged-simple-rt-oracle",
+              "runtimeWgslValidated": true,
+              "runtimeWgslSha256": "0001a83c66bcc0e5b912072961c0e8bb65dd2227c2dcad37553153715f094b63",
+              "runtimeWgslEntryPoints": ["vertex:vs_main", "fragment:fs_main"],
+              "runtimeWgslDiagnostics": [],
+              "parserReflected": true,
+              "stableRefusals": [
+  {
+    "reason": "runtime-effect.wgsl-descriptor-missing",
+    "status": "expected-unsupported",
+    "evidence": "RuntimeEffectDescriptorWebGpuTest#registered runtime shader without descriptor fails with stable diagnostic",
+    "policy": "registered runtime shader without WGSL descriptor fails with stable diagnostic"
+  },
+  {
+    "reason": "runtime-effect.arbitrary-sksl-unsupported",
+    "status": "expected-unsupported",
+    "evidence": "Spec 06 runtime effects descriptor non-goal",
+    "policy": "SkRuntimeEffect remains a compatibility facade backed by registered Kotlin/WGSL implementations"
+  }
+],
+              "comparison": {
+  "similarity": 100.000000,
+  "totalPixels": 4096,
+  "matchingPixels": 4096,
+  "mismatchingPixels": 0,
+  "tolerance": 1,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+              "similarityThreshold": 99.95,
+              "globalThresholdChanged": false,
+              "globalColorPolicyChanged": false,
+              "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-017-simple-rt/reference.png",
+              "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-017-simple-rt/webgpu.png",
+              "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-017-simple-rt/webgpu-diff.png",
+              "performanceArtifacts": {
+  "cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/cpu-performance.json",
+  "gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu-performance.json",
+  "gate": "reporting-only"
+},
+              "nonClaims": ["no-dynamic-sksl-compilation-claim", "no-sksl-ir-or-vm-claim", "no-arbitrary-runtime-effect-claim", "no-broad-runtime-effect-claim", "no-spiral-rt-promotion-claim", "no-runtime-effect-color-filter-claim", "no-runtime-effect-blender-claim", "no-runtime-effect-image-filter-claim", "no-live-editing-breadth-claim"]
+            }
