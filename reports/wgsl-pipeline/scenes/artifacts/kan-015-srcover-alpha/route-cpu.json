@@ -1,0 +1,72 @@
+            {
+              "sceneId": "paint.src-over-alpha.rect-stack.v1",
+              "scopeId": "src-over.partial-alpha.rect-stack.simple.v1",
+              "backend": "CPU",
+              "drawKind": "SkCanvas.drawRect",
+              "status": "pass",
+              "supportScope": "simple-bounded-src-over-partial-alpha-rect-stack",
+              "supportClaim": true,
+              "selectedRoute": "cpu.paint.src-over.partial-alpha.rect-stack",
+              "blendMode": "kSrcOver",
+              "blendPlan": "FixedFunction",
+              "blendPlanReason": "fixed-function WebGPU blend allowlist accepts kSrcOver",
+              "alphaPolicy": "partial",
+              "partialAlphaCommandCount": 2,
+              "commands": [{
+  "label": "partial-alpha-green-underlay",
+  "blendMode": "kSrcOver",
+  "alpha": 0.439216,
+  "color": "#7042B87A",
+  "rect": {
+    "left": 22.0,
+    "top": 18.0,
+    "right": 108.0,
+    "bottom": 70.0
+  }
+}, {
+  "label": "partial-alpha-rose-overlay",
+  "blendMode": "kSrcOver",
+  "alpha": 0.627451,
+  "color": "#A0E85068",
+  "rect": {
+    "left": 62.0,
+    "top": 32.0,
+    "right": 138.0,
+    "bottom": 84.0
+  }
+}],
+              "referenceKind": "analytic-src-over-partial-alpha-opaque-dst-oracle",
+              "fallbackReason": "none",
+              "colorSpacePolicy": "srgb-unmanaged-src-over-oracle",
+              "unsupportedBlendMode": "kModulate",
+              "unsupportedBlendReason": "blend.unsupported-mode.requires-explicit-allowlist",
+              "unsupportedBlendPlan": "ShaderLayerComposite",
+              "unsupportedBlendPlanRawReason": "blend mode kModulate requires shader/layer composite BlendPlan; fixed-function WebGPU path refuses it",
+              "overlapPixelCount": 1748,
+              "comparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+              "similarityThreshold": 99.00,
+              "globalThresholdChanged": false,
+              "globalBlendPolicyChanged": false,
+              "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/reference.png",
+              "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/cpu.png",
+              "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/cpu-diff.png",
+              "nonClaims": ["no-arbitrary-blend-mode-claim", "no-advanced-blend-chain-claim", "no-saveLayer-blend-composition-claim", "no-shader-destination-read-claim", "no-wide-color-pipeline-claim", "no-color-managed-blend-claim", "no-broad-layer-compositing-claim"]
+            }
