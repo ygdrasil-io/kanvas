@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.skia.effects.runtime.effects.SkBuiltinColorFilterEffects
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple
 import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkPoint
@@ -175,6 +176,21 @@ class SkRuntimeEffectMakeTest {
         assertEquals("kotlin/linear_gradient_rt", linearGradientDescriptor.cpuImplementationId)
         assertEquals("wgsl/runtime_linear_gradient_rt", linearGradientDescriptor.wgslImplementationId)
         assertEquals(listOf("in_colors0", "in_colors1"), linearGradientDescriptor.uniforms.map { it.name })
+    }
+
+    @Test
+    fun `LumaToAlpha runtime color filter exposes CPU and WGSL descriptor`() {
+        val effect = SkRuntimeEffect.MakeForColorFilter(SkBuiltinColorFilterEffects.LUMA_SRC_SKSL).effect
+
+        assertNotNull(effect)
+        val descriptor = effect!!.descriptor()
+        assertNotNull(descriptor)
+        assertEquals("runtime.color_filter_luma_to_alpha", descriptor!!.stableId)
+        assertEquals("kotlin/color_filter_luma_to_alpha", descriptor.cpuImplementationId)
+        assertEquals("wgsl/runtime_color_filter_luma_to_alpha", descriptor.wgslImplementationId)
+        assertEquals(SkRuntimeEffect.Kind.kColorFilter, descriptor.kind)
+        assertTrue(descriptor.uniforms.isEmpty())
+        assertTrue(descriptor.children.isEmpty())
     }
 
     // ─── Failure paths ───────────────────────────────────────────────

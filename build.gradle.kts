@@ -167,6 +167,10 @@ val requiredPipelineConformanceSuites = listOf(
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.RuntimeColorFilterSceneEvidenceTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
         className = "org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest",
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
@@ -315,6 +319,7 @@ fun renderPipelineConformanceReport(
     runtimeEffectLayoutV2Counts: String,
     runtimeShaderEffectsV2Counts: String,
     runtimeChildShaderEffectLaneCounts: String,
+    runtimeColorFilterWgslCounts: String,
 ): String {
     val byName = suites
         .sortedBy { it.className }
@@ -396,12 +401,14 @@ fun renderPipelineConformanceReport(
         |${row("Simple bitmap rect", status("org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest"), "`SimpleBitmapRectSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.bitmap-rect.nearest.fixture.v1`; WebGPU selects `webgpu.image.bitmap-rect.nearest.fixture`, uses fixture-backed `SkCanvas.drawImageRect` with `sampler=nearest`, `tileMode=kClamp`, `srcRectConstraint=kStrict`, `fallbackReason=none`, compares against an analytic strict-nearest fixture oracle at local threshold 99%, and keeps non-claims for broad image support, codec decode, arbitrary textures, mipmaps, tile-mode breadth, color-managed decode, texture atlases, and perspective transforms")}
         |${row("Simple SrcOver alpha", status("org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest"), "`SimpleSrcOverAlphaSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.src-over-alpha.rect-stack.v1`; WebGPU selects `webgpu.blend.src-over.partial-alpha.fixed-function`, validates generated solid-rect WGSL, records `blendPlan=FixedFunction`, uses two `kSrcOver` partial-alpha rect commands, `fallbackReason=none`, compares against an analytic SrcOver oracle at local threshold 99%, and keeps non-claims for arbitrary blend modes, advanced blend chains, saveLayer blend composition, shader destination reads, wide/color-managed color pipeline, and broad layer compositing")}
         |${row("Simple ColorFilter", status("org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest"), "`SimpleColorFilterSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.color-filter.blend-kplus.rect.v1`; WebGPU selects `webgpu.paint.color-filter.blend-kplus.solid-color`, validates handwritten `solid_color.wgsl`, records generated solid-rect fallback `generated solid rect does not support colorFilter` while the selected route has `fallbackReason=none`, compares against an analytic sRGB Blend(kPlus) ColorFilter oracle at local threshold 99%, and keeps non-claims for broad ColorFilter support, ColorFilter chains, color-managed/wide pipeline, saveLayer/gradient/bitmap/runtime/table ColorFilters, and global threshold/color-policy changes")}
+        |${row("Runtime ColorFilter evidence", status("org.skia.gpu.webgpu.RuntimeColorFilterSceneEvidenceTest"), "`RuntimeColorFilterSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `runtime.color-filter.luma-to-alpha.rect.v1`; WebGPU selects `webgpu.runtime-color-filter.luma-to-alpha.direct-rect`, validates and reflects `runtime_color_filter_luma_to_alpha.wgsl`, records stage order `solid-color shader -> runtime color filter -> fixed-function kSrcOver blend -> store`, compares against an analytic luma-to-alpha SrcOver-white oracle at local threshold 99%, and keeps non-claims for broad runtime ColorFilters, child/uniform/LUT/color-space wrappers, shader inputs, and global threshold/color-policy changes")}
         |${row("Simple SaveLayer image-filter", status("org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest"), "`SimpleSaveLayerImageFilterSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `save-layer.image-filter.color-filter-matrix.v1`; WebGPU selects `webgpu.image-filter.color-filter.layer-composite`, records `prepassRoute=null`, `materialiseStages=0`, `fallbackReason=none`, compares against an analytic SaveLayer ColorFilter(Matrix) oracle at local threshold 99%, and keeps non-claims for arbitrary layer stacks, multi-node DAGs, broad image-filter support, CPU readback fallback, and global threshold changes")}
         |${row("SimpleRT runtime effect", status("org.skia.gpu.webgpu.SimpleRuntimeEffectSceneEvidenceTest"), "`SimpleRuntimeEffectSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `runtime.simple_rt.descriptor.rect.v1`; WebGPU selects `webgpu.runtime-effect.descriptor.simple_rt`, validates and reflects `runtime_simple_rt.wgsl` with `gColor@0`, records `fallbackReason=none`, compares against an analytic SimpleRT coordinate-color oracle at local tolerance 1 and threshold 99.95%, references reporting-only CPU/GPU performance artifacts, and keeps stable refusals for missing WGSL descriptors/arbitrary SkSL plus non-claims for dynamic SkSL compilation, SkSL IR/VM, broad runtime effects, SpiralRT promotion, runtime color-filter/blender/image-filter, and live-editing breadth")}
         |${row("Image rect lowering", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest"), "`ImageRectLowering` captures source rect, destination rect, transform facts, opaque paint-owned sampling payload handoff, and route id; axis-aligned image rects select analytic rect coverage, transformed descriptor tests select path-like coverage without moving sampling/pixels/filtering/colorspace into geometry; CPU oracle covers one axis-aligned image rect and WebGPU selector diagnostics record the adapter-gated image-rect route")}
         |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; support matrix counts $runtimeEffectSupportMatrixCounts; layout V2 counts $runtimeEffectLayoutV2Counts")}
         |${row("Runtime Shader Effects V2 promotion", "passed", "`pipelineRuntimeShaderEffectsV2PromotionReport` validates selected registered shader effects against support matrix V2, layout V2, route JSON, reference/CPU/WebGPU/diff/stat artifacts, and keeps counts $runtimeShaderEffectsV2Counts")}
         |${row("Runtime child shader lane", "expected-unsupported", "`pipelineRuntimeChildShaderEffectLaneReport` validates `runtime.unsharp_rt` child descriptor representation, CPU oracle evidence, route JSON, resource-axis classification, and stable WebGPU refusal; counts $runtimeChildShaderEffectLaneCounts")}
+        |${row("Runtime ColorFilter WGSL", "passed", "`pipelineRuntimeColorFilterWgslReport` validates selected `runtime.color_filter_luma_to_alpha` descriptor/WGSL layout, reference/CPU/WebGPU/diff/stat route artifacts, and stable non-selected ColorFilter reason codes; counts $runtimeColorFilterWgslCounts")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -497,6 +504,11 @@ fun renderPipelineConformanceReport(
         |  lists `runtime.unsharp_rt` child `child:kShader@0`, records CPU oracle coverage, emits route JSON with `runtime-effect.child-binding-unsupported`,
         |  classifies child resource axes while excluding uniform values from PipelineKey, and keeps WebGPU support expected-unsupported;
         |  current counts are $runtimeChildShaderEffectLaneCounts.
+        |- Runtime ColorFilter WGSL: `reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.md`
+        |  validates selected `runtime.color_filter_luma_to_alpha` direct-rect support with descriptor-backed CPU/GPU routes,
+        |  matched parser/reflection layout, reference/CPU/WebGPU/diff/stat artifacts, explicit stage order, and stable reason codes
+        |  for non-selected runtime ColorFilters;
+        |  current counts are $runtimeColorFilterWgslCounts.
         |- GPU similarity investigation: `reports/wgsl-pipeline/2026-05-27-m31-gpu-similarity-investigation.md`
         |  classifies `DrawBitmapRect3*` and `DrawBitmapRectSkbug4734*` below-floor failures as implementation-regression candidates
         |  with no floor change in this milestone slice.
@@ -537,7 +549,7 @@ project(":cpu-raster").registerPipelineConformanceTest(
 )
 
 project(":gpu-raster").registerPipelineConformanceTest(
-    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, simple SaveLayer image-filter, simple SimpleRT runtime effect, and selector conformance tests.",
+    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SaveLayer image-filter, simple SimpleRT runtime effect, and selector conformance tests.",
     testPatterns = listOf(
         "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
         "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
@@ -552,6 +564,7 @@ project(":gpu-raster").registerPipelineConformanceTest(
         "org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest",
+        "org.skia.gpu.webgpu.RuntimeColorFilterSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleRuntimeEffectSceneEvidenceTest",
         "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
@@ -622,6 +635,30 @@ tasks.register<Exec>("pipelineRuntimeChildShaderEffectLaneReport") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineRuntimeColorFilterWgslReport") {
+    group = "verification"
+    description = "Materializes and validates the KAN-031 Runtime ColorFilter WGSL report."
+
+    dependsOn(
+        ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
+        ":gpu-raster:pipelineRuntimeEffectsLayoutV2Report",
+    )
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-color-filter-wgsl")
+    commandLine(
+        "python3",
+        "scripts/validate_kan031_runtime_color_filter_wgsl.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan031_runtime_color_filter_wgsl.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha"))
+    outputs.file(outputDir.file("runtime-color-filter-wgsl.json"))
+    outputs.file(outputDir.file("runtime-color-filter-wgsl.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register("pipelineConformance") {
     group = "verification"
     description = "Runs the standard production pipeline conformance suite without slow benchmark gates."
@@ -630,6 +667,7 @@ tasks.register("pipelineConformance") {
         ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
         "pipelineRuntimeShaderEffectsV2PromotionReport",
         "pipelineRuntimeChildShaderEffectLaneReport",
+        "pipelineRuntimeColorFilterWgslReport",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -645,9 +683,10 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime Effects V2 support matrix: :cpu-raster:pipelineRuntimeEffectsV2SupportMatrix
             |- REQUIRED Runtime Shader Effects V2 promotion report: pipelineRuntimeShaderEffectsV2PromotionReport
             |- REQUIRED Runtime child shader effect lane report: pipelineRuntimeChildShaderEffectLaneReport
+            |- REQUIRED Runtime ColorFilter WGSL report: pipelineRuntimeColorFilterWgslReport
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
-            |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
+            |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
             |- REQUIRED runtime descriptor registry and CPU dispatch tests: :cpu-raster:pipelineConformanceTest
             |- REQUIRED PipelineIR, CPU executor, and geometry oracle tests: :render-pipeline:pipelineConformanceTest
             |- REQUIRED kanvas-skia production descriptor-route tests: :kanvas-skia:pipelineConformanceTest
@@ -742,6 +781,14 @@ tasks.register("pipelineConformanceReport") {
             ?: throw GradleException(
                 "Missing Runtime child shader effect lane status counts in `reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.md`."
             )
+        val runtimeColorFilterWgslCounts = file("reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.md")
+            .readLines()
+            .firstOrNull { it.startsWith("Status counts: ") }
+            ?.removePrefix("Status counts: ")
+            ?.removeSuffix(".")
+            ?: throw GradleException(
+                "Missing Runtime ColorFilter WGSL status counts in `reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.md`."
+            )
         val report = renderPipelineConformanceReport(
             commit = commit,
             suites = suites,
@@ -751,6 +798,7 @@ tasks.register("pipelineConformanceReport") {
             runtimeEffectLayoutV2Counts = runtimeEffectLayoutV2Counts,
             runtimeShaderEffectsV2Counts = runtimeShaderEffectsV2Counts,
             runtimeChildShaderEffectLaneCounts = runtimeChildShaderEffectLaneCounts,
+            runtimeColorFilterWgslCounts = runtimeColorFilterWgslCounts,
         )
         val target = outputFile.get().asFile
         target.parentFile.mkdirs()

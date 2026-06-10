@@ -1,0 +1,52 @@
+            {
+              "sceneId": "runtime.color-filter.luma-to-alpha.rect.v1",
+              "scopeId": "runtime.color-filter.luma-to-alpha.direct-rect.v1",
+              "backend": "WebGPU",
+              "adapter": "Apple M2 Max",
+              "drawKind": "SkCanvas.drawRect",
+              "status": "pass",
+              "supportScope": "runtime-color-filter-luma-to-alpha-direct-rect",
+              "supportClaim": true,
+              "selectedRoute": "webgpu.runtime-color-filter.luma-to-alpha.direct-rect",
+              "runtimeEffectStableId": "runtime.color_filter_luma_to_alpha",
+              "wgslImplementationId": "wgsl/runtime_color_filter_luma_to_alpha",
+              "paintBlendMode": "kSrcOver",
+              "paintSourceColor": "0xFF336699",
+              "lumaAlpha": 92,
+              "filteredDisplayColor": "0xFFA3A3A3",
+              "stageOrder": "solid-color shader -> runtime color filter -> fixed-function kSrcOver blend -> store",
+              "referenceKind": "analytic-srgb-luma-to-alpha-src-over-white-oracle",
+              "fallbackReason": "none",
+              "fallbackPolicy": "supported-via-runtime-color-filter-luma-to-alpha-direct-rect-wgsl",
+              "colorSpacePolicy": "srgb-unmanaged-runtime-color-filter-oracle",
+              "wgslValidated": true,
+              "wgslSha256": "32dd05b45f0040d4825c73211646cd43bd74fad041c4448125c03e87e2493dc5",
+              "wgslEntryPoints": ["vertex:vs_main", "fragment:fs_main"],
+              "wgslDiagnostics": [],
+              "comparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+              "similarityThreshold": 99.00,
+              "globalThresholdChanged": false,
+              "globalColorPolicyChanged": false,
+              "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/reference.png",
+              "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/webgpu.png",
+              "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/webgpu-diff.png",
+              "nonClaims": ["no-broad-runtime-color-filter-claim", "no-runtime-color-filter-child-claim", "no-runtime-color-filter-uniform-claim", "no-runtime-color-filter-shader-input-claim", "no-color-management-breadth-claim", "no-lut-color-filter-claim", "no-color-filter-chain-claim", "no-global-threshold-change"]
+            }

@@ -2,6 +2,8 @@ package org.skia.effects.runtime.effects
 
 import org.skia.effects.runtime.ChildResolver
 import org.skia.effects.runtime.SkRuntimeEffect
+import org.skia.effects.runtime.SkRuntimeEffectDescriptor
+import org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistry
 import org.skia.effects.runtime.SkRuntimeEffectDispatch
 import org.skia.effects.runtime.SkRuntimeImpl
 import org.graphiks.math.SkColor4f
@@ -58,6 +60,18 @@ public object SkBuiltinColorFilterEffects {
 
         // Luma → alpha (gLumaSrc from runtimecolorfilter.cpp).
         SkRuntimeEffectDispatch.registerBuiltinIfAbsent(LUMA_SRC_SKSL) { LumaToAlphaImpl }
+        SkRuntimeEffectDescriptorRegistry.registerBuiltinIfAbsent(
+            LUMA_SRC_SKSL,
+            SkRuntimeEffectDescriptor(
+                stableId = "runtime.color_filter_luma_to_alpha",
+                kind = SkRuntimeEffect.Kind.kColorFilter,
+                uniforms = LumaToAlphaImpl.uniforms,
+                children = LumaToAlphaImpl.children,
+                flags = LumaToAlphaImpl.flags,
+                cpuImplementationId = "kotlin/color_filter_luma_to_alpha",
+                wgslImplementationId = "wgsl/runtime_color_filter_luma_to_alpha",
+            ),
+        )
 
         // G-channel splat (AlternateLuma's `inColor.ggga` from
         // lumafilter.cpp). Replicates the G channel into R, G, B

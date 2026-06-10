@@ -14,8 +14,8 @@ class RuntimeEffectsLayoutV2ReportTest {
         val summary = RuntimeEffectsLayoutV2Report.run(Path.of("src/main/resources/shaders"))
 
         assertEquals("kanvas.runtime-effects.v2.layout", summary.schemaVersion)
-        assertEquals(3, summary.rows.size)
-        assertEquals(3, summary.layoutMatched)
+        assertEquals(4, summary.rows.size)
+        assertEquals(4, summary.layoutMatched)
         assertEquals(0, summary.layoutMismatched)
 
         val simple = summary.rows.single { it.stableId == "runtime.simple_rt" }
@@ -55,6 +55,13 @@ class RuntimeEffectsLayoutV2ReportTest {
         assertEquals("layout-matched", linearGradient.status)
         assertEquals(32, linearGradient.uniformBlockSize)
         assertTrue(linearGradient.diagnostics.all { it == "none" })
+
+        val colorFilter = summary.rows.single { it.stableId == "runtime.color_filter_luma_to_alpha" }
+        assertEquals("layout-matched", colorFilter.status)
+        assertEquals("wgsl/runtime_color_filter_luma_to_alpha", colorFilter.wgslImplementationId)
+        assertEquals(0, colorFilter.uniformBlockSize)
+        assertTrue(colorFilter.uniforms.isEmpty())
+        assertTrue(colorFilter.diagnostics.all { it == "none" })
     }
 
     @Test
@@ -68,14 +75,15 @@ class RuntimeEffectsLayoutV2ReportTest {
         assertEquals(firstJson, secondJson)
         assertEquals(firstMarkdown, secondMarkdown)
         assertTrue(firstJson.contains("\"schemaVersion\":\"kanvas.runtime-effects.v2.layout\""))
-        assertTrue(firstJson.contains("\"layoutMatched\":3"))
+        assertTrue(firstJson.contains("\"layoutMatched\":4"))
         assertTrue(firstJson.contains("\"layoutMismatched\":0"))
+        assertTrue(firstJson.contains("\"stableId\":\"runtime.color_filter_luma_to_alpha\""))
         assertTrue(firstJson.contains("\"pipelineCacheKeyPolicy\":\"uniform-values-excluded\""))
         assertTrue(firstJson.contains("\"diagnostic\":\"none\""))
         assertFalse(firstJson.contains("uniformValue"))
 
         assertTrue(firstMarkdown.contains("# Runtime Effects Layout V2"))
-        assertTrue(firstMarkdown.contains("Status counts: total=3; layout-matched=3; layout-mismatched=0."))
+        assertTrue(firstMarkdown.contains("Status counts: total=4; layout-matched=4; layout-mismatched=0."))
         assertTrue(firstMarkdown.contains("runtime-effect.layout-reflection-mismatch"))
         assertTrue(firstMarkdown.contains("No uniform values enter runtime-effect pipeline cache keys."))
     }
