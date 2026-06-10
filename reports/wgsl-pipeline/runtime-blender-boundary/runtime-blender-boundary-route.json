@@ -1,0 +1,60 @@
+{
+  "cpuFixture": {
+    "dst": [
+      0.25,
+      0.5,
+      0.75,
+      0.4
+    ],
+    "expected": [
+      0.75,
+      0.5,
+      0.25,
+      1.0
+    ],
+    "formula": "(half4(1) - dst).rgb1",
+    "source": "gm/destcolor.cpp invert blender",
+    "src": [
+      1.0,
+      0.0,
+      0.0,
+      0.5
+    ],
+    "status": "pass",
+    "testClass": "SkRuntimeBlenderTest",
+    "testFile": "cpu-raster/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt"
+  },
+  "cpuImplementationId": "kotlin/invert_blender",
+  "fallbackReason": "runtime-effect.blender-dst-read-unsupported",
+  "gpuGate": {
+    "futurePassCondition": "BlendPlan proves an explicit shader/layer composite route for destination color without implicit readback.",
+    "gpuPassAllowedNow": false
+  },
+  "nonClaims": [
+    "No support for all blend modes.",
+    "No GPU runtime blender support.",
+    "No implicit destination read.",
+    "No CPU readback fallback.",
+    "No hidden layer compatibility path.",
+    "No dynamic SkSL compilation.",
+    "No SkSL IR or VM."
+  ],
+  "routeDiagnostics": {
+    "blendPlanArtifact": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-blend-plan.json",
+    "cpuReadbackAllowed": false,
+    "fixedFunctionBlendAllowed": false,
+    "hiddenLayerCompatAllowed": false,
+    "implicitDestinationReadAllowed": false,
+    "requiresDestinationColor": true,
+    "requiresLayerComposite": true
+  },
+  "sceneId": "runtime.invert_blender.boundary.v1",
+  "schemaVersion": "kanvas.runtime-blender-boundary.route",
+  "secondaryFallbackReason": "blend.shader-layer-required",
+  "selectedRoute": "webgpu.runtime-blender.expected-unsupported",
+  "stableId": "runtime.invert_blender",
+  "status": "expected-unsupported",
+  "supportState": "cpu-only",
+  "ticket": "KAN-032",
+  "wgslImplementationId": null
+}

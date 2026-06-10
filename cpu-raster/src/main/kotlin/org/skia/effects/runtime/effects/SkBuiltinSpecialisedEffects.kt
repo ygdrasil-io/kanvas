@@ -2,7 +2,10 @@ package org.skia.effects.runtime.effects
 
 import org.skia.effects.runtime.ChildResolver
 import org.skia.effects.runtime.SkRuntimeEffect
+import org.skia.effects.runtime.SkRuntimeEffectDescriptor
+import org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistry
 import org.skia.effects.runtime.SkRuntimeEffectDispatch
+import org.skia.effects.runtime.SkRuntimeEffectDispatchMetadata
 import org.skia.effects.runtime.SkRuntimeImpl
 import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkPoint
@@ -54,7 +57,22 @@ import java.nio.ByteBuffer
 public object SkBuiltinSpecialisedEffects {
 
     public fun registerAll() {
-        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(INVERT_BLENDER_SKSL) { InvertBlenderImpl }
+        SkRuntimeEffectDispatch.registerBuiltinIfAbsent(
+            INVERT_BLENDER_SKSL,
+            InvertBlenderImpl.dispatchMetadata("runtime.invert_blender", "kotlin/invert_blender"),
+        ) { InvertBlenderImpl }
+        SkRuntimeEffectDescriptorRegistry.registerBuiltinIfAbsent(
+            INVERT_BLENDER_SKSL,
+            SkRuntimeEffectDescriptor(
+                stableId = "runtime.invert_blender",
+                kind = SkRuntimeEffect.Kind.kBlender,
+                uniforms = InvertBlenderImpl.uniforms,
+                children = InvertBlenderImpl.children,
+                flags = InvertBlenderImpl.flags,
+                cpuImplementationId = "kotlin/invert_blender",
+                wgslImplementationId = null,
+            ),
+        )
         SkRuntimeEffectDispatch.registerBuiltinIfAbsent(STRETCH_COLORS_BLENDER_SKSL) { StretchColorsBlenderImpl }
         SkRuntimeEffectDispatch.registerBuiltinIfAbsent(KAWASE_BLUR_SHADER_SKSL) { KawaseBlurShaderImpl }
         SkRuntimeEffectDispatch.registerBuiltinIfAbsent(KAWASE_MIX_SHADER_SKSL) { KawaseMixShaderImpl }
@@ -391,6 +409,19 @@ public object SkBuiltinSpecialisedEffects {
             )
         }
     }
+
+    private fun SkRuntimeImpl.dispatchMetadata(
+        stableId: String,
+        cpuImplementationId: String,
+    ): SkRuntimeEffectDispatchMetadata =
+        SkRuntimeEffectDispatchMetadata(
+            stableId = stableId,
+            kind = SkRuntimeEffect.Kind.kBlender,
+            uniforms = uniforms,
+            children = children,
+            flags = flags,
+            cpuImplementationId = cpuImplementationId,
+        )
 
     init { registerAll() }
 }

@@ -24,6 +24,7 @@ import java.nio.ByteOrder
  */
 public class SkRuntimeBlender internal constructor(
     private val impl: SkRuntimeImpl,
+    public val runtimeEffectDescriptor: SkRuntimeEffectDescriptor?,
     private val uniformsBuffer: ByteBuffer,
     private val childResolvers: Array<ChildResolver>,
 ) : SkBlender() {

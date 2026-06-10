@@ -421,7 +421,12 @@ public object SkRuntimeEffectDescriptorRegistry {
         }
         val fallbackReason = when (supportState) {
             "gpu-backed" -> "none"
-            "cpu-only" -> "runtime-effect.wgsl-descriptor-missing"
+            "cpu-only" ->
+                if (entry.kind == SkRuntimeEffect.Kind.kBlender) {
+                    "runtime-effect.blender-dst-read-unsupported"
+                } else {
+                    "runtime-effect.wgsl-descriptor-missing"
+                }
             "expected-unsupported" -> "runtime-effect.wgsl-descriptor-missing"
             else -> "runtime-effect.dependency-gated"
         }
@@ -430,8 +435,14 @@ public object SkRuntimeEffectDescriptorRegistry {
                 "This row is a registered Kotlin/CPU and parser-validated WGSL implementation; " +
                     "it is not broad runtime-effect or dynamic SkSL support."
             "cpu-only" ->
-                "This row has registered Kotlin/CPU behavior but no parser-validated WGSL implementation; " +
-                    "GPU remains refused with a stable missing-descriptor reason."
+                if (entry.kind == SkRuntimeEffect.Kind.kBlender) {
+                    "This registered runtime blender has Kotlin/CPU behavior, but its result depends on " +
+                        "destination color. WebGPU remains refused until an explicit shader/layer composite " +
+                        "BlendPlan exists; this does not support all blend modes."
+                } else {
+                    "This row has registered Kotlin/CPU behavior but no parser-validated WGSL implementation; " +
+                        "GPU remains refused with a stable missing-descriptor reason."
+                }
             "expected-unsupported" ->
                 "Legacy dispatch metadata lacks a registered WGSL descriptor; it remains visible expected-unsupported."
             else ->
