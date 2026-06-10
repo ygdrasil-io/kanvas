@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsChildren
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple
 import java.nio.file.Files
 import java.nio.file.Path
@@ -148,9 +149,9 @@ class SkRuntimeEffectDescriptorRegistryTest {
 
         assertEquals(
             SkRuntimeEffectSupportMatrixV2StatusCounts(
-                total = 5,
-                descriptorBacked = 3,
-                cpuOnly = 0,
+                total = 6,
+                descriptorBacked = 4,
+                cpuOnly = 1,
                 gpuBacked = 3,
                 dependencyGated = 0,
                 expectedUnsupported = 2,
@@ -173,9 +174,25 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertEquals(null, arbitrarySkSL.wgslImplementationId)
         assertTrue(arbitrarySkSL.pmNote.contains("does not dynamically compile SkSL"))
 
-        val missingDescriptor = entries.single { it.fallbackReason == "runtime-effect.wgsl-descriptor-missing" }
+        val missingDescriptor = entries.single { it.stableId == "policy.unregistered_wgsl_descriptor" }
         assertEquals("expected-unsupported", missingDescriptor.supportState)
         assertTrue(missingDescriptor.pmNote.contains("registered WGSL descriptor"))
+    }
+
+    @Test
+    fun `child shader descriptor records named child lane and remains CPU-only`() {
+        SkBuiltinShaderEffectsChildren.registerAll()
+
+        val entry = SkRuntimeEffectDescriptorRegistry.supportMatrixV2Entries()
+            .single { it.stableId == "runtime.unsharp_rt" }
+
+        assertEquals("descriptor-backed", entry.descriptorStatus)
+        assertEquals("cpu-only", entry.supportState)
+        assertEquals(listOf("child:kShader"), entry.children)
+        assertEquals("kotlin/unsharp_rt", entry.cpuImplementationId)
+        assertEquals(null, entry.wgslImplementationId)
+        assertEquals("runtime-effect.wgsl-descriptor-missing", entry.fallbackReason)
+        assertTrue(entry.pmNote.contains("registered Kotlin/CPU behavior"))
     }
 
     @Test
@@ -192,16 +209,19 @@ class SkRuntimeEffectDescriptorRegistryTest {
 
         assertTrue(firstJson.contains("\"schemaVersion\":\"kanvas.runtime-effects.v2.support-matrix\""))
         assertTrue(firstJson.contains("\"supportState\":\"gpu-backed\""))
+        assertTrue(firstJson.contains("\"supportState\":\"cpu-only\""))
         assertTrue(firstJson.contains("\"fallbackReason\":\"runtime-effect.arbitrary-sksl-unsupported\""))
         assertTrue(firstJson.contains("\"fallbackReason\":\"runtime-effect.wgsl-descriptor-missing\""))
-        assertTrue(firstJson.contains("\"descriptorBacked\":3"))
+        assertTrue(firstJson.contains("\"descriptorBacked\":4"))
+        assertTrue(firstJson.contains("\"cpuOnly\":1"))
         assertTrue(firstJson.contains("\"expectedUnsupported\":2"))
         assertTrue(firstJson.contains("No dynamic SkSL compilation"))
 
         assertTrue(firstMarkdown.contains("# Runtime Effects V2 Support Matrix"))
-        assertTrue(firstMarkdown.contains("Status counts: total=5; descriptor-backed=3; CPU-only=0; GPU-backed=3; dependency-gated=0; expected-unsupported=2."))
+        assertTrue(firstMarkdown.contains("Status counts: total=6; descriptor-backed=4; CPU-only=1; GPU-backed=3; dependency-gated=0; expected-unsupported=2."))
         assertTrue(firstMarkdown.contains("| Stable id | Kind | Descriptor status | Support state | CPU implementation | WGSL implementation | Fallback reason | PM note |"))
         assertTrue(firstMarkdown.contains("| runtime.simple_rt | kShader | descriptor-backed | gpu-backed | kotlin/simple_rt | wgsl/runtime_simple_rt | none |"))
+        assertTrue(firstMarkdown.contains("| runtime.unsharp_rt | kShader | descriptor-backed | cpu-only | kotlin/unsharp_rt | - | runtime-effect.wgsl-descriptor-missing |"))
         assertTrue(firstMarkdown.contains("runtime-effect.arbitrary-sksl-unsupported"))
         assertTrue(firstMarkdown.contains("No dynamic SkSL compilation"))
     }

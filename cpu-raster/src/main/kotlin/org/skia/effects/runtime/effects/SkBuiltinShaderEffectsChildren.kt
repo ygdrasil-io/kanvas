@@ -2,6 +2,8 @@ package org.skia.effects.runtime.effects
 
 import org.skia.effects.runtime.ChildResolver
 import org.skia.effects.runtime.SkRuntimeEffect
+import org.skia.effects.runtime.SkRuntimeEffectDescriptor
+import org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistry
 import org.skia.effects.runtime.SkRuntimeEffectDispatch
 import org.skia.effects.runtime.SkRuntimeImpl
 import org.graphiks.math.SkColor4f
@@ -56,6 +58,18 @@ public object SkBuiltinShaderEffectsChildren {
     public fun registerAll() {
         SkRuntimeEffectDispatch.registerBuiltinIfAbsent(THRESHOLD_RT_SKSL) { ThresholdRTImpl }
         SkRuntimeEffectDispatch.registerBuiltinIfAbsent(UNSHARP_RT_SKSL) { UnsharpRTImpl }
+        SkRuntimeEffectDescriptorRegistry.registerBuiltinIfAbsent(
+            UNSHARP_RT_SKSL,
+            SkRuntimeEffectDescriptor(
+                stableId = "runtime.unsharp_rt",
+                kind = SkRuntimeEffect.Kind.kShader,
+                uniforms = UnsharpRTImpl.uniforms,
+                children = UnsharpRTImpl.children,
+                flags = UnsharpRTImpl.flags,
+                cpuImplementationId = "kotlin/unsharp_rt",
+                wgslImplementationId = null,
+            ),
+        )
     }
 
     // ─── SkSL sources (verbatim copies of upstream) ──────────────────

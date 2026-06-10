@@ -3,7 +3,7 @@
 Derived evidence. `SkRuntimeEffectDescriptorRegistry` is the source of truth.
 WGSL is the GPU target; SkSL is only a compatibility/refusal surface.
 
-Status counts: total=5; descriptor-backed=3; CPU-only=0; GPU-backed=3; dependency-gated=0; expected-unsupported=2.
+Status counts: total=6; descriptor-backed=4; CPU-only=1; GPU-backed=3; dependency-gated=0; expected-unsupported=2.
 
 | Stable id | Kind | Descriptor status | Support state | CPU implementation | WGSL implementation | Fallback reason | PM note |
 |---|---|---|---|---|---|---|---|
@@ -12,6 +12,7 @@ Status counts: total=5; descriptor-backed=3; CPU-only=0; GPU-backed=3; dependenc
 | runtime.linear_gradient_rt | kShader | descriptor-backed | gpu-backed | kotlin/linear_gradient_rt | wgsl/runtime_linear_gradient_rt | none | This row is a registered Kotlin/CPU and parser-validated WGSL implementation; it is not broad runtime-effect or dynamic SkSL support. |
 | runtime.simple_rt | kShader | descriptor-backed | gpu-backed | kotlin/simple_rt | wgsl/runtime_simple_rt | none | This row is a registered Kotlin/CPU and parser-validated WGSL implementation; it is not broad runtime-effect or dynamic SkSL support. |
 | runtime.spiral_rt | kShader | descriptor-backed | gpu-backed | kotlin/spiral_rt | wgsl/runtime_spiral_rt | none | This row is a registered Kotlin/CPU and parser-validated WGSL implementation; it is not broad runtime-effect or dynamic SkSL support. |
+| runtime.unsharp_rt | kShader | descriptor-backed | cpu-only | kotlin/unsharp_rt | - | runtime-effect.wgsl-descriptor-missing | This row has registered Kotlin/CPU behavior but no parser-validated WGSL implementation; GPU remains refused with a stable missing-descriptor reason. |
 
 ## Non-Claims
 - No dynamic SkSL compilation.
