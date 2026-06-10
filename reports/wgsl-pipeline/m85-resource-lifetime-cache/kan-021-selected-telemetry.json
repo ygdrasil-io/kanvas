@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-021",
+  "packId": "kan-021-cache-resource-telemetry-selected-v1",
+  "status": "pass",
+  "claimLevel": "selected-cache-resource-telemetry-reporting",
+  "performanceClass": "derived-ledger-reporting",
+  "releaseBlocking": false,
+  "countedAsMeasuredGate": false,
+  "countedAsCacheReadinessGate": false,
+  "readinessDelta": 0,
+  "selectedSceneContractId": "m83-display-list-pm-scene-v1",
+  "lane": "frame.kadre-windowed",
+  "selectedEvidence": {
+    "primaryArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+    "counterSource": "derived-selected-scene-resource-ledger",
+    "observedRuntimeCounters": false,
+    "observedRuntimeCacheTelemetryClaimed": false,
+    "counters": {
+      "frameCount": 180,
+      "pipelineCacheHits": 179,
+      "pipelineCacheMisses": 1,
+      "shaderModuleCount": 1,
+      "pipelineCount": 1,
+      "bindGroupCount": 1,
+      "textureCount": 2,
+      "textureUploadBytes": 1075200,
+      "intermediateTextureBytes": 0,
+      "bindGroupChurn": 0,
+      "resourceGenerationCount": 3,
+      "invalidResourceReuseCount": 0
+    }
+  },
+  "cacheKeyPolicy": {
+    "owner": "kadre-runtime",
+    "pipelineKeyPolicy": "layout-code-resource-pipeline-state-only",
+    "uniformValuesInPipelineKey": false,
+    "boundedKeySpaceCount": 6,
+    "boundedKeySpaces": [
+      "shaderModule",
+      "pipeline",
+      "bindGroup",
+      "texture",
+      "intermediateTexture",
+      "glyphAtlas"
+    ]
+  },
+  "invalidationEvidence": {
+    "source": "reports/wgsl-pipeline/m82-kadre-input-resize-runtime-loop/evidence.json",
+    "reconfigureCount": 2,
+    "reconfigureFailureCount": 0,
+    "generationsStrictlyAdvance": true,
+    "generationSequenceMonotonic": true,
+    "invalidatesWebGpuResources": true,
+    "invalidResourceReuseCount": 0,
+    "failureReasonIfObserved": "m85.invalid-resource-generation-reuse"
+  },
+  "sourceClassification": {
+    "m85Ledger": "derived",
+    "m90NativeRouteAllocations": "observed-partial",
+    "m90CacheHitsMisses": "derived",
+    "for315HeadlessWebGpuSnapshot": "observed",
+    "broadKadreWgpu4kCacheCallbacks": "not-observable"
+  },
+  "classificationRows": [
+    {
+      "id": "m85-selected-scene-ledger",
+      "sourceClass": "derived",
+      "source": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+      "pmMeaning": "Deterministic selected-scene ledger for cache hits/misses, resources, generation invalidation, and invalid reuse.",
+      "gateTreatment": "reporting-only"
+    },
+    {
+      "id": "m90-native-route-allocation-churn",
+      "sourceClass": "observed-partial",
+      "source": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+      "pmMeaning": "Selected native route records shader/pipeline creation churn, but not broad cache-hit callbacks.",
+      "gateTreatment": "reporting-only"
+    },
+    {
+      "id": "for315-headless-webgpu-cache-snapshot",
+      "sourceClass": "observed",
+      "source": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+      "pmMeaning": "Kanvas headless WebGPU snapshot proves one warm cache reuse scenario through SkWebGpuDevice.cacheTelemetrySnapshot().",
+      "gateTreatment": "reporting-only"
+    },
+    {
+      "id": "m92-broad-native-cache-callbacks",
+      "sourceClass": "not-observable",
+      "source": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+      "pmMeaning": "Broad Kadre/wgpu4k cache callbacks and native resource lifetime snapshots remain blockers.",
+      "gateTreatment": "blocked-for-broad-promotion"
+    }
+  ],
+  "deviceLossDiagnostics": {
+    "status": "expected-unsupported",
+    "reason": "m85.device-loss-recreate-observation-unsupported",
+    "recreateClaimed": false
+  },
+  "validationRows": [
+    {
+      "id": "kan021.selected-scene",
+      "status": "pass",
+      "assertion": "The selected cache/resource scene is m83-display-list-pm-scene-v1 on frame.kadre-windowed."
+    },
+    {
+      "id": "kan021.m85-ledger-derived",
+      "status": "pass",
+      "assertion": "M85 counters remain derived selected-scene ledger counters and are not observed runtime cache telemetry."
+    },
+    {
+      "id": "kan021.cache-key-policy",
+      "status": "pass",
+      "assertion": "PipelineKey axes remain layout/code/resource/pipeline-state only, with no uniform values."
+    },
+    {
+      "id": "kan021.resize-invalidation",
+      "status": "pass",
+      "assertion": "Resize evidence advances resource generations, invalidates WebGPU resources, and reports zero invalid reuse."
+    },
+    {
+      "id": "kan021.observed-partial-boundary",
+      "status": "pass",
+      "assertion": "M90 native route allocation churn remains observed-partial and cache hits/misses remain derived."
+    },
+    {
+      "id": "kan021.observed-headless-bridge",
+      "status": "pass",
+      "assertion": "FOR-315 is the only observed cache snapshot bridge and is headless Kanvas WebGPU, not Kadre native callbacks."
+    },
+    {
+      "id": "kan021.broad-cache-blockers",
+      "status": "pass",
+      "assertion": "Broad Kadre/wgpu4k cache callbacks and resource lifetime snapshots remain not-observable blockers."
+    },
+    {
+      "id": "kan021.device-loss-refusal",
+      "status": "pass",
+      "assertion": "Device-loss recovery remains expected-unsupported with a stable M85 reason."
+    }
+  ],
+  "nonClaims": [
+    "KAN-021 does not claim broad cache behavior beyond the selected scene.",
+    "KAN-021 does not claim observed WebGPU runtime cache telemetry from the M85 ledger.",
+    "KAN-021 does not claim real device-lost recovery or recreate support.",
+    "KAN-021 does not count as a release-blocking or cache-readiness gate.",
+    "KAN-021 does not promote observed-partial native allocation churn to observed cache hits.",
+    "KAN-021 does not add broad cache eviction or arbitrary scene cache coverage."
+  ],
+  "artifactPaths": [
+    "reports/wgsl-pipeline/m85-resource-lifetime-cache/kan-021-selected-telemetry.json",
+    "reports/wgsl-pipeline/2026-06-10-kan-021-cache-resource-telemetry.md",
+    "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+    "reports/wgsl-pipeline/m85-resource-lifetime-cache/cache-pressure.json",
+    "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+    "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+    "reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json",
+    "reports/wgsl-pipeline/runtime-cache-telemetry-closeout-for317.json",
+    "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json"
+  ]
+}
