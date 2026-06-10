@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-036",
+  "packId": "kan-036-butt-stroke-non-hairline-v1",
+  "status": "pass",
+  "closureDecision": "stable-refusal-existing-selector",
+  "claimLevel": "selected-butt-stroke-non-hairline-stable-refusal",
+  "supportClaim": false,
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "edgeBudgetChanged": false,
+  "readinessDelta": 0,
+  "selectedRow": {
+    "fixtureId": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+    "sourceGm": "CircularArcsStrokeButtGM",
+    "sourceRowId": "circular-arcs-stroke-butt-webgpu",
+    "sourceFutureTarget": "future-circular-arcs-stroke-butt-nonhairline-subdivision-probe",
+    "boundedHarnessGm": "circular-arcs-stroke-butt-selected-cell-harness-for322",
+    "cellCount": 1,
+    "quadrant": "bottom-left",
+    "fullGmCanvasArcRectLTRB": [
+      140,
+      520,
+      180,
+      560
+    ],
+    "boundedCanvasArcRectLTRB": [
+      20,
+      20,
+      60,
+      60
+    ],
+    "rowIndex": 0,
+    "columnIndex": 2,
+    "startDegrees": 0,
+    "sweepDegrees": 90,
+    "complementSweepDegrees": -270,
+    "useCenter": false,
+    "aa": true,
+    "style": "kStroke_Style",
+    "strokeWidth": 15,
+    "strokeCap": "kButt_Cap",
+    "includedCaps": [
+      "kButt_Cap"
+    ],
+    "excludedCaps": [
+      "kRound_Cap",
+      "kSquare_Cap"
+    ],
+    "includesHairlineStrokeWidth0": false,
+    "includesFill": false,
+    "includesDash": false,
+    "paintAlpha": 100,
+    "drawArcCalls": [
+      {
+        "paintColor": "red",
+        "startDegrees": 0,
+        "sweepDegrees": 90
+      },
+      {
+        "paintColor": "blue",
+        "startDegrees": 0,
+        "sweepDegrees": -270
+      }
+    ]
+  },
+  "webGpuRefusal": {
+    "status": "expected-unsupported",
+    "adapter": "Apple M2 Max",
+    "selectedRoute": "webgpu.selected-cell-test-harness.refused",
+    "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "refusalReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "pathVerbCount": 67,
+    "pathVerbBudget": 96,
+    "coverageEdgeCount": 66,
+    "edgeBudget": 256,
+    "edgeBudgetReason": "not coverage.edge-count-exceeded",
+    "clipStackDepth": "n/a",
+    "clipStackDepthBudget": 4,
+    "deviceBounds": [
+      39.832764,
+      39.832764,
+      67.49814,
+      67.49814
+    ],
+    "strokeWidth": 15.0,
+    "strokeCaps": [
+      "butt"
+    ],
+    "strokeJoins": [
+      "miter"
+    ],
+    "pipelineKeyContains": "coverageKind=pathAaStrokeCapJoinBlocked"
+  },
+  "skiaReference": {
+    "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_SKIA_REFERENCE_READY",
+    "available": true,
+    "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png",
+    "provenance": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia-reference-provenance.json"
+  },
+  "cpuOracle": {
+    "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_HARNESS_READY",
+    "route": "cpu.raster.selected-cell-test-harness",
+    "fallbackReason": "none",
+    "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+    "diffPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu-diff.png"
+  },
+  "cpuVsSkia": {
+    "decision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_CPU_DIFF_REQUIRES_RASTER_AUDIT",
+    "supportReady": false,
+    "diffPath": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328/cpu-vs-skia-diff.png",
+    "auditDecision": "CIRCULAR_ARCS_STROKE_BUTT_SELECTED_CELL_CPU_RASTER_AUDIT_CAUSE_IDENTIFIED",
+    "interpretation": {
+      "requiresCpuRasterAudit": true,
+      "reason": "strict selected-cell pixels differ; the gap is classified as a CPU raster audit input, not as a renderer fix or scene promotion",
+      "classification": "cpu-diff-requires-raster-audit"
+    }
+  },
+  "artifactAvailability": {
+    "skiaReference": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png"
+    },
+    "cpuOracle": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png"
+    },
+    "cpuVsSkiaDiff": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328/cpu-vs-skia-diff.png"
+    },
+    "webGpuStableRefusal": {
+      "available": true,
+      "reason": "coverage.stroke-cap-join-visual-parity-below-threshold"
+    },
+    "webGpuImage": {
+      "available": false,
+      "reason": "stable-refusal-before-debug-images"
+    },
+    "webGpuDiff": {
+      "available": false,
+      "reason": "stable-refusal-before-debug-images"
+    }
+  },
+  "supportPolicy": {
+    "rowStatus": "expected-unsupported",
+    "decision": "stable-refusal",
+    "requiredForSupport": [
+      "adapter-backed WebGPU image",
+      "WebGPU diff/stat artifact",
+      "fallbackReason=none",
+      "CPU vs Skia support-ready decision",
+      "no threshold or edge-budget weakening"
+    ]
+  },
+  "nonClaims": [
+    "KAN-036 does not claim support for the selected butt stroke row.",
+    "KAN-036 does not claim broad stroke, cap, join, dash, or hairline support.",
+    "KAN-036 does not change renderer, shader, selector, PipelineKey, threshold, or edge-budget behavior.",
+    "KAN-036 does not lower the 99.95 support threshold or increase the 256 WebGPU AA edge budget."
+  ],
+  "validationRows": [
+    {
+      "id": "selected-row-bounded",
+      "status": "pass",
+      "evidence": "The row is one non-hairline, no-dash, butt-cap selected cell with strokeWidth=15."
+    },
+    {
+      "id": "webgpu-stable-refusal",
+      "status": "pass",
+      "evidence": "WebGPU refuses through coverage.stroke-cap-join-visual-parity-below-threshold with edges 66/256 and verbs 67/96."
+    },
+    {
+      "id": "support-claim-blocked",
+      "status": "pass",
+      "evidence": "No WebGPU image/diff exists and CPU-vs-Skia remains in raster-audit status."
+    },
+    {
+      "id": "policy-preserved",
+      "status": "pass",
+      "evidence": "No renderer, shader, selector, threshold, or edge-budget change is made."
+    }
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 20,
+    "missingCommittedArtifacts": 0,
+    "missing": []
+  },
+  "artifactPaths": [
+    ".upstream/specs/geometry-coverage/02-lowering-rules.md",
+    ".upstream/specs/geometry-coverage/04-webgpu-coverage-backend.md",
+    ".upstream/specs/geometry-coverage/06-validation-and-perf.md",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CircularArcsStrokeButtSelectedCellCaptureTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt",
+    "reports/wgsl-pipeline/2026-06-04-for-322-circular-arcs-stroke-butt-selected-cell-harness.md",
+    "reports/wgsl-pipeline/hairlines-root-cause/kan-035-hairlines-root-cause.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328/cpu-vs-skia-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/circular-arcs-stroke-butt-selected-cell-skia-reference-for327.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia-reference-provenance.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png"
+  ]
+}
