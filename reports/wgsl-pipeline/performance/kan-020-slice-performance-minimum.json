@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "packId": "kan-020-slice-performance-proof-minimum-v1",
+  "ticket": "KAN-020",
+  "status": "pass",
+  "claimLevel": "performance-proof-policy",
+  "releaseBlockingChange": false,
+  "readinessDelta": 0,
+  "ruleSummary": "Every new PM-visible slice must declare measured performance evidence, a candidate/reporting-only phase, or an explicit non-gating rationale. Estimated, missing, derived, or diagnostic-only metrics must not be counted as measured gates.",
+  "minimumContract": {
+    "appliesTo": "New PM-visible support, refusal, runtime, cache, and release-readiness slices.",
+    "requiredFields": [
+      "sliceId",
+      "sliceType",
+      "performanceClass",
+      "sourceEvidence",
+      "releaseBlocking",
+      "countedAsMeasuredGate",
+      "rationale",
+      "nonClaims"
+    ],
+    "allowedEvidenceClasses": [
+      {
+        "class": "release-blocking-measured-gate",
+        "mayCountAsMeasuredGate": true,
+        "requires": [
+          "status=measured",
+          "releaseBlocking=true",
+          "selected release policy",
+          "minimum sample count",
+          "host, OS/architecture, JDK, backend, and adapter where applicable",
+          "median and p95 or equivalent row metric",
+          "baseline name, commit, and owner",
+          "missing or estimated metrics fail the selected lane"
+        ]
+      },
+      {
+        "class": "measured-candidate",
+        "mayCountAsMeasuredGate": false,
+        "requires": [
+          "status=measured",
+          "releaseBlocking=false",
+          "gatePhase=candidate or candidate-reporting-only",
+          "command",
+          "host metadata",
+          "sample count",
+          "median and p95 or frame summary",
+          "quarantine or reporting-only rationale",
+          "non-claim that this is not a release gate"
+        ]
+      },
+      {
+        "class": "reporting-only",
+        "mayCountAsMeasuredGate": false,
+        "requires": [
+          "releaseBlocking=false",
+          "measured=false or countedAsMeasuredGate=false",
+          "source evidence path",
+          "measurement type",
+          "reason why the slice is visible but not a gate"
+        ]
+      },
+      {
+        "class": "derived-ledger-reporting",
+        "mayCountAsMeasuredGate": false,
+        "requires": [
+          "sourceClass=derived or equivalent counterSource",
+          "observedRuntimeCounters=false when applicable",
+          "countedAsCacheReadinessGate=false",
+          "bounded selected-scene scope",
+          "non-claim for broad observed runtime telemetry"
+        ]
+      },
+      {
+        "class": "non-gating-refusal",
+        "mayCountAsMeasuredGate": false,
+        "requires": [
+          "stable refusal or fallback reason",
+          "releaseBlocking=false",
+          "rationale explaining why performance is not applicable to the refused support claim"
+        ]
+      }
+    ],
+    "forbidden": [
+      "counting estimated metrics as measured",
+      "counting missing metrics as measured",
+      "promoting reporting-only rows to release-blocking without selected policy and negative fixture evidence",
+      "counting derived selected-scene cache ledgers as observed WebGPU runtime cache telemetry",
+      "adding a new release-blocking threshold from KAN-020"
+    ]
+  },
+  "sliceTypeMinimums": [
+    {
+      "sliceType": "bounded-rendering-support",
+      "minimum": "Link an existing selected release gate, add a measured candidate/reporting payload, or state a non-gating performance rationale. Support evidence alone is not a performance measurement.",
+      "defaultClassBeforeMeasurement": "reporting-only"
+    },
+    {
+      "sliceType": "expected-unsupported-refusal",
+      "minimum": "Expose stable refusal/fallback reason and state that no performance gate is required because no support path is claimed.",
+      "defaultClassBeforeMeasurement": "non-gating-refusal"
+    },
+    {
+      "sliceType": "runtime-frame",
+      "minimum": "Provide frame telemetry with warmup/measured samples and host/backend metadata, or mark the lane reporting-only with quarantine rationale.",
+      "defaultClassBeforeMeasurement": "measured-candidate"
+    },
+    {
+      "sliceType": "resource-cache",
+      "minimum": "Classify counters as observed, observed-partial, derived, or unavailable. Derived ledgers remain reporting-only until observed runtime cache telemetry is present.",
+      "defaultClassBeforeMeasurement": "derived-ledger-reporting"
+    },
+    {
+      "sliceType": "release-readiness",
+      "minimum": "Reference the selected gate matrix and preserve the distinction between release-blocking gates, candidate gates, reporting-only evidence, and non-gating refusals.",
+      "defaultClassBeforeMeasurement": "reporting-only"
+    }
+  ],
+  "sourceEvidence": [
+    {
+      "id": "m59-selected-release-gates",
+      "path": "reports/wgsl-pipeline/performance/m59-performance-release-gate.json",
+      "performanceClass": "release-blocking-measured-gate",
+      "releaseBlocking": true,
+      "countedAsMeasuredGate": true,
+      "minimumSampleCount": 30,
+      "selectedRows": 7,
+      "rationale": "M59 is the already selected release-blocking performance target. KAN-020 does not create new release-blocking rows."
+    },
+    {
+      "id": "m67-headless-frame-candidate",
+      "path": "reports/wgsl-pipeline/performance/m67-performance-tiering/m67-frame-gate-candidate.json",
+      "performanceClass": "measured-candidate",
+      "lane": "frame.headless-webgpu",
+      "releaseBlocking": false,
+      "countedAsMeasuredGate": false,
+      "measuredRows": 3,
+      "passRows": 1,
+      "warnRows": 2,
+      "rationale": "M67 serializes measured candidate frame rows and keeps them non-release-blocking."
+    },
+    {
+      "id": "m67-family-reporting-only",
+      "path": "reports/wgsl-pipeline/performance/m67-performance-tiering/m67-family-budgets.json",
+      "performanceClass": "reporting-only",
+      "releaseBlocking": false,
+      "countedAsMeasuredGate": false,
+      "families": 7,
+      "measuredFamilies": 1,
+      "reportingOnlyFamilies": 6,
+      "rationale": "Feature families without isolated timing payloads remain reporting-only."
+    },
+    {
+      "id": "m84-native-frame-candidate-reporting",
+      "path": "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json",
+      "performanceClass": "measured-candidate",
+      "lane": "frame.kadre-windowed",
+      "releaseBlocking": false,
+      "countedAsMeasuredGate": false,
+      "gatePhase": "candidate-reporting-only",
+      "rationale": "M84 contains native timing samples but remains candidate/reporting-only until variance, adapter eligibility, and gate ownership are accepted."
+    },
+    {
+      "id": "m85-resource-cache-derived-ledger",
+      "path": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+      "performanceClass": "derived-ledger-reporting",
+      "lane": "frame.kadre-windowed",
+      "releaseBlocking": false,
+      "countedAsMeasuredGate": false,
+      "observedRuntimeCounters": false,
+      "countedAsCacheReadinessGate": false,
+      "rationale": "M85 makes selected-scene resource/cache behavior auditable as a derived ledger, not observed broad WebGPU cache telemetry."
+    }
+  ],
+  "validationRows": [
+    {
+      "id": "kan020.minimum-contract",
+      "status": "pass",
+      "assertion": "The policy defines a required performance classification for every future PM-visible slice."
+    },
+    {
+      "id": "kan020.no-new-release-gate",
+      "status": "pass",
+      "assertion": "KAN-020 does not add a new release-blocking threshold or readiness movement."
+    },
+    {
+      "id": "kan020.m67-candidate-vs-reporting",
+      "status": "pass",
+      "assertion": "M67 measured candidate rows and reporting-only families remain distinct."
+    },
+    {
+      "id": "kan020.m84-windowed-candidate-reporting",
+      "status": "pass",
+      "assertion": "M84 frame.kadre-windowed timing remains candidate/reporting-only and not counted as a measured gate."
+    },
+    {
+      "id": "kan020.m85-derived-cache-ledger",
+      "status": "pass",
+      "assertion": "M85 derived resource/cache ledger remains non-gating and is not observed runtime cache telemetry."
+    }
+  ],
+  "artifactPaths": [
+    "reports/wgsl-pipeline/performance/kan-020-slice-performance-minimum.json",
+    "reports/wgsl-pipeline/2026-06-10-kan-020-performance-proof-minimum.md",
+    "reports/wgsl-pipeline/performance/m59-performance-release-gate.json",
+    "reports/wgsl-pipeline/performance/m67-performance-tiering/m67-frame-gate-candidate.json",
+    "reports/wgsl-pipeline/performance/m67-performance-tiering/m67-family-budgets.json",
+    "reports/wgsl-pipeline/performance/m67-performance-tiering-negative/m67-negative-fixture.json",
+    "reports/wgsl-pipeline/m84-native-frame-timing/evidence.json",
+    "reports/wgsl-pipeline/m84-native-frame-timing/negative-fixture.json",
+    "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+    "reports/wgsl-pipeline/m85-resource-lifetime-cache/cache-pressure.json"
+  ],
+  "nonClaims": [
+    "KAN-020 does not create a new release-blocking performance threshold.",
+    "KAN-020 does not promote frame.kadre-windowed to release-grade FPS.",
+    "KAN-020 does not count derived M85 cache ledgers as observed runtime cache telemetry.",
+    "KAN-020 does not count estimated or missing metrics as measured evidence.",
+    "KAN-020 does not claim broad Skia performance parity."
+  ]
+}

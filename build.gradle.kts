@@ -4737,6 +4737,25 @@ tasks.register<Exec>("validateKan008ImageFilterDagRefusals") {
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required"))
 }
 
+tasks.register<Exec>("validateKan020PerformanceProofMinimum") {
+    group = "verification"
+    description = "Validates KAN-020 minimum performance proof policy for PM-visible slices."
+    mustRunAfter("pipelineM67PerformanceTiering", "pipelineM67PerformanceTieringNegative")
+    commandLine("python3", "scripts/validate_kan020_performance_proof_minimum.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan020_performance_proof_minimum.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-020-performance-proof-minimum.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/kan-020-slice-performance-minimum.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m59-performance-release-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m67-performance-tiering/m67-frame-gate-candidate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m67-performance-tiering/m67-family-budgets.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m67-performance-tiering-negative/m67-negative-fixture.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m84-native-frame-timing/negative-fixture.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/cache-pressure.json"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md"))
+}
+
 tasks.register<Exec>("validateMepRcScenePack") {
     group = "verification"
     description = "Validates checked-in MEP RC FOR-215/FOR-216/FOR-218 scene-pack evidence without Kadre native dependencies."
@@ -4802,6 +4821,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
+        "validateKan020PerformanceProofMinimum",
     )
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
@@ -4896,6 +4916,8 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-006-intermediate-texture-ownership.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-007-savelayer-simple-filter.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-008-image-filter-dag-refusals.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-020-performance-proof-minimum.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/kan-020-slice-performance-minimum.json"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
@@ -5124,6 +5146,8 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-06-10-kan-006-intermediate-texture-ownership.md",
             "reports/wgsl-pipeline/2026-06-10-kan-007-savelayer-simple-filter.md",
             "reports/wgsl-pipeline/2026-06-10-kan-008-image-filter-dag-refusals.md",
+            "reports/wgsl-pipeline/2026-06-10-kan-020-performance-proof-minimum.md",
+            "reports/wgsl-pipeline/performance/kan-020-slice-performance-minimum.json",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
