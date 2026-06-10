@@ -4722,6 +4722,21 @@ tasks.register<Exec>("validateKan007SaveLayerSimpleFilter") {
     inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleSaveLayerImageFilterSceneEvidenceTest.kt"))
 }
 
+tasks.register<Exec>("validateKan008ImageFilterDagRefusals") {
+    group = "verification"
+    description = "Validates KAN-008 visible expected-unsupported image-filter DAG refusals."
+    commandLine("python3", "scripts/validate_kan008_image_filter_dag_refusals.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan008_image_filter_dag_refusals.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-008-image-filter-dag-refusals.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m61-image-filter-dag-diagnostics.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-007-savelayer-simple-filter.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m61-image-filter-dag-v2-promotion.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/image-filter-crop-nonnull-prepass-required"))
+}
+
 tasks.register<Exec>("validateMepRcScenePack") {
     group = "verification"
     description = "Validates checked-in MEP RC FOR-215/FOR-216/FOR-218 scene-pack evidence without Kadre native dependencies."
@@ -4786,6 +4801,7 @@ tasks.register("pipelinePmBundle") {
         "validateMepRcRuntime",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
+        "validateKan008ImageFilterDagRefusals",
     )
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
@@ -4879,9 +4895,12 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-006-intermediate-texture-ownership.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-007-savelayer-simple-filter.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-008-image-filter-dag-refusals.md"))
     inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m61-image-filter-dag-v2-promotion.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"))
@@ -5103,6 +5122,8 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md",
             "reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md",
             "reports/wgsl-pipeline/2026-06-10-kan-006-intermediate-texture-ownership.md",
+            "reports/wgsl-pipeline/2026-06-10-kan-007-savelayer-simple-filter.md",
+            "reports/wgsl-pipeline/2026-06-10-kan-008-image-filter-dag-refusals.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
