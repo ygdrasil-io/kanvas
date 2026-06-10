@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-039",
+  "packId": "kan-039-nested-clip-stack-v1",
+  "status": "pass",
+  "closureDecision": "stable-refusal-nested-clip-stack-v1",
+  "claimLevel": "bounded-nested-clip-stack-stable-refusal",
+  "supportClaim": false,
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "edgeBudgetChanged": false,
+  "readinessDelta": 0,
+  "candidate": {
+    "sceneId": "m60-bounded-nested-rrect-clip",
+    "role": "bounded-nested-clip-candidate",
+    "source": "BlurredClippedCircleGM",
+    "referenceKind": "skia-upstream",
+    "status": "expected-unsupported",
+    "decision": "stable-refusal",
+    "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+    "cpuStatus": "pass",
+    "gpuStatus": "expected-unsupported",
+    "cpuRoute": "cpu.coverage.nested-rrect-clip-oracle",
+    "gpuRoute": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "coverageStrategy": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+    "pipelineKey": "clipDepth=3 clip=rect+rect+rrectOval op=intersect+intersect+difference budget=m60 source=BlurredClippedCircleGM status=expected-unsupported",
+    "clipDepth": 3,
+    "clipDepthBudget": 4,
+    "clipDepthReason": "not coverage.clip-depth-exceeded",
+    "edgeCount": 72,
+    "edgeBudget": 256,
+    "edgeBudgetReason": "not coverage.edge-count-exceeded",
+    "deviceBounds": {
+      "left": 0,
+      "top": 0,
+      "right": 1164,
+      "bottom": 802
+    },
+    "deviceBoundsBudget": 2048,
+    "clipOp": "intersect+intersect+difference",
+    "clipShape": "rect+rect+rrect-oval",
+    "clipSequence": [
+      {
+        "index": 0,
+        "type": "rect",
+        "op": "intersect",
+        "interaction": "ClipInteraction.DeviceRect-or-AnalyticShape",
+        "rawPaintClipOperationExposed": false
+      },
+      {
+        "index": 1,
+        "type": "rect",
+        "op": "intersect",
+        "interaction": "ClipInteraction.DeviceRect-or-AnalyticShape",
+        "rawPaintClipOperationExposed": false
+      },
+      {
+        "index": 2,
+        "type": "rrect-oval",
+        "op": "difference",
+        "interaction": "ClipInteraction.AaClip",
+        "rawPaintClipOperationExposed": false
+      }
+    ],
+    "inverseClip": false,
+    "complexClip": false,
+    "clipShader": false,
+    "perspectiveClip": false,
+    "pathBooleanParity": false,
+    "supportThreshold": 99.95,
+    "gpuSimilarity": 98.48,
+    "cpuSimilarity": 97.31,
+    "supportReady": false,
+    "blockingCondition": "visual-parity-below-threshold-and-selector-route-dump-missing"
+  },
+  "m57SupportBaseline": {
+    "sceneId": "m57-aaclip-bounded-grid",
+    "status": "pass",
+    "fallbackReason": "none",
+    "gpuRoute": "webgpu.coverage.aaclip-bounded-grid",
+    "cpuRoute": "cpu.coverage.aaclip-bounded-grid-oracle",
+    "edgeCount": 90,
+    "edgeBudget": 256,
+    "clipOp": "intersect",
+    "clipShape": "aa-rect-grid",
+    "complexClip": false,
+    "inverseClip": false,
+    "gpuSimilarity": 98.83
+  },
+  "clipPolicy": {
+    "noIntegerScissorSubstitution": true,
+    "arbitraryAaClipFallback": "coverage.arbitrary-aa-clip-unsupported",
+    "clipStackFallback": "geometry.clip-stack-unsupported",
+    "nestedVisualFallback": "coverage.nested-clip-visual-parity-below-threshold",
+    "supportedClipStackFamilies": [
+      "rect-intersect",
+      "rrect-intersect",
+      "rect-difference"
+    ],
+    "refusedClipStackFamilies": [
+      "arbitrary-aa-path-intersect",
+      "multi-shape-aa-difference",
+      "shader-clip",
+      "unlowerable-stack"
+    ],
+    "excludedFromCandidate": [
+      "clipShader",
+      "perspectiveClip",
+      "pathBooleanParity"
+    ]
+  },
+  "forensicBlockers": {
+    "for301Decision": "SKAACLIP_DIFFERENCE_OP_ALPHA_MERGE_CAUSES_TARGET_HOLE",
+    "for301SupportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+    "for302Decision": "M60_ANALYTIC_MODEL_RECONCILED_RUNTIME_IS_CORRECT",
+    "for302SupportDecision": "KEEP_EXPECTED_UNSUPPORTED",
+    "exactGap": "FOR-293 treated the analytic surviving difference-clip coverage as enough for red root visibility. FOR-301 proves that the runtime `SkAAClip` path operand is full over the 59 original targets, so `kDifference` computes zero result coverage there.",
+    "differenceFormulaMatches": true,
+    "safeLocalFixApplied": false,
+    "analyticRuntimeReconciled": true
+  },
+  "artifactAvailability": {
+    "skiaReference": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png"
+    },
+    "cpuOracle": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png"
+    },
+    "cpuDiff": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu-diff.png"
+    },
+    "webGpuDiagnosticImage": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png"
+    },
+    "webGpuDiagnosticDiff": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu-diff.png"
+    },
+    "webGpuRoute": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-gpu.json"
+    },
+    "webGpuSupportRoute": {
+      "available": false,
+      "reason": "coverage.nested-clip-visual-parity-below-threshold",
+      "required": "row-specific WebGPU selector route dump with fallbackReason=none"
+    }
+  },
+  "supportPolicy": {
+    "rowStatus": "expected-unsupported",
+    "decision": "stable-refusal",
+    "requiredForSupport": [
+      "WebGPU route with fallbackReason=none",
+      "selector-owned route diagnostics rather than scene-contract-only diagnostics",
+      "visual parity at or above 99.95 without threshold weakening",
+      "clip sequence/depth/type/fallback diagnostics preserved",
+      "m57-aaclip-bounded-grid remains supported",
+      "arbitrary AA clips and complex nested clips remain refused with stable reasons",
+      "no integer scissor substitution for AA clip support"
+    ]
+  },
+  "nonClaims": [
+    "KAN-039 does not claim nested clip WebGPU support.",
+    "KAN-039 does not claim arbitrary clip-stack, clipShader, perspective clip, path boolean parity, inverse clip, or complex clip support.",
+    "KAN-039 does not replace arbitrary AA clips with integer scissor.",
+    "KAN-039 does not lower the 99.95 threshold or raise the 256 edge budget / depth 4 clip budget.",
+    "KAN-039 does not port Ganesh or Graphite and does not add SkSL compiler behavior."
+  ],
+  "validationRows": [
+    {
+      "id": "m60-candidate-visible-refusal",
+      "status": "pass",
+      "evidence": "m60-bounded-nested-rrect-clip remains expected-unsupported via coverage.nested-clip-visual-parity-below-threshold."
+    },
+    {
+      "id": "clip-sequence-diagnostics-visible",
+      "status": "pass",
+      "evidence": "Clip sequence is rect/intersect, rect/intersect, rrect-oval/difference with depth 3/4."
+    },
+    {
+      "id": "budget-diagnostics-preserved",
+      "status": "pass",
+      "evidence": "Candidate stays under clip depth 3/4 and edge count 72/256; refusal is visual parity, not budget overflow."
+    },
+    {
+      "id": "m57-support-baseline-preserved",
+      "status": "pass",
+      "evidence": "m57-aaclip-bounded-grid remains pass with WebGPU fallbackReason=none."
+    },
+    {
+      "id": "forensic-blocker-visible",
+      "status": "pass",
+      "evidence": "FOR-301/FOR-302 keep M60 expected-unsupported and block reuse of the superseded analytic model."
+    },
+    {
+      "id": "clip-policy-refusals-visible",
+      "status": "pass",
+      "evidence": "Arbitrary AA clip and unlowerable clip-stack refusals remain stable; no integer scissor substitution is introduced."
+    },
+    {
+      "id": "policy-preserved",
+      "status": "pass",
+      "evidence": "No renderer, shader, threshold, edge-budget, or clip-depth budget change is made."
+    }
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 28,
+    "missingCommittedArtifacts": 0,
+    "missing": []
+  },
+  "artifactPaths": [
+    ".upstream/specs/geometry-coverage/01-contracts-geometry-coverage.md",
+    ".upstream/specs/geometry-coverage/02-lowering-rules.md",
+    ".upstream/specs/geometry-coverage/04-webgpu-coverage-backend.md",
+    ".upstream/specs/geometry-coverage/05-fallback-diagnostics.md",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/NestedClipSceneCaptureTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt",
+    "render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt",
+    "render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt",
+    "reports/wgsl-pipeline/2026-06-01-m60-nested-clip-path-aa-promotion.md",
+    "reports/wgsl-pipeline/2026-06-04-for-301-m60-skaaclip-band-trace.md",
+    "reports/wgsl-pipeline/2026-06-04-for-304-renderer-feature-conversion-wave-closeout.md",
+    "reports/wgsl-pipeline/2026-06-10-kan-004-clips-aa.md",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-004-clips-aa/kan-004-clips-aa.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-analytic-clip-model-reconciliation-for302.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-skaaclip-band-trace-for301.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/stats.json",
+    "reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json",
+    "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json"
+  ]
+}
