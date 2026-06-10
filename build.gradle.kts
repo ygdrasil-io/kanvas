@@ -4756,6 +4756,29 @@ tasks.register<Exec>("validateKan020PerformanceProofMinimum") {
     inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md"))
 }
 
+tasks.register<Exec>("validateKan021CacheResourceTelemetry") {
+    group = "verification"
+    description = "Validates KAN-021 selected cache/resource telemetry evidence."
+    mustRunAfter(
+        "validateKan020PerformanceProofMinimum",
+        ":kadre-runtime:pipelineM85ResourceLifetimeCacheHardening",
+        ":kadre-runtime:pipelineMepNextRuntimeInteractive",
+    )
+    commandLine("python3", "scripts/validate_kan021_cache_resource_telemetry.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan021_cache_resource_telemetry.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-021-cache-resource-telemetry.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/kan-021-selected-telemetry.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/cache-pressure.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-cache-telemetry-closeout-for317.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md"))
+}
+
 tasks.register<Exec>("validateMepRcScenePack") {
     group = "verification"
     description = "Validates checked-in MEP RC FOR-215/FOR-216/FOR-218 scene-pack evidence without Kadre native dependencies."
@@ -4822,6 +4845,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
         "validateKan020PerformanceProofMinimum",
+        "validateKan021CacheResourceTelemetry",
     )
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
@@ -5148,6 +5172,8 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-06-10-kan-008-image-filter-dag-refusals.md",
             "reports/wgsl-pipeline/2026-06-10-kan-020-performance-proof-minimum.md",
             "reports/wgsl-pipeline/performance/kan-020-slice-performance-minimum.json",
+            "reports/wgsl-pipeline/2026-06-10-kan-021-cache-resource-telemetry.md",
+            "reports/wgsl-pipeline/m85-resource-lifetime-cache/kan-021-selected-telemetry.json",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
