@@ -10,9 +10,12 @@ import org.skia.effects.runtime.ChildResolver
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectDispatch
 import org.skia.effects.runtime.SkRuntimeImpl
+import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsChildren
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple
 import org.skia.foundation.SkData
 import org.skia.foundation.SkPaint
+import org.skia.foundation.SkShader
+import org.skia.foundation.SkShaders
 import org.graphiks.math.SK_ColorBLACK
 import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkPoint
@@ -204,6 +207,37 @@ class RuntimeEffectDescriptorWebGpuTest {
                 assertTrue(
                     error.message!!.contains("runtime effect descriptor missing"),
                     "expected stable missing-WGSL diagnostic, got ${error.message}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `runtime shader with child descriptor fails with stable child binding diagnostic`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val effect = SkRuntimeEffect.MakeForShader(SkBuiltinShaderEffectsChildren.UNSHARP_RT_SKSL).effect!!
+        val shader = effect.makeShader(
+            uniforms = null,
+            children = arrayOf<SkShader?>(SkShaders.Color(SK_ColorBLACK)),
+        )!!
+
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val error = assertThrows(IllegalStateException::class.java) {
+                    SkCanvas(device).drawRect(
+                        SkRect.MakeLTRB(0f, 0f, 16f, 16f),
+                        SkPaint().apply {
+                            this.shader = shader
+                            isAntiAlias = false
+                        },
+                    )
+                    device.flush()
+                }
+                assertTrue(
+                    error.message!!.contains("runtime-effect.child-binding-unsupported"),
+                    "expected stable child-binding diagnostic, got ${error.message}",
                 )
             }
         }

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "kanvas.runtime-child-shader-effect-lane.route",
+  "ticket": "KAN-030",
+  "sceneId": "runtime.unsharp_rt.child-shader-lane.v1",
+  "stableId": "runtime.unsharp_rt",
+  "selectedRoute": "webgpu.runtime-effect.child-shader.expected-unsupported",
+  "status": "expected-unsupported",
+  "supportState": "cpu-only",
+  "gpuSupportState": "expected-unsupported",
+  "fallbackReason": "runtime-effect.child-binding-unsupported",
+  "children": [
+    {
+      "name": "child",
+      "index": 0,
+      "type": "kShader",
+      "binding": "child[0]",
+      "bindingState": "cpu-supported-gpu-unsupported",
+      "resourceAxis": "childShader",
+      "resourceAxisState": "classified-not-in-pipeline-key",
+      "fallbackReason": "runtime-effect.child-binding-unsupported"
+    }
+  ],
+  "pipelineKeyPolicy": {
+    "policy": "resource-axes-classified-uniform-values-excluded",
+    "uniformValuesIncluded": false,
+    "acceptedAxes": [
+      "wgslImplementationId",
+      "blendMode",
+      "layoutReflection",
+      "childShaderResourceShape"
+    ],
+    "rejectedAxes": [
+      "uniformBytes",
+      "uniformValues",
+      "childShaderPixels"
+    ]
+  },
+  "cpuOracle": {
+    "status": "pass",
+    "testClass": "SkBuiltinShaderEffectsChildrenTest",
+    "testFile": "cpu-raster/src/test/kotlin/org/skia/effects/runtime/effects/SkBuiltinShaderEffectsChildrenTest.kt",
+    "coveredBehavior": [
+      "MakeForShader resolves UnsharpRT",
+      "single named shader child is required at index 0",
+      "constant child kernel returns input",
+      "direct impl oracle verifies unclamped kernel arithmetic"
+    ]
+  },
+  "nonClaims": [
+    "No GPU child shader support claim.",
+    "No dynamic SkSL compilation.",
+    "No SkSL IR or VM.",
+    "No arbitrary runtime-effect DAG support.",
+    "No child shader texture/resource binding allocation claim.",
+    "No uniform values in PipelineKey."
+  ]
+}

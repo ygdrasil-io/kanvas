@@ -15335,6 +15335,11 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             lastRuntimeEffectFallbackReason = "runtime effect descriptor missing"
             return false
         }
+        if (descriptor.children.isNotEmpty()) {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.child-binding-unsupported: runtime effect ${descriptor.stableId} child shader bindings are not supported on WebGPU"
+            return false
+        }
         val wgslImplementationId = descriptor.wgslImplementationId ?: run {
             lastRuntimeEffectFallbackReason =
                 "runtime effect ${descriptor.stableId} has no supported WGSL implementation"
