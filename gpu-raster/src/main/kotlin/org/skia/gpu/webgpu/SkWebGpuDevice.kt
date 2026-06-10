@@ -11751,6 +11751,17 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                 plan.effectiveColorFilter != null &&
                 plan.offsetDx == 0 &&
                 plan.offsetDy == 0
+        val simpleColorFilterImageFilter = paint?.imageFilter?.asColorFilterImageFilter()
+        val selectedSimpleColorFilterRoute =
+            simpleColorFilterImageFilter != null &&
+                simpleColorFilterImageFilter.input == null &&
+                paint.colorFilter == null &&
+                plan.materialiseChain.isEmpty() &&
+                plan.preBlurColorFilter == null &&
+                plan.blurParams == null &&
+                plan.effectiveColorFilter != null &&
+                plan.offsetDx == 0 &&
+                plan.offsetDy == 0
 
         val w = gpuSrc.width
         val h = gpuSrc.height
@@ -12132,6 +12143,15 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                 scratchOwner = "LayerCompositeDraw.materializeTargetTexture",
                 scratchLifetime = "per-composite-dispatch",
                 materialiseStages = 1,
+                fallbackReason = null,
+            )
+        } else if (selectedSimpleColorFilterRoute) {
+            lastImageFilterRouteForDiagnostics = ImageFilterRouteDiagnostics(
+                selectedRoute = "webgpu.image-filter.color-filter.layer-composite",
+                prepassRoute = null,
+                scratchOwner = null,
+                scratchLifetime = null,
+                materialiseStages = 0,
                 fallbackReason = null,
             )
         }
