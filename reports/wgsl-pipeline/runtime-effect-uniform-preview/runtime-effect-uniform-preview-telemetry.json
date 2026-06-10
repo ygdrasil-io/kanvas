@@ -1,0 +1,54 @@
+{
+  "packId": "kan-033-runtime-effect-uniform-preview-telemetry-v1",
+  "rows": [
+    {
+      "compileCountAfter": 1,
+      "compileCountBefore": 1,
+      "compileCountDelta": 0,
+      "effectStableId": "runtime.simple_rt",
+      "fallbackReason": "none",
+      "frame": 1,
+      "parameter": "gColor.b",
+      "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+      "stateId": "kan-033-simple-rt-blue-low",
+      "uniformUpdateCount": 1
+    },
+    {
+      "compileCountAfter": 1,
+      "compileCountBefore": 1,
+      "compileCountDelta": 0,
+      "effectStableId": "runtime.simple_rt",
+      "fallbackReason": "none",
+      "frame": 2,
+      "parameter": "gColor.b",
+      "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+      "stateId": "kan-033-simple-rt-blue-high",
+      "uniformUpdateCount": 2
+    },
+    {
+      "compileCountAfter": 1,
+      "compileCountBefore": 1,
+      "compileCountDelta": 0,
+      "effectStableId": "runtime.spiral_rt",
+      "fallbackReason": "none",
+      "frame": 3,
+      "parameter": "rad_scale",
+      "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl state=[blendMode=kSrcOver]",
+      "stateId": "kan-033-spiral-rt-rad-low",
+      "uniformUpdateCount": 1
+    },
+    {
+      "compileCountAfter": 1,
+      "compileCountBefore": 1,
+      "compileCountDelta": 0,
+      "effectStableId": "runtime.spiral_rt",
+      "fallbackReason": "none",
+      "frame": 4,
+      "parameter": "rad_scale",
+      "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl state=[blendMode=kSrcOver]",
+      "stateId": "kan-033-spiral-rt-rad-high",
+      "uniformUpdateCount": 2
+    }
+  ],
+  "schemaVersion": "kanvas.runtime-effect-uniform-preview.telemetry"
+}

@@ -1,0 +1,36 @@
+{
+  "backend": "WebGPU",
+  "fallbackReason": "none",
+  "parameterState": {
+    "acceptedValue": 0.05,
+    "effectStableId": "runtime.spiral_rt",
+    "frame": 3,
+    "id": "kan-033-spiral-rt-rad-low",
+    "parameter": "rad_scale",
+    "requestedValue": 0.05,
+    "uniformBytes": 48,
+    "uniformOffset": 0,
+    "uniformValues": [
+      0.05,
+      32.0,
+      32.0,
+      0.0,
+      0.1,
+      0.2,
+      0.9,
+      1.0,
+      0.95,
+      0.3,
+      0.1,
+      1.0
+    ]
+  },
+  "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl state=[blendMode=kSrcOver]",
+  "pipelineKeyStableAcrossUniformEdits": true,
+  "runtimeEffectStableId": "runtime.spiral_rt",
+  "sceneId": "kan-033-spiral-rt-rad-low",
+  "selectedRoute": "webgpu.runtime-effect.uniform-preview.spiral_rt",
+  "status": "pass",
+  "ticket": "KAN-033",
+  "uniformValuesInPipelineKey": false
+}
