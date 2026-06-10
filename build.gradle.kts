@@ -4753,6 +4753,24 @@ tasks.register<Exec>("validateKan004ClipsAa") {
     inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/05-fallback-diagnostics.md"))
 }
 
+tasks.register<Exec>("validateKan026HairlinesHarness") {
+    group = "verification"
+    description = "Validates KAN-026 HairlinesGM row-specific harness evidence and stable support refusal."
+    commandLine("python3", "scripts/validate_kan026_hairlines_harness.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan026_hairlines_harness.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-026-hairlines-harness.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-026-hairlines-harness/kan-026-hairlines-harness.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/hairlines.png"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/testing/CrossBackendHarness.kt"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-318-path-aa-arc-stroke-hairline-scout.md"))
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -4901,6 +4919,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan002PathAaEdgeBudget",
         "validateKan003CapsJoinsAa",
         "validateKan004ClipsAa",
+        "validateKan026HairlinesHarness",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
