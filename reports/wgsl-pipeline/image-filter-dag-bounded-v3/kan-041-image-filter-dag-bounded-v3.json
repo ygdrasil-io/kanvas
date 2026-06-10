@@ -1,0 +1,355 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-041",
+  "packId": "kan-041-image-filter-dag-bounded-v3",
+  "status": "pass",
+  "closureDecision": "bounded-image-filter-dag-v3",
+  "claimLevel": "two-bounded-dag-scenes-with-stable-residual-refusals",
+  "supportClaim": "two-bounded-image-filter-dags",
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "readinessDelta": 0,
+  "summary": {
+    "supportScenes": 2,
+    "expectedUnsupportedScenes": 3,
+    "supportRowsMissingProofs": 0,
+    "implicitCpuReadbackFallbacks": 0,
+    "maxNodeBudget": 4,
+    "maxIntermediateTextureBudget": 4
+  },
+  "supportScenes": [
+    {
+      "sceneId": "crop-image-filter-nonnull-prepass",
+      "baseArtifactScene": "crop-image-filter-nonnull-prepass",
+      "source": "M38 Crop(input=Offset(null)) generated scene",
+      "referenceKind": "skia-upstream",
+      "status": "pass",
+      "fallbackReason": "none",
+      "nodeCount": 2,
+      "nodeBudget": 4,
+      "childrenPerNodeBudget": 2,
+      "intermediateTextureCount": 1,
+      "intermediateTextureBudget": 4,
+      "estimatedIntermediateBytes": 512000,
+      "passOrder": [
+        "child-pre-pass",
+        "final-crop-composite"
+      ],
+      "nodes": [
+        {
+          "id": "offset-child",
+          "kind": "offset",
+          "inputs": [],
+          "support": "supported",
+          "reason": "bounded child pre-pass materializes the offset child into GPU scratch"
+        },
+        {
+          "id": "crop-decal",
+          "kind": "crop-decal",
+          "inputs": [
+            "offset-child"
+          ],
+          "support": "supported",
+          "reason": "final crop composite samples the bounded child scratch with fallbackReason=none"
+        }
+      ],
+      "ownership": {
+        "intermediatesAllocated": 1,
+        "intermediateTexture": "SkWebGpuDevice.cropNonNullOffsetChildPrePassScratch",
+        "writerRoute": "LayerCompositeDraw.materializeToIntermediate",
+        "readerRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+        "scratchLifetime": "per-draw-child-pre-pass",
+        "cpuReadbackFallback": false,
+        "picturePrepass": false
+      },
+      "route": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+      "prepassRoute": "LayerCompositeDraw.materializeToIntermediate",
+      "pixels": 128000,
+      "gpuSimilarity": 98.44,
+      "threshold": 50.0,
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "artifactPaths": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json",
+        "cpuRoute": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-cpu.json",
+        "gpuRoute": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+        "prepassRoute": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-prepass.json"
+      },
+      "strictSkiaParityClaim": false,
+      "nonClaim": "Bounded Crop(input=Offset(null)) support only; no strict Skia parity, arbitrary DAG, picture prepass, or CPU readback fallback is claimed."
+    },
+    {
+      "sceneId": "m61-compose-cf-matrix-transform-dag-v2",
+      "baseArtifactScene": "image-filter-compose-cf-matrix-transform",
+      "source": "M61 Compose(ColorFilter, MatrixTransform) generated scene",
+      "referenceKind": "test-oracle",
+      "status": "pass",
+      "fallbackReason": "none",
+      "nodeCount": 3,
+      "nodeBudget": 4,
+      "childrenPerNodeBudget": 2,
+      "intermediateTextureCount": 1,
+      "intermediateTextureBudget": 4,
+      "estimatedIntermediateBytes": 4096,
+      "passOrder": [
+        "matrix-transform-prepass",
+        "color-filter-final-composite"
+      ],
+      "nodes": [
+        {
+          "id": "source-image",
+          "kind": "source-texture",
+          "inputs": [],
+          "support": "supported",
+          "reason": "test oracle source texture is already materialized"
+        },
+        {
+          "id": "matrix-transform",
+          "kind": "matrix-transform-affine",
+          "inputs": [
+            "source-image"
+          ],
+          "support": "supported",
+          "reason": "affine MatrixTransform materializes one bounded scratch texture"
+        },
+        {
+          "id": "color-filter-compose",
+          "kind": "color-filter-compose",
+          "inputs": [
+            "matrix-transform"
+          ],
+          "support": "supported",
+          "reason": "final ColorFilter composite consumes the bounded matrix intermediate"
+        }
+      ],
+      "ownership": {
+        "intermediatesAllocated": 1,
+        "parentSurfaceOwned": true,
+        "sourceSurface": "gpuSrc.intermediateView",
+        "scratchOwner": "LayerCompositeDraw.materializeTargetTexture",
+        "scratchViewOwner": "LayerCompositeDraw.materializeTargetView",
+        "scratchAllocator": "SkWebGpuDevice.enqueueMaterializeMatrixTransformToScratch",
+        "scratchAllocationLabel": "SkWebGpuDevice.materializeMatrixTransformTarget",
+        "scratchUsage": [
+          "RenderAttachment",
+          "TextureBinding"
+        ],
+        "scratchLifetime": "per-composite-dispatch",
+        "writerPass": "matrix-transform-prepass",
+        "writerRoute": "webgpu.image-filter.compose.cf-matrix-transform.materialize-matrix",
+        "readerPass": "color-filter-final-composite",
+        "readerRoute": "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite",
+        "releaseOwner": "DrawResources",
+        "releasePoint": "closeDrawResources after command submission",
+        "releaseOrder": [
+          "materializeTargetView.close()",
+          "materializeTargetTexture.close()"
+        ],
+        "cpuReadbackFallback": false,
+        "newResourceLifecycle": false,
+        "lifecycle": [
+          {
+            "stage": "allocate",
+            "owner": "SkWebGpuDevice.enqueueMaterializeMatrixTransformToScratch",
+            "resource": "Layer-sized GPUTexture labeled SkWebGpuDevice.materializeMatrixTransformTarget",
+            "evidence": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
+          },
+          {
+            "stage": "write",
+            "owner": "LayerCompositeDraw.materializeTargetView",
+            "resource": "MatrixTransform affine materialise pre-pass writes source pixels into scratch with loadOp=Clear",
+            "evidence": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-prepass.json"
+          },
+          {
+            "stage": "consume",
+            "owner": "LayerCompositeDraw final ColorFilter composite",
+            "resource": "Final composite samples the scratch as source layer input",
+            "evidence": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json"
+          },
+          {
+            "stage": "release",
+            "owner": "DrawResources.closeDrawResources",
+            "resource": "materializeTargetView then materializeTargetTexture are closed after command submission",
+            "evidence": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
+          }
+        ],
+        "notes": [
+          "The promoted row is bounded to three nodes and one intermediate texture.",
+          "The row reuses generated SaveLayerImageFilterTest evidence and does not claim recursive graph scheduling or ImageFiltersGraphGM parity.",
+          "The scratch reuses the existing LayerCompositeDraw/DrawResources lifecycle; no second image-filter resource manager or CPU readback fallback is introduced."
+        ]
+      },
+      "route": "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite",
+      "prepassRoute": "webgpu.image-filter.compose.cf-matrix-transform.materialize-matrix",
+      "pixels": 1024,
+      "gpuSimilarity": 100.0,
+      "threshold": 99.0,
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "artifactPaths": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/gpu-diff.png",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/stats.json",
+        "cpuRoute": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-cpu.json",
+        "gpuRoute": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json",
+        "prepassRoute": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-prepass.json"
+      },
+      "strictSkiaParityClaim": false,
+      "nonClaim": "No arbitrary image-filter DAG, ImageFiltersGraphGM parity, picture/layer prepass, perspective transform, or recursive scheduling support is claimed by this row."
+    }
+  ],
+  "refusalScenes": [
+    {
+      "sceneId": "m52-big-tile-image-filter-dag-refusal",
+      "source": "M52 BigTileImageFilterGM DAG boundary",
+      "status": "expected-unsupported",
+      "fallbackReason": "image-filter.dag-or-picture-prepass-required",
+      "reasonCodeStable": true,
+      "nodeCount": 3,
+      "nodeBudget": 4,
+      "intermediateTextureCount": 0,
+      "intermediateTextureBudget": 4,
+      "passOrder": [],
+      "nonClaim": "No arbitrary image-filter DAG, picture/layer prepass, or BigTile GPU support is claimed by this row."
+    },
+    {
+      "sceneId": "m54-imagefilters-graph-boundary",
+      "source": "M54 ImageFiltersGraphGM boundary",
+      "status": "expected-unsupported",
+      "fallbackReason": "image-filter.dag-or-picture-prepass-required",
+      "reasonCodeStable": true,
+      "nodeCount": 4,
+      "nodeBudget": 4,
+      "intermediateTextureCount": 0,
+      "intermediateTextureBudget": 4,
+      "passOrder": [],
+      "nonClaim": "Does not claim arbitrary image-filter DAG support, recursive scheduling, or picture prepass support."
+    },
+    {
+      "sceneId": "image-filter-crop-nonnull-prepass-required",
+      "source": "Out-of-scope Crop(input=nonNull) graph shapes",
+      "status": "expected-unsupported",
+      "fallbackReason": "image-filter.crop-input-nonnull-prepass-required",
+      "reasonCodeStable": true,
+      "nodeCount": 2,
+      "nodeBudget": 4,
+      "intermediateTextureCount": 0,
+      "intermediateTextureBudget": 4,
+      "passOrder": [],
+      "nonClaim": null
+    }
+  ],
+  "claimGuard": {
+    "supportRowsMissingProofs": [],
+    "supportRowsMissingFallbackNone": [],
+    "unsupportedRowsMissingStableReason": [],
+    "implicitCpuReadbackFallbacks": [],
+    "overBudgetSupportRows": [],
+    "hiddenPicturePrepassSupport": []
+  },
+  "requiredValidation": [
+    "validateKan006IntermediateTextureOwnership",
+    "validateKan008ImageFilterDagRefusals",
+    "pipelineM61ImageFilterDagV2PromotionPack",
+    "pipelineSceneDashboardGate",
+    "pipelinePmBundle"
+  ],
+  "nonClaims": [
+    "KAN-041 does not add renderer, shader, selector, PipelineKey, threshold, or budget changes.",
+    "KAN-041 does not claim arbitrary recursive image-filter DAG support.",
+    "KAN-041 does not claim picture prepass, large layer prepass, BigTile/ImageFiltersGraph broad parity, or CPU readback fallback.",
+    "KAN-041 does not claim strict Skia parity for crop-image-filter-nonnull-prepass; it keeps risk.fidelity-gap visible.",
+    "KAN-041 does not rebuild Skia image-filter internals, Ganesh, Graphite, SkSL compiler, SkSL IR, or SkSL VM."
+  ],
+  "validationRows": [
+    {
+      "id": "two-bounded-support-scenes",
+      "status": "pass",
+      "evidence": "crop-image-filter-nonnull-prepass and m61-compose-cf-matrix-transform-dag-v2 both carry complete reference/CPU/GPU/diff/stat/route proofs with fallbackReason=none."
+    },
+    {
+      "id": "graph-diagnostics-visible",
+      "status": "pass",
+      "evidence": "Support graphs expose node count, bounds, intermediate ownership, pass order, and byte estimates."
+    },
+    {
+      "id": "unsupported-graphs-stable",
+      "status": "pass",
+      "evidence": "M52 BigTile, M54 ImageFiltersGraph, and out-of-scope Crop(input=nonNull) remain expected-unsupported with stable reasons."
+    },
+    {
+      "id": "no-hidden-readback",
+      "status": "pass",
+      "evidence": "Support graph ownership records cpuReadbackFallback=false and no support row claims picture prepass."
+    },
+    {
+      "id": "policy-preserved",
+      "status": "pass",
+      "evidence": "No renderer, shader, threshold, PipelineKey, or budget change is made."
+    }
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 36,
+    "missingCommittedArtifacts": 0,
+    "missing": []
+  },
+  "artifactPaths": [
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    ".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md",
+    ".upstream/target/high-performance-wgsl-pipeline-target.md",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SaveLayerImageFilterTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleOffsetImageFilterWebGpuTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/SimpleOffsetImageFilterCrossBackendTest.kt",
+    "reports/wgsl-pipeline/2026-05-28-m41-crop-image-filter-generated-evidence.md",
+    "reports/wgsl-pipeline/2026-06-01-m61-bounded-image-filter-dag-v2-promotion.md",
+    "reports/wgsl-pipeline/2026-06-01-m61-image-filter-dag-diagnostics.md",
+    "reports/wgsl-pipeline/2026-06-10-kan-006-intermediate-texture-ownership.md",
+    "reports/wgsl-pipeline/2026-06-10-kan-008-image-filter-dag-refusals.md",
+    "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-prepass.json",
+    "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/gpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/gpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-prepass.json",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/stats.json",
+    "reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json",
+    "reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json",
+    "reports/wgsl-pipeline/scenes/generated/m61-image-filter-dag-v2-promotion.json",
+    "reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json",
+    "reports/wgsl-pipeline/scenes/generated/results.json",
+    "scripts/validate_kan006_intermediate_texture_ownership.py",
+    "scripts/validate_kan008_image_filter_dag_refusals.py"
+  ]
+}
