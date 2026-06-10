@@ -382,6 +382,7 @@ fun renderPipelineConformanceReport(
         |runtime effect uniform preview evidence across registered effects with stable PipelineKey telemetry,
         |Runtime Effects V2 evidence bundle aggregation with support/refusal rows and PM non-claims,
         |KAN-035 HairlinesGM root-cause evidence with stable expected-unsupported classification,
+        |KAN-036 butt stroke non-hairline bounded row evidence with stable expected-unsupported classification,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -420,6 +421,7 @@ fun renderPipelineConformanceReport(
         |${row("Runtime Effect uniform preview", "passed", "`pipelineRuntimeEffectUniformPreviewReport` validates two registered runtime effects, four edited uniform states, stable PipelineKey telemetry, invalid-value refusal policy, and headless/Kadre lane separation; counts $runtimeEffectUniformPreviewCounts")}
         |${row("Runtime Effects V2 evidence bundle", "passed", "`pipelineRuntimeEffectsV2EvidenceBundleReport` aggregates all Runtime Effects V2 support/refusal rows, linked artifacts, stable diagnostics, and PM non-claims; counts $runtimeEffectsV2EvidenceBundleCounts")}
         |${row("KAN-035 HairlinesGM root cause", "expected-unsupported", "`validateKan035HairlinesRootCause` classifies the current HairlinesGM residual as `cap-join-parity`, keeps `skia-gm-hairlines` expected-unsupported, records `expected-unsupported-diagnostic=1` and `unexpected-exception=0`, and makes no renderer, shader, threshold, or edge-budget change.")}
+        |${row("KAN-036 butt stroke non-hairline", "expected-unsupported", "`validateKan036ButtStrokeNonHairline` selects one non-hairline no-dash butt-cap stroke row, records WebGPU stable refusal `coverage.stroke-cap-join-visual-parity-below-threshold` with `coverageEdgeCount=66/256`, blocks support until WebGPU image/diff and CPU-vs-Skia support-ready evidence exist, and makes no renderer, shader, threshold, or edge-budget change.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -791,6 +793,7 @@ tasks.register("pipelineConformance") {
         "pipelineRuntimeEffectUniformPreviewReport",
         "pipelineRuntimeEffectsV2EvidenceBundleReport",
         "validateKan035HairlinesRootCause",
+        "validateKan036ButtStrokeNonHairline",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -811,6 +814,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
             |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
             |- REQUIRED KAN-035 HairlinesGM root-cause evidence and stable refusal classification: validateKan035HairlinesRootCause
+            |- REQUIRED KAN-036 butt stroke non-hairline row evidence and stable refusal classification: validateKan036ButtStrokeNonHairline
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5110,6 +5114,43 @@ tasks.register<Exec>("validateKan035HairlinesRootCause") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan036ButtStrokeNonHairline") {
+    group = "verification"
+    description = "Materializes and validates the KAN-036 selected butt stroke non-hairline evidence and stable refusal classification."
+    dependsOn("validateKan035HairlinesRootCause")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/butt-stroke-non-hairline")
+    commandLine(
+        "python3",
+        "scripts/validate_kan036_butt_stroke_non_hairline.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan036_butt_stroke_non_hairline.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-322-circular-arcs-stroke-butt-selected-cell-harness.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu-diff.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/circular-arcs-stroke-butt-selected-cell-skia-reference-for327.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia-reference-provenance.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328/cpu-vs-skia-diff.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/hairlines-root-cause/kan-035-hairlines-root-cause.json"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CircularArcsStrokeButtSelectedCellCaptureTest.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/04-webgpu-coverage-backend.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/06-validation-and-perf.md"))
+    outputs.file(outputDir.file("kan-036-butt-stroke-non-hairline.json"))
+    outputs.file(outputDir.file("kan-036-butt-stroke-non-hairline.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -5260,6 +5301,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan004ClipsAa",
         "validateKan026HairlinesHarness",
         "validateKan035HairlinesRootCause",
+        "validateKan036ButtStrokeNonHairline",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
