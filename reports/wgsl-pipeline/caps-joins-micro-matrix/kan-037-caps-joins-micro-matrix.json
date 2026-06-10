@@ -1,0 +1,264 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-037",
+  "packId": "kan-037-caps-joins-micro-matrix-v1",
+  "status": "pass",
+  "closureDecision": "stable-refusal-micro-matrix",
+  "claimLevel": "selected-cap-join-micro-matrix-stable-refusal",
+  "supportClaim": false,
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "edgeBudgetChanged": false,
+  "readinessDelta": 0,
+  "scene": {
+    "sceneId": "m60-bounded-stroke-cap-join",
+    "source": "BoundedStrokeCapJoinGM",
+    "coveragePlan": "PathStrokeCoverage(openPolyline,aa=true,strokeWidth=10,capJoinMatrix=butt-bevel+round-round+square-bevel)",
+    "strokeWidth": 10.0,
+    "strokeMiter": 4.0,
+    "supportThreshold": 99.95,
+    "capJoinMatrix": [
+      "butt-bevel",
+      "round-round",
+      "square-bevel"
+    ]
+  },
+  "candidate": {
+    "id": "round-round",
+    "role": "candidate",
+    "cap": "round",
+    "join": "round",
+    "miterLimit": 4.0,
+    "contourEvidence": "openPolyline-source-with-round-cap-and-round-join-boundary-cells",
+    "status": "expected-unsupported",
+    "decision": "stable-refusal",
+    "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "blockingCondition": "missing_cpu_gpu_coverage_equivalence_for_round_cap_join_boundary_cells",
+    "notEquivalentCells": 2,
+    "safeBoundedCoverageCorrectionProven": false,
+    "residual": {
+      "mismatchPixels": 523,
+      "greaterThanEightPixels": 8,
+      "greaterThanThirtyTwoPixels": 6,
+      "maxChannelDelta": 48,
+      "bounds": {
+        "left": 48,
+        "top": 38,
+        "right": 95,
+        "bottom": 81
+      }
+    }
+  },
+  "sentinels": [
+    {
+      "id": "butt-bevel",
+      "role": "sentinel",
+      "cap": "butt",
+      "join": "bevel",
+      "miterLimit": 4.0,
+      "contourEvidence": "open-contour-cap-sentinel",
+      "status": "expected-unsupported",
+      "decision": "stable-refusal",
+      "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "residual": {
+        "mismatchPixels": 394,
+        "greaterThanEightPixels": 2,
+        "greaterThanThirtyTwoPixels": 0,
+        "maxChannelDelta": 25,
+        "bounds": {
+          "left": 9,
+          "top": 27,
+          "right": 47,
+          "bottom": 92
+        }
+      }
+    },
+    {
+      "id": "square-bevel",
+      "role": "sentinel",
+      "cap": "square",
+      "join": "bevel",
+      "miterLimit": 4.0,
+      "contourEvidence": "out-of-scope-square-cap-sentinel",
+      "status": "expected-unsupported",
+      "decision": "stable-refusal",
+      "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "residual": {
+        "mismatchPixels": 87,
+        "greaterThanEightPixels": 0,
+        "greaterThanThirtyTwoPixels": 0,
+        "maxChannelDelta": 1,
+        "bounds": {
+          "left": 96,
+          "top": 37,
+          "right": 153,
+          "bottom": 82
+        }
+      }
+    }
+  ],
+  "webGpuRefusal": {
+    "status": "expected-unsupported",
+    "adapter": "Apple M2 Max",
+    "selectedRoute": "webgpu.coverage.refuse",
+    "diagnosticRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
+    "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
+    "pathVerbCount": 9,
+    "pathVerbBudget": 96,
+    "coverageEdgeCount": 18,
+    "edgeBudget": 256,
+    "edgeBudgetReason": "not coverage.edge-count-exceeded",
+    "dashIntervalCount": 0,
+    "dashIntervalBudget": 8,
+    "strokeWidth": 10.0,
+    "strokeCaps": [
+      "butt",
+      "round",
+      "square"
+    ],
+    "strokeJoins": [
+      "bevel",
+      "round",
+      "bevel"
+    ],
+    "miterLimit": 4.0,
+    "transform": "n/a",
+    "clipStackDepth": "n/a",
+    "deviceBounds": {
+      "left": 0,
+      "top": 0,
+      "right": 192,
+      "bottom": 128
+    },
+    "pipelineKeyContains": "pathAaStrokeCapJoinBlocked"
+  },
+  "cpuEvidence": {
+    "openContourCaps": {
+      "available": true,
+      "route": "cpu.coverage.stroke-cap-join-oracle",
+      "coveragePlan": "PathStrokeCoverage(openPolyline,aa=true,strokeWidth=10,capJoinMatrix=butt-bevel+round-round+square-bevel)",
+      "capJoinMatrix": [
+        "butt-bevel",
+        "round-round",
+        "square-bevel"
+      ]
+    },
+    "closedContourJoins": {
+      "available": false,
+      "classification": "support-blocker",
+      "reason": "No separate closed-contour CPU join oracle artifact is present in the KAN-037 evidence set.",
+      "requiredBeforeSupport": true
+    }
+  },
+  "artifactAvailability": {
+    "skiaReference": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/skia.png"
+    },
+    "cpuOracle": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu.png"
+    },
+    "cpuDiff": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu-diff.png"
+    },
+    "webGpuProductionRoute": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json"
+    },
+    "webGpuDiagnosticImage": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental.png"
+    },
+    "webGpuDiagnosticDiff": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental-diff.png"
+    },
+    "webGpuSupportImage": {
+      "available": false,
+      "reason": "coverage.stroke-cap-join-visual-parity-below-threshold"
+    },
+    "webGpuSupportDiff": {
+      "available": false,
+      "reason": "coverage.stroke-cap-join-visual-parity-below-threshold"
+    }
+  },
+  "supportPolicy": {
+    "rowStatus": "expected-unsupported",
+    "decision": "stable-refusal",
+    "requiredForSupport": [
+      "closed-contour CPU join oracle evidence",
+      "round-round CPU/GPU coverage equivalence for boundary cells",
+      "production WebGPU route with fallbackReason=none",
+      "WebGPU support image/diff/stat artifacts",
+      "no threshold or edge-budget weakening"
+    ]
+  },
+  "nonClaims": [
+    "KAN-037 does not claim support for round-round, butt-bevel, square-bevel, or broad caps/joins.",
+    "KAN-037 does not change renderer, shaders, selector, PipelineKey, threshold, or edge-budget behavior.",
+    "KAN-037 does not lower the 99.95 support threshold or increase the 256 WebGPU AA edge budget.",
+    "KAN-037 does not treat diagnostic-only WebGPU images as production support.",
+    "KAN-037 does not satisfy closed-contour join CPU evidence; it records that gap as a support blocker."
+  ],
+  "validationRows": [
+    {
+      "id": "candidate-round-round-stable-refusal",
+      "status": "pass",
+      "evidence": "round-round remains coverage.stroke-cap-join-visual-parity-below-threshold with missing_cpu_gpu_coverage_equivalence_for_round_cap_join_boundary_cells."
+    },
+    {
+      "id": "sentinels-visible",
+      "status": "pass",
+      "evidence": "butt-bevel and square-bevel remain stable-refusal sentinels in the same M60 scene."
+    },
+    {
+      "id": "route-diagnostics-complete",
+      "status": "pass",
+      "evidence": "Route exposes cap/join/stroke width/miter/edge/dash/device bounds/pipeline key facts."
+    },
+    {
+      "id": "closed-contour-gap-explicit",
+      "status": "pass",
+      "evidence": "Closed-contour join CPU evidence is absent and therefore blocks support."
+    },
+    {
+      "id": "policy-preserved",
+      "status": "pass",
+      "evidence": "No renderer, shader, selector, threshold, or edge-budget change is made."
+    }
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 23,
+    "missingCommittedArtifacts": 0,
+    "missing": []
+  },
+  "artifactPaths": [
+    ".upstream/specs/geometry-coverage/02-lowering-rules.md",
+    ".upstream/specs/geometry-coverage/05-fallback-diagnostics.md",
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+    "reports/wgsl-pipeline/2026-06-03-for-266-stroke-cap-join-aa-residual.md",
+    "reports/wgsl-pipeline/2026-06-03-for-267-round-cap-join-coverage-equivalence.md",
+    "reports/wgsl-pipeline/2026-06-10-kan-003-caps-joins-aa.md",
+    "reports/wgsl-pipeline/butt-stroke-non-hairline/kan-036-butt-stroke-non-hairline.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-003-caps-joins-aa/kan-003-caps-joins-aa.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/experimental-gpu-diagnostic.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json",
+    "reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json",
+    "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json"
+  ]
+}
