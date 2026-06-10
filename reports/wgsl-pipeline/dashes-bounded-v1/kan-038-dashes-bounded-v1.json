@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-038",
+  "packId": "kan-038-dashes-bounded-v1",
+  "status": "pass",
+  "closureDecision": "stable-refusal-dashes-bounded-v1",
+  "claimLevel": "bounded-dash-row-identified-stable-refusal",
+  "supportClaim": false,
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "edgeBudgetChanged": false,
+  "readinessDelta": 0,
+  "candidate": {
+    "id": "skia-gm-dashing-width1-pattern1-1-aa",
+    "role": "bounded-candidate",
+    "sourceRow": "skia-gm-dashing",
+    "source": "DashingGM main grid",
+    "status": "expected-unsupported",
+    "decision": "stable-refusal",
+    "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
+    "dashIntervals": [
+      1.0,
+      1.0
+    ],
+    "dashIntervalCount": 2,
+    "dashIntervalBudget": 8,
+    "phase": 0.0,
+    "strokeWidth": 1.0,
+    "strokeWidthRange": "0.5..64",
+    "antiAlias": true,
+    "geometry": "horizontal drawLine 0,0 -> 600,0",
+    "pathEffectOrder": "before-stroke",
+    "sourceEvidence": [
+      "skia-integration-tests/src/main/kotlin/org/skia/tests/DashingGM.kt",
+      "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/DashingCrossBackendTest.kt",
+      "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"
+    ],
+    "postDashVerbCount": "not-recorded",
+    "postDashEdgeCount": "not-recorded",
+    "postDashEdgeCountProven": false,
+    "supportReady": false,
+    "blockingCondition": "row-specific_reference_cpu_gpu_diff_stat_route_artifacts_missing"
+  },
+  "overBudgetSentinel": {
+    "sceneId": "path-aa-dashing-edge-budget",
+    "role": "over-budget-sentinel",
+    "source": "DashingGM generated inventory row",
+    "cpuStatus": "pass",
+    "cpuRoute": "cpu.path-coverage.dashing-oracle",
+    "cpuFallbackReason": "none",
+    "gpuStatus": "expected-unsupported",
+    "gpuRoute": "webgpu.coverage.refuse",
+    "fallbackReason": "coverage.edge-count-exceeded",
+    "pipelineKey": "coverageKind=pathStrokeDashOverflow,pathFillRule=winding,topology=triangleList,source=DashingGM",
+    "coveragePlan": "PathCoverage(strokeDash=true,aa=true,edgeCountOverBudget=true)",
+    "dashIntervals": [
+      1.0,
+      1.0
+    ],
+    "dashIntervalCount": 2,
+    "dashIntervalBudget": 8,
+    "phase": 0.0,
+    "postDashVerbCount": "not-recorded",
+    "postDashEdgeCount": "exceeded-current-budget",
+    "edgeBudget": 256,
+    "statsStatus": "expected-unsupported",
+    "statsFallbackReason": "coverage.edge-count-exceeded",
+    "nonClaim": "Does not claim dash, cap, join, broad stroke, or edge-budget removal support."
+  },
+  "relatedOverBudgetRows": [
+    {
+      "id": "m54-dash-circle-boundary",
+      "source": "skia-gm-dashcircle",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded",
+      "gpuRoute": "webgpu.coverage.dash-circle.expected-unsupported",
+      "pipelineKey": "pathAA=dashCircle budget=current source=DashCircleGM",
+      "baseArtifactScene": "path-aa-dashing-edge-budget"
+    },
+    {
+      "id": "m66-path-aa-dashing-edge-budget-refusal",
+      "source": "skia-gm-dashcircle",
+      "status": "expected-unsupported",
+      "fallbackReason": "coverage.edge-count-exceeded",
+      "gpuRoute": "webgpu.coverage.refuse.edge-count",
+      "pipelineKey": "pathAA=dashing edgeBudget=exceeded source=DashCircleGM milestone=M66",
+      "baseArtifactScene": "path-aa-dashing-edge-budget"
+    }
+  ],
+  "fallbackTaxonomy": {
+    "validBudgetReasons": [
+      "coverage.edge-count-exceeded",
+      "coverage.dash-budget-exceeded"
+    ],
+    "observedOverBudgetReasons": [
+      "coverage.edge-count-exceeded"
+    ],
+    "dashBudgetExceededReasonCodePresent": true,
+    "dashBudgetExceededObservedInCurrentArtifacts": false,
+    "pathEffectUnsupportedReasonCodePresent": true
+  },
+  "artifactAvailability": {
+    "skiaReference": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/skia.png"
+    },
+    "cpuOracle": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/cpu.png"
+    },
+    "cpuDiff": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/cpu-diff.png"
+    },
+    "webGpuStableRefusalRoute": {
+      "available": true,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-gpu.json"
+    },
+    "webGpuSupportImage": {
+      "available": false,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/gpu.png",
+      "reason": "coverage.edge-count-exceeded"
+    },
+    "webGpuSupportDiff": {
+      "available": false,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/gpu-diff.png",
+      "reason": "coverage.edge-count-exceeded"
+    },
+    "postDashVerbEdgeStats": {
+      "available": false,
+      "reason": "existing generated dash rows do not record exact post-dash verb and edge counts"
+    }
+  },
+  "supportPolicy": {
+    "rowStatus": "expected-unsupported",
+    "decision": "stable-refusal",
+    "requiredForSupport": [
+      "row-specific Skia reference image for the bounded dash candidate",
+      "row-specific CPU oracle image/diff/stat/route artifacts",
+      "row-specific WebGPU image/diff/stat/route artifacts with fallbackReason=none",
+      "diagnostics that expose dash intervals, phase, post-dash verbs, post-dash edges, and stroke facts",
+      "over-budget sentinel remains refused with coverage.edge-count-exceeded or coverage.dash-budget-exceeded",
+      "no global edge-budget, threshold, or dash interval budget increase"
+    ]
+  },
+  "diagnosticRequirements": {
+    "dashIntervals": "recorded for candidate",
+    "phase": "recorded for candidate",
+    "postDashVerbs": "missing in current artifacts",
+    "postDashEdges": "missing for bounded candidate; over-budget sentinel records refusal only",
+    "strokeFacts": "recorded from DashingGM source row",
+    "pathEffectOrder": "path effect before stroke"
+  },
+  "nonClaims": [
+    "KAN-038 does not claim bounded dash WebGPU support.",
+    "KAN-038 does not claim broad DashingGM, DashCircleGM, dashcubics, caps/joins, hairlines, or stroke-outline support.",
+    "KAN-038 does not add renderer, shader, selector, threshold, edge-budget, or dash interval budget changes.",
+    "KAN-038 does not infer support from existing cross-backend similarity floors or policy-only dashboard rows.",
+    "KAN-038 keeps over-budget dashed Path AA rows refused by stable budget diagnostics."
+  ],
+  "validationRows": [
+    {
+      "id": "bounded-dash-candidate-identified",
+      "status": "pass",
+      "evidence": "skia-gm-dashing-width1-pattern1-1-aa uses 2/8 dash intervals, phase 0, stroke width 1, path effect before stroke."
+    },
+    {
+      "id": "bounded-candidate-refused-with-policy-row",
+      "status": "pass",
+      "evidence": "skia-gm-dashing remains expected-unsupported via coverage.dashing.row-specific-artifacts-required."
+    },
+    {
+      "id": "over-budget-sentinel-preserved",
+      "status": "pass",
+      "evidence": "path-aa-dashing-edge-budget remains expected-unsupported via coverage.edge-count-exceeded."
+    },
+    {
+      "id": "dash-budget-taxonomy-visible",
+      "status": "pass",
+      "evidence": "coverage.dash-budget-exceeded remains a stable reason code for dash interval overflow."
+    },
+    {
+      "id": "support-evidence-gap-explicit",
+      "status": "pass",
+      "evidence": "Bounded support remains blocked until post-dash verb/edge diagnostics and WebGPU fallbackReason=none artifacts exist."
+    },
+    {
+      "id": "policy-preserved",
+      "status": "pass",
+      "evidence": "No renderer, shader, selector, threshold, edge-budget, or dash interval budget change is made."
+    }
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 20,
+    "missingCommittedArtifacts": 0,
+    "missing": []
+  },
+  "artifactPaths": [
+    ".upstream/specs/geometry-coverage/02-lowering-rules.md",
+    ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/DashingCrossBackendTest.kt",
+    "render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt",
+    "render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt",
+    "reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md",
+    "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+    "reports/wgsl-pipeline/2026-05-31-m60-path-aa-budget-audit.md",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/stats.json",
+    "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+    "reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json",
+    "reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json",
+    "reports/wgsl-pipeline/scenes/generated/results.json",
+    "skia-integration-tests/src/main/kotlin/org/skia/tests/DashingGM.kt"
+  ]
+}
