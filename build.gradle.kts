@@ -4717,6 +4717,24 @@ tasks.register<Exec>("validateKan002PathAaEdgeBudget") {
     inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
 }
 
+tasks.register<Exec>("validateKan003CapsJoinsAa") {
+    group = "verification"
+    description = "Validates KAN-003 bounded caps/joins AA visible refusal evidence."
+    commandLine("python3", "scripts/validate_kan003_caps_joins_aa.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan003_caps_joins_aa.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-003-caps-joins-aa.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-003-caps-joins-aa/kan-003-caps-joins-aa.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-03-for-266-stroke-cap-join-aa-residual.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-03-for-267-round-cap-join-coverage-equivalence.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
+    inputs.file(layout.projectDirectory.file("render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -4863,6 +4881,7 @@ tasks.register("pipelinePmBundle") {
         "validateMepRcScenePack",
         "validateMepRcRuntime",
         "validateKan002PathAaEdgeBudget",
+        "validateKan003CapsJoinsAa",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
