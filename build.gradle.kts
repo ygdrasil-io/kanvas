@@ -476,8 +476,8 @@ fun renderPipelineConformanceReport(
         |  `kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt`.
         |- Pipeline cache telemetry: `gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/PipelineKeyTelemetryTest.kt`
         |  verifies cold frame misses are at least one and warm frame cache hits increase.
-        |- Runtime-effect support matrix: `reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md`
-        |  lists descriptor-backed runtime effects separately from adapter-backed scene parity and keeps below-threshold WGSL rows explicit;
+        |- Runtime-effect V2 support matrix: `reports/wgsl-pipeline/runtime-effects-v2/support-matrix.md`
+        |  lists descriptor-backed runtime effects separately from adapter-backed scene parity, keeps policy refusals explicit, and avoids broad runtime-effect claims;
         |  current counts are $runtimeEffectSupportMatrixCounts.
         |- GPU similarity investigation: `reports/wgsl-pipeline/2026-05-27-m31-gpu-similarity-investigation.md`
         |  classifies `DrawBitmapRect3*` and `DrawBitmapRectSkbug4734*` below-floor failures as implementation-regression candidates
@@ -639,13 +639,13 @@ tasks.register("pipelineConformanceReport") {
         val legacyWgslDiagnosticsAllowlistCount = file("gpu-raster/src/test/resources/wgsl-diagnostics-allowlist.txt")
             .readLines()
             .count { line -> line.isNotBlank() && !line.startsWith("#") }
-        val runtimeEffectSupportMatrixCounts = file("reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md")
+        val runtimeEffectSupportMatrixCounts = file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.md")
             .readLines()
             .firstOrNull { it.startsWith("Status counts: ") }
             ?.removePrefix("Status counts: ")
             ?.removeSuffix(".")
             ?: throw GradleException(
-                "Missing runtime-effect support matrix status counts in `reports/wgsl-pipeline/2026-05-27-m23-runtime-effect-support-matrix.md`."
+                "Missing runtime-effect V2 support matrix status counts in `reports/wgsl-pipeline/runtime-effects-v2/support-matrix.md`."
             )
         val report = renderPipelineConformanceReport(
             commit = commit,

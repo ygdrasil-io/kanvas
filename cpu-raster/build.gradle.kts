@@ -89,6 +89,16 @@ tasks.register<Test>("testCodecSuiteWithKotlinBackend") {
     }
 }
 
+tasks.register<JavaExec>("pipelineRuntimeEffectsV2SupportMatrix") {
+    group = "verification"
+    description = "Materializes the KAN-027 Runtime Effects V2 support matrix JSON and Markdown artifacts."
+
+    dependsOn("classes")
+    mainClass.set("org.skia.effects.runtime.RuntimeEffectsV2SupportMatrixReportKt")
+    classpath = sourceSets.main.get().runtimeClasspath
+    args(rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-effects-v2").asFile.absolutePath)
+}
+
 // G7.2 — Dokka GFM config. See :math/build.gradle.kts for the
 // reference setup.
 tasks.dokkaGfm {
