@@ -1,0 +1,337 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-035",
+  "packId": "kan-035-hairlines-root-cause-v1",
+  "status": "pass",
+  "closureDecision": "stable-refusal-diagnostic-fix",
+  "claimLevel": "row-specific-hairlines-root-cause-with-stable-refusal",
+  "supportClaim": false,
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "edgeBudgetChanged": false,
+  "readinessDelta": 0,
+  "selectedHarness": {
+    "testClass": "org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest",
+    "testFile": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt",
+    "method": "HairlinesGM matches reference on raster and GPU backends",
+    "gm": "HairlinesGM",
+    "gmFile": "skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt",
+    "referenceName": "hairlines",
+    "referenceFile": "skia-integration-tests/src/test/resources/original-888/hairlines.png",
+    "referenceKind": "skia-upstream-original-888",
+    "adapterGate": "WebGpuContext.createOrNull",
+    "rasterFloor": 97.63,
+    "gpuFloor": 98.92,
+    "rasterTolerance": 1,
+    "gpuTolerance": "TestUtils.TEXTUAL_GM_TOLERANCE",
+    "debugImages": [
+      "gpu-raster/build/debug-images/hairlines-raster.png",
+      "gpu-raster/build/debug-images/hairlines-gpu.png",
+      "gpu-raster/build/debug-images/hairlines-diff.png"
+    ],
+    "coverage": {
+      "canvas": "1250x1250",
+      "draws": 168,
+      "stressPaths": 14,
+      "strokeWidths": [
+        0.0,
+        0.5,
+        1.5
+      ],
+      "aaModes": [
+        false,
+        true
+      ],
+      "alphas": [
+        "0xFF",
+        "0x40"
+      ],
+      "pathFamilies": [
+        "15-spoke star",
+        "near-vertical tangent quads",
+        "cubic cusp regressions",
+        "missing-end-cap line bundles",
+        "r=2000 arc plus chord"
+      ]
+    }
+  },
+  "observedRefusal": {
+    "command": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest",
+    "expectedOutcome": "FAIL_STABLE_REFUSAL",
+    "route": "webgpu.coverage.refuse",
+    "strategy": "RefuseDiagnostic",
+    "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "pathVerbCount": 75,
+    "pathVerbBudget": 96,
+    "coverageEdgeCount": 60,
+    "edgeBudget": 256,
+    "strokeWidth": 1.0,
+    "strokeCaps": [
+      "butt"
+    ],
+    "strokeJoins": [
+      "miter"
+    ],
+    "deviceBounds": [
+      260.0,
+      4.947735,
+      340.0,
+      84.61401
+    ],
+    "pipelineCoverageKind": "pathAaStrokeCapJoinBlocked",
+    "inventoryCategoryAfterFix": "expected-unsupported-diagnostic",
+    "failureBeforeDebugImages": true
+  },
+  "cpuEvidence": {
+    "sourceReport": "skia-integration-tests/test-similarity-report.md",
+    "sourceScores": "skia-integration-tests/test-similarity-scores.properties",
+    "similarity": 97.678016,
+    "displaySimilarity": 97.68,
+    "tolerance": 1,
+    "matchingPixels": 1526219,
+    "totalPixels": 1562500,
+    "maxChannelDiff": "0, 255, 255, 255",
+    "meanMismatchDiff": "0, 23, 23, 23",
+    "rasterFloor": 97.63,
+    "strictSupportThreshold": 99.95,
+    "supportThresholdMet": false
+  },
+  "dashboardPolicyRow": {
+    "sceneId": "skia-gm-hairlines",
+    "status": "expected-unsupported",
+    "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+    "policyOnlyArtifacts": true,
+    "generatedRowStatus": "expected-unsupported",
+    "generatedRowFallbackReason": "coverage.hairline.row-specific-artifacts-required",
+    "nonClaim": "Dashboard visibility only. This row does not claim broad hairline Path AA, subpixel hairline coverage, transform-sensitive hairline width, or edge-budget support."
+  },
+  "linkedM60Boundary": {
+    "sceneId": "m60-bounded-stroke-cap-join",
+    "status": "expected-unsupported",
+    "route": "webgpu.coverage.refuse",
+    "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "remainingBoundary": "coverage.stroke-cap-join-aa-residual",
+    "supportThreshold": 99.95,
+    "edgeCount": 18,
+    "edgeBudget": 256,
+    "pathVerbCount": 9,
+    "pathVerbBudget": 96,
+    "routeArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+    "statsArtifact": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json",
+    "imageArtifacts": {
+      "skia": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/skia.png",
+      "cpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu-diff.png",
+      "experimentalGpu": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental.png",
+      "experimentalDiff": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental-diff.png"
+    }
+  },
+  "linkedDiagnostics": {
+    "for266": {
+      "artifact": "reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json",
+      "decision": "KEEP_DIAGNOSTIC",
+      "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "remainingBoundary": "coverage.stroke-cap-join-aa-residual"
+    },
+    "for267": {
+      "artifact": "reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json",
+      "decision": "KEEP_DIAGNOSTIC",
+      "boundedCoverageCorrectionStatus": "REFUSED",
+      "missingCondition": "missing_cpu_gpu_coverage_equivalence_for_round_cap_join_boundary_cells",
+      "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold"
+    },
+    "for318": {
+      "report": "reports/wgsl-pipeline/2026-06-04-for-318-path-aa-arc-stroke-hairline-scout.md",
+      "hairlineStrokeWidth0": "blocked-by-current-m60-stroke-width-budget",
+      "edgeBudgetPolicy": "preserve-256-edge-budget-and-current-refusals",
+      "supportStatus": "not-supported"
+    }
+  },
+  "gpuInventoryClassification": {
+    "sourceCommand": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest",
+    "sourceReport": "gpu-raster/build/reports/gpu-inventory/gpu-inventory-failure-classification.json",
+    "generatedSnapshot": "reports/wgsl-pipeline/hairlines-root-cause/gpu-inventory-hairlines-classification.json",
+    "byCategory": {
+      "expected-unsupported-diagnostic": 1,
+      "similarity-regression": 0,
+      "unsupported-image-filter": 0,
+      "adapter-skip": 0,
+      "adapter-missing": 0,
+      "unexpected-exception": 0
+    },
+    "records": [
+      {
+        "testName": "org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest#HairlinesGM matches reference on raster and GPU backends()",
+        "status": "failure",
+        "category": "expected-unsupported-diagnostic",
+        "reason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+        "actualSimilarityPercent": null,
+        "floorSimilarityPercent": null,
+        "artifactPath": null,
+        "sourceXml": "TEST-org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest.xml"
+      }
+    ],
+    "catalogEntry": {
+      "reason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "followUp": "KAN-035/KAN-036 (stroke cap/join parity evidence before support promotion)",
+      "policy": "Expected unsupported while stroke cap/join evidence remains below the 99.95 support threshold."
+    }
+  },
+  "rootCause": {
+    "primaryBucket": "cap-join-parity",
+    "decision": "keep-stable-refusal",
+    "boundedFix": "gpu-inventory-classifier-catalog-only",
+    "rendererFixAttempted": false,
+    "shaderOrSelectorChanged": false,
+    "priorities": [
+      {
+        "bucket": "cap-join-parity",
+        "rank": 1,
+        "evidence": "Production refusal reports cap=butt, join=miter, route=webgpu.coverage.refuse, fallback=coverage.stroke-cap-join-visual-parity-below-threshold.",
+        "decision": "primary root cause for current WebGPU abort"
+      },
+      {
+        "bucket": "coverage-stroke-aa-residual",
+        "rank": 2,
+        "evidence": "M60 remains expected-unsupported at 99.95 with coverage.stroke-cap-join-aa-residual.",
+        "decision": "shared boundary blocks support promotion"
+      },
+      {
+        "bucket": "hairline-row-specific-artifacts",
+        "rank": 3,
+        "evidence": "HairlinesGM lacks row-local WebGPU image and diff because the draw refuses before debug images.",
+        "decision": "dashboard row remains policy-only expected unsupported"
+      }
+    ],
+    "bucketDecisions": {
+      "coverage-stroke": {
+        "classification": "secondary",
+        "reason": "The failing draw is a stroked path and the M60 coverage stroke boundary is still below threshold."
+      },
+      "cap-join-parity": {
+        "classification": "primary",
+        "reason": "The stable diagnostic is specifically stroke cap/join visual parity below threshold."
+      },
+      "aa-quantization": {
+        "classification": "not-primary",
+        "reason": "FOR-267 inspects representative targetColorSpaceBlend=true RGBA16Float boundary cells from m60-bounded-stroke-cap-join. The true round-join cell is byte-exact, but a true round-cap boundary cell and the FOR-266 high-delta overlap cell are not byte-equivalent, and the audit only observes byte-derived coverage proxies rather than raw CPU/GPU coverage planes."
+      },
+      "transform-facts": {
+        "classification": "ruled-out-for-current-abort",
+        "reason": "The observed refusal is under path, edge, clip-depth, and device-bounds budgets with deviceBounds=[260.0, 4.947735, 340.0, 84.61401]."
+      },
+      "unsupported": {
+        "classification": "policy-result",
+        "reason": "The row remains expected-unsupported until row-local 99.95 evidence exists."
+      }
+    },
+    "cpuReferenceStatus": {
+      "similarity": 97.678016,
+      "strictSupportThreshold": 99.95,
+      "supportThresholdMet": false
+    }
+  },
+  "rowLocalArtifactAvailability": {
+    "reference": {
+      "available": true,
+      "path": "skia-integration-tests/src/test/resources/original-888/hairlines.png",
+      "kind": "skia-upstream-original-888"
+    },
+    "cpuStats": {
+      "available": true,
+      "path": "skia-integration-tests/test-similarity-report.md",
+      "similarity": 97.678016,
+      "matchingPixels": 1526219,
+      "totalPixels": 1562500
+    },
+    "gpuStableRefusal": {
+      "available": true,
+      "reason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "route": "webgpu.coverage.refuse",
+      "transientXmlPath": "gpu-raster/build/test-results/test/TEST-org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest.xml"
+    },
+    "webGpuImage": {
+      "available": false,
+      "reason": "stable-refusal-before-debug-images",
+      "pathConvention": "gpu-raster/build/debug-images/hairlines-gpu.png"
+    },
+    "rowLocalDiffImage": {
+      "available": false,
+      "reason": "stable-refusal-before-debug-images",
+      "pathConvention": "gpu-raster/build/debug-images/hairlines-diff.png"
+    }
+  },
+  "nonClaims": [
+    "KAN-035 does not claim HairlinesGM WebGPU support.",
+    "KAN-035 does not claim broad hairline Path AA support.",
+    "KAN-035 does not lower the 99.95 support threshold.",
+    "KAN-035 does not increase the 256 WebGPU AA edge budget.",
+    "KAN-035 does not change renderer, shader, selector, or PipelineKey behavior.",
+    "KAN-035 does not port Ganesh, Graphite, SkSL compiler, SkSL IR, or SkSL VM."
+  ],
+  "validationRows": [
+    {
+      "id": "hairlines-replay-stable-refusal",
+      "status": "pass",
+      "evidence": "HairlinesCrossBackendTest refuses via coverage.stroke-cap-join-visual-parity-below-threshold under the current budgets."
+    },
+    {
+      "id": "gpu-inventory-classifier-stable",
+      "status": "pass",
+      "evidence": "GpuInventoryFailureReport classifies the Hairlines refusal as expected-unsupported-diagnostic and keeps future coverage codes fail-closed."
+    },
+    {
+      "id": "root-cause-unique-primary",
+      "status": "pass",
+      "evidence": "Primary bucket is cap-join-parity, with coverage stroke residual and row-specific artifact gaps as ordered follow-ups."
+    },
+    {
+      "id": "policy-row-preserved",
+      "status": "pass",
+      "evidence": "skia-gm-hairlines remains expected-unsupported with coverage.hairline.row-specific-artifacts-required."
+    },
+    {
+      "id": "budgets-preserved",
+      "status": "pass",
+      "evidence": "Path verb, edge, support threshold, renderer, and shader policies are unchanged."
+    }
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 25,
+    "missingCommittedArtifacts": 0,
+    "missing": [],
+    "transientArtifactsDocumentedButNotRequired": [
+      "gpu-raster/build/test-results/test/TEST-org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest.xml",
+      "gpu-raster/build/reports/gpu-inventory/gpu-inventory-failure-classification.json",
+      "gpu-raster/build/reports/gpu-inventory/gpu-inventory-failure-classification.md"
+    ]
+  },
+  "artifactPaths": [
+    ".upstream/specs/geometry-coverage/02-lowering-rules.md",
+    ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+    ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/tools/GpuInventoryFailureReport.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/tools/GpuInventoryFailureReportTest.kt",
+    "reports/wgsl-pipeline/2026-06-04-for-318-path-aa-arc-stroke-hairline-scout.md",
+    "reports/wgsl-pipeline/2026-06-10-kan-026-hairlines-harness.md",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-026-hairlines-harness/kan-026-hairlines-harness.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json",
+    "reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json",
+    "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+    "skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt",
+    "skia-integration-tests/src/test/resources/original-888/hairlines.png",
+    "skia-integration-tests/test-similarity-report.md",
+    "skia-integration-tests/test-similarity-scores.properties"
+  ]
+}

@@ -133,6 +133,48 @@ class GpuInventoryFailureReportTest {
     }
 
     @Test
+    fun `stroke cap join below threshold diagnostics are expected unsupported and future coverage codes fail closed`() {
+        val testRoot = Files.createTempDirectory("gpu-inventory-stroke-cap-join")
+        val xml = testRoot.resolve("TEST-org.skia.gpu.webgpu.InventoryStrokeCapJoin.xml")
+        Files.writeString(
+            xml,
+            """
+            |<?xml version="1.0" encoding="UTF-8"?>
+            |<testsuite name="org.skia.gpu.webgpu.InventoryStrokeCapJoin" tests="3" failures="3" skipped="0" errors="0">
+            |  <testcase classname="org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest" name="HairlinesGM matches reference on raster and GPU backends()">
+            |    <failure message="refused path">diagnostic=backend=GPU,reason=coverage.stroke-cap-join-visual-parity-below-threshold,action=RefuseDiagnostic(coverage.stroke-cap-join-visual-parity-below-threshold)</failure>
+            |  </testcase>
+            |  <testcase classname="org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest" name="m60 boundary">
+            |    <failure message="reason=coverage.stroke-cap-join-visual-parity-below-threshold">M60 remains below the 99.95 support threshold.</failure>
+            |  </testcase>
+            |  <testcase classname="org.skia.gpu.webgpu.StrokeCapJoinSceneCaptureTest" name="future code">
+            |    <failure message="reason=coverage.stroke-cap-join-v2">Unknown future diagnostic must not be accepted silently.</failure>
+            |  </testcase>
+            |</testsuite>
+            """.trimMargin(),
+        )
+
+        val summary = GpuInventoryFailureReport.run(testRoot)
+
+        assertEquals(2, summary.byCategory.getValue(GpuInventoryFailureCategory.ExpectedUnsupportedDiagnostic))
+        assertEquals(1, summary.byCategory.getValue(GpuInventoryFailureCategory.UnexpectedException))
+
+        val expectedUnsupported = summary.records
+            .filter { it.category == GpuInventoryFailureCategory.ExpectedUnsupportedDiagnostic }
+        assertTrue(expectedUnsupported.all { it.reason == "coverage.stroke-cap-join-visual-parity-below-threshold" })
+
+        val unknownReasons = summary.records
+            .filter { it.category == GpuInventoryFailureCategory.UnexpectedException }
+            .map { it.reason }
+            .toSet()
+        assertTrue(unknownReasons.contains("unknown diagnostic code: coverage.stroke-cap-join-v2"))
+
+        val markdown = GpuInventoryFailureReport.toMarkdown(summary)
+        assertTrue(markdown.contains("| `coverage.stroke-cap-join-visual-parity-below-threshold` |"))
+        assertTrue(markdown.contains("99.95 support threshold"))
+    }
+
+    @Test
     fun `lists out of scope crop non null rows in expected unsupported inventory section`() {
         val testRoot = Files.createTempDirectory("gpu-inventory-crop-tests")
         val xml = testRoot.resolve("TEST-org.skia.gpu.webgpu.InventoryCrop.xml")
