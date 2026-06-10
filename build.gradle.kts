@@ -312,6 +312,7 @@ fun renderPipelineConformanceReport(
     vectorDecisionReportPresent: Boolean,
     legacyWgslDiagnosticsAllowlistCount: Int,
     runtimeEffectSupportMatrixCounts: String,
+    runtimeEffectLayoutV2Counts: String,
 ): String {
     val byName = suites
         .sortedBy { it.className }
@@ -394,7 +395,7 @@ fun renderPipelineConformanceReport(
         |${row("Simple SaveLayer image-filter", status("org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest"), "`SimpleSaveLayerImageFilterSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `save-layer.image-filter.color-filter-matrix.v1`; WebGPU selects `webgpu.image-filter.color-filter.layer-composite`, records `prepassRoute=null`, `materialiseStages=0`, `fallbackReason=none`, compares against an analytic SaveLayer ColorFilter(Matrix) oracle at local threshold 99%, and keeps non-claims for arbitrary layer stacks, multi-node DAGs, broad image-filter support, CPU readback fallback, and global threshold changes")}
         |${row("SimpleRT runtime effect", status("org.skia.gpu.webgpu.SimpleRuntimeEffectSceneEvidenceTest"), "`SimpleRuntimeEffectSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `runtime.simple_rt.descriptor.rect.v1`; WebGPU selects `webgpu.runtime-effect.descriptor.simple_rt`, validates and reflects `runtime_simple_rt.wgsl` with `gColor@0`, records `fallbackReason=none`, compares against an analytic SimpleRT coordinate-color oracle at local tolerance 1 and threshold 99.95%, references reporting-only CPU/GPU performance artifacts, and keeps stable refusals for missing WGSL descriptors/arbitrary SkSL plus non-claims for dynamic SkSL compilation, SkSL IR/VM, broad runtime effects, SpiralRT promotion, runtime color-filter/blender/image-filter, and live-editing breadth")}
         |${row("Image rect lowering", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest"), "`ImageRectLowering` captures source rect, destination rect, transform facts, opaque paint-owned sampling payload handoff, and route id; axis-aligned image rects select analytic rect coverage, transformed descriptor tests select path-like coverage without moving sampling/pixels/filtering/colorspace into geometry; CPU oracle covers one axis-aligned image rect and WebGPU selector diagnostics record the adapter-gated image-rect route")}
-        |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; matrix counts $runtimeEffectSupportMatrixCounts")}
+        |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; support matrix counts $runtimeEffectSupportMatrixCounts; layout V2 counts $runtimeEffectLayoutV2Counts")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -479,6 +480,9 @@ fun renderPipelineConformanceReport(
         |- Runtime-effect V2 support matrix: `reports/wgsl-pipeline/runtime-effects-v2/support-matrix.md`
         |  lists descriptor-backed runtime effects separately from adapter-backed scene parity, keeps policy refusals explicit, and avoids broad runtime-effect claims;
         |  current counts are $runtimeEffectSupportMatrixCounts.
+        |- Runtime-effect layout V2 report: `reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.md`
+        |  compares Kotlin descriptor offsets/sizes to WGSL lowered reflection for registered runtime effects and keeps uniform values out of runtime-effect pipeline cache keys;
+        |  current counts are $runtimeEffectLayoutV2Counts.
         |- GPU similarity investigation: `reports/wgsl-pipeline/2026-05-27-m31-gpu-similarity-investigation.md`
         |  classifies `DrawBitmapRect3*` and `DrawBitmapRectSkbug4734*` below-floor failures as implementation-regression candidates
         |  with no floor change in this milestone slice.
@@ -647,12 +651,21 @@ tasks.register("pipelineConformanceReport") {
             ?: throw GradleException(
                 "Missing runtime-effect V2 support matrix status counts in `reports/wgsl-pipeline/runtime-effects-v2/support-matrix.md`."
             )
+        val runtimeEffectLayoutV2Counts = file("reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.md")
+            .readLines()
+            .firstOrNull { it.startsWith("Status counts: ") }
+            ?.removePrefix("Status counts: ")
+            ?.removeSuffix(".")
+            ?: throw GradleException(
+                "Missing runtime-effect layout V2 status counts in `reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.md`."
+            )
         val report = renderPipelineConformanceReport(
             commit = commit,
             suites = suites,
             vectorDecisionReportPresent = vectorDecisionReportPresent,
             legacyWgslDiagnosticsAllowlistCount = legacyWgslDiagnosticsAllowlistCount,
             runtimeEffectSupportMatrixCounts = runtimeEffectSupportMatrixCounts,
+            runtimeEffectLayoutV2Counts = runtimeEffectLayoutV2Counts,
         )
         val target = outputFile.get().asFile
         target.parentFile.mkdirs()
