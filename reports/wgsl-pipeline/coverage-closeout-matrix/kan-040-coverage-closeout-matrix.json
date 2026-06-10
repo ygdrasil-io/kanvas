@@ -1,0 +1,385 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-040",
+  "packId": "kan-040-coverage-stroke-clip-closeout-matrix",
+  "status": "pass",
+  "closureDecision": "coverage-stroke-clip-closeout-matrix",
+  "claimLevel": "pm-coverage-stroke-clip-aggregation-no-new-renderer-support",
+  "supportClaim": "m57-aaclip-bounded-grid-only",
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "edgeBudgetChanged": false,
+  "readinessDelta": 0,
+  "summary": {
+    "totalRows": 6,
+    "supportableBounded": 1,
+    "visibleNonSupportable": 1,
+    "expectedUnsupported": 3,
+    "dependencyGated": 1,
+    "supportClaims": 1,
+    "unsupportedRows": 5
+  },
+  "categoryDefinitions": {
+    "supportable-bounded": "A bounded row with reference, CPU/GPU, diff/stat, route, and fallbackReason=none.",
+    "visible-non-supportable": "A visible row with stable refusal or policy evidence that is not supportable under current proof rules.",
+    "expected-unsupported": "A selected row with stable unsupported diagnostic and explicit support blockers.",
+    "dependency-gated": "A row whose missing artifacts or dependency facts block any support claim."
+  },
+  "matrixRows": [
+    {
+      "ticket": "KAN-004",
+      "id": "m57-aaclip-bounded-grid",
+      "family": "AA clips",
+      "classification": "supportable-bounded",
+      "rowStatus": "pass",
+      "supportClaim": true,
+      "fallbackReason": "none",
+      "reasonCodeStable": true,
+      "route": "webgpu.coverage.aaclip-bounded-grid",
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "missingProofs": [],
+      "evidencePack": "reports/wgsl-pipeline/scenes/artifacts/kan-004-clips-aa/kan-004-clips-aa.json",
+      "summary": "Bounded AA clip row remains supported with reference/CPU/GPU/diff/stat/route and fallbackReason=none.",
+      "details": {
+        "edgeCount": 90,
+        "edgeBudget": 256,
+        "clipOp": "intersect",
+        "clipShape": "aa-rect-grid",
+        "gpuSimilarity": 98.83
+      }
+    },
+    {
+      "ticket": "KAN-035",
+      "id": "skia-gm-hairlines",
+      "family": "HairlinesGM",
+      "classification": "visible-non-supportable",
+      "rowStatus": "expected-unsupported",
+      "supportClaim": false,
+      "fallbackReason": "coverage.hairline.row-specific-artifacts-required",
+      "reasonCodeStable": true,
+      "route": "webgpu.coverage.refuse",
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": false,
+        "diff": false,
+        "stats": true,
+        "route": true
+      },
+      "missingProofs": [
+        "rowLocalDiffImage",
+        "webGpuImage"
+      ],
+      "evidencePack": "reports/wgsl-pipeline/hairlines-root-cause/kan-035-hairlines-root-cause.json",
+      "summary": "HairlinesGM remains visible but non-supportable; current abort is cap/join parity and row-local WebGPU image/diff are absent.",
+      "details": {
+        "primaryRootCause": "cap-join-parity",
+        "observedFallback": "coverage.stroke-cap-join-visual-parity-below-threshold",
+        "coverageEdgeCount": 60,
+        "edgeBudget": 256
+      }
+    },
+    {
+      "ticket": "KAN-036",
+      "id": "circular-arcs-stroke-butt-start0-sweep90-usecenter-false-aa-true",
+      "family": "Butt stroke non-hairline",
+      "classification": "expected-unsupported",
+      "rowStatus": "expected-unsupported",
+      "supportClaim": false,
+      "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "reasonCodeStable": true,
+      "route": "webgpu.selected-cell-test-harness.refused",
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": false,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "missingProofs": [
+        "webGpuDiff",
+        "webGpuImage"
+      ],
+      "evidencePack": "reports/wgsl-pipeline/butt-stroke-non-hairline/kan-036-butt-stroke-non-hairline.json",
+      "summary": "Selected butt-cap non-hairline row stays expected-unsupported until WebGPU image/diff and CPU-vs-Skia support-ready evidence exist.",
+      "details": {
+        "strokeWidth": 15.0,
+        "pathVerbCount": 67,
+        "coverageEdgeCount": 66,
+        "edgeBudget": 256
+      }
+    },
+    {
+      "ticket": "KAN-037",
+      "id": "m60-bounded-stroke-cap-join",
+      "family": "Caps/joins micro-matrix",
+      "classification": "expected-unsupported",
+      "rowStatus": "expected-unsupported",
+      "supportClaim": false,
+      "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "reasonCodeStable": true,
+      "route": "webgpu.coverage.refuse",
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "missingProofs": [
+        "webGpuSupportDiff",
+        "webGpuSupportImage"
+      ],
+      "evidencePack": "reports/wgsl-pipeline/caps-joins-micro-matrix/kan-037-caps-joins-micro-matrix.json",
+      "summary": "Round-round candidate and butt/square sentinels remain expected-unsupported with closed-contour CPU join evidence still missing.",
+      "details": {
+        "candidate": "round-round",
+        "capJoinMatrix": [
+          "butt-bevel",
+          "round-round",
+          "square-bevel"
+        ],
+        "coverageEdgeCount": 18,
+        "edgeBudget": 256,
+        "blockingCondition": "missing_cpu_gpu_coverage_equivalence_for_round_cap_join_boundary_cells"
+      }
+    },
+    {
+      "ticket": "KAN-038",
+      "id": "skia-gm-dashing-width1-pattern1-1-aa",
+      "family": "Dashes",
+      "classification": "dependency-gated",
+      "rowStatus": "expected-unsupported",
+      "supportClaim": false,
+      "fallbackReason": "coverage.dashing.row-specific-artifacts-required",
+      "reasonCodeStable": true,
+      "route": "policy-row",
+      "proofs": {
+        "reference": false,
+        "cpu": false,
+        "gpu": false,
+        "diff": false,
+        "stats": false,
+        "route": false
+      },
+      "missingProofs": [
+        "postDashVerbEdgeStats",
+        "webGpuSupportDiff",
+        "webGpuSupportImage"
+      ],
+      "evidencePack": "reports/wgsl-pipeline/dashes-bounded-v1/kan-038-dashes-bounded-v1.json",
+      "summary": "Bounded dash candidate is identified but gated by missing row-specific reference/CPU/GPU/diff/stat/route and post-dash verb/edge diagnostics.",
+      "details": {
+        "dashIntervalCount": 2,
+        "dashIntervalBudget": 8,
+        "phase": 0.0,
+        "strokeWidth": 1.0,
+        "supportReady": false,
+        "postDashVerbCount": "not-recorded",
+        "postDashEdgeCount": "not-recorded"
+      }
+    },
+    {
+      "ticket": "KAN-039",
+      "id": "m60-bounded-nested-rrect-clip",
+      "family": "Nested clips",
+      "classification": "expected-unsupported",
+      "rowStatus": "expected-unsupported",
+      "supportClaim": false,
+      "fallbackReason": "coverage.nested-clip-visual-parity-below-threshold",
+      "reasonCodeStable": true,
+      "route": "webgpu.coverage.nested-rrect-clip.expected-unsupported",
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "missingProofs": [
+        "webGpuSupportRoute"
+      ],
+      "evidencePack": "reports/wgsl-pipeline/nested-clip-stack-v1/kan-039-nested-clip-stack-v1.json",
+      "summary": "Nested rect/rrect clip row stays expected-unsupported below visual parity floor and lacks selector-owned fallbackReason=none route.",
+      "details": {
+        "clipDepth": 3,
+        "clipDepthBudget": 4,
+        "edgeCount": 72,
+        "edgeBudget": 256,
+        "clipOp": "intersect+intersect+difference",
+        "clipShape": "rect+rect+rrect-oval",
+        "gpuSimilarity": 98.48,
+        "supportThreshold": 99.95
+      }
+    }
+  ],
+  "claimGuard": {
+    "supportRowsMissingProofs": [],
+    "unsupportedRowsMissingFallback": [],
+    "unsupportedRowsUnstableReason": [],
+    "hiddenPromotionRows": [],
+    "budgetOrThresholdChanges": [],
+    "pmBundleCategoriesVisible": true
+  },
+  "requiredValidation": [
+    "validateKan035HairlinesRootCause",
+    "validateKan036ButtStrokeNonHairline",
+    "validateKan037CapsJoinsMicroMatrix",
+    "validateKan038DashesBoundedV1",
+    "validateKan039NestedClipStackV1",
+    "pipelineSceneDashboardGate",
+    "pipelinePmBundle"
+  ],
+  "nonClaims": [
+    "KAN-040 does not add renderer, shader, selector, PipelineKey, threshold, edge-budget, dash-budget, or clip-depth changes.",
+    "KAN-040 does not claim broad Path AA, hairline, stroke, cap/join, dash, AA clip, or clip-stack support.",
+    "KAN-040 does not promote visible non-supportable, expected-unsupported, or dependency-gated rows to support.",
+    "KAN-040 does not replace AA clip evidence with integer scissor substitution.",
+    "KAN-040 does not port Ganesh or Graphite and does not add SkSL compiler behavior."
+  ],
+  "validationRows": [
+    {
+      "id": "support-claims-have-complete-proofs",
+      "status": "pass",
+      "evidence": "The only support row is m57-aaclip-bounded-grid and all support proof booleans are true."
+    },
+    {
+      "id": "unsupported-rows-have-stable-reasons",
+      "status": "pass",
+      "evidence": "All five non-support rows carry stable non-none fallback reason codes."
+    },
+    {
+      "id": "pm-categories-visible",
+      "status": "pass",
+      "evidence": "Matrix includes supportable-bounded, visible-non-supportable, expected-unsupported, and dependency-gated categories."
+    },
+    {
+      "id": "source-policy-preserved",
+      "status": "pass",
+      "evidence": "No source pack reports renderer, shader, threshold, edge-budget, shared-coverage, or hidden promotion changes."
+    },
+    {
+      "id": "artifact-audit-complete",
+      "status": "pass",
+      "evidence": "100 committed source artifacts are present."
+    }
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 100,
+    "missingCommittedArtifacts": 0,
+    "missing": []
+  },
+  "artifactPaths": [
+    ".upstream/specs/geometry-coverage/01-contracts-geometry-coverage.md",
+    ".upstream/specs/geometry-coverage/02-lowering-rules.md",
+    ".upstream/specs/geometry-coverage/04-webgpu-coverage-backend.md",
+    ".upstream/specs/geometry-coverage/05-fallback-diagnostics.md",
+    ".upstream/specs/geometry-coverage/06-validation-and-perf.md",
+    ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+    ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/tools/GpuInventoryFailureReport.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/CircularArcsStrokeButtSelectedCellCaptureTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/NestedClipSceneCaptureTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/DashingCrossBackendTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/tools/GpuInventoryFailureReportTest.kt",
+    "render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt",
+    "render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt",
+    "reports/wgsl-pipeline/2026-05-31-gra-336-path-aa-clip-budget-review.md",
+    "reports/wgsl-pipeline/2026-05-31-m48-expected-unsupported-breadth-evidence.md",
+    "reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-promotion.md",
+    "reports/wgsl-pipeline/2026-05-31-m60-path-aa-budget-audit.md",
+    "reports/wgsl-pipeline/2026-06-01-m60-nested-clip-path-aa-promotion.md",
+    "reports/wgsl-pipeline/2026-06-03-for-266-stroke-cap-join-aa-residual.md",
+    "reports/wgsl-pipeline/2026-06-03-for-267-round-cap-join-coverage-equivalence.md",
+    "reports/wgsl-pipeline/2026-06-04-for-301-m60-skaaclip-band-trace.md",
+    "reports/wgsl-pipeline/2026-06-04-for-304-renderer-feature-conversion-wave-closeout.md",
+    "reports/wgsl-pipeline/2026-06-04-for-318-path-aa-arc-stroke-hairline-scout.md",
+    "reports/wgsl-pipeline/2026-06-04-for-322-circular-arcs-stroke-butt-selected-cell-harness.md",
+    "reports/wgsl-pipeline/2026-06-10-kan-003-caps-joins-aa.md",
+    "reports/wgsl-pipeline/2026-06-10-kan-004-clips-aa.md",
+    "reports/wgsl-pipeline/2026-06-10-kan-026-hairlines-harness.md",
+    "reports/wgsl-pipeline/butt-stroke-non-hairline/kan-036-butt-stroke-non-hairline.json",
+    "reports/wgsl-pipeline/caps-joins-micro-matrix/kan-037-caps-joins-micro-matrix.json",
+    "reports/wgsl-pipeline/dashes-bounded-v1/kan-038-dashes-bounded-v1.json",
+    "reports/wgsl-pipeline/hairlines-root-cause/kan-035-hairlines-root-cause.json",
+    "reports/wgsl-pipeline/nested-clip-stack-v1/kan-039-nested-clip-stack-v1.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329/circular-arcs-stroke-butt-selected-cell-cpu-raster-audit-for329.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/circular-arcs-stroke-butt-selected-cell-harness-for322.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-harness-for322/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-cpu-diff-for328/cpu-vs-skia-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/circular-arcs-stroke-butt-selected-cell-skia-reference-for327.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia-reference-provenance.json",
+    "reports/wgsl-pipeline/scenes/artifacts/circular-arcs-stroke-butt-selected-cell-skia-reference-for327/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-003-caps-joins-aa/kan-003-caps-joins-aa.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-004-clips-aa/kan-004-clips-aa.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-026-hairlines-harness/kan-026-hairlines-harness.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/gpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/gpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-analytic-clip-model-reconciliation-for302.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-skaaclip-band-trace-for301.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/experimental-gpu-diagnostic.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-dashing-edge-budget/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json",
+    "reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json",
+    "reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json",
+    "reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json",
+    "reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json",
+    "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json",
+    "reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json",
+    "reports/wgsl-pipeline/scenes/generated/results.json",
+    "skia-integration-tests/src/main/kotlin/org/skia/tests/DashingGM.kt",
+    "skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt",
+    "skia-integration-tests/src/test/resources/original-888/hairlines.png",
+    "skia-integration-tests/test-similarity-report.md",
+    "skia-integration-tests/test-similarity-scores.properties"
+  ]
+}
