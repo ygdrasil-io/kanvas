@@ -385,6 +385,7 @@ fun renderPipelineConformanceReport(
         |KAN-036 butt stroke non-hairline bounded row evidence with stable expected-unsupported classification,
         |KAN-037 caps/joins micro-matrix evidence with stable expected-unsupported classification,
         |KAN-038 dashes bounded V1 evidence with stable expected-unsupported classification,
+        |KAN-039 nested clip-stack V1 evidence with stable expected-unsupported classification,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -426,6 +427,7 @@ fun renderPipelineConformanceReport(
         |${row("KAN-036 butt stroke non-hairline", "expected-unsupported", "`validateKan036ButtStrokeNonHairline` selects one non-hairline no-dash butt-cap stroke row, records WebGPU stable refusal `coverage.stroke-cap-join-visual-parity-below-threshold` with `coverageEdgeCount=66/256`, blocks support until WebGPU image/diff and CPU-vs-Skia support-ready evidence exist, and makes no renderer, shader, threshold, or edge-budget change.")}
         |${row("KAN-037 caps/joins micro-matrix", "expected-unsupported", "`validateKan037CapsJoinsMicroMatrix` selects `round-round`, preserves `butt-bevel` and `square-bevel` sentinels, records WebGPU stable refusal `coverage.stroke-cap-join-visual-parity-below-threshold` with `coverageEdgeCount=18/256`, keeps closed-contour join CPU evidence as a visible support blocker, and makes no renderer, shader, threshold, or edge-budget change.")}
         |${row("KAN-038 dashes bounded V1", "expected-unsupported", "`validateKan038DashesBoundedV1` identifies `skia-gm-dashing-width1-pattern1-1-aa` with 2/8 dash intervals, phase 0, stroke width 1, path effect before stroke, keeps it refused via `coverage.dashing.row-specific-artifacts-required`, preserves the `path-aa-dashing-edge-budget` sentinel via `coverage.edge-count-exceeded`, and makes no renderer, shader, threshold, edge-budget, or dash-budget change.")}
+        |${row("KAN-039 nested clip-stack V1", "expected-unsupported", "`validateKan039NestedClipStackV1` selects `m60-bounded-nested-rrect-clip`, records clip sequence `rect/intersect + rect/intersect + rrect-oval/difference`, clipDepth `3/4`, edgeCount `72/256`, keeps it refused via `coverage.nested-clip-visual-parity-below-threshold`, preserves `m57-aaclip-bounded-grid` support, and makes no renderer, shader, threshold, edge-budget, clip-depth budget, or integer-scissor substitution change.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -800,6 +802,7 @@ tasks.register("pipelineConformance") {
         "validateKan036ButtStrokeNonHairline",
         "validateKan037CapsJoinsMicroMatrix",
         "validateKan038DashesBoundedV1",
+        "validateKan039NestedClipStackV1",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -823,6 +826,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-036 butt stroke non-hairline row evidence and stable refusal classification: validateKan036ButtStrokeNonHairline
             |- REQUIRED KAN-037 caps/joins micro-matrix evidence and stable refusal classification: validateKan037CapsJoinsMicroMatrix
             |- REQUIRED KAN-038 dashes bounded V1 evidence and stable refusal classification: validateKan038DashesBoundedV1
+            |- REQUIRED KAN-039 nested clip-stack V1 evidence and stable refusal classification: validateKan039NestedClipStackV1
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5236,6 +5240,51 @@ tasks.register<Exec>("validateKan038DashesBoundedV1") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan039NestedClipStackV1") {
+    group = "verification"
+    description = "Materializes and validates the KAN-039 nested clip-stack V1 evidence and stable refusal classification."
+    dependsOn("validateKan004ClipsAa", "validateKan038DashesBoundedV1")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/nested-clip-stack-v1")
+    commandLine(
+        "python3",
+        "scripts/validate_kan039_nested_clip_stack_v1.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan039_nested_clip_stack_v1.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-004-clips-aa/kan-004-clips-aa.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-004-clips-aa.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m60-nested-clip-path-aa-promotion.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/stats.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/skia.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/cpu-diff.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/gpu-diff.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/stats.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-skaaclip-band-trace-for301.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-301-m60-skaaclip-band-trace.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip/m60-analytic-clip-model-reconciliation-for302.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-304-renderer-feature-conversion-wave-closeout.md"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/NestedClipSceneCaptureTest.kt"))
+    inputs.file(layout.projectDirectory.file("render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt"))
+    inputs.file(layout.projectDirectory.file("render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelectorTest.kt"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/01-contracts-geometry-coverage.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/04-webgpu-coverage-backend.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/05-fallback-diagnostics.md"))
+    outputs.file(outputDir.file("kan-039-nested-clip-stack-v1.json"))
+    outputs.file(outputDir.file("kan-039-nested-clip-stack-v1.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -5389,6 +5438,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan036ButtStrokeNonHairline",
         "validateKan037CapsJoinsMicroMatrix",
         "validateKan038DashesBoundedV1",
+        "validateKan039NestedClipStackV1",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
