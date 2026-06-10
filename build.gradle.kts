@@ -387,6 +387,7 @@ fun renderPipelineConformanceReport(
         |KAN-038 dashes bounded V1 evidence with stable expected-unsupported classification,
         |KAN-039 nested clip-stack V1 evidence with stable expected-unsupported classification,
         |KAN-040 coverage/stroke/clip closeout matrix with support/refusal proof guards,
+        |KAN-041 image-filter DAG bounded V3 evidence with two support rows and stable residual refusals,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -430,6 +431,7 @@ fun renderPipelineConformanceReport(
         |${row("KAN-038 dashes bounded V1", "expected-unsupported", "`validateKan038DashesBoundedV1` identifies `skia-gm-dashing-width1-pattern1-1-aa` with 2/8 dash intervals, phase 0, stroke width 1, path effect before stroke, keeps it refused via `coverage.dashing.row-specific-artifacts-required`, preserves the `path-aa-dashing-edge-budget` sentinel via `coverage.edge-count-exceeded`, and makes no renderer, shader, threshold, edge-budget, or dash-budget change.")}
         |${row("KAN-039 nested clip-stack V1", "expected-unsupported", "`validateKan039NestedClipStackV1` selects `m60-bounded-nested-rrect-clip`, records clip sequence `rect/intersect + rect/intersect + rrect-oval/difference`, clipDepth `3/4`, edgeCount `72/256`, keeps it refused via `coverage.nested-clip-visual-parity-below-threshold`, preserves `m57-aaclip-bounded-grid` support, and makes no renderer, shader, threshold, edge-budget, clip-depth budget, or integer-scissor substitution change.")}
         |${row("KAN-040 coverage/stroke/clip closeout matrix", "passed", "`validateKan040CoverageCloseoutMatrix` aggregates HairlinesGM, butt stroke, caps/joins, dashes, AA clip, and nested clip rows into supportable-bounded, visible-non-supportable, expected-unsupported, and dependency-gated categories; it fails support claims without reference/CPU/GPU/diff/stat/route plus `fallbackReason=none` and refuses unsupported rows without stable fallbacks.")}
+        |${row("KAN-041 image-filter DAG bounded V3", "passed", "`validateKan041ImageFilterDagBoundedV3` records two bounded support scenes (`crop-image-filter-nonnull-prepass`, `m61-compose-cf-matrix-transform-dag-v2`) with reference/CPU/GPU/diff/stat/route and `fallbackReason=none`, keeps BigTile/ImageFiltersGraph/out-of-scope Crop rows refused with stable reasons, and makes no renderer, shader, threshold, readback, picture-prepass, or broad DAG claim.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -806,6 +808,7 @@ tasks.register("pipelineConformance") {
         "validateKan038DashesBoundedV1",
         "validateKan039NestedClipStackV1",
         "validateKan040CoverageCloseoutMatrix",
+        "validateKan041ImageFilterDagBoundedV3",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -831,6 +834,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-038 dashes bounded V1 evidence and stable refusal classification: validateKan038DashesBoundedV1
             |- REQUIRED KAN-039 nested clip-stack V1 evidence and stable refusal classification: validateKan039NestedClipStackV1
             |- REQUIRED KAN-040 coverage/stroke/clip closeout matrix and claim guards: validateKan040CoverageCloseoutMatrix
+            |- REQUIRED KAN-041 image-filter DAG bounded V3 support/refusal evidence: validateKan041ImageFilterDagBoundedV3
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5315,6 +5319,37 @@ tasks.register<Exec>("validateKan040CoverageCloseoutMatrix") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan041ImageFilterDagBoundedV3") {
+    group = "verification"
+    description = "Materializes and validates the KAN-041 image-filter DAG bounded V3 support/refusal evidence."
+    dependsOn(
+        "validateKan006IntermediateTextureOwnership",
+        "validateKan008ImageFilterDagRefusals",
+        "validateKan040CoverageCloseoutMatrix",
+    )
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/image-filter-dag-bounded-v3")
+    commandLine(
+        "python3",
+        "scripts/validate_kan041_image_filter_dag_bounded_v3.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan041_image_filter_dag_bounded_v3.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m52-inventory-promotion-pack.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m54-hard-feature-depth-pack.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m61-image-filter-dag-v2-promotion.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/target/high-performance-wgsl-pipeline-target.md"))
+    outputs.file(outputDir.file("kan-041-image-filter-dag-bounded-v3.json"))
+    outputs.file(outputDir.file("kan-041-image-filter-dag-bounded-v3.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -5470,6 +5505,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan038DashesBoundedV1",
         "validateKan039NestedClipStackV1",
         "validateKan040CoverageCloseoutMatrix",
+        "validateKan041ImageFilterDagBoundedV3",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
