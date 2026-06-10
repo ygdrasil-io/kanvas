@@ -1,0 +1,621 @@
+{
+  "artifactAudit": {
+    "missing": []
+  },
+  "claimAudit": {
+    "hiddenBroadClaims": []
+  },
+  "claimLevel": "runtime-effects-v2-evidence-aggregation-no-new-rendering-capability",
+  "counts": {
+    "cpuOnly": 2,
+    "dependencyGated": 0,
+    "descriptorBacked": 6,
+    "expectedUnsupported": 2,
+    "gpuBacked": 4,
+    "hiddenBroadClaims": 0,
+    "layoutMatched": 4,
+    "missingArtifacts": 0,
+    "previewEditedStates": 4,
+    "supportClaimsWithArtifacts": 4,
+    "totalRows": 8,
+    "unsupportedRowsVisible": 4
+  },
+  "nonClaims": [
+    "No dynamic SkSL compilation.",
+    "No SkSL IR or VM.",
+    "No broad runtime-effect support beyond registered descriptors.",
+    "No arbitrary user WGSL input.",
+    "No runtime color-filter, blender, image-filter helper, child shader, or live editor broad claim.",
+    "No global similarity threshold change.",
+    "No GPU child shader support claim.",
+    "No arbitrary runtime-effect DAG support.",
+    "No child shader texture/resource binding allocation claim.",
+    "No uniform values in PipelineKey.",
+    "No broad ColorFilter support.",
+    "No arbitrary runtime ColorFilter WGSL support.",
+    "No runtime ColorFilter uniforms, child ColorFilters, LUTs, or color-space wrappers.",
+    "No shader-input runtime ColorFilter route beyond solid-color direct rect.",
+    "No global threshold or color policy change.",
+    "No support for all blend modes.",
+    "No GPU runtime blender support.",
+    "No implicit destination read.",
+    "No CPU readback fallback.",
+    "No hidden layer compatibility path.",
+    "No live SkSL editor.",
+    "No live controls for unregistered effects.",
+    "No new WGSL generated per uniform value.",
+    "No Kadre native window requirement for headless validation.",
+    "No new rendering capability is introduced by this bundle.",
+    "No Kadre native CI requirement."
+  ],
+  "packId": "kan-034-runtime-effects-v2-evidence-bundle-v1",
+  "rows": [
+    {
+      "artifactGroups": {},
+      "cpuImplementationId": null,
+      "descriptorStatus": "policy-only",
+      "exactState": "expected-unsupported",
+      "fallbackReason": "runtime-effect.arbitrary-sksl-unsupported",
+      "kind": "policy",
+      "layoutStatus": null,
+      "pipelineCacheKeyPolicy": null,
+      "pmNote": "Kanvas does not dynamically compile SkSL; arbitrary runtime-effect input remains a stable refusal.",
+      "sourceReports": [
+        "supportMatrix"
+      ],
+      "specializedEvidence": {},
+      "stableId": "policy.arbitrary_sksl_input",
+      "supportClaim": false,
+      "supportState": "expected-unsupported",
+      "uniformBlockSize": null,
+      "wgslImplementationId": null
+    },
+    {
+      "artifactGroups": {},
+      "cpuImplementationId": null,
+      "descriptorStatus": "policy-only",
+      "exactState": "expected-unsupported",
+      "fallbackReason": "runtime-effect.wgsl-descriptor-missing",
+      "kind": "policy",
+      "layoutStatus": null,
+      "pipelineCacheKeyPolicy": null,
+      "pmNote": "Runtime effects without a registered WGSL descriptor remain visible expected-unsupported rows.",
+      "sourceReports": [
+        "supportMatrix"
+      ],
+      "specializedEvidence": {},
+      "stableId": "policy.unregistered_wgsl_descriptor",
+      "supportClaim": false,
+      "supportState": "expected-unsupported",
+      "uniformBlockSize": null,
+      "wgslImplementationId": null
+    },
+    {
+      "artifactGroups": {
+        "primarySupport": {
+          "cpu": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/cpu.png",
+          "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/cpu-diff.png",
+          "reference": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/reference.png",
+          "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/route-cpu.json",
+          "routeWebGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/route-webgpu.json",
+          "stats": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/stats.json",
+          "webGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/webgpu.png",
+          "webGpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/webgpu-diff.png"
+        }
+      },
+      "cpuImplementationId": "kotlin/color_filter_luma_to_alpha",
+      "descriptorStatus": "descriptor-backed",
+      "exactState": "gpu-backed",
+      "fallbackReason": "none",
+      "kind": "kColorFilter",
+      "layoutStatus": "layout-matched",
+      "pipelineCacheKeyPolicy": "uniform-values-excluded",
+      "pmNote": "This row is a registered Kotlin/CPU and parser-validated WGSL implementation; it is not broad runtime-effect or dynamic SkSL support.",
+      "sourceReports": [
+        "supportMatrix",
+        "layoutV2",
+        "runtimeColorFilterWgsl"
+      ],
+      "specializedEvidence": {
+        "runtimeColorFilterWgsl": {
+          "cpuSimilarity": 100.0,
+          "fallbackReason": "none",
+          "nonSelectedColorFilters": [
+            {
+              "pmNote": "CPU behavior exists, but this ticket promotes only LumaToAlpha WGSL.",
+              "reason": "runtime-effect.color-filter-cpu-only",
+              "stableId": "runtime.color_filter_noop",
+              "state": "not-promoted"
+            },
+            {
+              "pmNote": "Ternary/Ifs/EarlyReturn tone-map variants stay CPU-only until separately scoped.",
+              "reason": "runtime-effect.color-filter-cpu-only",
+              "stableId": "runtime.color_filter_tonemap",
+              "state": "not-promoted"
+            },
+            {
+              "pmNote": "AlternateLuma depends on working color-space behavior outside this bounded slice.",
+              "reason": "color-filter.color-space-unsupported",
+              "stableId": "runtime.color_filter_g_channel_splat",
+              "state": "dependency-gated"
+            },
+            {
+              "pmNote": "ColorFilter child bindings are not promoted by this direct-rect WGSL route.",
+              "reason": "runtime-effect.color-filter-cpu-only",
+              "stableId": "runtime.color_filter_compose_children",
+              "state": "not-promoted"
+            },
+            {
+              "pmNote": "Runtime ColorFilters without a registered descriptor and parser-reflected WGSL stay refused.",
+              "reason": "runtime-effect.color-filter-wgsl-missing",
+              "stableId": "policy.unregistered_runtime_color_filter_wgsl",
+              "state": "expected-unsupported"
+            }
+          ],
+          "stageOrder": "solid-color shader -> runtime color filter -> fixed-function kSrcOver blend -> store",
+          "status": "pass",
+          "threshold": 99.0,
+          "webGpuSimilarity": 100.0
+        }
+      },
+      "stableId": "runtime.color_filter_luma_to_alpha",
+      "supportClaim": true,
+      "supportState": "gpu-backed",
+      "uniformBlockSize": 0,
+      "wgslImplementationId": "wgsl/runtime_color_filter_luma_to_alpha"
+    },
+    {
+      "artifactGroups": {
+        "runtimeBlenderBoundary": {
+          "blendPlanJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-blend-plan.json",
+          "reportJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.json",
+          "reportMarkdown": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.md",
+          "routeJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-route.json"
+        }
+      },
+      "cpuImplementationId": "kotlin/invert_blender",
+      "descriptorStatus": "descriptor-backed",
+      "exactState": "cpu-only",
+      "fallbackReason": "runtime-effect.blender-dst-read-unsupported",
+      "kind": "kBlender",
+      "layoutStatus": null,
+      "pipelineCacheKeyPolicy": null,
+      "pmNote": "This registered runtime blender has Kotlin/CPU behavior, but its result depends on destination color. WebGPU remains refused until an explicit shader/layer composite BlendPlan exists; this does not support all blend modes.",
+      "sourceReports": [
+        "supportMatrix",
+        "runtimeBlenderBoundary"
+      ],
+      "specializedEvidence": {
+        "blenderBoundary": {
+          "blendPlan": {
+            "candidate": "InvertBlender",
+            "cpuReadbackAllowed": false,
+            "fallbackReasons": [
+              "runtime-effect.blender-dst-read-unsupported",
+              "blend.shader-layer-required"
+            ],
+            "fixedFunctionAllowed": false,
+            "implicitDestinationReadAllowed": false,
+            "kind": "ShaderLayerComposite",
+            "operation": "runtime blender main(src, dst) reads destination color",
+            "reason": "The candidate computes its output from dstColor, so WebGPU cannot use a fixed-function blend state or silently read destination pixels. A future GPU pass must prove an explicit shader/layer composite BlendPlan with no CPU readback.",
+            "requiresDestinationColor": true,
+            "requiresLayerComposite": true,
+            "schemaVersion": "kanvas.runtime-blender-boundary.blend-plan",
+            "stableId": "runtime.invert_blender",
+            "status": "required-not-implemented",
+            "ticket": "KAN-032"
+          },
+          "route": {
+            "cpuFixture": {
+              "dst": [
+                0.25,
+                0.5,
+                0.75,
+                0.4
+              ],
+              "expected": [
+                0.75,
+                0.5,
+                0.25,
+                1.0
+              ],
+              "formula": "(half4(1) - dst).rgb1",
+              "source": "gm/destcolor.cpp invert blender",
+              "src": [
+                1.0,
+                0.0,
+                0.0,
+                0.5
+              ],
+              "status": "pass",
+              "testClass": "SkRuntimeBlenderTest",
+              "testFile": "cpu-raster/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt"
+            },
+            "cpuImplementationId": "kotlin/invert_blender",
+            "fallbackReason": "runtime-effect.blender-dst-read-unsupported",
+            "gpuGate": {
+              "futurePassCondition": "BlendPlan proves an explicit shader/layer composite route for destination color without implicit readback.",
+              "gpuPassAllowedNow": false
+            },
+            "nonClaims": [
+              "No support for all blend modes.",
+              "No GPU runtime blender support.",
+              "No implicit destination read.",
+              "No CPU readback fallback.",
+              "No hidden layer compatibility path.",
+              "No dynamic SkSL compilation.",
+              "No SkSL IR or VM."
+            ],
+            "routeDiagnostics": {
+              "blendPlanArtifact": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-blend-plan.json",
+              "cpuReadbackAllowed": false,
+              "fixedFunctionBlendAllowed": false,
+              "hiddenLayerCompatAllowed": false,
+              "implicitDestinationReadAllowed": false,
+              "requiresDestinationColor": true,
+              "requiresLayerComposite": true
+            },
+            "sceneId": "runtime.invert_blender.boundary.v1",
+            "schemaVersion": "kanvas.runtime-blender-boundary.route",
+            "secondaryFallbackReason": "blend.shader-layer-required",
+            "selectedRoute": "webgpu.runtime-blender.expected-unsupported",
+            "stableId": "runtime.invert_blender",
+            "status": "expected-unsupported",
+            "supportState": "cpu-only",
+            "ticket": "KAN-032",
+            "wgslImplementationId": null
+          },
+          "status": "expected-unsupported"
+        },
+        "stableRefusals": [
+          "runtime-effect.blender-dst-read-unsupported",
+          "blend.shader-layer-required",
+          "runtime-effect.blender-wgsl-descriptor-missing"
+        ]
+      },
+      "stableId": "runtime.invert_blender",
+      "supportClaim": false,
+      "supportState": "cpu-only",
+      "uniformBlockSize": null,
+      "wgslImplementationId": null
+    },
+    {
+      "artifactGroups": {
+        "primarySupport": {
+          "cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/cpu.png",
+          "cpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/cpu-diff.png",
+          "gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/gpu.png",
+          "gpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/gpu-diff.png",
+          "route_cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/route-cpu.json",
+          "route_gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/route-gpu.json",
+          "skia": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/skia.png",
+          "stats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/stats.json"
+        }
+      },
+      "cpuImplementationId": "kotlin/linear_gradient_rt",
+      "descriptorStatus": "descriptor-backed",
+      "exactState": "gpu-backed",
+      "fallbackReason": "none",
+      "kind": "kShader",
+      "layoutStatus": "layout-matched",
+      "pipelineCacheKeyPolicy": "uniform-values-excluded",
+      "pmNote": "This row is a registered Kotlin/CPU and parser-validated WGSL implementation; it is not broad runtime-effect or dynamic SkSL support.",
+      "sourceReports": [
+        "supportMatrix",
+        "layoutV2",
+        "runtimeShaderEffectsV2"
+      ],
+      "specializedEvidence": {
+        "shaderEffectPromotion": {
+          "cpuSimilarity": 100.0,
+          "fallbackReason": "none",
+          "gpuSimilarity": 100.0,
+          "pipelineKeyPolicy": {
+            "acceptedAxes": [
+              "wgslImplementationId",
+              "blendMode",
+              "layoutReflection"
+            ],
+            "observedPipelineKey": "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=supported state=[blendMode=kSrcOver]",
+            "policy": "uniform-values-excluded",
+            "uniformValuesIncluded": false
+          },
+          "sceneId": "runtime-effect-linear-gradient",
+          "status": "pass",
+          "threshold": 99.95
+        }
+      },
+      "stableId": "runtime.linear_gradient_rt",
+      "supportClaim": true,
+      "supportState": "gpu-backed",
+      "uniformBlockSize": 32,
+      "wgslImplementationId": "wgsl/runtime_linear_gradient_rt"
+    },
+    {
+      "artifactGroups": {
+        "primarySupport": {
+          "cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/cpu.png",
+          "cpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/cpu-diff.png",
+          "gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu.png",
+          "gpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu-diff.png",
+          "route_cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-cpu.json",
+          "route_gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json",
+          "skia": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/skia.png",
+          "stats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json"
+        },
+        "uniformPreviewStates": [
+          {
+            "cpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/cpu.png",
+            "diff": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/diff.png",
+            "gpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/gpu.png",
+            "routeCpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/route-cpu.json",
+            "routeGpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/route-gpu.json",
+            "stats": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/stats.json"
+          },
+          {
+            "cpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/cpu.png",
+            "diff": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/diff.png",
+            "gpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/gpu.png",
+            "routeCpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/route-cpu.json",
+            "routeGpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/route-gpu.json",
+            "stats": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/stats.json"
+          }
+        ]
+      },
+      "cpuImplementationId": "kotlin/simple_rt",
+      "descriptorStatus": "descriptor-backed",
+      "exactState": "gpu-backed",
+      "fallbackReason": "none",
+      "kind": "kShader",
+      "layoutStatus": "layout-matched",
+      "pipelineCacheKeyPolicy": "uniform-values-excluded",
+      "pmNote": "This row is a registered Kotlin/CPU and parser-validated WGSL implementation; it is not broad runtime-effect or dynamic SkSL support.",
+      "sourceReports": [
+        "supportMatrix",
+        "layoutV2",
+        "runtimeShaderEffectsV2",
+        "runtimeEffectUniformPreview"
+      ],
+      "specializedEvidence": {
+        "shaderEffectPromotion": {
+          "cpuSimilarity": 100.0,
+          "fallbackReason": "none",
+          "gpuSimilarity": 100.0,
+          "pipelineKeyPolicy": {
+            "acceptedAxes": [
+              "wgslImplementationId",
+              "blendMode",
+              "layoutReflection"
+            ],
+            "observedPipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+            "policy": "uniform-values-excluded",
+            "uniformValuesIncluded": false
+          },
+          "sceneId": "runtime-effect-simple",
+          "status": "pass",
+          "threshold": 99.95
+        },
+        "uniformPreview": {
+          "editedStateCount": 2,
+          "pipelineKeyStableAcrossUniformEdits": true,
+          "stableRefusals": [
+            "runtime-effect.preview-uniform-out-of-range",
+            "runtime-effect.preview-effect-not-registered",
+            "runtime-effect.arbitrary-sksl-unsupported"
+          ],
+          "status": "pass",
+          "uniformValuesInPipelineKey": false
+        }
+      },
+      "stableId": "runtime.simple_rt",
+      "supportClaim": true,
+      "supportState": "gpu-backed",
+      "uniformBlockSize": 16,
+      "wgslImplementationId": "wgsl/runtime_simple_rt"
+    },
+    {
+      "artifactGroups": {
+        "primarySupport": {
+          "cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/cpu.png",
+          "cpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/cpu-diff.png",
+          "gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/gpu.png",
+          "gpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/gpu-diff.png",
+          "route_cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/route-cpu.json",
+          "route_gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/route-gpu.json",
+          "skia": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/skia.png",
+          "stats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/stats.json"
+        },
+        "uniformPreviewStates": [
+          {
+            "cpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/cpu.png",
+            "diff": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/diff.png",
+            "gpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/gpu.png",
+            "routeCpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/route-cpu.json",
+            "routeGpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/route-gpu.json",
+            "stats": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/stats.json"
+          },
+          {
+            "cpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/cpu.png",
+            "diff": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/diff.png",
+            "gpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/gpu.png",
+            "routeCpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/route-cpu.json",
+            "routeGpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/route-gpu.json",
+            "stats": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/stats.json"
+          }
+        ]
+      },
+      "cpuImplementationId": "kotlin/spiral_rt",
+      "descriptorStatus": "descriptor-backed",
+      "exactState": "gpu-backed",
+      "fallbackReason": "none",
+      "kind": "kShader",
+      "layoutStatus": "layout-matched",
+      "pipelineCacheKeyPolicy": "uniform-values-excluded",
+      "pmNote": "This row is a registered Kotlin/CPU and parser-validated WGSL implementation; it is not broad runtime-effect or dynamic SkSL support.",
+      "sourceReports": [
+        "supportMatrix",
+        "layoutV2",
+        "runtimeShaderEffectsV2",
+        "runtimeEffectUniformPreview"
+      ],
+      "specializedEvidence": {
+        "shaderEffectPromotion": {
+          "cpuSimilarity": 100.0,
+          "fallbackReason": "none",
+          "gpuSimilarity": 100.0,
+          "pipelineKeyPolicy": {
+            "acceptedAxes": [
+              "wgslImplementationId",
+              "blendMode",
+              "layoutReflection"
+            ],
+            "observedPipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl parserReflected=true status=supported state=[blendMode=kSrcOver]",
+            "policy": "uniform-values-excluded",
+            "uniformValuesIncluded": false
+          },
+          "sceneId": "runtime-effect-spiral",
+          "status": "pass",
+          "threshold": 99.95
+        },
+        "uniformPreview": {
+          "editedStateCount": 2,
+          "pipelineKeyStableAcrossUniformEdits": true,
+          "stableRefusals": [
+            "runtime-effect.preview-uniform-out-of-range",
+            "runtime-effect.preview-effect-not-registered",
+            "runtime-effect.arbitrary-sksl-unsupported"
+          ],
+          "status": "pass",
+          "uniformValuesInPipelineKey": false
+        }
+      },
+      "stableId": "runtime.spiral_rt",
+      "supportClaim": true,
+      "supportState": "gpu-backed",
+      "uniformBlockSize": 48,
+      "wgslImplementationId": "wgsl/runtime_spiral_rt"
+    },
+    {
+      "artifactGroups": {
+        "cpuOnlyChildLane": {
+          "reportJson": "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.json",
+          "reportMarkdown": "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.md",
+          "routeJson": "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane-route.json"
+        }
+      },
+      "cpuImplementationId": "kotlin/unsharp_rt",
+      "descriptorStatus": "descriptor-backed",
+      "exactState": "cpu-only",
+      "fallbackReason": "runtime-effect.wgsl-descriptor-missing",
+      "kind": "kShader",
+      "layoutStatus": null,
+      "pipelineCacheKeyPolicy": null,
+      "pmNote": "This row has registered Kotlin/CPU behavior but no parser-validated WGSL implementation; GPU remains refused with a stable missing-descriptor reason.",
+      "sourceReports": [
+        "supportMatrix",
+        "runtimeChildShaderEffectLane"
+      ],
+      "specializedEvidence": {
+        "childLane": {
+          "children": [
+            {
+              "binding": "child[0]",
+              "bindingState": "cpu-supported-gpu-unsupported",
+              "fallbackReason": "runtime-effect.child-binding-unsupported",
+              "index": 0,
+              "name": "child",
+              "resourceAxis": "childShader",
+              "resourceAxisState": "classified-not-in-pipeline-key",
+              "type": "kShader"
+            }
+          ],
+          "gpuFallbackReason": "runtime-effect.child-binding-unsupported",
+          "gpuSupportState": "expected-unsupported",
+          "pipelineKeyPolicy": {
+            "acceptedAxes": [
+              "wgslImplementationId",
+              "blendMode",
+              "layoutReflection",
+              "childShaderResourceShape"
+            ],
+            "policy": "resource-axes-classified-uniform-values-excluded",
+            "rejectedAxes": [
+              "uniformBytes",
+              "uniformValues",
+              "childShaderPixels"
+            ],
+            "uniformValuesIncluded": false
+          },
+          "status": "expected-unsupported"
+        },
+        "stableRefusals": [
+          "runtime-effect.child-binding-unsupported",
+          "runtime-effect.child-wgsl-layout-missing",
+          "runtime-effect.child-resource-axis-unsupported"
+        ]
+      },
+      "stableId": "runtime.unsharp_rt",
+      "supportClaim": false,
+      "supportState": "cpu-only",
+      "uniformBlockSize": null,
+      "wgslImplementationId": null
+    }
+  ],
+  "schemaVersion": "kanvas.runtime-effects-v2.evidence-bundle",
+  "sourceOfTruth": {
+    "blenderJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.json",
+    "blenderMarkdown": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.md",
+    "childLaneJson": "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.json",
+    "childLaneMarkdown": "reports/wgsl-pipeline/runtime-child-shader-effect-lane/runtime-child-shader-effect-lane.md",
+    "colorFilterJson": "reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.json",
+    "colorFilterMarkdown": "reports/wgsl-pipeline/runtime-color-filter-wgsl/runtime-color-filter-wgsl.md",
+    "layoutJson": "reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json",
+    "layoutMarkdown": "reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.md",
+    "shaderEffectsJson": "reports/wgsl-pipeline/runtime-shader-effects-v2/runtime-shader-effects-v2-promotion.json",
+    "shaderEffectsMarkdown": "reports/wgsl-pipeline/runtime-shader-effects-v2/runtime-shader-effects-v2-promotion.md",
+    "supportMatrixJson": "reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json",
+    "supportMatrixMarkdown": "reports/wgsl-pipeline/runtime-effects-v2/support-matrix.md",
+    "uniformPreviewJson": "reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.json",
+    "uniformPreviewMarkdown": "reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.md"
+  },
+  "stableRefusals": [
+    "runtime-effect.arbitrary-sksl-unsupported",
+    "runtime-effect.wgsl-descriptor-missing",
+    "runtime-effect.blender-dst-read-unsupported",
+    "runtime-effect.child-binding-unsupported",
+    "runtime-effect.child-wgsl-layout-missing",
+    "runtime-effect.child-resource-axis-unsupported",
+    "runtime-effect.color-filter-wgsl-missing",
+    "runtime-effect.color-filter-cpu-only",
+    "color-filter.color-space-unsupported",
+    "blend.shader-layer-required",
+    "runtime-effect.blender-wgsl-descriptor-missing",
+    "runtime-effect.preview-uniform-out-of-range",
+    "runtime-effect.preview-effect-not-registered"
+  ],
+  "status": "pass",
+  "ticket": "KAN-034",
+  "validationRows": [
+    {
+      "detail": "All 8 Runtime Effects V2 rows mirror the KAN-027 support matrix.",
+      "id": "support-matrix-coherence",
+      "status": "pass"
+    },
+    {
+      "detail": "Each gpu-backed support claim links CPU/GPU/diff/stat/route artifacts.",
+      "id": "support-artifacts",
+      "status": "pass"
+    },
+    {
+      "detail": "CPU-only and policy-only rows retain visible stable refusals.",
+      "id": "unsupported-visible",
+      "status": "pass"
+    },
+    {
+      "detail": "Dynamic SkSL compilation, SkSL IR/VM, and broad runtime-effect support remain non-claims.",
+      "id": "no-dynamic-sksl",
+      "status": "pass"
+    }
+  ]
+}
