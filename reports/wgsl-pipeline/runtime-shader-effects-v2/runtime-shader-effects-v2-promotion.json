@@ -1,0 +1,186 @@
+{
+  "schemaVersion": "kanvas.runtime-shader-effects.v2.promotion",
+  "packId": "kan-029-runtime-shader-effects-v2-promotion",
+  "ticket": "KAN-029",
+  "status": "pass",
+  "claimLevel": "selected-registered-runtime-shader-effects-v2",
+  "sourceOfTruth": {
+    "supportMatrix": "reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json",
+    "layoutReport": "reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json",
+    "sceneContract": "reports/wgsl-pipeline/scenes/generated/m64-registered-runtime-effects-pack.json"
+  },
+  "counts": {
+    "total": 3,
+    "supported": 3,
+    "fallbackNone": 3,
+    "layoutMatched": 3,
+    "belowThreshold": 0,
+    "missingArtifacts": 0
+  },
+  "effects": [
+    {
+      "stableId": "runtime.linear_gradient_rt",
+      "sceneId": "runtime-effect-linear-gradient",
+      "status": "pass",
+      "supportState": "gpu-backed",
+      "descriptorStatus": "descriptor-backed",
+      "kind": "kShader",
+      "cpuImplementationId": "kotlin/linear_gradient_rt",
+      "wgslImplementationId": "wgsl/runtime_linear_gradient_rt",
+      "layoutStatus": "layout-matched",
+      "uniformBlockSize": 32,
+      "threshold": 99.95,
+      "cpuSimilarity": 100.0,
+      "gpuSimilarity": 100.0,
+      "cpuRoute": "cpu.runtime-effect.descriptor.linear_gradient_rt",
+      "gpuRoute": "webgpu.runtime-effect.descriptor.linear_gradient_rt",
+      "cpuRouteStatus": "pass",
+      "gpuRouteStatus": "pass",
+      "fallbackReason": "none",
+      "routeStableId": "runtime.linear_gradient_rt",
+      "routeWgslImplementationId": "wgsl/runtime_linear_gradient_rt",
+      "pipelineKeyPolicy": {
+        "policy": "uniform-values-excluded",
+        "uniformValuesIncluded": false,
+        "acceptedAxes": [
+          "wgslImplementationId",
+          "blendMode",
+          "layoutReflection"
+        ],
+        "observedPipelineKey": "runtimeEffect=LinearGradientRT descriptor=runtime_linear_gradient_rt.wgsl parserReflected=true status=supported state=[blendMode=kSrcOver]"
+      },
+      "artifacts": {
+        "skia": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/gpu.png",
+        "cpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/cpu-diff.png",
+        "gpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/gpu-diff.png",
+        "route_cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/route-cpu.json",
+        "route_gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/stats.json"
+      },
+      "parserEvidence": "RuntimeEffectDescriptorWebGpuTest#runtime LinearGradientRT descriptor WGSL parses and reflects uniforms",
+      "renderEvidence": "RuntimeEffectDescriptorSceneCaptureTest#LinearGradientRT descriptor scene captures supported evidence",
+      "nonClaim": "Promotes only the registered LinearGradientRT descriptor-backed shader with reflected in_colors0/in_colors1 uniform layout; arbitrary SkSL, unregistered effects, SpiralRT, runtime-effect color filters, blenders, and image filters remain out of scope."
+    },
+    {
+      "stableId": "runtime.simple_rt",
+      "sceneId": "runtime-effect-simple",
+      "status": "pass",
+      "supportState": "gpu-backed",
+      "descriptorStatus": "descriptor-backed",
+      "kind": "kShader",
+      "cpuImplementationId": "kotlin/simple_rt",
+      "wgslImplementationId": "wgsl/runtime_simple_rt",
+      "layoutStatus": "layout-matched",
+      "uniformBlockSize": 16,
+      "threshold": 99.95,
+      "cpuSimilarity": 100.0,
+      "gpuSimilarity": 100.0,
+      "cpuRoute": "cpu.runtime-effect.descriptor.simple_rt",
+      "gpuRoute": "webgpu.runtime-effect.descriptor.simple_rt",
+      "cpuRouteStatus": "pass",
+      "gpuRouteStatus": "pass",
+      "fallbackReason": "none",
+      "routeStableId": "runtime.simple_rt",
+      "routeWgslImplementationId": "wgsl/runtime_simple_rt",
+      "pipelineKeyPolicy": {
+        "policy": "uniform-values-excluded",
+        "uniformValuesIncluded": false,
+        "acceptedAxes": [
+          "wgslImplementationId",
+          "blendMode",
+          "layoutReflection"
+        ],
+        "observedPipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]"
+      },
+      "artifacts": {
+        "skia": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu.png",
+        "cpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/cpu-diff.png",
+        "gpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/gpu-diff.png",
+        "route_cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-cpu.json",
+        "route_gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json"
+      },
+      "parserEvidence": "RuntimeEffectDescriptorWebGpuTest#runtime SimpleRT descriptor WGSL parses and reflects uniforms",
+      "renderEvidence": "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest#SimpleRT runtime shader renders through descriptor-backed WGSL path",
+      "nonClaim": "Promotes only the registered SimpleRT descriptor-backed shader with reflected gColor uniform layout; arbitrary SkSL, unregistered effects, runtime-effect color filters, blenders, and image filters remain out of scope."
+    },
+    {
+      "stableId": "runtime.spiral_rt",
+      "sceneId": "runtime-effect-spiral",
+      "status": "pass",
+      "supportState": "gpu-backed",
+      "descriptorStatus": "descriptor-backed",
+      "kind": "kShader",
+      "cpuImplementationId": "kotlin/spiral_rt",
+      "wgslImplementationId": "wgsl/runtime_spiral_rt",
+      "layoutStatus": "layout-matched",
+      "uniformBlockSize": 48,
+      "threshold": 99.95,
+      "cpuSimilarity": 100.0,
+      "gpuSimilarity": 100.0,
+      "cpuRoute": "cpu.runtime-effect.descriptor.spiral_rt",
+      "gpuRoute": "webgpu.runtime-effect.descriptor.spiral_rt",
+      "cpuRouteStatus": "pass",
+      "gpuRouteStatus": "pass",
+      "fallbackReason": "none",
+      "routeStableId": "runtime.spiral_rt",
+      "routeWgslImplementationId": "wgsl/runtime_spiral_rt",
+      "pipelineKeyPolicy": {
+        "policy": "uniform-values-excluded",
+        "uniformValuesIncluded": false,
+        "acceptedAxes": [
+          "wgslImplementationId",
+          "blendMode",
+          "layoutReflection"
+        ],
+        "observedPipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl parserReflected=true status=supported state=[blendMode=kSrcOver]"
+      },
+      "artifacts": {
+        "skia": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/gpu.png",
+        "cpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/cpu-diff.png",
+        "gpu_diff": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/gpu-diff.png",
+        "route_cpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/route-cpu.json",
+        "route_gpu": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/stats.json"
+      },
+      "parserEvidence": "RuntimeEffectDescriptorWebGpuTest#runtime SpiralRT descriptor WGSL parses and reflects uniforms",
+      "renderEvidence": "RuntimeEffectDescriptorSceneCaptureTest#SpiralRT descriptor scene captures supported evidence",
+      "nonClaim": "Promotes only the registered SpiralRT descriptor-backed shader with reflected rad_scale/in_center/in_colors0/in_colors1 uniform layout; arbitrary SkSL, unregistered effects, runtime-effect color filters, blenders, and image filters remain out of scope."
+    }
+  ],
+  "stableRefusals": [
+    "runtime-effect.arbitrary-sksl-unsupported",
+    "runtime-effect.wgsl-descriptor-missing"
+  ],
+  "nonClaims": [
+    "No dynamic SkSL compilation.",
+    "No SkSL IR or VM.",
+    "No arbitrary user WGSL input.",
+    "No broad runtime-effect support beyond selected registered descriptors.",
+    "No runtime color-filter, blender, image-filter helper, child shader, or live editor broad claim.",
+    "No global similarity threshold change."
+  ],
+  "validationRows": [
+    {
+      "id": "support-matrix-v2",
+      "status": "pass",
+      "detail": "3 descriptor-backed gpu-backed rows selected."
+    },
+    {
+      "id": "layout-v2",
+      "status": "pass",
+      "detail": "3 selected rows have layout-matched reflected WGSL uniforms."
+    },
+    {
+      "id": "visual-artifacts",
+      "status": "pass",
+      "detail": "reference/CPU/WebGPU/diff/stat and route artifacts exist for each selected effect."
+    }
+  ]
+}
