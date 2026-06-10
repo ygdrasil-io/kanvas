@@ -1,0 +1,128 @@
+{
+  "claimLevel": "selected-runtime-color-filter-luma-to-alpha-direct-rect",
+  "counts": {
+    "belowThreshold": 0,
+    "gpuBacked": 1,
+    "layoutMatched": 1,
+    "nonSelectedVisible": 5,
+    "selected": 1
+  },
+  "nonClaims": [
+    "No broad ColorFilter support.",
+    "No dynamic SkSL compilation.",
+    "No SkSL IR or VM.",
+    "No arbitrary runtime ColorFilter WGSL support.",
+    "No runtime ColorFilter uniforms, child ColorFilters, LUTs, or color-space wrappers.",
+    "No shader-input runtime ColorFilter route beyond solid-color direct rect.",
+    "No global threshold or color policy change."
+  ],
+  "nonSelectedColorFilters": [
+    {
+      "pmNote": "CPU behavior exists, but this ticket promotes only LumaToAlpha WGSL.",
+      "reason": "runtime-effect.color-filter-cpu-only",
+      "stableId": "runtime.color_filter_noop",
+      "state": "not-promoted"
+    },
+    {
+      "pmNote": "Ternary/Ifs/EarlyReturn tone-map variants stay CPU-only until separately scoped.",
+      "reason": "runtime-effect.color-filter-cpu-only",
+      "stableId": "runtime.color_filter_tonemap",
+      "state": "not-promoted"
+    },
+    {
+      "pmNote": "AlternateLuma depends on working color-space behavior outside this bounded slice.",
+      "reason": "color-filter.color-space-unsupported",
+      "stableId": "runtime.color_filter_g_channel_splat",
+      "state": "dependency-gated"
+    },
+    {
+      "pmNote": "ColorFilter child bindings are not promoted by this direct-rect WGSL route.",
+      "reason": "runtime-effect.color-filter-cpu-only",
+      "stableId": "runtime.color_filter_compose_children",
+      "state": "not-promoted"
+    },
+    {
+      "pmNote": "Runtime ColorFilters without a registered descriptor and parser-reflected WGSL stay refused.",
+      "reason": "runtime-effect.color-filter-wgsl-missing",
+      "stableId": "policy.unregistered_runtime_color_filter_wgsl",
+      "state": "expected-unsupported"
+    }
+  ],
+  "packId": "kan-031-runtime-color-filter-wgsl",
+  "schemaVersion": "kanvas.runtime-color-filter-wgsl",
+  "selected": {
+    "artifacts": {
+      "cpu": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/cpu-diff.png",
+      "reference": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/reference.png",
+      "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/route-cpu.json",
+      "routeWebGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/route-webgpu.json",
+      "stats": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/stats.json",
+      "webGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/webgpu.png",
+      "webGpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/webgpu-diff.png"
+    },
+    "colorSpacePolicy": "srgb-unmanaged-runtime-color-filter-oracle",
+    "cpuImplementationId": "kotlin/color_filter_luma_to_alpha",
+    "cpuSimilarity": 100.0,
+    "descriptorStatus": "descriptor-backed",
+    "fallbackReason": "none",
+    "filteredDisplayColor": "0xFFA3A3A3",
+    "kind": "kColorFilter",
+    "layoutStatus": "layout-matched",
+    "lumaAlpha": 92,
+    "paintSourceColor": "0xFF336699",
+    "sceneId": "runtime.color-filter.luma-to-alpha.rect.v1",
+    "selectedRoutes": {
+      "cpu": "cpu.runtime-color-filter.luma-to-alpha.direct-rect",
+      "webGpu": "webgpu.runtime-color-filter.luma-to-alpha.direct-rect"
+    },
+    "stableId": "runtime.color_filter_luma_to_alpha",
+    "stageOrder": "solid-color shader -> runtime color filter -> fixed-function kSrcOver blend -> store",
+    "supportState": "gpu-backed",
+    "threshold": 99.0,
+    "uniformBlockSize": 0,
+    "uniforms": [],
+    "webGpuSimilarity": 100.0,
+    "wgslEntryPoints": [
+      "vertex:vs_main",
+      "fragment:fs_main"
+    ],
+    "wgslImplementationId": "wgsl/runtime_color_filter_luma_to_alpha",
+    "wgslSha256": "32dd05b45f0040d4825c73211646cd43bd74fad041c4448125c03e87e2493dc5",
+    "wgslValidated": true
+  },
+  "sourceOfTruth": {
+    "layoutReport": "reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json",
+    "sceneArtifacts": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha",
+    "supportMatrix": "reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"
+  },
+  "stableRefusals": [
+    "runtime-effect.color-filter-wgsl-missing",
+    "runtime-effect.color-filter-cpu-only",
+    "color-filter.color-space-unsupported"
+  ],
+  "status": "pass",
+  "ticket": "KAN-031",
+  "validationRows": [
+    {
+      "detail": "runtime.color_filter_luma_to_alpha is descriptor-backed and gpu-backed.",
+      "id": "descriptor",
+      "status": "pass"
+    },
+    {
+      "detail": "runtime_color_filter_luma_to_alpha.wgsl parses and layout reflection is matched.",
+      "id": "layout",
+      "status": "pass"
+    },
+    {
+      "detail": "reference/CPU/WebGPU/diff/stat/route artifacts exist and exceed threshold.",
+      "id": "scene-evidence",
+      "status": "pass"
+    },
+    {
+      "detail": "Non-selected runtime ColorFilters are visible with stable reason codes.",
+      "id": "fallback-taxonomy",
+      "status": "pass"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import org.skia.effects.runtime.ChildResolver
 import org.skia.effects.runtime.SkRuntimeEffect
 import org.skia.effects.runtime.SkRuntimeEffectDispatch
 import org.skia.effects.runtime.SkRuntimeImpl
+import org.skia.effects.runtime.effects.SkBuiltinColorFilterEffects
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsChildren
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple
 import org.skia.foundation.SkData
@@ -17,6 +18,7 @@ import org.skia.foundation.SkPaint
 import org.skia.foundation.SkShader
 import org.skia.foundation.SkShaders
 import org.graphiks.math.SK_ColorBLACK
+import org.graphiks.math.SK_ColorWHITE
 import org.graphiks.math.SkColor4f
 import org.graphiks.math.SkPoint
 import org.graphiks.math.SkRect
@@ -80,6 +82,20 @@ class RuntimeEffectDescriptorWebGpuTest {
             ),
             uniforms.members.associate { it.name to it.offset },
         )
+    }
+
+    @Test
+    fun `runtime LumaToAlpha color filter descriptor WGSL parses and reflects source color`() {
+        val report = WgslValidationReport.run(Path.of("src/main/resources/shaders"))
+            .files
+            .single { it.path.endsWith("runtime_color_filter_luma_to_alpha.wgsl") }
+
+        assertTrue(report.success, "expected runtime_color_filter_luma_to_alpha.wgsl to parse: ${report.diagnostics}")
+        assertTrue(report.entryPoints.contains("vertex:vs_main"))
+        assertTrue(report.entryPoints.contains("fragment:fs_main"))
+        assertTrue(report.bindings.any { it == "uniforms@group=0,binding=0" })
+        val uniforms = report.uniformStructs.single { it.variable == "uniforms" }
+        assertEquals(mapOf("sourceColor" to 0), uniforms.members.associate { it.name to it.offset })
     }
 
     @Test
@@ -177,6 +193,69 @@ class RuntimeEffectDescriptorWebGpuTest {
 
         assertEquals(listOf(212, 43, 0, 255), pixels.rgbaAt(43, 31))
         assertEquals(listOf(235, 115, 0, 255), pixels.rgbaAt(43, 32))
+    }
+
+    @Test
+    fun `LumaToAlpha runtime color filter renders after solid color shader before blend`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val effect = SkRuntimeEffect.MakeForColorFilter(SkBuiltinColorFilterEffects.LUMA_SRC_SKSL).effect!!
+        val colorFilter = effect.makeColorFilter(uniforms = null)!!
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                SkCanvas(device).drawRect(
+                    SkRect.MakeLTRB(0f, 0f, 32f, 32f),
+                    SkPaint().apply {
+                        color = 0xFF336699.toInt()
+                        this.colorFilter = colorFilter
+                        isAntiAlias = false
+                    },
+                )
+                val out = device.flush()
+                assertEquals(null, device.runtimeEffectFallbackReasonForDiagnostics())
+                out
+            }
+        }
+
+        val sample = pixels.rgbaAt(16, 16)
+        assertTrue(sample[0] in 158..168, "R should be white blended by luma alpha, got ${sample[0]}")
+        assertTrue(sample[1] in 158..168, "G should be white blended by luma alpha, got ${sample[1]}")
+        assertTrue(sample[2] in 158..168, "B should be white blended by luma alpha, got ${sample[2]}")
+        assertTrue(sample[3] >= 250, "A should remain opaque after SrcOver onto white, got ${sample[3]}")
+    }
+
+    @Test
+    fun `LumaToAlpha runtime color filter fully clipped rect is a no-op`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val effect = SkRuntimeEffect.MakeForColorFilter(SkBuiltinColorFilterEffects.LUMA_SRC_SKSL).effect!!
+        val colorFilter = effect.makeColorFilter(uniforms = null)!!
+
+        val pixels = context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val canvas = SkCanvas(device)
+                canvas.clipRect(SkRect.MakeLTRB(0f, 0f, 4f, 4f))
+                canvas.drawRect(
+                    SkRect.MakeLTRB(32f, 32f, 48f, 48f),
+                    SkPaint().apply {
+                        color = 0xFF336699.toInt()
+                        this.colorFilter = colorFilter
+                        isAntiAlias = false
+                    },
+                )
+                val out = device.flush()
+                assertEquals(null, device.runtimeEffectFallbackReasonForDiagnostics())
+                out
+            }
+        }
+
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(0, 0))
+        assertEquals(listOf(255, 255, 255, 255), pixels.rgbaAt(40, 40))
     }
 
     @Test
