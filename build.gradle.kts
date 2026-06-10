@@ -322,6 +322,7 @@ fun renderPipelineConformanceReport(
     runtimeColorFilterWgslCounts: String,
     runtimeBlenderBoundaryCounts: String,
     runtimeEffectUniformPreviewCounts: String,
+    runtimeEffectsV2EvidenceBundleCounts: String,
 ): String {
     val byName = suites
         .sortedBy { it.className }
@@ -379,6 +380,7 @@ fun renderPipelineConformanceReport(
         |runtime child shader effect CPU-only lane and stable WebGPU refusal evidence,
         |runtime blender CPU-only boundary and stable WebGPU destination-read refusal evidence,
         |runtime effect uniform preview evidence across registered effects with stable PipelineKey telemetry,
+        |Runtime Effects V2 evidence bundle aggregation with support/refusal rows and PM non-claims,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -415,6 +417,7 @@ fun renderPipelineConformanceReport(
         |${row("Runtime ColorFilter WGSL", "passed", "`pipelineRuntimeColorFilterWgslReport` validates selected `runtime.color_filter_luma_to_alpha` descriptor/WGSL layout, reference/CPU/WebGPU/diff/stat route artifacts, and stable non-selected ColorFilter reason codes; counts $runtimeColorFilterWgslCounts")}
         |${row("Runtime Blender boundary", "expected-unsupported", "`pipelineRuntimeBlenderBoundaryReport` validates selected `runtime.invert_blender` descriptor, CPU fixture, route JSON, BlendPlan dump, and stable WebGPU destination-read refusal; counts $runtimeBlenderBoundaryCounts")}
         |${row("Runtime Effect uniform preview", "passed", "`pipelineRuntimeEffectUniformPreviewReport` validates two registered runtime effects, four edited uniform states, stable PipelineKey telemetry, invalid-value refusal policy, and headless/Kadre lane separation; counts $runtimeEffectUniformPreviewCounts")}
+        |${row("Runtime Effects V2 evidence bundle", "passed", "`pipelineRuntimeEffectsV2EvidenceBundleReport` aggregates all Runtime Effects V2 support/refusal rows, linked artifacts, stable diagnostics, and PM non-claims; counts $runtimeEffectsV2EvidenceBundleCounts")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -522,9 +525,14 @@ fun renderPipelineConformanceReport(
         |  current counts are $runtimeBlenderBoundaryCounts.
         |- Runtime Effect uniform preview: `reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.md`
         |  validates `runtime.simple_rt` and `runtime.spiral_rt` as registered effect previews with two edited states each,
-        |  records telemetry showing uniform updates do not change `PipelineKey` or compile new WGSL, emits CPU/GPU/diff/route artifacts,
+        |  records telemetry showing uniform updates do not change `PipelineKey` or compile new WGSL, emits CPU/GPU/diff/stat/route artifacts,
         |  and keeps live SkSL editor, unregistered effects, per-value WGSL generation, and Kadre native execution as explicit non-claims;
         |  current counts are $runtimeEffectUniformPreviewCounts.
+        |- Runtime Effects V2 evidence bundle: `reports/wgsl-pipeline/runtime-effects-v2/evidence.md`
+        |  aggregates the KAN-027 through KAN-033 Runtime Effects V2 reports, lists every primary support/refusal row,
+        |  links support-claim artifacts, audits missing evidence, and keeps dynamic SkSL compilation, SkSL IR/VM,
+        |  broad runtime-effect support, and Kadre native CI as explicit non-claims;
+        |  current counts are $runtimeEffectsV2EvidenceBundleCounts.
         |- GPU similarity investigation: `reports/wgsl-pipeline/2026-05-27-m31-gpu-similarity-investigation.md`
         |  classifies `DrawBitmapRect3*` and `DrawBitmapRectSkbug4734*` below-floor failures as implementation-regression candidates
         |  with no floor change in this milestone slice.
@@ -732,6 +740,42 @@ tasks.register<Exec>("pipelineRuntimeEffectUniformPreviewReport") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineRuntimeEffectsV2EvidenceBundleReport") {
+    group = "verification"
+    description = "Materializes and validates the KAN-034 Runtime Effects V2 evidence bundle."
+
+    dependsOn(
+        ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
+        ":gpu-raster:pipelineRuntimeEffectsLayoutV2Report",
+        "pipelineRuntimeShaderEffectsV2PromotionReport",
+        "pipelineRuntimeChildShaderEffectLaneReport",
+        "pipelineRuntimeColorFilterWgslReport",
+        "pipelineRuntimeBlenderBoundaryReport",
+        "pipelineRuntimeEffectUniformPreviewReport",
+    )
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-effects-v2")
+    commandLine(
+        "python3",
+        "scripts/validate_kan034_runtime_effects_v2_evidence_bundle.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan034_runtime_effects_v2_evidence_bundle.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.md"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-shader-effects-v2"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-child-shader-effect-lane"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-color-filter-wgsl"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-blender-boundary"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-effect-uniform-preview"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts"))
+    outputs.file(outputDir.file("evidence.json"))
+    outputs.file(outputDir.file("evidence.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register("pipelineConformance") {
     group = "verification"
     description = "Runs the standard production pipeline conformance suite without slow benchmark gates."
@@ -743,6 +787,7 @@ tasks.register("pipelineConformance") {
         "pipelineRuntimeColorFilterWgslReport",
         "pipelineRuntimeBlenderBoundaryReport",
         "pipelineRuntimeEffectUniformPreviewReport",
+        "pipelineRuntimeEffectsV2EvidenceBundleReport",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -761,6 +806,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime ColorFilter WGSL report: pipelineRuntimeColorFilterWgslReport
             |- REQUIRED Runtime Blender boundary report: pipelineRuntimeBlenderBoundaryReport
             |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
+            |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -882,6 +928,14 @@ tasks.register("pipelineConformanceReport") {
             ?: throw GradleException(
                 "Missing Runtime Effect uniform preview status counts in `reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.md`."
             )
+        val runtimeEffectsV2EvidenceBundleCounts = file("reports/wgsl-pipeline/runtime-effects-v2/evidence.md")
+            .readLines()
+            .firstOrNull { it.startsWith("Status counts: ") }
+            ?.removePrefix("Status counts: ")
+            ?.removeSuffix(".")
+            ?: throw GradleException(
+                "Missing Runtime Effects V2 evidence bundle status counts in `reports/wgsl-pipeline/runtime-effects-v2/evidence.md`."
+            )
         val report = renderPipelineConformanceReport(
             commit = commit,
             suites = suites,
@@ -894,6 +948,7 @@ tasks.register("pipelineConformanceReport") {
             runtimeColorFilterWgslCounts = runtimeColorFilterWgslCounts,
             runtimeBlenderBoundaryCounts = runtimeBlenderBoundaryCounts,
             runtimeEffectUniformPreviewCounts = runtimeEffectUniformPreviewCounts,
+            runtimeEffectsV2EvidenceBundleCounts = runtimeEffectsV2EvidenceBundleCounts,
         )
         val target = outputFile.get().asFile
         target.parentFile.mkdirs()
