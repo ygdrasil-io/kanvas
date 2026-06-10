@@ -4696,6 +4696,27 @@ tasks.register<Exec>("validateMepNextRuntimeInteractive") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
 }
 
+tasks.register<Exec>("validateKan002PathAaEdgeBudget") {
+    group = "verification"
+    description = "Validates KAN-002 bounded Path AA edge-budget evidence and refusal policy."
+    commandLine("python3", "scripts/validate_kan002_path_aa_edge_budget.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan002_path_aa_edge_budget.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-002-path-aa-edge-budget.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-002-path-aa-edge-budget/kan-002-path-aa-edge-budget.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md"))
+    inputs.file(layout.projectDirectory.file("render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -4841,6 +4862,7 @@ tasks.register("pipelinePmBundle") {
         "validateMepNextRuntimeInteractive",
         "validateMepRcScenePack",
         "validateMepRcRuntime",
+        "validateKan002PathAaEdgeBudget",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
