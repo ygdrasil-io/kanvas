@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.skia.core.SkCanvas
+import org.skia.effects.runtime.effects.SkBuiltinSpecialisedEffects
 import org.graphiks.math.SK_ColorBLUE
 import org.graphiks.math.SK_ColorRED
 import org.skia.foundation.SkBitmap
@@ -75,6 +76,22 @@ class SkRuntimeBlenderTest {
         assertTrue(kotlin.math.abs(r - 128) <= 2, "R should be ≈ 128 ; got $r")
         assertEquals(0, g, "G should be 0")
         assertTrue(kotlin.math.abs(b - 128) <= 2, "B should be ≈ 128 ; got $b")
+    }
+
+    @Test
+    fun `builtin invert runtime blender uses destination color on CPU`() {
+        val effect = SkRuntimeEffect.MakeForBlender(SkBuiltinSpecialisedEffects.INVERT_BLENDER_SKSL).effect!!
+        val blender = effect.makeBlender(null)!!
+
+        val out = blender.blend(
+            src = SkColor4f(1f, 0f, 0f, 0.5f),
+            dst = SkColor4f(0.25f, 0.5f, 0.75f, 0.4f),
+        )
+
+        assertEquals(0.75f, out.fR, 1e-5f)
+        assertEquals(0.5f, out.fG, 1e-5f)
+        assertEquals(0.25f, out.fB, 1e-5f)
+        assertEquals(1f, out.fA, 1e-5f)
     }
 
     private fun stubAverage() = object : SkRuntimeImpl {

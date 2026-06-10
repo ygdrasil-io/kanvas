@@ -68,6 +68,7 @@ import org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgsl
 import org.skia.gpu.webgpu.tools.GeneratedSolidRectWgsl
 import org.skia.core.SkClipShape
 import org.skia.core.SkDevice
+import org.skia.effects.runtime.SkRuntimeBlender
 import org.skia.effects.runtime.SkRuntimeColorFilter
 import org.skia.effects.runtime.SkRuntimeShader
 import org.skia.core.SrcRectConstraint
@@ -15024,7 +15025,20 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         return half
     }
 
+    private fun refuseRuntimeBlenderIfPresent(paint: SkPaint?) {
+        val runtimeBlender = paint?.blender as? SkRuntimeBlender ?: return
+        lastRuntimeEffectFallbackReason = "runtime-effect.blender-dst-read-unsupported"
+        val stableId = runtimeBlender.runtimeEffectDescriptor?.stableId ?: "missing-descriptor"
+        error(
+            "SkWebGpuDevice: runtime-effect.blender-dst-read-unsupported: " +
+                "runtime blender $stableId requires destination color; " +
+                "blend.shader-layer-required: explicit shader/layer composite BlendPlan is required. " +
+                "No CPU readback or implicit destination read fallback is available.",
+        )
+    }
+
     override fun drawRect(rect: SkRect, clip: SkIRect, paint: SkPaint) {
+        refuseRuntimeBlenderIfPresent(paint)
         // Phase MaskFilter-blur -- intercept `paint.maskFilter is
         // SkBlurMaskFilter` (kNormal) and route through the offscreen-mask
         // + Gaussian-blur pipeline. The rect is already in device space
@@ -16119,6 +16133,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     }
 
     override fun drawPaint(ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
+        refuseRuntimeBlenderIfPresent(paint)
         // G3.2 — drawPaint = fill the entire clip with the paint. Route
         // through drawRect so all of G2.1/G2.2/G2.3a/G3.1 logic (alpha,
         // blend mode, AA, stroke-style validation) applies uniformly.
@@ -16179,6 +16194,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
      * remain TODO.
      */
     override fun drawPath(path: SkPath, ctm: SkMatrix, clip: SkIRect, paint: SkPaint) {
+        refuseRuntimeBlenderIfPresent(paint)
         // H5 / II1 -- PathEffect dispatch. The canonical Skia pipeline for
         // paths is `path -> pathEffect -> stroker -> maskFilter -> colorFilter
         // -> blend` (mirrored on CPU at SkBitmapDevice.drawPath:1092). The
@@ -17743,6 +17759,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         constraint: SrcRectConstraint,
         clip: SkIRect,
     ) {
+        refuseRuntimeBlenderIfPresent(paint)
         // G2.x slice 2 -- bitmap-shader pipeline (`bitmap_shader.wgsl`)
         // now honours the analytical clip shape via the trailing two
         // vec4 slots ; the canvas-side aaClip throw stays out of the

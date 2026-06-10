@@ -13,6 +13,9 @@ import org.skia.effects.runtime.SkRuntimeImpl
 import org.skia.effects.runtime.effects.SkBuiltinColorFilterEffects
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsChildren
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple
+import org.skia.effects.runtime.effects.SkBuiltinSpecialisedEffects
+import org.skia.foundation.SkBlurMaskFilter
+import org.skia.foundation.SkBlurStyle
 import org.skia.foundation.SkData
 import org.skia.foundation.SkPaint
 import org.skia.foundation.SkShader
@@ -317,6 +320,110 @@ class RuntimeEffectDescriptorWebGpuTest {
                 assertTrue(
                     error.message!!.contains("runtime-effect.child-binding-unsupported"),
                     "expected stable child-binding diagnostic, got ${error.message}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `runtime blender refuses WebGPU destination read without implicit readback`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val effect = SkRuntimeEffect.MakeForBlender(SkBuiltinSpecialisedEffects.INVERT_BLENDER_SKSL).effect!!
+        val blender = effect.makeBlender(null)!!
+
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                device.setBackground(SK_ColorWHITE)
+                val error = assertThrows(IllegalStateException::class.java) {
+                    SkCanvas(device).drawRect(
+                        SkRect.MakeLTRB(0f, 0f, 16f, 16f),
+                        SkPaint(SK_ColorBLACK).apply {
+                            this.blender = blender
+                            isAntiAlias = false
+                        },
+                    )
+                    device.flush()
+                }
+                assertEquals(
+                    "runtime-effect.blender-dst-read-unsupported",
+                    device.runtimeEffectFallbackReasonForDiagnostics(),
+                )
+                assertTrue(
+                    error.message!!.contains("runtime-effect.blender-dst-read-unsupported"),
+                    "expected stable runtime blender dst-read diagnostic, got ${error.message}",
+                )
+                assertTrue(
+                    error.message!!.contains("blend.shader-layer-required"),
+                    "expected BlendPlan layer-composite boundary diagnostic, got ${error.message}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `runtime blender refuses stroked WebGPU rect before style dispatch`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val effect = SkRuntimeEffect.MakeForBlender(SkBuiltinSpecialisedEffects.INVERT_BLENDER_SKSL).effect!!
+        val blender = effect.makeBlender(null)!!
+
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val error = assertThrows(IllegalStateException::class.java) {
+                    SkCanvas(device).drawRect(
+                        SkRect.MakeLTRB(0f, 0f, 16f, 16f),
+                        SkPaint(SK_ColorBLACK).apply {
+                            this.blender = blender
+                            style = SkPaint.Style.kStroke_Style
+                            strokeWidth = 2f
+                            isAntiAlias = false
+                        },
+                    )
+                    device.flush()
+                }
+                assertEquals(
+                    "runtime-effect.blender-dst-read-unsupported",
+                    device.runtimeEffectFallbackReasonForDiagnostics(),
+                )
+                assertTrue(
+                    error.message!!.contains("blend.shader-layer-required"),
+                    "expected style-independent BlendPlan refusal, got ${error.message}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `runtime blender refuses blurred WebGPU rect before mask-filter layer route`() {
+        val context = WebGpuContext.createOrNull()
+        Assumptions.assumeTrue(context != null, "No WebGPU adapter")
+
+        val effect = SkRuntimeEffect.MakeForBlender(SkBuiltinSpecialisedEffects.INVERT_BLENDER_SKSL).effect!!
+        val blender = effect.makeBlender(null)!!
+
+        context!!.use { ctx ->
+            SkWebGpuDevice(ctx, W, H).use { device ->
+                val error = assertThrows(IllegalStateException::class.java) {
+                    SkCanvas(device).drawRect(
+                        SkRect.MakeLTRB(8f, 8f, 40f, 40f),
+                        SkPaint(SK_ColorBLACK).apply {
+                            this.blender = blender
+                            maskFilter = SkBlurMaskFilter.Make(SkBlurStyle.kNormal, 2f)
+                            isAntiAlias = false
+                        },
+                    )
+                    device.flush()
+                }
+                assertEquals(
+                    "runtime-effect.blender-dst-read-unsupported",
+                    device.runtimeEffectFallbackReasonForDiagnostics(),
+                )
+                assertTrue(
+                    error.message!!.contains("No CPU readback or implicit destination read fallback is available."),
+                    "expected pre-mask-filter runtime blender refusal, got ${error.message}",
                 )
             }
         }

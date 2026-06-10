@@ -1,0 +1,180 @@
+{
+  "artifacts": {
+    "blendPlanJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-blend-plan.json",
+    "reportJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.json",
+    "reportMarkdown": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.md",
+    "routeJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-route.json"
+  },
+  "blendPlan": {
+    "candidate": "InvertBlender",
+    "cpuReadbackAllowed": false,
+    "fallbackReasons": [
+      "runtime-effect.blender-dst-read-unsupported",
+      "blend.shader-layer-required"
+    ],
+    "fixedFunctionAllowed": false,
+    "implicitDestinationReadAllowed": false,
+    "kind": "ShaderLayerComposite",
+    "operation": "runtime blender main(src, dst) reads destination color",
+    "reason": "The candidate computes its output from dstColor, so WebGPU cannot use a fixed-function blend state or silently read destination pixels. A future GPU pass must prove an explicit shader/layer composite BlendPlan with no CPU readback.",
+    "requiresDestinationColor": true,
+    "requiresLayerComposite": true,
+    "schemaVersion": "kanvas.runtime-blender-boundary.blend-plan",
+    "stableId": "runtime.invert_blender",
+    "status": "required-not-implemented",
+    "ticket": "KAN-032"
+  },
+  "candidate": {
+    "blendPlanJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-blend-plan.json",
+    "cpuFixture": {
+      "dst": [
+        0.25,
+        0.5,
+        0.75,
+        0.4
+      ],
+      "expected": [
+        0.75,
+        0.5,
+        0.25,
+        1.0
+      ],
+      "formula": "(half4(1) - dst).rgb1",
+      "source": "gm/destcolor.cpp invert blender",
+      "src": [
+        1.0,
+        0.0,
+        0.0,
+        0.5
+      ],
+      "status": "pass",
+      "testClass": "SkRuntimeBlenderTest",
+      "testFile": "cpu-raster/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt"
+    },
+    "cpuImplementationId": "kotlin/invert_blender",
+    "descriptorStatus": "descriptor-backed",
+    "fallbackReason": "runtime-effect.blender-dst-read-unsupported",
+    "kind": "kBlender",
+    "routeJson": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-route.json",
+    "stableId": "runtime.invert_blender",
+    "supportState": "cpu-only",
+    "wgslImplementationId": null
+  },
+  "claimLevel": "selected-runtime-blender-cpu-only-gpu-boundary-refusal",
+  "counts": {
+    "allBlendModesSupported": 0,
+    "cpuSupported": 1,
+    "destinationReadCandidates": 1,
+    "gpuExpectedUnsupported": 1,
+    "gpuSupported": 0,
+    "implicitReadbackRoutes": 0,
+    "totalCandidates": 1
+  },
+  "nonClaims": [
+    "No support for all blend modes.",
+    "No GPU runtime blender support.",
+    "No implicit destination read.",
+    "No CPU readback fallback.",
+    "No hidden layer compatibility path.",
+    "No dynamic SkSL compilation.",
+    "No SkSL IR or VM."
+  ],
+  "packId": "kan-032-runtime-blender-boundary",
+  "route": {
+    "cpuFixture": {
+      "dst": [
+        0.25,
+        0.5,
+        0.75,
+        0.4
+      ],
+      "expected": [
+        0.75,
+        0.5,
+        0.25,
+        1.0
+      ],
+      "formula": "(half4(1) - dst).rgb1",
+      "source": "gm/destcolor.cpp invert blender",
+      "src": [
+        1.0,
+        0.0,
+        0.0,
+        0.5
+      ],
+      "status": "pass",
+      "testClass": "SkRuntimeBlenderTest",
+      "testFile": "cpu-raster/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt"
+    },
+    "cpuImplementationId": "kotlin/invert_blender",
+    "fallbackReason": "runtime-effect.blender-dst-read-unsupported",
+    "gpuGate": {
+      "futurePassCondition": "BlendPlan proves an explicit shader/layer composite route for destination color without implicit readback.",
+      "gpuPassAllowedNow": false
+    },
+    "nonClaims": [
+      "No support for all blend modes.",
+      "No GPU runtime blender support.",
+      "No implicit destination read.",
+      "No CPU readback fallback.",
+      "No hidden layer compatibility path.",
+      "No dynamic SkSL compilation.",
+      "No SkSL IR or VM."
+    ],
+    "routeDiagnostics": {
+      "blendPlanArtifact": "reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary-blend-plan.json",
+      "cpuReadbackAllowed": false,
+      "fixedFunctionBlendAllowed": false,
+      "hiddenLayerCompatAllowed": false,
+      "implicitDestinationReadAllowed": false,
+      "requiresDestinationColor": true,
+      "requiresLayerComposite": true
+    },
+    "sceneId": "runtime.invert_blender.boundary.v1",
+    "schemaVersion": "kanvas.runtime-blender-boundary.route",
+    "secondaryFallbackReason": "blend.shader-layer-required",
+    "selectedRoute": "webgpu.runtime-blender.expected-unsupported",
+    "stableId": "runtime.invert_blender",
+    "status": "expected-unsupported",
+    "supportState": "cpu-only",
+    "ticket": "KAN-032",
+    "wgslImplementationId": null
+  },
+  "schemaVersion": "kanvas.runtime-blender-boundary",
+  "sourceOfTruth": {
+    "cpuFixtureTest": "cpu-raster/src/test/kotlin/org/skia/effects/runtime/SkRuntimeBlenderTest.kt",
+    "descriptorSource": "cpu-raster/src/main/kotlin/org/skia/effects/runtime/effects/SkBuiltinSpecialisedEffects.kt",
+    "supportMatrix": "reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json",
+    "webGpuRefusalTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/RuntimeEffectDescriptorWebGpuTest.kt",
+    "webGpuRoute": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
+  },
+  "stableRefusals": [
+    "runtime-effect.blender-dst-read-unsupported",
+    "blend.shader-layer-required",
+    "runtime-effect.blender-wgsl-descriptor-missing"
+  ],
+  "status": "expected-unsupported",
+  "ticket": "KAN-032",
+  "validationRows": [
+    {
+      "detail": "runtime.invert_blender is descriptor-backed, kBlender, CPU-only, and has no WGSL id.",
+      "id": "descriptor",
+      "status": "pass"
+    },
+    {
+      "detail": "SkRuntimeBlenderTest checks destination-color inversion.",
+      "id": "cpu-fixture",
+      "status": "pass"
+    },
+    {
+      "detail": "WebGPU refuses fill and stroke runtime blender destination reads with stable diagnostics.",
+      "id": "webgpu-boundary",
+      "status": "pass"
+    },
+    {
+      "detail": "GPU pass remains forbidden until an explicit shader/layer composite BlendPlan exists.",
+      "id": "blend-plan-gate",
+      "status": "pass"
+    }
+  ]
+}

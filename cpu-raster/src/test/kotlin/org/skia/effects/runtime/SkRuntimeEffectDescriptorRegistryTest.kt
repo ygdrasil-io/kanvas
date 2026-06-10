@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsChildren
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple
+import org.skia.effects.runtime.effects.SkBuiltinSpecialisedEffects
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -149,9 +150,9 @@ class SkRuntimeEffectDescriptorRegistryTest {
 
         assertEquals(
             SkRuntimeEffectSupportMatrixV2StatusCounts(
-                total = 7,
-                descriptorBacked = 5,
-                cpuOnly = 1,
+                total = 8,
+                descriptorBacked = 6,
+                cpuOnly = 2,
                 gpuBacked = 4,
                 dependencyGated = 0,
                 expectedUnsupported = 2,
@@ -187,6 +188,23 @@ class SkRuntimeEffectDescriptorRegistryTest {
     }
 
     @Test
+    fun `runtime blender descriptor records destination read boundary and remains CPU-only`() {
+        SkBuiltinSpecialisedEffects.registerAll()
+
+        val entry = SkRuntimeEffectDescriptorRegistry.supportMatrixV2Entries()
+            .single { it.stableId == "runtime.invert_blender" }
+
+        assertEquals("descriptor-backed", entry.descriptorStatus)
+        assertEquals("kBlender", entry.kind)
+        assertEquals("cpu-only", entry.supportState)
+        assertEquals("kotlin/invert_blender", entry.cpuImplementationId)
+        assertEquals(null, entry.wgslImplementationId)
+        assertEquals("runtime-effect.blender-dst-read-unsupported", entry.fallbackReason)
+        assertTrue(entry.pmNote.contains("destination color"))
+        assertTrue(entry.pmNote.contains("does not support all blend modes"))
+    }
+
+    @Test
     fun `child shader descriptor records named child lane and remains CPU-only`() {
         SkBuiltinShaderEffectsChildren.registerAll()
 
@@ -219,16 +237,17 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(firstJson.contains("\"supportState\":\"cpu-only\""))
         assertTrue(firstJson.contains("\"fallbackReason\":\"runtime-effect.arbitrary-sksl-unsupported\""))
         assertTrue(firstJson.contains("\"fallbackReason\":\"runtime-effect.wgsl-descriptor-missing\""))
-        assertTrue(firstJson.contains("\"descriptorBacked\":5"))
-        assertTrue(firstJson.contains("\"cpuOnly\":1"))
+        assertTrue(firstJson.contains("\"descriptorBacked\":6"))
+        assertTrue(firstJson.contains("\"cpuOnly\":2"))
         assertTrue(firstJson.contains("\"gpuBacked\":4"))
         assertTrue(firstJson.contains("\"expectedUnsupported\":2"))
         assertTrue(firstJson.contains("No dynamic SkSL compilation"))
 
         assertTrue(firstMarkdown.contains("# Runtime Effects V2 Support Matrix"))
-        assertTrue(firstMarkdown.contains("Status counts: total=7; descriptor-backed=5; CPU-only=1; GPU-backed=4; dependency-gated=0; expected-unsupported=2."))
+        assertTrue(firstMarkdown.contains("Status counts: total=8; descriptor-backed=6; CPU-only=2; GPU-backed=4; dependency-gated=0; expected-unsupported=2."))
         assertTrue(firstMarkdown.contains("| Stable id | Kind | Descriptor status | Support state | CPU implementation | WGSL implementation | Fallback reason | PM note |"))
         assertTrue(firstMarkdown.contains("| runtime.color_filter_luma_to_alpha | kColorFilter | descriptor-backed | gpu-backed | kotlin/color_filter_luma_to_alpha | wgsl/runtime_color_filter_luma_to_alpha | none |"))
+        assertTrue(firstMarkdown.contains("| runtime.invert_blender | kBlender | descriptor-backed | cpu-only | kotlin/invert_blender | - | runtime-effect.blender-dst-read-unsupported |"))
         assertTrue(firstMarkdown.contains("| runtime.simple_rt | kShader | descriptor-backed | gpu-backed | kotlin/simple_rt | wgsl/runtime_simple_rt | none |"))
         assertTrue(firstMarkdown.contains("| runtime.unsharp_rt | kShader | descriptor-backed | cpu-only | kotlin/unsharp_rt | - | runtime-effect.wgsl-descriptor-missing |"))
         assertTrue(firstMarkdown.contains("runtime-effect.arbitrary-sksl-unsupported"))

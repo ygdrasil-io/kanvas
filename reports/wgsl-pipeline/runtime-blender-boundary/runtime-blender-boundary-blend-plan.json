@@ -1,0 +1,19 @@
+{
+  "candidate": "InvertBlender",
+  "cpuReadbackAllowed": false,
+  "fallbackReasons": [
+    "runtime-effect.blender-dst-read-unsupported",
+    "blend.shader-layer-required"
+  ],
+  "fixedFunctionAllowed": false,
+  "implicitDestinationReadAllowed": false,
+  "kind": "ShaderLayerComposite",
+  "operation": "runtime blender main(src, dst) reads destination color",
+  "reason": "The candidate computes its output from dstColor, so WebGPU cannot use a fixed-function blend state or silently read destination pixels. A future GPU pass must prove an explicit shader/layer composite BlendPlan with no CPU readback.",
+  "requiresDestinationColor": true,
+  "requiresLayerComposite": true,
+  "schemaVersion": "kanvas.runtime-blender-boundary.blend-plan",
+  "stableId": "runtime.invert_blender",
+  "status": "required-not-implemented",
+  "ticket": "KAN-032"
+}

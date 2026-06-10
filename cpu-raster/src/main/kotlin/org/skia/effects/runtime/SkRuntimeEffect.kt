@@ -278,6 +278,7 @@ public class SkRuntimeEffect private constructor(
         }
         return SkRuntimeBlender(
             impl = impl,
+            runtimeEffectDescriptor = descriptor(),
             uniformsBuffer = SkRuntimeShader.makeUniformsBuffer(uniforms),
             childResolvers = resolvers,
         )
