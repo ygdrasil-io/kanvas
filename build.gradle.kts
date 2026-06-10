@@ -386,6 +386,7 @@ fun renderPipelineConformanceReport(
         |KAN-037 caps/joins micro-matrix evidence with stable expected-unsupported classification,
         |KAN-038 dashes bounded V1 evidence with stable expected-unsupported classification,
         |KAN-039 nested clip-stack V1 evidence with stable expected-unsupported classification,
+        |KAN-040 coverage/stroke/clip closeout matrix with support/refusal proof guards,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -428,6 +429,7 @@ fun renderPipelineConformanceReport(
         |${row("KAN-037 caps/joins micro-matrix", "expected-unsupported", "`validateKan037CapsJoinsMicroMatrix` selects `round-round`, preserves `butt-bevel` and `square-bevel` sentinels, records WebGPU stable refusal `coverage.stroke-cap-join-visual-parity-below-threshold` with `coverageEdgeCount=18/256`, keeps closed-contour join CPU evidence as a visible support blocker, and makes no renderer, shader, threshold, or edge-budget change.")}
         |${row("KAN-038 dashes bounded V1", "expected-unsupported", "`validateKan038DashesBoundedV1` identifies `skia-gm-dashing-width1-pattern1-1-aa` with 2/8 dash intervals, phase 0, stroke width 1, path effect before stroke, keeps it refused via `coverage.dashing.row-specific-artifacts-required`, preserves the `path-aa-dashing-edge-budget` sentinel via `coverage.edge-count-exceeded`, and makes no renderer, shader, threshold, edge-budget, or dash-budget change.")}
         |${row("KAN-039 nested clip-stack V1", "expected-unsupported", "`validateKan039NestedClipStackV1` selects `m60-bounded-nested-rrect-clip`, records clip sequence `rect/intersect + rect/intersect + rrect-oval/difference`, clipDepth `3/4`, edgeCount `72/256`, keeps it refused via `coverage.nested-clip-visual-parity-below-threshold`, preserves `m57-aaclip-bounded-grid` support, and makes no renderer, shader, threshold, edge-budget, clip-depth budget, or integer-scissor substitution change.")}
+        |${row("KAN-040 coverage/stroke/clip closeout matrix", "passed", "`validateKan040CoverageCloseoutMatrix` aggregates HairlinesGM, butt stroke, caps/joins, dashes, AA clip, and nested clip rows into supportable-bounded, visible-non-supportable, expected-unsupported, and dependency-gated categories; it fails support claims without reference/CPU/GPU/diff/stat/route plus `fallbackReason=none` and refuses unsupported rows without stable fallbacks.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -803,6 +805,7 @@ tasks.register("pipelineConformance") {
         "validateKan037CapsJoinsMicroMatrix",
         "validateKan038DashesBoundedV1",
         "validateKan039NestedClipStackV1",
+        "validateKan040CoverageCloseoutMatrix",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -827,6 +830,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-037 caps/joins micro-matrix evidence and stable refusal classification: validateKan037CapsJoinsMicroMatrix
             |- REQUIRED KAN-038 dashes bounded V1 evidence and stable refusal classification: validateKan038DashesBoundedV1
             |- REQUIRED KAN-039 nested clip-stack V1 evidence and stable refusal classification: validateKan039NestedClipStackV1
+            |- REQUIRED KAN-040 coverage/stroke/clip closeout matrix and claim guards: validateKan040CoverageCloseoutMatrix
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5285,6 +5289,32 @@ tasks.register<Exec>("validateKan039NestedClipStackV1") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan040CoverageCloseoutMatrix") {
+    group = "verification"
+    description = "Materializes and validates the KAN-040 coverage/stroke/clip closeout matrix and claim guards."
+    dependsOn("validateKan039NestedClipStackV1")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/coverage-closeout-matrix")
+    commandLine(
+        "python3",
+        "scripts/validate_kan040_coverage_closeout_matrix.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan040_coverage_closeout_matrix.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-004-clips-aa/kan-004-clips-aa.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/hairlines-root-cause/kan-035-hairlines-root-cause.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/butt-stroke-non-hairline/kan-036-butt-stroke-non-hairline.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/caps-joins-micro-matrix/kan-037-caps-joins-micro-matrix.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/dashes-bounded-v1/kan-038-dashes-bounded-v1.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/nested-clip-stack-v1/kan-039-nested-clip-stack-v1.json"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/05-fallback-diagnostics.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/06-validation-and-perf.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
+    outputs.file(outputDir.file("kan-040-coverage-closeout-matrix.json"))
+    outputs.file(outputDir.file("kan-040-coverage-closeout-matrix.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -5439,6 +5469,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan037CapsJoinsMicroMatrix",
         "validateKan038DashesBoundedV1",
         "validateKan039NestedClipStackV1",
+        "validateKan040CoverageCloseoutMatrix",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
