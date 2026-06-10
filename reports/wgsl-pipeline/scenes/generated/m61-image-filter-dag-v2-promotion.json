@@ -54,11 +54,52 @@
         "ownership": {
           "intermediatesAllocated": 1,
           "parentSurfaceOwned": true,
+          "sourceSurface": "gpuSrc.intermediateView",
           "scratchOwner": "LayerCompositeDraw.materializeTargetTexture",
+          "scratchViewOwner": "LayerCompositeDraw.materializeTargetView",
+          "scratchAllocator": "SkWebGpuDevice.enqueueMaterializeMatrixTransformToScratch",
+          "scratchAllocationLabel": "SkWebGpuDevice.materializeMatrixTransformTarget",
+          "scratchUsage": ["RenderAttachment", "TextureBinding"],
           "scratchLifetime": "per-composite-dispatch",
+          "writerPass": "matrix-transform-prepass",
+          "writerRoute": "webgpu.image-filter.compose.cf-matrix-transform.materialize-matrix",
+          "readerPass": "color-filter-final-composite",
+          "readerRoute": "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite",
+          "releaseOwner": "DrawResources",
+          "releasePoint": "closeDrawResources after command submission",
+          "releaseOrder": ["materializeTargetView.close()", "materializeTargetTexture.close()"],
+          "cpuReadbackFallback": false,
+          "newResourceLifecycle": false,
+          "lifecycle": [
+            {
+              "stage": "allocate",
+              "owner": "SkWebGpuDevice.enqueueMaterializeMatrixTransformToScratch",
+              "resource": "Layer-sized GPUTexture labeled SkWebGpuDevice.materializeMatrixTransformTarget",
+              "evidence": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
+            },
+            {
+              "stage": "write",
+              "owner": "LayerCompositeDraw.materializeTargetView",
+              "resource": "MatrixTransform affine materialise pre-pass writes source pixels into scratch with loadOp=Clear",
+              "evidence": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-prepass.json"
+            },
+            {
+              "stage": "consume",
+              "owner": "LayerCompositeDraw final ColorFilter composite",
+              "resource": "Final composite samples the scratch as source layer input",
+              "evidence": "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json"
+            },
+            {
+              "stage": "release",
+              "owner": "DrawResources.closeDrawResources",
+              "resource": "materializeTargetView then materializeTargetTexture are closed after command submission",
+              "evidence": "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
+            }
+          ],
           "notes": [
             "The promoted row is bounded to three nodes and one intermediate texture.",
-            "The row reuses generated SaveLayerImageFilterTest evidence and does not claim recursive graph scheduling or ImageFiltersGraphGM parity."
+            "The row reuses generated SaveLayerImageFilterTest evidence and does not claim recursive graph scheduling or ImageFiltersGraphGM parity.",
+            "The scratch reuses the existing LayerCompositeDraw/DrawResources lifecycle; no second image-filter resource manager or CPU readback fallback is introduced."
           ]
         },
         "nonClaim": "No arbitrary image-filter DAG, ImageFiltersGraphGM parity, picture/layer prepass, perspective transform, or recursive scheduling support is claimed by this row."

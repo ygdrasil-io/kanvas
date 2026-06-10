@@ -4689,6 +4689,20 @@ tasks.register<Exec>("validateMepNextRuntimeInteractive") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json"))
 }
 
+tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
+    group = "verification"
+    description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
+    commandLine("python3", "scripts/validate_kan006_intermediate_texture_ownership.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan006_intermediate_texture_ownership.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-006-intermediate-texture-ownership.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m61-image-filter-dag-v2-promotion.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-prepass.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/stats.json"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SaveLayerImageFilterTest.kt"))
+}
+
 tasks.register<Exec>("validateMepRcScenePack") {
     group = "verification"
     description = "Validates checked-in MEP RC FOR-215/FOR-216/FOR-218 scene-pack evidence without Kadre native dependencies."
@@ -4751,6 +4765,7 @@ tasks.register("pipelinePmBundle") {
         "validateMepNextRuntimeInteractive",
         "validateMepRcScenePack",
         "validateMepRcRuntime",
+        "validateKan006IntermediateTextureOwnership",
     )
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
@@ -4842,9 +4857,11 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-006-intermediate-texture-ownership.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m61-image-filter-dag-v2-promotion.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m66-gm-promotion-wave.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m66-readiness-counters.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance/m55-performance-gate-candidates.json"))
@@ -5063,6 +5080,7 @@ tasks.register("pipelinePmBundle") {
             "reports/wgsl-pipeline/2026-06-02-mep-next-feature-breadth-pm-report.md",
             "reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md",
             "reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md",
+            "reports/wgsl-pipeline/2026-06-10-kan-006-intermediate-texture-ownership.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.md",
             "reports/wgsl-pipeline/m75-kadre-replay-pack/evidence.json",
             "reports/wgsl-pipeline/m76-generated-metadata-replay/evidence.md",
