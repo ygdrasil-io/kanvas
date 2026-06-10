@@ -383,6 +383,7 @@ fun renderPipelineConformanceReport(
         |Runtime Effects V2 evidence bundle aggregation with support/refusal rows and PM non-claims,
         |KAN-035 HairlinesGM root-cause evidence with stable expected-unsupported classification,
         |KAN-036 butt stroke non-hairline bounded row evidence with stable expected-unsupported classification,
+        |KAN-037 caps/joins micro-matrix evidence with stable expected-unsupported classification,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -422,6 +423,7 @@ fun renderPipelineConformanceReport(
         |${row("Runtime Effects V2 evidence bundle", "passed", "`pipelineRuntimeEffectsV2EvidenceBundleReport` aggregates all Runtime Effects V2 support/refusal rows, linked artifacts, stable diagnostics, and PM non-claims; counts $runtimeEffectsV2EvidenceBundleCounts")}
         |${row("KAN-035 HairlinesGM root cause", "expected-unsupported", "`validateKan035HairlinesRootCause` classifies the current HairlinesGM residual as `cap-join-parity`, keeps `skia-gm-hairlines` expected-unsupported, records `expected-unsupported-diagnostic=1` and `unexpected-exception=0`, and makes no renderer, shader, threshold, or edge-budget change.")}
         |${row("KAN-036 butt stroke non-hairline", "expected-unsupported", "`validateKan036ButtStrokeNonHairline` selects one non-hairline no-dash butt-cap stroke row, records WebGPU stable refusal `coverage.stroke-cap-join-visual-parity-below-threshold` with `coverageEdgeCount=66/256`, blocks support until WebGPU image/diff and CPU-vs-Skia support-ready evidence exist, and makes no renderer, shader, threshold, or edge-budget change.")}
+        |${row("KAN-037 caps/joins micro-matrix", "expected-unsupported", "`validateKan037CapsJoinsMicroMatrix` selects `round-round`, preserves `butt-bevel` and `square-bevel` sentinels, records WebGPU stable refusal `coverage.stroke-cap-join-visual-parity-below-threshold` with `coverageEdgeCount=18/256`, keeps closed-contour join CPU evidence as a visible support blocker, and makes no renderer, shader, threshold, or edge-budget change.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -794,6 +796,7 @@ tasks.register("pipelineConformance") {
         "pipelineRuntimeEffectsV2EvidenceBundleReport",
         "validateKan035HairlinesRootCause",
         "validateKan036ButtStrokeNonHairline",
+        "validateKan037CapsJoinsMicroMatrix",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -815,6 +818,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
             |- REQUIRED KAN-035 HairlinesGM root-cause evidence and stable refusal classification: validateKan035HairlinesRootCause
             |- REQUIRED KAN-036 butt stroke non-hairline row evidence and stable refusal classification: validateKan036ButtStrokeNonHairline
+            |- REQUIRED KAN-037 caps/joins micro-matrix evidence and stable refusal classification: validateKan037CapsJoinsMicroMatrix
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5151,6 +5155,46 @@ tasks.register<Exec>("validateKan036ButtStrokeNonHairline") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan037CapsJoinsMicroMatrix") {
+    group = "verification"
+    description = "Materializes and validates the KAN-037 caps/joins micro-matrix evidence and stable refusal classification."
+    dependsOn("validateKan003CapsJoinsAa", "validateKan036ButtStrokeNonHairline")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/caps-joins-micro-matrix")
+    commandLine(
+        "python3",
+        "scripts/validate_kan037_caps_joins_micro_matrix.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan037_caps_joins_micro_matrix.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-003-caps-joins-aa/kan-003-caps-joins-aa.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/butt-stroke-non-hairline/kan-036-butt-stroke-non-hairline.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/experimental-gpu-diagnostic.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/skia.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu-diff.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental-diff.png"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-03-for-266-stroke-cap-join-aa-residual.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-03-for-267-round-cap-join-coverage-equivalence.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-003-caps-joins-aa.md"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/StrokeCapJoinSceneCaptureTest.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/05-fallback-diagnostics.md"))
+    outputs.file(outputDir.file("kan-037-caps-joins-micro-matrix.json"))
+    outputs.file(outputDir.file("kan-037-caps-joins-micro-matrix.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -5302,6 +5346,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan026HairlinesHarness",
         "validateKan035HairlinesRootCause",
         "validateKan036ButtStrokeNonHairline",
+        "validateKan037CapsJoinsMicroMatrix",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
