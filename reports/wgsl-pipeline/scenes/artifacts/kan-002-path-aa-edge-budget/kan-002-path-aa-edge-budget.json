@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-002",
+  "packId": "kan-002-path-aa-edge-budget-v1",
+  "status": "pass",
+  "claimLevel": "bounded-path-aa-edge-budget-evidence",
+  "edgeBudget": 256,
+  "budgetChanged": false,
+  "thresholdsWeakened": false,
+  "readinessDelta": 0,
+  "supportClaim": "path-aa-stroke-primitive-only",
+  "refusalPolicy": "coverage.edge-count-exceeded",
+  "boundedSupportScene": {
+    "sceneId": "path-aa-stroke-primitive",
+    "source": "M44 StrokeRectGM/StrokeCircleGM representative",
+    "referenceKind": "test-oracle",
+    "gpuStatus": "pass",
+    "gpuFallbackReason": "none",
+    "coverageStrategy": "webgpu.coverage.path-aa-stroke-primitive",
+    "budgetReason": "not coverage.edge-count-exceeded",
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/skia.png",
+    "cpuImage": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/cpu.png",
+    "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/cpu-diff.png",
+    "gpuImage": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/gpu.png",
+    "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/gpu-diff.png",
+    "cpuRoute": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/route-cpu.json",
+    "gpuRoute": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/route-gpu.json",
+    "stats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/stats.json"
+  },
+  "explicitBudgetScene": {
+    "sceneId": "m57-aaclip-bounded-grid",
+    "source": "AA clip bounded grid evidence",
+    "edgeBudget": 256,
+    "edgeBudgetReason": "not coverage.edge-count-exceeded",
+    "gpuStatus": "pass",
+    "gpuFallbackReason": "none",
+    "coverageStrategy": "webgpu.coverage.aa-clip-rect-grid",
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/skia.png",
+    "cpuImage": "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/cpu.png",
+    "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/cpu-diff.png",
+    "gpuImage": "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/gpu.png",
+    "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/gpu-diff.png",
+    "cpuRoute": "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/route-cpu.json",
+    "gpuRoute": "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/route-gpu.json",
+    "stats": "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/stats.json"
+  },
+  "edgeBudgetRefusalScene": {
+    "sceneId": "path-aa-convexpaths-edge-budget",
+    "source": "ConvexPathsGM generated expected-unsupported row",
+    "referenceKind": "cpu-oracle",
+    "gpuStatus": "expected-unsupported",
+    "gpuFallbackReason": "coverage.edge-count-exceeded",
+    "coverageStrategy": "webgpu.coverage.refuse",
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/skia.png",
+    "cpuImage": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/cpu.png",
+    "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/cpu-diff.png",
+    "cpuRoute": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/route-cpu.json",
+    "gpuRoute": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/route-gpu.json",
+    "stats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/stats.json"
+  },
+  "inventoryBoundaryScene": {
+    "sceneId": "path-aa-edge-budget-boundary",
+    "source": "gpuInventoryTest expected-unsupported boundary",
+    "edgeCountExceededRows": 46,
+    "expectedUnsupportedRows": 50,
+    "unexpectedExceptions": 0,
+    "gpuFallbackReason": "coverage.edge-count-exceeded",
+    "coverageStrategy": "webgpu.coverage.refuse",
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/skia.png",
+    "cpuImage": "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/cpu.png",
+    "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/cpu-diff.png",
+    "cpuRoute": "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/route-cpu.json",
+    "gpuRoute": "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/route-gpu.json",
+    "stats": "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/stats.json"
+  },
+  "underBudgetRefusalScene": {
+    "sceneId": "m60-bounded-stroke-cap-join",
+    "source": "M60 bounded cap/join residual",
+    "edgeCount": 18,
+    "edgeBudget": 256,
+    "edgeBudgetReason": "not coverage.edge-count-exceeded",
+    "gpuStatus": "expected-unsupported",
+    "gpuFallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "coverageStrategy": "webgpu.coverage.refuse",
+    "cpuRoute": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+    "gpuRoute": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+    "stats": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json"
+  },
+  "policySources": [
+    ".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md",
+    ".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md",
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    "render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"
+  ],
+  "validationRows": [
+    {
+      "id": "budget-policy",
+      "status": "pass",
+      "evidence": "ADR 0005, M60 realtime spec, selector constant, and device constant all preserve the 256 edge budget."
+    },
+    {
+      "id": "bounded-support-row",
+      "status": "pass",
+      "evidence": "path-aa-stroke-primitive keeps reference, CPU, GPU, diff, stats, and route artifacts with WebGPU fallbackReason=none."
+    },
+    {
+      "id": "explicit-budget-row",
+      "status": "pass",
+      "evidence": "m57-aaclip-bounded-grid route diagnostics expose edgeBudget=256 and not coverage.edge-count-exceeded."
+    },
+    {
+      "id": "edge-budget-refusal-row",
+      "status": "pass",
+      "evidence": "path-aa-convexpaths-edge-budget stays expected-unsupported with coverage.edge-count-exceeded."
+    },
+    {
+      "id": "inventory-boundary-row",
+      "status": "pass",
+      "evidence": "path-aa-edge-budget-boundary keeps 46 edge-count exceeded rows, 50 expected unsupported rows, and zero unexpected exceptions."
+    },
+    {
+      "id": "under-budget-refusal-separation",
+      "status": "pass",
+      "evidence": "m60-bounded-stroke-cap-join is under the 256 edge budget but remains refused for visual parity, so edge budget is not used as a generic blocker."
+    },
+    {
+      "id": "no-claim-expansion",
+      "status": "pass",
+      "evidence": "The pack records no broad Path AA support, no arbitrary complex path support, no budget increase, and no threshold weakening."
+    }
+  ],
+  "nonClaims": [
+    "KAN-002 does not claim broad Path AA support.",
+    "KAN-002 does not support arbitrary complex paths.",
+    "KAN-002 does not increase the WebGPU edge budget.",
+    "KAN-002 does not weaken dashboard thresholds.",
+    "KAN-002 does not port Ganesh or Graphite.",
+    "KAN-002 does not add a SkSL compiler.",
+    "KAN-002 does not silently fall back to CPU readback."
+  ],
+  "artifactPaths": [
+    "reports/wgsl-pipeline/scenes/artifacts/kan-002-path-aa-edge-budget/kan-002-path-aa-edge-budget.json",
+    "reports/wgsl-pipeline/2026-06-10-kan-002-path-aa-edge-budget.md",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/gpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/gpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-stroke-primitive/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-convexpaths-edge-budget/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/path-aa-edge-budget-boundary/stats.json"
+  ]
+}
