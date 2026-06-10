@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-003",
+  "packId": "kan-003-caps-joins-aa-visible-refusal-v1",
+  "status": "pass",
+  "closureDecision": "visible-non-supportable",
+  "claimLevel": "bounded-stroke-cap-join-visible-refusal",
+  "supportClaim": false,
+  "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+  "remainingBoundary": "coverage.stroke-cap-join-aa-residual",
+  "thresholdsWeakened": false,
+  "sharedCoverageChanged": false,
+  "readinessDelta": 0,
+  "selectedScene": {
+    "sceneId": "m60-bounded-stroke-cap-join",
+    "status": "expected-unsupported",
+    "family": "Path AA / stroke cap join",
+    "source": "LinePathGM-derived bounded stroke cap/join scene",
+    "referenceKind": "cpu-oracle",
+    "cpuStatus": "pass",
+    "gpuStatus": "expected-unsupported",
+    "gpuFallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "normalGpuRoute": "webgpu.coverage.refuse",
+    "diagnosticGpuRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
+    "edgeCount": 18,
+    "edgeBudget": 256,
+    "pathVerbCount": 9,
+    "pathVerbBudget": 96,
+    "strokeWidth": 10.0,
+    "strokeCaps": [
+      "butt",
+      "round",
+      "square"
+    ],
+    "strokeJoins": [
+      "bevel",
+      "round",
+      "bevel"
+    ],
+    "supportThreshold": 99.95,
+    "targetColorSpaceBlendDiagnosticOnly": true,
+    "reference": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/skia.png",
+    "cpuImage": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu.png",
+    "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu-diff.png",
+    "gpuExperimentalImage": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental.png",
+    "gpuExperimentalDiff": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental-diff.png",
+    "cpuRoute": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+    "gpuRoute": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+    "stats": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json",
+    "aaResidualDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+    "experimentalGpuDiagnostic": "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/experimental-gpu-diagnostic.json"
+  },
+  "dashboardRow": {
+    "source": "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json",
+    "sceneId": "m60-bounded-stroke-cap-join",
+    "status": "expected-unsupported",
+    "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "gpuRoute": "webgpu.coverage.refuse",
+    "cpuRoute": "cpu.coverage.stroke-cap-join-oracle",
+    "remainingRootCause": "coverage.stroke-cap-join-aa-residual",
+    "tags": [
+      "feature.stroke.cap",
+      "feature.stroke.join",
+      "route.gpu.expected-unsupported"
+    ]
+  },
+  "for266Residual": {
+    "artifact": "reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json",
+    "report": "reports/wgsl-pipeline/2026-06-03-for-266-stroke-cap-join-aa-residual.md",
+    "decision": "KEEP_DIAGNOSTIC",
+    "fallbackReason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "remainingBoundary": "coverage.stroke-cap-join-aa-residual"
+  },
+  "for267CoverageEquivalence": {
+    "artifact": "reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json",
+    "report": "reports/wgsl-pipeline/2026-06-03-for-267-round-cap-join-coverage-equivalence.md",
+    "decision": "KEEP_DIAGNOSTIC",
+    "boundedCoverageCorrectionStatus": "REFUSED",
+    "missingCondition": "missing_cpu_gpu_coverage_equivalence_for_round_cap_join_boundary_cells",
+    "remainingBoundary": "coverage.stroke-cap-join-aa-residual",
+    "cellCount": 4,
+    "roundCapCellsObserved": true,
+    "roundJoinCellsObserved": true,
+    "safeBoundedCoverageCorrectionProven": false
+  },
+  "productionPolicy": {
+    "normalRoute": "webgpu.coverage.refuse",
+    "diagnosticRoute": "webgpu.coverage.stroke-cap-join.experimental-render",
+    "targetColorSpaceBlendGloballyEnabled": false,
+    "supportThreshold": 99.95,
+    "fallbackReasonStable": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "remainingBoundary": "coverage.stroke-cap-join-aa-residual"
+  },
+  "validationRows": [
+    {
+      "id": "selected-scene-visible-refusal",
+      "status": "pass",
+      "evidence": "m60-bounded-stroke-cap-join keeps reference, CPU image/diff, experimental GPU diagnostic image/diff, stats, and CPU/GPU route diagnostics."
+    },
+    {
+      "id": "production-route-refusal",
+      "status": "pass",
+      "evidence": "Normal WebGPU route remains webgpu.coverage.refuse with coverage.stroke-cap-join-visual-parity-below-threshold."
+    },
+    {
+      "id": "bounded-facts-visible",
+      "status": "pass",
+      "evidence": "Route diagnostics expose edgeCount=18/256, pathVerbCount=9/96, strokeWidth=10, caps butt/round/square, and joins bevel/round/bevel."
+    },
+    {
+      "id": "for266-residual-preserved",
+      "status": "pass",
+      "evidence": "FOR-266 remains KEEP_DIAGNOSTIC and records the residual boundary coverage.stroke-cap-join-aa-residual."
+    },
+    {
+      "id": "for267-coverage-equivalence-refused",
+      "status": "pass",
+      "evidence": "FOR-267 keeps KEEP_DIAGNOSTIC with correction refused because boundary-cell CPU/GPU coverage equivalence is not proven."
+    },
+    {
+      "id": "dashboard-row-preserved",
+      "status": "pass",
+      "evidence": "m60-nested-clip-path-aa-promotion keeps the scene expected-unsupported with stroke cap/join tags and stable fallback."
+    },
+    {
+      "id": "no-claim-expansion",
+      "status": "pass",
+      "evidence": "No cap/join support, broad stroke support, threshold weakening, shared coverage production change, global targetColorSpaceBlend, Ganesh/Graphite, or SkSL compiler work is claimed."
+    }
+  ],
+  "nonClaims": [
+    "KAN-003 does not claim stroke cap/join WebGPU support.",
+    "KAN-003 does not claim broad stroke support.",
+    "KAN-003 does not support all stroke caps or joins.",
+    "KAN-003 does not lower the 99.95 support threshold.",
+    "KAN-003 does not change shared coverage production behavior.",
+    "KAN-003 does not enable targetColorSpaceBlend globally.",
+    "KAN-003 does not port Ganesh or Graphite.",
+    "KAN-003 does not add a SkSL compiler."
+  ],
+  "artifactPaths": [
+    "reports/wgsl-pipeline/scenes/artifacts/kan-003-caps-joins-aa/kan-003-caps-joins-aa.json",
+    "reports/wgsl-pipeline/2026-06-10-kan-003-caps-joins-aa.md",
+    "reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/gpu-experimental-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/aa-residual-diagnostic.json",
+    "reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/experimental-gpu-diagnostic.json",
+    "reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json",
+    "reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json"
+  ]
+}
