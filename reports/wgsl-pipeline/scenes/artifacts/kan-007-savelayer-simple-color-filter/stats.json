@@ -1,0 +1,77 @@
+        {
+          "sceneId": "save-layer.image-filter.color-filter-matrix.v1",
+          "scopeId": "kan-007.save-layer.simple-color-filter.v1",
+          "status": "pass",
+          "supportScope": "bounded-saveLayer-colorFilter-matrix-input-null",
+          "supportClaim": true,
+          "cpuRouteIdentifier": "cpu.save-layer.image-filter.color-filter-matrix",
+          "webGpuRouteIdentifier": "webgpu.image-filter.color-filter.layer-composite",
+          "imageFilterKind": "ColorFilter",
+          "colorFilterKind": "Matrix",
+          "sourceColor": "#FFFF0000",
+          "filteredColor": "#FF4C4C4C",
+          "layerBounds": "left=24.0;top=16.0;right=88.0;bottom=56.0",
+          "layerPixelCount": 2560,
+          "fallbackPolicy": "supported-via-layer-composite-color-filter-uniform",
+          "routeDiagnostics": {
+  "selectedRoute": "webgpu.image-filter.color-filter.layer-composite",
+  "prepassRoute": null,
+  "scratchOwner": null,
+  "scratchLifetime": null,
+  "materialiseStages": 0,
+  "fallbackReason": null
+},
+          "cpuNonBackgroundPixels": 2560,
+          "webGpuNonBackgroundPixels": 2560,
+          "tolerance": 2,
+          "cpuSimilarityThreshold": 99.00,
+          "webGpuSimilarityThreshold": 99.00,
+          "cpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 8064,
+  "matchingPixels": 8064,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "webGpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 8064,
+  "matchingPixels": 8064,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "globalThresholdChanged": false,
+          "webGpuAdapter": "Apple M2 Max",
+          "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter/reference.png",
+          "cpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter/cpu.png",
+          "webGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter/webgpu.png",
+          "cpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter/cpu-diff.png",
+          "webGpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter/webgpu-diff.png",
+          "routeCpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter/route-cpu.json",
+          "routeWebGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter/route-webgpu.json",
+          "nonClaims": ["no-arbitrary-layer-stack-claim", "no-multi-node-dag-claim", "no-broad-image-filter-claim", "no-color-filter-chain-claim", "no-blur-offset-crop-matrix-transform-expansion-claim", "no-picture-prepass-claim", "no-cpu-readback-fallback-claim", "no-global-threshold-change"]
+        }

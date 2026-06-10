@@ -1,0 +1,54 @@
+            {
+              "sceneId": "save-layer.image-filter.color-filter-matrix.v1",
+              "scopeId": "kan-007.save-layer.simple-color-filter.v1",
+              "backend": "WebGPU",
+              "adapter": "Apple M2 Max",
+              "drawKind": "SkCanvas.saveLayer",
+              "status": "pass",
+              "supportScope": "bounded-saveLayer-colorFilter-matrix-input-null",
+              "supportClaim": true,
+              "selectedRoute": "webgpu.image-filter.color-filter.layer-composite",
+              "imageFilterKind": "ColorFilter",
+              "colorFilterKind": "Matrix",
+              "sourceColor": "#FFFF0000",
+              "filteredColor": "#FF4C4C4C",
+              "layerBounds": "left=24.0;top=16.0;right=88.0;bottom=56.0",
+              "layerPixelCount": 2560,
+              "referenceKind": "analytic-saveLayer-colorFilter-matrix-oracle",
+              "fallbackReason": "none",
+              "fallbackPolicy": "supported-via-layer-composite-color-filter-uniform",
+              "routeDiagnostics": {
+  "selectedRoute": "webgpu.image-filter.color-filter.layer-composite",
+  "prepassRoute": null,
+  "scratchOwner": null,
+  "scratchLifetime": null,
+  "materialiseStages": 0,
+  "fallbackReason": null
+},
+              "routeFacts": "saveLayer imageFilter ColorFilter(Matrix,input=null) -> layer_composite.wgsl colorFilter uniform; no prepass; no scratch texture",
+              "comparison": {
+  "similarity": 100.000000,
+  "totalPixels": 8064,
+  "matchingPixels": 8064,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+              "similarityThreshold": 99.00,
+              "globalThresholdChanged": false,
+              "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter/reference.png",
+              "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter/webgpu.png",
+              "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter/webgpu-diff.png",
+              "nonClaims": ["no-arbitrary-layer-stack-claim", "no-multi-node-dag-claim", "no-broad-image-filter-claim", "no-color-filter-chain-claim", "no-blur-offset-crop-matrix-transform-expansion-claim", "no-picture-prepass-claim", "no-cpu-readback-fallback-claim", "no-global-threshold-change"]
+            }
