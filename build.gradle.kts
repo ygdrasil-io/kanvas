@@ -390,6 +390,7 @@ fun renderPipelineConformanceReport(
         |KAN-041 image-filter DAG bounded V3 evidence with two support rows and stable residual refusals,
         |KAN-042 image-filter residual refusal matrix with PM support/gap/dependency categories,
         |KAN-043 text shaping/fallback scope with explicit font identity, glyph clusters, glyph ids, and stable fallback refusals,
+        |KAN-044 glyph mask/atlas ownership boundary with text-owned atlas route, CPU mask oracle, coverage handoff, and stable WebGPU alpha-mask refusal,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -436,6 +437,7 @@ fun renderPipelineConformanceReport(
         |${row("KAN-041 image-filter DAG bounded V3", "passed", "`validateKan041ImageFilterDagBoundedV3` records two bounded support scenes (`crop-image-filter-nonnull-prepass`, `m61-compose-cf-matrix-transform-dag-v2`) with reference/CPU/GPU/diff/stat/route and `fallbackReason=none`, keeps BigTile/ImageFiltersGraph/out-of-scope Crop rows refused with stable reasons, and makes no renderer, shader, threshold, readback, picture-prepass, or broad DAG claim.")}
         |${row("KAN-042 image-filter residual refusal matrix", "passed", "`validateKan042ImageFilterResidualRefusalMatrix` aggregates 15 image-filter rows into `supportable-bounded`, `implementation-gap`, and `dependency-gated` PM categories, keeps every unsupported row on a stable reason code, verifies dashboard `fail=0` and `tracked-gap=0`, and makes no renderer, shader, threshold, budget, or new support claim.")}
         |${row("KAN-043 text shaping/fallback scope", "passed", "`validateKan043TextShapingFallbackScope` records simple Latin support, bounded kerning-style shaping support, complex shaping refusal, and missing glyph/fallback refusal with font face/source/hash, shaping route, clusters, glyph ids, CPU/GPU route or refusal, and guards against implicit system font fallback or broad shaping claims.")}
+        |${row("KAN-044 glyph mask/atlas ownership", "passed", "`validateKan044GlyphMaskAtlasOwnership` records the text-owned simple Latin glyph atlas upload plan, CPU glyph-mask oracle, geometry `CoveragePlan.AlphaMask` handoff, and WebGPU standalone alpha-mask refusal `coverage.alpha-mask-unsupported`, with guards against missing glyph keys/generation/upload bytes/cache ids, coverage ownership drift, LCD/SDF, dynamic eviction, and Ganesh/Graphite claims.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -815,6 +817,7 @@ tasks.register("pipelineConformance") {
         "validateKan041ImageFilterDagBoundedV3",
         "validateKan042ImageFilterResidualRefusalMatrix",
         "validateKan043TextShapingFallbackScope",
+        "validateKan044GlyphMaskAtlasOwnership",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -843,6 +846,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-041 image-filter DAG bounded V3 support/refusal evidence: validateKan041ImageFilterDagBoundedV3
             |- REQUIRED KAN-042 image-filter residual refusal matrix and PM category guards: validateKan042ImageFilterResidualRefusalMatrix
             |- REQUIRED KAN-043 text shaping/fallback scope and font fallback guards: validateKan043TextShapingFallbackScope
+            |- REQUIRED KAN-044 glyph mask/atlas ownership boundary and coverage ownership guards: validateKan044GlyphMaskAtlasOwnership
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5426,6 +5430,41 @@ tasks.register<Exec>("validateKan043TextShapingFallbackScope") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan044GlyphMaskAtlasOwnership") {
+    group = "verification"
+    description = "Materializes and validates the KAN-044 glyph mask atlas ownership evidence."
+    dependsOn(
+        "validateKan043TextShapingFallbackScope",
+        ":render-pipeline:pipelineConformanceTest",
+        ":gpu-raster:pipelineConformanceTest",
+    )
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/glyph-mask-atlas-ownership")
+    commandLine(
+        "python3",
+        "scripts/validate_kan044_glyph_mask_atlas_ownership.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan044_glyph_mask_atlas_ownership.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlas.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlasTest.kt"))
+    inputs.file(layout.projectDirectory.file("kanvas-skia/src/main/kotlin/org/skia/foundation/SkCpuGlyphCache.kt"))
+    inputs.file(layout.projectDirectory.file("render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt"))
+    inputs.file(layout.projectDirectory.file("render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt"))
+    inputs.file(layout.projectDirectory.file("kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/target/high-performance-wgsl-pipeline-target.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/font/README.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/font/04-glyph-rendering-and-coverage.md"))
+    outputs.file(outputDir.file("kan-044-glyph-mask-atlas-ownership.json"))
+    outputs.file(outputDir.file("kan-044-glyph-mask-atlas-ownership.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -5584,6 +5623,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan041ImageFilterDagBoundedV3",
         "validateKan042ImageFilterResidualRefusalMatrix",
         "validateKan043TextShapingFallbackScope",
+        "validateKan044GlyphMaskAtlasOwnership",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",

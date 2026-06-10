@@ -1,0 +1,288 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-044",
+  "packId": "kan-044-glyph-mask-atlas-ownership",
+  "status": "pass",
+  "closureDecision": "glyph-mask-atlas-ownership-boundary",
+  "claimLevel": "pm-ownership-boundary-existing-evidence-only",
+  "supportClaim": "no-new-rendering-support",
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "coverageOwnsGlyphAtlas": false,
+  "broadAtlasEvictionClaim": false,
+  "readinessDelta": 0,
+  "summary": {
+    "totalRows": 4,
+    "atlasUploadPlanRows": 1,
+    "cpuMaskOracleRows": 1,
+    "coverageHandoffRows": 1,
+    "webGpuRefusalRows": 1,
+    "rowsMissingGlyphKeys": 0,
+    "rowsMissingAtlasGeneration": 0,
+    "rowsMissingUploadBytes": 0,
+    "coverageOwnershipViolations": 0
+  },
+  "ownershipRows": [
+    {
+      "rowId": "text.simple-latin.glyph-atlas.upload-plan",
+      "pmCategory": "atlas-upload-plan",
+      "status": "pass",
+      "sourceEvidence": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+      "sceneId": "text.simple-latin.line.v1",
+      "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+      "route": {
+        "webGpu": "webgpu.text.glyph-atlas.simple-latin",
+        "cpu": "cpu.text.glyph-mask.simple-latin",
+        "coverage": "not-owned-by-coverage"
+      },
+      "atlas": {
+        "textureLabel": "kan-011.text.simple-latin.liberation-sans-regular.v1.glyph-atlas.generation-1",
+        "textureFormat": "R8Unorm",
+        "textureUsage": "TextureBinding|CopyDst",
+        "maskFormat": "A8",
+        "generation": 1,
+        "width": 128,
+        "height": 101,
+        "rowStrideBytes": 128,
+        "uploadByteCount": 12928,
+        "uploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+        "glyphEntryCount": 26,
+        "nonEmptyGlyphCount": 25,
+        "emptyGlyphCount": 1
+      },
+      "glyphKeys": [
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=46",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=68",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=81",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=89",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=86",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=3",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=47",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=87",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=76",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=19",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=20",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=21",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=22",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=23",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=24",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=25",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=26",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=27",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=28",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=36",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=37",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=38",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=91",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=92",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=93",
+        "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=17"
+      ],
+      "cacheIds": {
+        "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+        "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+        "dumpSha256": "6cc963c317f851cbb1b1fd9c8d462c5bcada73c848097af9f71772f98e1fad86",
+        "textureLabel": "kan-011.text.simple-latin.liberation-sans-regular.v1.glyph-atlas.generation-1",
+        "routeIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+        "uploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5"
+      },
+      "ownership": {
+        "discoveryOwner": "text-glyph-infrastructure",
+        "rasterizationOwner": "text-glyph-infrastructure",
+        "atlasLifetimeOwner": "text-glyph-infrastructure",
+        "invalidationOwner": "text-glyph-infrastructure"
+      },
+      "coverageBoundary": "coverage-consumes-opaque-mask-ref-only",
+      "proofs": {
+        "atlasJson": true,
+        "statsJson": true,
+        "routeJson": true,
+        "sourceCode": true
+      },
+      "nonClaims": [
+        "no-broad-glyph-atlas-claim",
+        "no-lcd-or-sdf-claim",
+        "no-dynamic-atlas-eviction-claim",
+        "no-ganesh-graphite-text-ops-claim",
+        "no-coverage-owned-atlas-claim"
+      ]
+    },
+    {
+      "rowId": "text.simple-latin.cpu-mask-oracle",
+      "pmCategory": "cpu-mask-oracle",
+      "status": "pass",
+      "sourceEvidence": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlasTest.kt",
+      "oracle": {
+        "testName": "SkWebGpuGlyphAtlasTest",
+        "assertion": "atlas coordinate sampling should match the CPU glyph mask alpha",
+        "sampledMaskMatchesAtlas": true,
+        "nonEmptyGlyphCount": 25,
+        "firstGlyphKey": "text.simple-latin.liberation-sans-regular.v1|kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8|family=Liberation Sans|style=SkFontStyle(weight=400, width=5, slant=kUpright_Slant)|size=32|scaleX=1|skewX=0|edging=kAntiAlias|glyph=46",
+        "firstGlyphId": 46,
+        "firstMaskSha256": "774f82d2b1ba2d81bb53402fb0d7970cbf8f778d6a0f713290daabe04c5c2db1",
+        "firstNonZeroPixels": 203
+      },
+      "cacheIds": {
+        "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+        "uploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+        "dumpSha256": "6cc963c317f851cbb1b1fd9c8d462c5bcada73c848097af9f71772f98e1fad86"
+      },
+      "route": {
+        "cpu": "cpu.text.glyph-mask.simple-latin",
+        "webGpu": "webgpu.text.glyph-atlas.simple-latin",
+        "coverage": "not-owned-by-coverage"
+      },
+      "ownership": {
+        "discoveryOwner": "text-glyph-infrastructure",
+        "rasterizationOwner": "text-glyph-infrastructure",
+        "atlasLifetimeOwner": "text-glyph-infrastructure",
+        "invalidationOwner": "text-glyph-infrastructure"
+      },
+      "proofs": {
+        "cpuGlyphCache": true,
+        "atlasTest": true,
+        "atlasJson": true
+      },
+      "nonClaims": [
+        "no-broad-glyph-atlas-claim",
+        "no-lcd-or-sdf-claim",
+        "no-dynamic-atlas-eviction-claim",
+        "no-ganesh-graphite-text-ops-claim",
+        "no-coverage-owned-atlas-claim"
+      ]
+    },
+    {
+      "rowId": "geometry.glyph-mask.alpha-mask-handoff",
+      "pmCategory": "coverage-handoff",
+      "status": "pass",
+      "sourceEvidence": "render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt",
+      "route": {
+        "coverage": "geometry.glyph-mask.alpha-mask-handoff",
+        "webGpu": "deferred-to-backend-decision",
+        "cpu": "CoveragePlanAdapter.lower(CoveragePlan.AlphaMask)"
+      },
+      "coveragePlan": "CoveragePlan.AlphaMask",
+      "coverageModel": "CoverageModel.AlphaMask",
+      "maskRef": "glyph-atlas.page0.run-title-3",
+      "maskFormat": "A8",
+      "ownership": {
+        "discoveryOwner": "text-glyph-infrastructure",
+        "rasterizationOwner": "text-glyph-infrastructure",
+        "atlasLifetimeOwner": "text-glyph-infrastructure",
+        "invalidationOwner": "text-glyph-infrastructure"
+      },
+      "coverageOwnsAtlas": false,
+      "fallbackReason": "none",
+      "proofs": {
+        "contractCode": true,
+        "contractTest": true
+      },
+      "nonClaims": [
+        "no-broad-glyph-atlas-claim",
+        "no-lcd-or-sdf-claim",
+        "no-dynamic-atlas-eviction-claim",
+        "no-ganesh-graphite-text-ops-claim",
+        "no-coverage-owned-atlas-claim"
+      ]
+    },
+    {
+      "rowId": "webgpu.standalone-alpha-mask-refusal",
+      "pmCategory": "webgpu-alpha-mask-refusal",
+      "status": "expected-unsupported",
+      "sourceEvidence": "kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt",
+      "reasonCode": "coverage.alpha-mask-unsupported",
+      "route": {
+        "webGpu": "webgpu.refuse.standalone-alpha-mask",
+        "coverage": "CoveragePlan.AlphaMask",
+        "cpu": "CoverageModel.AlphaMask"
+      },
+      "ownership": {
+        "discoveryOwner": "text-glyph-infrastructure",
+        "rasterizationOwner": "text-glyph-infrastructure",
+        "atlasLifetimeOwner": "text-glyph-infrastructure",
+        "invalidationOwner": "text-glyph-infrastructure"
+      },
+      "coverageOwnsAtlas": false,
+      "proofs": {
+        "reasonCodeTest": true,
+        "webGpuRefusalTest": true
+      },
+      "nonClaims": [
+        "no-broad-glyph-atlas-claim",
+        "no-lcd-or-sdf-claim",
+        "no-dynamic-atlas-eviction-claim",
+        "no-ganesh-graphite-text-ops-claim",
+        "no-coverage-owned-atlas-claim"
+      ]
+    }
+  ],
+  "claimGuard": {
+    "rowsMissingGlyphKeys": [],
+    "rowsMissingAtlasGeneration": [],
+    "rowsMissingUploadBytes": [],
+    "rowsMissingCacheIds": [],
+    "cpuMaskOracleMissing": [],
+    "coverageOwnershipViolations": [],
+    "webGpuRouteMissingDecision": [],
+    "hiddenAtlasEvictionClaims": [],
+    "lcdOrSdfClaims": [],
+    "ganeshGraphiteClaims": [],
+    "thresholdOrRendererChanges": []
+  },
+  "requiredValidation": [
+    "validateKan044GlyphMaskAtlasOwnership",
+    ":render-pipeline:pipelineConformanceTest -- includes GeometryCoverageContractsTest",
+    ":gpu-raster:pipelineConformanceTest -- includes SkWebGpuGlyphAtlasTest and SimpleLatinLineSceneEvidenceTest",
+    "pipelinePmBundle"
+  ],
+  "validationRows": [
+    {
+      "id": "atlas-route-visible",
+      "status": "pass",
+      "evidence": "Atlas row records glyph keys, generation, R8/A8 format, upload bytes, upload hash, and cache ids."
+    },
+    {
+      "id": "cpu-mask-oracle-visible",
+      "status": "pass",
+      "evidence": "SkWebGpuGlyphAtlasTest proves atlas sampling matches CPU glyph mask alpha."
+    },
+    {
+      "id": "coverage-consumes-opaque-ref",
+      "status": "pass",
+      "evidence": "GlyphMaskLowering exposes CoveragePlan.AlphaMask while ownership remains text-glyph-infrastructure."
+    },
+    {
+      "id": "webgpu-refusal-visible",
+      "status": "pass",
+      "evidence": "Standalone alpha-mask WebGPU route remains expected-unsupported via coverage.alpha-mask-unsupported."
+    }
+  ],
+  "nonClaims": [
+    "KAN-044 does not add renderer, shader, selector, PipelineKey, threshold, or budget changes.",
+    "KAN-044 does not claim broad glyph atlas support, dynamic atlas eviction, LCD, SDF, bitmap glyph, or color-font support.",
+    "KAN-044 does not move glyph discovery, rasterization, atlas lifetime, or invalidation ownership into geometry/coverage.",
+    "KAN-044 does not port Ganesh, Graphite, SkSL compiler, SkSL IR, or SkSL VM."
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 14,
+    "missingCommittedArtifacts": 0,
+    "missing": []
+  },
+  "artifactPaths": [
+    ".upstream/specs/font/04-glyph-rendering-and-coverage.md",
+    ".upstream/specs/font/README.md",
+    ".upstream/specs/geometry-coverage/02-lowering-rules.md",
+    ".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md",
+    ".upstream/target/high-performance-wgsl-pipeline-target.md",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlas.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlasTest.kt",
+    "kanvas-skia/src/main/kotlin/org/skia/foundation/SkCpuGlyphCache.kt",
+    "kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt",
+    "render-pipeline/src/main/kotlin/org/skia/pipeline/GeometryCoverageContracts.kt",
+    "render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
+    "reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json"
+  ]
+}
