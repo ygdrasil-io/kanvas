@@ -167,6 +167,10 @@ val requiredPipelineConformanceSuites = listOf(
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
     RequiredPipelineConformanceSuite(
+        className = "org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest",
+        resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
+    ),
+    RequiredPipelineConformanceSuite(
         className = "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
         resultRoot = "gpu-raster/build/test-results/pipelineConformanceTest",
     ),
@@ -359,6 +363,7 @@ fun renderPipelineConformanceReport(
         |PipelineKey and BlendPlan contracts, runtime-effect descriptor routing and dispatch-only matrix coverage, CPU descriptor coverage,
         |bounded simple-Latin text line evidence, bounded simple linear-gradient evidence, bounded fixture-backed bitmap rect evidence,
         |bounded SrcOver partial-alpha evidence, bounded simple Blend(kPlus) ColorFilter direct-rect evidence,
+        |bounded SaveLayer ColorFilter image-filter evidence,
         |bounded registered SimpleRT runtime-effect evidence,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
@@ -386,6 +391,7 @@ fun renderPipelineConformanceReport(
         |${row("Simple bitmap rect", status("org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest"), "`SimpleBitmapRectSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.bitmap-rect.nearest.fixture.v1`; WebGPU selects `webgpu.image.bitmap-rect.nearest.fixture`, uses fixture-backed `SkCanvas.drawImageRect` with `sampler=nearest`, `tileMode=kClamp`, `srcRectConstraint=kStrict`, `fallbackReason=none`, compares against an analytic strict-nearest fixture oracle at local threshold 99%, and keeps non-claims for broad image support, codec decode, arbitrary textures, mipmaps, tile-mode breadth, color-managed decode, texture atlases, and perspective transforms")}
         |${row("Simple SrcOver alpha", status("org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest"), "`SimpleSrcOverAlphaSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.src-over-alpha.rect-stack.v1`; WebGPU selects `webgpu.blend.src-over.partial-alpha.fixed-function`, validates generated solid-rect WGSL, records `blendPlan=FixedFunction`, uses two `kSrcOver` partial-alpha rect commands, `fallbackReason=none`, compares against an analytic SrcOver oracle at local threshold 99%, and keeps non-claims for arbitrary blend modes, advanced blend chains, saveLayer blend composition, shader destination reads, wide/color-managed color pipeline, and broad layer compositing")}
         |${row("Simple ColorFilter", status("org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest"), "`SimpleColorFilterSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `paint.color-filter.blend-kplus.rect.v1`; WebGPU selects `webgpu.paint.color-filter.blend-kplus.solid-color`, validates handwritten `solid_color.wgsl`, records generated solid-rect fallback `generated solid rect does not support colorFilter` while the selected route has `fallbackReason=none`, compares against an analytic sRGB Blend(kPlus) ColorFilter oracle at local threshold 99%, and keeps non-claims for broad ColorFilter support, ColorFilter chains, color-managed/wide pipeline, saveLayer/gradient/bitmap/runtime/table ColorFilters, and global threshold/color-policy changes")}
+        |${row("Simple SaveLayer image-filter", status("org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest"), "`SimpleSaveLayerImageFilterSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `save-layer.image-filter.color-filter-matrix.v1`; WebGPU selects `webgpu.image-filter.color-filter.layer-composite`, records `prepassRoute=null`, `materialiseStages=0`, `fallbackReason=none`, compares against an analytic SaveLayer ColorFilter(Matrix) oracle at local threshold 99%, and keeps non-claims for arbitrary layer stacks, multi-node DAGs, broad image-filter support, CPU readback fallback, and global threshold changes")}
         |${row("SimpleRT runtime effect", status("org.skia.gpu.webgpu.SimpleRuntimeEffectSceneEvidenceTest"), "`SimpleRuntimeEffectSceneEvidenceTest` writes reference/CPU/WebGPU/diff/stats artifacts for `runtime.simple_rt.descriptor.rect.v1`; WebGPU selects `webgpu.runtime-effect.descriptor.simple_rt`, validates and reflects `runtime_simple_rt.wgsl` with `gColor@0`, records `fallbackReason=none`, compares against an analytic SimpleRT coordinate-color oracle at local tolerance 1 and threshold 99.95%, references reporting-only CPU/GPU performance artifacts, and keeps stable refusals for missing WGSL descriptors/arbitrary SkSL plus non-claims for dynamic SkSL compilation, SkSL IR/VM, broad runtime effects, SpiralRT promotion, runtime color-filter/blender/image-filter, and live-editing breadth")}
         |${row("Image rect lowering", status("org.skia.pipeline.GeometryCoverageContractsTest", "org.skia.core.SkBitmapDescriptorCoverageOracleTest", "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest"), "`ImageRectLowering` captures source rect, destination rect, transform facts, opaque paint-owned sampling payload handoff, and route id; axis-aligned image rects select analytic rect coverage, transformed descriptor tests select path-like coverage without moving sampling/pixels/filtering/colorspace into geometry; CPU oracle covers one axis-aligned image rect and WebGPU selector diagnostics record the adapter-gated image-rect route")}
         |${row("Runtime-effect status", status("org.skia.effects.runtime.SkRuntimeEffectDescriptorRegistryTest", "org.skia.effects.runtime.SkRuntimeEffectDispatchTest", "org.skia.effects.runtime.SkRuntimeEffectMakeTest", "org.skia.gpu.webgpu.RuntimeEffectDescriptorWebGpuTest"), "CPU registry/dispatch/Make tests plus WebGPU descriptor test; matrix counts $runtimeEffectSupportMatrixCounts")}
@@ -513,7 +519,7 @@ project(":cpu-raster").registerPipelineConformanceTest(
 )
 
 project(":gpu-raster").registerPipelineConformanceTest(
-    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, simple SimpleRT runtime effect, and selector conformance tests.",
+    descriptionText = "Runs generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, simple SaveLayer image-filter, simple SimpleRT runtime effect, and selector conformance tests.",
     testPatterns = listOf(
         "org.skia.gpu.webgpu.tools.WgslValidationReportTest",
         "org.skia.gpu.webgpu.tools.WgslStrictValidationReportTest",
@@ -528,6 +534,7 @@ project(":gpu-raster").registerPipelineConformanceTest(
         "org.skia.gpu.webgpu.SimpleBitmapRectSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleSrcOverAlphaSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleColorFilterSceneEvidenceTest",
+        "org.skia.gpu.webgpu.SimpleSaveLayerImageFilterSceneEvidenceTest",
         "org.skia.gpu.webgpu.SimpleRuntimeEffectSceneEvidenceTest",
         "org.skia.gpu.webgpu.WebGpuCoveragePlanSelectorTest",
     ),
@@ -4703,6 +4710,18 @@ tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SaveLayerImageFilterTest.kt"))
 }
 
+tasks.register<Exec>("validateKan007SaveLayerSimpleFilter") {
+    group = "verification"
+    description = "Validates KAN-007 bounded SaveLayer simple image-filter evidence."
+    commandLine("python3", "scripts/validate_kan007_savelayer_simple_filter.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan007_savelayer_simple_filter.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-007-savelayer-simple-filter.md"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleSaveLayerImageFilterSceneEvidence.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleSaveLayerImageFilterSceneEvidenceTest.kt"))
+}
+
 tasks.register<Exec>("validateMepRcScenePack") {
     group = "verification"
     description = "Validates checked-in MEP RC FOR-215/FOR-216/FOR-218 scene-pack evidence without Kadre native dependencies."
@@ -4766,6 +4785,7 @@ tasks.register("pipelinePmBundle") {
         "validateMepRcScenePack",
         "validateMepRcRuntime",
         "validateKan006IntermediateTextureOwnership",
+        "validateKan007SaveLayerSimpleFilter",
     )
 
     val dashboardDir = layout.buildDirectory.dir("reports/wgsl-pipeline-scenes")
@@ -4858,6 +4878,8 @@ tasks.register("pipelinePmBundle") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-kadre-runtime-closeout.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-02-rc-pm-demo-script.md"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-006-intermediate-texture-ownership.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-007-savelayer-simple-filter.md"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-007-savelayer-simple-color-filter"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/results.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m53-inventory-promotion-pack.json"))
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
