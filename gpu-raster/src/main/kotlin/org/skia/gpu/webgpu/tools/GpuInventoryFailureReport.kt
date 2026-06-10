@@ -63,6 +63,7 @@ public object GpuInventoryFailureReport {
     private val expectedUnsupportedReasonCatalog: LinkedHashMap<String, String?> = linkedMapOf(
         "coverage.edge-count-exceeded" to "GRA-70 (WebGPU coverage strategy promotion/fallback scope)",
         "coverage.stroke-outline-edge-count-exceeded" to "GRA-178 (M37 stroke primitive overflow fallback scope)",
+        "coverage.stroke-cap-join-visual-parity-below-threshold" to "KAN-035/KAN-036 (stroke cap/join parity evidence before support promotion)",
         "coverage.arbitrary-aa-clip-unsupported" to null,
         "coverage.alpha-mask-unsupported" to null,
         "coverage.span-runs-unsupported" to null,
@@ -148,6 +149,8 @@ public object GpuInventoryFailureReport {
             appendLine(expectedUnsupportedReasonRows)
             appendLine()
             appendLine("`coverage.edge-count-exceeded` is tracked as a known unsupported WebGPU breadth gap and is not smoke-eligible until follow-up implementation evidence exists.")
+            appendLine()
+            appendLine("`coverage.stroke-cap-join-visual-parity-below-threshold` is tracked as expected unsupported while stroke cap/join evidence remains below the 99.95 support threshold.")
             appendLine()
             appendLine("## Unsupported Image-Filter Reason Catalog")
             appendLine()

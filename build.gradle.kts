@@ -381,6 +381,7 @@ fun renderPipelineConformanceReport(
         |runtime blender CPU-only boundary and stable WebGPU destination-read refusal evidence,
         |runtime effect uniform preview evidence across registered effects with stable PipelineKey telemetry,
         |Runtime Effects V2 evidence bundle aggregation with support/refusal rows and PM non-claims,
+        |KAN-035 HairlinesGM root-cause evidence with stable expected-unsupported classification,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -418,6 +419,7 @@ fun renderPipelineConformanceReport(
         |${row("Runtime Blender boundary", "expected-unsupported", "`pipelineRuntimeBlenderBoundaryReport` validates selected `runtime.invert_blender` descriptor, CPU fixture, route JSON, BlendPlan dump, and stable WebGPU destination-read refusal; counts $runtimeBlenderBoundaryCounts")}
         |${row("Runtime Effect uniform preview", "passed", "`pipelineRuntimeEffectUniformPreviewReport` validates two registered runtime effects, four edited uniform states, stable PipelineKey telemetry, invalid-value refusal policy, and headless/Kadre lane separation; counts $runtimeEffectUniformPreviewCounts")}
         |${row("Runtime Effects V2 evidence bundle", "passed", "`pipelineRuntimeEffectsV2EvidenceBundleReport` aggregates all Runtime Effects V2 support/refusal rows, linked artifacts, stable diagnostics, and PM non-claims; counts $runtimeEffectsV2EvidenceBundleCounts")}
+        |${row("KAN-035 HairlinesGM root cause", "expected-unsupported", "`validateKan035HairlinesRootCause` classifies the current HairlinesGM residual as `cap-join-parity`, keeps `skia-gm-hairlines` expected-unsupported, records `expected-unsupported-diagnostic=1` and `unexpected-exception=0`, and makes no renderer, shader, threshold, or edge-budget change.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -788,6 +790,7 @@ tasks.register("pipelineConformance") {
         "pipelineRuntimeBlenderBoundaryReport",
         "pipelineRuntimeEffectUniformPreviewReport",
         "pipelineRuntimeEffectsV2EvidenceBundleReport",
+        "validateKan035HairlinesRootCause",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -807,6 +810,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime Blender boundary report: pipelineRuntimeBlenderBoundaryReport
             |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
             |- REQUIRED Runtime Effects V2 evidence bundle: pipelineRuntimeEffectsV2EvidenceBundleReport
+            |- REQUIRED KAN-035 HairlinesGM root-cause evidence and stable refusal classification: validateKan035HairlinesRootCause
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5067,6 +5071,45 @@ tasks.register<Exec>("validateKan026HairlinesHarness") {
     inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-318-path-aa-arc-stroke-hairline-scout.md"))
 }
 
+tasks.register<Exec>("validateKan035HairlinesRootCause") {
+    group = "verification"
+    description = "Materializes and validates the KAN-035 HairlinesGM residual root-cause evidence and stable refusal classification."
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/hairlines-root-cause")
+    commandLine(
+        "python3",
+        "scripts/validate_kan035_hairlines_root_cause.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan035_hairlines_root_cause.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-026-hairlines-harness/kan-026-hairlines-harness.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-026-hairlines-harness.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/dash-hairline-stroke-gm-dashboard-visibility.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-gpu.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/stats.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join/route-cpu.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-stroke-cap-join"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/stroke-cap-join-aa-residual-for266/stroke-cap-join-aa-residual-for266.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/round-cap-join-coverage-equivalence-for267/round-cap-join-coverage-equivalence-for267.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-04-for-318-path-aa-arc-stroke-hairline-scout.md"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/test/resources/original-888/hairlines.png"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/test-similarity-report.md"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/test-similarity-scores.properties"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/crossbackend/HairlinesCrossBackendTest.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/tools/GpuInventoryFailureReport.kt"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/tools/GpuInventoryFailureReportTest.kt"))
+    inputs.file(layout.projectDirectory.file("skia-integration-tests/src/main/kotlin/org/skia/tests/HairlinesGM.kt"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/08-path-aa-mvp-boundary.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/adr/0005-webgpu-aa-edge-budget.md"))
+    outputs.file(outputDir.file("kan-035-hairlines-root-cause.json"))
+    outputs.file(outputDir.file("kan-035-hairlines-root-cause.md"))
+    outputs.file(outputDir.file("gpu-inventory-hairlines-classification.json"))
+    outputs.file(outputDir.file("gpu-inventory-hairlines-classification.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -5216,6 +5259,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan003CapsJoinsAa",
         "validateKan004ClipsAa",
         "validateKan026HairlinesHarness",
+        "validateKan035HairlinesRootCause",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",

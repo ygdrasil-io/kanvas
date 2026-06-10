@@ -1,0 +1,30 @@
+{
+  "sourceCommand": "rtk ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest",
+  "sourceReport": "gpu-raster/build/reports/gpu-inventory/gpu-inventory-failure-classification.json",
+  "generatedSnapshot": "reports/wgsl-pipeline/hairlines-root-cause/gpu-inventory-hairlines-classification.json",
+  "byCategory": {
+    "expected-unsupported-diagnostic": 1,
+    "similarity-regression": 0,
+    "unsupported-image-filter": 0,
+    "adapter-skip": 0,
+    "adapter-missing": 0,
+    "unexpected-exception": 0
+  },
+  "records": [
+    {
+      "testName": "org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest#HairlinesGM matches reference on raster and GPU backends()",
+      "status": "failure",
+      "category": "expected-unsupported-diagnostic",
+      "reason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+      "actualSimilarityPercent": null,
+      "floorSimilarityPercent": null,
+      "artifactPath": null,
+      "sourceXml": "TEST-org.skia.gpu.webgpu.crossbackend.HairlinesCrossBackendTest.xml"
+    }
+  ],
+  "catalogEntry": {
+    "reason": "coverage.stroke-cap-join-visual-parity-below-threshold",
+    "followUp": "KAN-035/KAN-036 (stroke cap/join parity evidence before support promotion)",
+    "policy": "Expected unsupported while stroke cap/join evidence remains below the 99.95 support threshold."
+  }
+}
