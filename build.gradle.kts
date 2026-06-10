@@ -4735,6 +4735,24 @@ tasks.register<Exec>("validateKan003CapsJoinsAa") {
     inputs.file(layout.projectDirectory.file("gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/WebGpuCoveragePlanSelector.kt"))
 }
 
+tasks.register<Exec>("validateKan004ClipsAa") {
+    group = "verification"
+    description = "Validates KAN-004 bounded AA clip support evidence and stable clip-stack refusals."
+    commandLine("python3", "scripts/validate_kan004_clips_aa.py", rootDir.absolutePath)
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan004_clips_aa.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-10-kan-004-clips-aa.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-004-clips-aa/kan-004-clips-aa.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m57-path-aa-clip-micro-promotion.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m60-nested-clip-path-aa-promotion.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-05-31-m57-path-aa-clip-micro-promotion.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/2026-06-01-m60-nested-clip-path-aa-promotion.md"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m57-aaclip-bounded-grid"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/m60-bounded-nested-rrect-clip"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/05-fallback-diagnostics.md"))
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -4882,6 +4900,7 @@ tasks.register("pipelinePmBundle") {
         "validateMepRcRuntime",
         "validateKan002PathAaEdgeBudget",
         "validateKan003CapsJoinsAa",
+        "validateKan004ClipsAa",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
