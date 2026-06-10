@@ -1,0 +1,15 @@
+{
+  "effectStableId": "runtime.spiral_rt",
+  "fallbackReason": "none",
+  "gpuSimilarity": 100.0,
+  "matchingPixels": 4096,
+  "maxChannelDelta": 0,
+  "parameter": "rad_scale",
+  "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl state=[blendMode=kSrcOver]",
+  "pipelineKeyStableAcrossUniformEdits": true,
+  "pixels": 4096,
+  "sceneId": "kan-033-spiral-rt-rad-high",
+  "threshold": 99.95,
+  "ticket": "KAN-033",
+  "uniformValuesInPipelineKey": false
+}

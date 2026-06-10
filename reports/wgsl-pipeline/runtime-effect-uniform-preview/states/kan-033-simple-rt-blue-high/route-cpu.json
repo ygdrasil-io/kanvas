@@ -1,0 +1,28 @@
+{
+  "backend": "CPU",
+  "fallbackReason": "none",
+  "parameterState": {
+    "acceptedValue": 0.82,
+    "effectStableId": "runtime.simple_rt",
+    "frame": 2,
+    "id": "kan-033-simple-rt-blue-high",
+    "parameter": "gColor.b",
+    "requestedValue": 0.82,
+    "uniformBytes": 16,
+    "uniformOffset": 8,
+    "uniformValues": [
+      0.0,
+      0.0,
+      0.82,
+      1.0
+    ]
+  },
+  "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+  "pipelineKeyStableAcrossUniformEdits": true,
+  "runtimeEffectStableId": "runtime.simple_rt",
+  "sceneId": "kan-033-simple-rt-blue-high",
+  "selectedRoute": "cpu.runtime-effect.uniform-preview.simple_rt",
+  "status": "pass",
+  "ticket": "KAN-033",
+  "uniformValuesInPipelineKey": false
+}

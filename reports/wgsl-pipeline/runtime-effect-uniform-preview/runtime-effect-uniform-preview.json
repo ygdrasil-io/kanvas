@@ -1,0 +1,401 @@
+{
+  "claimLevel": "registered-runtime-effect-uniform-preview-headless",
+  "counts": {
+    "editedStateCount": 4,
+    "effectCount": 2,
+    "gpuParityStateCount": 4,
+    "invalidEditCount": 2,
+    "pipelineKeyChanges": 0
+  },
+  "editedStates": [
+    {
+      "artifacts": {
+        "cpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/cpu.png",
+        "diff": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/diff.png",
+        "gpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/gpu.png",
+        "routeCpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/stats.json"
+      },
+      "cpuRoute": "cpu.runtime-effect.uniform-preview.simple_rt",
+      "effectStableId": "runtime.simple_rt",
+      "fallbackReason": "none",
+      "gpuRoute": "webgpu.runtime-effect.uniform-preview.simple_rt",
+      "id": "kan-033-simple-rt-blue-low",
+      "matchingPixels": 4096,
+      "maxChannelDelta": 0,
+      "parameter": "gColor.b",
+      "parameterState": {
+        "acceptedValue": 0.25,
+        "effectStableId": "runtime.simple_rt",
+        "frame": 1,
+        "id": "kan-033-simple-rt-blue-low",
+        "parameter": "gColor.b",
+        "requestedValue": 0.25,
+        "uniformBytes": 16,
+        "uniformOffset": 8,
+        "uniformValues": [
+          0.0,
+          0.0,
+          0.25,
+          1.0
+        ]
+      },
+      "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+      "pipelineKeyStableAcrossUniformEdits": true,
+      "pixels": 4096,
+      "similarity": 100.0,
+      "status": "pass",
+      "threshold": 99.95,
+      "uniformValuesInPipelineKey": false
+    },
+    {
+      "artifacts": {
+        "cpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/cpu.png",
+        "diff": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/diff.png",
+        "gpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/gpu.png",
+        "routeCpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/stats.json"
+      },
+      "cpuRoute": "cpu.runtime-effect.uniform-preview.simple_rt",
+      "effectStableId": "runtime.simple_rt",
+      "fallbackReason": "none",
+      "gpuRoute": "webgpu.runtime-effect.uniform-preview.simple_rt",
+      "id": "kan-033-simple-rt-blue-high",
+      "matchingPixels": 4096,
+      "maxChannelDelta": 0,
+      "parameter": "gColor.b",
+      "parameterState": {
+        "acceptedValue": 0.82,
+        "effectStableId": "runtime.simple_rt",
+        "frame": 2,
+        "id": "kan-033-simple-rt-blue-high",
+        "parameter": "gColor.b",
+        "requestedValue": 0.82,
+        "uniformBytes": 16,
+        "uniformOffset": 8,
+        "uniformValues": [
+          0.0,
+          0.0,
+          0.82,
+          1.0
+        ]
+      },
+      "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+      "pipelineKeyStableAcrossUniformEdits": true,
+      "pixels": 4096,
+      "similarity": 100.0,
+      "status": "pass",
+      "threshold": 99.95,
+      "uniformValuesInPipelineKey": false
+    },
+    {
+      "artifacts": {
+        "cpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/cpu.png",
+        "diff": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/diff.png",
+        "gpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/gpu.png",
+        "routeCpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/stats.json"
+      },
+      "cpuRoute": "cpu.runtime-effect.uniform-preview.spiral_rt",
+      "effectStableId": "runtime.spiral_rt",
+      "fallbackReason": "none",
+      "gpuRoute": "webgpu.runtime-effect.uniform-preview.spiral_rt",
+      "id": "kan-033-spiral-rt-rad-low",
+      "matchingPixels": 4096,
+      "maxChannelDelta": 0,
+      "parameter": "rad_scale",
+      "parameterState": {
+        "acceptedValue": 0.05,
+        "effectStableId": "runtime.spiral_rt",
+        "frame": 3,
+        "id": "kan-033-spiral-rt-rad-low",
+        "parameter": "rad_scale",
+        "requestedValue": 0.05,
+        "uniformBytes": 48,
+        "uniformOffset": 0,
+        "uniformValues": [
+          0.05,
+          32.0,
+          32.0,
+          0.0,
+          0.1,
+          0.2,
+          0.9,
+          1.0,
+          0.95,
+          0.3,
+          0.1,
+          1.0
+        ]
+      },
+      "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl state=[blendMode=kSrcOver]",
+      "pipelineKeyStableAcrossUniformEdits": true,
+      "pixels": 4096,
+      "similarity": 100.0,
+      "status": "pass",
+      "threshold": 99.95,
+      "uniformValuesInPipelineKey": false
+    },
+    {
+      "artifacts": {
+        "cpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/cpu.png",
+        "diff": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/diff.png",
+        "gpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/gpu.png",
+        "routeCpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/stats.json"
+      },
+      "cpuRoute": "cpu.runtime-effect.uniform-preview.spiral_rt",
+      "effectStableId": "runtime.spiral_rt",
+      "fallbackReason": "none",
+      "gpuRoute": "webgpu.runtime-effect.uniform-preview.spiral_rt",
+      "id": "kan-033-spiral-rt-rad-high",
+      "matchingPixels": 4096,
+      "maxChannelDelta": 0,
+      "parameter": "rad_scale",
+      "parameterState": {
+        "acceptedValue": 0.35,
+        "effectStableId": "runtime.spiral_rt",
+        "frame": 4,
+        "id": "kan-033-spiral-rt-rad-high",
+        "parameter": "rad_scale",
+        "requestedValue": 0.35,
+        "uniformBytes": 48,
+        "uniformOffset": 0,
+        "uniformValues": [
+          0.35,
+          32.0,
+          32.0,
+          0.0,
+          0.1,
+          0.2,
+          0.9,
+          1.0,
+          0.95,
+          0.3,
+          0.1,
+          1.0
+        ]
+      },
+      "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl state=[blendMode=kSrcOver]",
+      "pipelineKeyStableAcrossUniformEdits": true,
+      "pixels": 4096,
+      "similarity": 100.0,
+      "status": "pass",
+      "threshold": 99.95,
+      "uniformValuesInPipelineKey": false
+    }
+  ],
+  "effects": [
+    {
+      "cpuImplementationId": "kotlin/simple_rt",
+      "descriptorStatus": "descriptor-backed",
+      "editableParameters": [
+        {
+          "component": "b",
+          "constraint": "clamp",
+          "default": 0.25,
+          "invalidValueDiagnostic": "runtime-effect.preview-uniform-out-of-range",
+          "max": 1.0,
+          "min": 0.0,
+          "name": "gColor.b",
+          "step": 0.01,
+          "type": "float",
+          "uiControl": "slider",
+          "uniform": "gColor",
+          "uniformBytes": 16,
+          "uniformOffset": 8
+        }
+      ],
+      "invalidEdit": {
+        "acceptedValue": 1.0,
+        "fallbackReason": "runtime-effect.preview-uniform-out-of-range",
+        "parameter": "gColor.b",
+        "policy": "clamp",
+        "requestedValue": 1.4
+      },
+      "kind": "kShader",
+      "shaderPath": "gpu-raster/src/main/resources/shaders/runtime_simple_rt.wgsl",
+      "sourceRoute": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/route-gpu.json",
+      "sourceStats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple/stats.json",
+      "stableId": "runtime.simple_rt",
+      "supportState": "gpu-backed",
+      "telemetry": {
+        "actualNativeWindowRun": false,
+        "compileCountAfter": 1,
+        "compileCountBefore": 1,
+        "compileCountDelta": 0,
+        "fallbackReason": "none",
+        "kadreNativeLane": "opt-in",
+        "lane": "headless.runtime-effect-uniform-preview",
+        "pipelineKeyAfter": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+        "pipelineKeyBefore": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+        "pipelineKeyStableAcrossUniformEdits": true,
+        "telemetryRows": [
+          {
+            "compileCountAfter": 1,
+            "compileCountBefore": 1,
+            "compileCountDelta": 0,
+            "effectStableId": "runtime.simple_rt",
+            "fallbackReason": "none",
+            "frame": 1,
+            "parameter": "gColor.b",
+            "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+            "stateId": "kan-033-simple-rt-blue-low",
+            "uniformUpdateCount": 1
+          },
+          {
+            "compileCountAfter": 1,
+            "compileCountBefore": 1,
+            "compileCountDelta": 0,
+            "effectStableId": "runtime.simple_rt",
+            "fallbackReason": "none",
+            "frame": 2,
+            "parameter": "gColor.b",
+            "pipelineKey": "runtimeEffect=SimpleRT descriptor=runtime_simple_rt.wgsl state=[blendMode=kSrcOver]",
+            "stateId": "kan-033-simple-rt-blue-high",
+            "uniformUpdateCount": 2
+          }
+        ],
+        "uniformUpdateCount": 2,
+        "uniformValuesInPipelineKey": false
+      },
+      "wgslImplementationId": "wgsl/runtime_simple_rt"
+    },
+    {
+      "cpuImplementationId": "kotlin/spiral_rt",
+      "descriptorStatus": "descriptor-backed",
+      "editableParameters": [
+        {
+          "component": "",
+          "constraint": "refuse",
+          "default": 0.05,
+          "invalidValueDiagnostic": "runtime-effect.preview-uniform-out-of-range",
+          "max": 0.5,
+          "min": 0.0,
+          "name": "rad_scale",
+          "step": 0.01,
+          "type": "float",
+          "uiControl": "slider",
+          "uniform": "rad_scale",
+          "uniformBytes": 48,
+          "uniformOffset": 0
+        }
+      ],
+      "invalidEdit": {
+        "acceptedValue": null,
+        "fallbackReason": "runtime-effect.preview-uniform-out-of-range",
+        "parameter": "rad_scale",
+        "policy": "refuse",
+        "requestedValue": 0.9
+      },
+      "kind": "kShader",
+      "shaderPath": "gpu-raster/src/main/resources/shaders/runtime_spiral_rt.wgsl",
+      "sourceRoute": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/route-gpu.json",
+      "sourceStats": "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral/stats.json",
+      "stableId": "runtime.spiral_rt",
+      "supportState": "gpu-backed",
+      "telemetry": {
+        "actualNativeWindowRun": false,
+        "compileCountAfter": 1,
+        "compileCountBefore": 1,
+        "compileCountDelta": 0,
+        "fallbackReason": "none",
+        "kadreNativeLane": "opt-in",
+        "lane": "headless.runtime-effect-uniform-preview",
+        "pipelineKeyAfter": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl state=[blendMode=kSrcOver]",
+        "pipelineKeyBefore": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl state=[blendMode=kSrcOver]",
+        "pipelineKeyStableAcrossUniformEdits": true,
+        "telemetryRows": [
+          {
+            "compileCountAfter": 1,
+            "compileCountBefore": 1,
+            "compileCountDelta": 0,
+            "effectStableId": "runtime.spiral_rt",
+            "fallbackReason": "none",
+            "frame": 3,
+            "parameter": "rad_scale",
+            "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl state=[blendMode=kSrcOver]",
+            "stateId": "kan-033-spiral-rt-rad-low",
+            "uniformUpdateCount": 1
+          },
+          {
+            "compileCountAfter": 1,
+            "compileCountBefore": 1,
+            "compileCountDelta": 0,
+            "effectStableId": "runtime.spiral_rt",
+            "fallbackReason": "none",
+            "frame": 4,
+            "parameter": "rad_scale",
+            "pipelineKey": "runtimeEffect=SpiralRT descriptor=runtime_spiral_rt.wgsl state=[blendMode=kSrcOver]",
+            "stateId": "kan-033-spiral-rt-rad-high",
+            "uniformUpdateCount": 2
+          }
+        ],
+        "uniformUpdateCount": 2,
+        "uniformValuesInPipelineKey": false
+      },
+      "wgslImplementationId": "wgsl/runtime_spiral_rt"
+    }
+  ],
+  "nonClaims": [
+    "No live SkSL editor.",
+    "No live controls for unregistered effects.",
+    "No new WGSL generated per uniform value.",
+    "No broad runtime-effect support beyond registered descriptors.",
+    "No Kadre native window requirement for headless validation."
+  ],
+  "packId": "kan-033-runtime-effect-uniform-preview-v1",
+  "schemaVersion": "kanvas.runtime-effect-uniform-preview",
+  "sourceOfTruth": {
+    "layoutReport": "reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json",
+    "supportMatrix": "reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"
+  },
+  "stableRefusals": [
+    {
+      "fallbackReason": "runtime-effect.preview-uniform-out-of-range",
+      "id": "uniform-out-of-range",
+      "message": "Invalid preview values are clamped or refused by parameter policy.",
+      "status": "handled"
+    },
+    {
+      "fallbackReason": "runtime-effect.preview-effect-not-registered",
+      "id": "effect-not-registered",
+      "message": "Preview controls are limited to registered Kanvas descriptors.",
+      "status": "expected-unsupported"
+    },
+    {
+      "fallbackReason": "runtime-effect.arbitrary-sksl-unsupported",
+      "id": "arbitrary-sksl",
+      "message": "Kanvas does not provide a live SkSL editor or dynamic SkSL compilation.",
+      "status": "expected-unsupported"
+    }
+  ],
+  "status": "pass",
+  "ticket": "KAN-033",
+  "validationRows": [
+    {
+      "detail": "Two registered gpu-backed runtime effects have bounded preview metadata.",
+      "id": "kan033.registered-effects",
+      "status": "pass"
+    },
+    {
+      "detail": "Uniform edits update payloads without changing PipelineKey or compile count.",
+      "id": "kan033.pipeline-key-stability",
+      "status": "pass"
+    },
+    {
+      "detail": "Four edited states materialize CPU/GPU/diff artifacts and route JSON.",
+      "id": "kan033.edited-state-parity",
+      "status": "pass"
+    },
+    {
+      "detail": "Headless evidence is required; Kadre native preview remains opt-in.",
+      "id": "kan033.kadre-separation",
+      "status": "pass"
+    }
+  ]
+}

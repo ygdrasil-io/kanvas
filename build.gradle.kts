@@ -321,6 +321,7 @@ fun renderPipelineConformanceReport(
     runtimeChildShaderEffectLaneCounts: String,
     runtimeColorFilterWgslCounts: String,
     runtimeBlenderBoundaryCounts: String,
+    runtimeEffectUniformPreviewCounts: String,
 ): String {
     val byName = suites
         .sortedBy { it.className }
@@ -377,6 +378,7 @@ fun renderPipelineConformanceReport(
         |selected registered Runtime Shader Effects V2 promotion evidence,
         |runtime child shader effect CPU-only lane and stable WebGPU refusal evidence,
         |runtime blender CPU-only boundary and stable WebGPU destination-read refusal evidence,
+        |runtime effect uniform preview evidence across registered effects with stable PipelineKey telemetry,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -412,6 +414,7 @@ fun renderPipelineConformanceReport(
         |${row("Runtime child shader lane", "expected-unsupported", "`pipelineRuntimeChildShaderEffectLaneReport` validates `runtime.unsharp_rt` child descriptor representation, CPU oracle evidence, route JSON, resource-axis classification, and stable WebGPU refusal; counts $runtimeChildShaderEffectLaneCounts")}
         |${row("Runtime ColorFilter WGSL", "passed", "`pipelineRuntimeColorFilterWgslReport` validates selected `runtime.color_filter_luma_to_alpha` descriptor/WGSL layout, reference/CPU/WebGPU/diff/stat route artifacts, and stable non-selected ColorFilter reason codes; counts $runtimeColorFilterWgslCounts")}
         |${row("Runtime Blender boundary", "expected-unsupported", "`pipelineRuntimeBlenderBoundaryReport` validates selected `runtime.invert_blender` descriptor, CPU fixture, route JSON, BlendPlan dump, and stable WebGPU destination-read refusal; counts $runtimeBlenderBoundaryCounts")}
+        |${row("Runtime Effect uniform preview", "passed", "`pipelineRuntimeEffectUniformPreviewReport` validates two registered runtime effects, four edited uniform states, stable PipelineKey telemetry, invalid-value refusal policy, and headless/Kadre lane separation; counts $runtimeEffectUniformPreviewCounts")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -517,6 +520,11 @@ fun renderPipelineConformanceReport(
         |  records the required shader/layer `BlendPlan`, and keeps destination reads, CPU readback, hidden layer compat,
         |  and all-blend-modes support as explicit non-claims;
         |  current counts are $runtimeBlenderBoundaryCounts.
+        |- Runtime Effect uniform preview: `reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.md`
+        |  validates `runtime.simple_rt` and `runtime.spiral_rt` as registered effect previews with two edited states each,
+        |  records telemetry showing uniform updates do not change `PipelineKey` or compile new WGSL, emits CPU/GPU/diff/route artifacts,
+        |  and keeps live SkSL editor, unregistered effects, per-value WGSL generation, and Kadre native execution as explicit non-claims;
+        |  current counts are $runtimeEffectUniformPreviewCounts.
         |- GPU similarity investigation: `reports/wgsl-pipeline/2026-05-27-m31-gpu-similarity-investigation.md`
         |  classifies `DrawBitmapRect3*` and `DrawBitmapRectSkbug4734*` below-floor failures as implementation-regression candidates
         |  with no floor change in this milestone slice.
@@ -694,6 +702,36 @@ tasks.register<Exec>("pipelineRuntimeBlenderBoundaryReport") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("pipelineRuntimeEffectUniformPreviewReport") {
+    group = "verification"
+    description = "Materializes and validates the KAN-033 Runtime Effect uniform preview report."
+
+    dependsOn(
+        ":cpu-raster:pipelineRuntimeEffectsV2SupportMatrix",
+        ":gpu-raster:pipelineRuntimeEffectsLayoutV2Report",
+    )
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-effect-uniform-preview")
+    commandLine(
+        "python3",
+        "scripts/validate_kan033_runtime_effect_uniform_preview.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan033_runtime_effect_uniform_preview.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/support-matrix.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-layout-v2/runtime-effects-layout-v2.json"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/resources/shaders/runtime_simple_rt.wgsl"))
+    inputs.file(layout.projectDirectory.file("gpu-raster/src/main/resources/shaders/runtime_spiral_rt.wgsl"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/runtime-effect-simple"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/runtime-effect-spiral"))
+    outputs.file(outputDir.file("runtime-effect-uniform-preview.json"))
+    outputs.file(outputDir.file("runtime-effect-uniform-preview.md"))
+    outputs.file(outputDir.file("runtime-effect-uniform-preview-edited-states.json"))
+    outputs.file(outputDir.file("runtime-effect-uniform-preview-telemetry.json"))
+    outputs.dir(outputDir.dir("states"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register("pipelineConformance") {
     group = "verification"
     description = "Runs the standard production pipeline conformance suite without slow benchmark gates."
@@ -704,6 +742,7 @@ tasks.register("pipelineConformance") {
         "pipelineRuntimeChildShaderEffectLaneReport",
         "pipelineRuntimeColorFilterWgslReport",
         "pipelineRuntimeBlenderBoundaryReport",
+        "pipelineRuntimeEffectUniformPreviewReport",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -721,6 +760,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED Runtime child shader effect lane report: pipelineRuntimeChildShaderEffectLaneReport
             |- REQUIRED Runtime ColorFilter WGSL report: pipelineRuntimeColorFilterWgslReport
             |- REQUIRED Runtime Blender boundary report: pipelineRuntimeBlenderBoundaryReport
+            |- REQUIRED Runtime Effect uniform preview report: pipelineRuntimeEffectUniformPreviewReport
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -834,6 +874,14 @@ tasks.register("pipelineConformanceReport") {
             ?: throw GradleException(
                 "Missing Runtime Blender boundary status counts in `reports/wgsl-pipeline/runtime-blender-boundary/runtime-blender-boundary.md`."
             )
+        val runtimeEffectUniformPreviewCounts = file("reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.md")
+            .readLines()
+            .firstOrNull { it.startsWith("Status counts: ") }
+            ?.removePrefix("Status counts: ")
+            ?.removeSuffix(".")
+            ?: throw GradleException(
+                "Missing Runtime Effect uniform preview status counts in `reports/wgsl-pipeline/runtime-effect-uniform-preview/runtime-effect-uniform-preview.md`."
+            )
         val report = renderPipelineConformanceReport(
             commit = commit,
             suites = suites,
@@ -845,6 +893,7 @@ tasks.register("pipelineConformanceReport") {
             runtimeChildShaderEffectLaneCounts = runtimeChildShaderEffectLaneCounts,
             runtimeColorFilterWgslCounts = runtimeColorFilterWgslCounts,
             runtimeBlenderBoundaryCounts = runtimeBlenderBoundaryCounts,
+            runtimeEffectUniformPreviewCounts = runtimeEffectUniformPreviewCounts,
         )
         val target = outputFile.get().asFile
         target.parentFile.mkdirs()
