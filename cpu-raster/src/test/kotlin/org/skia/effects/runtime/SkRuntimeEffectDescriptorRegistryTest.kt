@@ -5,7 +5,10 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import org.skia.effects.runtime.effects.SkBuiltinShaderEffectsSimple
+import java.nio.file.Files
+import java.nio.file.Path
 
 class SkRuntimeEffectDescriptorRegistryTest {
     @AfterEach
@@ -134,6 +137,86 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(first.contains("supported:wgsl/runtime_linear_gradient_rt"))
         assertTrue(first.contains("supported:wgsl/runtime_spiral_rt"))
         assertTrue(first.contains("descriptor-backed"))
+    }
+
+    @Test
+    fun `V2 support matrix distinguishes gpu backed effects from stable policy refusals`() {
+        registerRuntimeEffectsV2SupportMatrixBuiltins()
+
+        val entries = SkRuntimeEffectDescriptorRegistry.supportMatrixV2Entries()
+        val counts = SkRuntimeEffectDescriptorRegistry.supportMatrixV2StatusCounts()
+
+        assertEquals(
+            SkRuntimeEffectSupportMatrixV2StatusCounts(
+                total = 5,
+                descriptorBacked = 3,
+                cpuOnly = 0,
+                gpuBacked = 3,
+                dependencyGated = 0,
+                expectedUnsupported = 2,
+            ),
+            counts,
+        )
+
+        val simple = entries.single { it.stableId == "runtime.simple_rt" }
+        assertEquals("descriptor-backed", simple.descriptorStatus)
+        assertEquals("gpu-backed", simple.supportState)
+        assertEquals("kotlin/simple_rt", simple.cpuImplementationId)
+        assertEquals("wgsl/runtime_simple_rt", simple.wgslImplementationId)
+        assertEquals("none", simple.fallbackReason)
+        assertTrue(simple.pmNote.contains("registered Kotlin/CPU and parser-validated WGSL"))
+
+        val arbitrarySkSL = entries.single { it.fallbackReason == "runtime-effect.arbitrary-sksl-unsupported" }
+        assertEquals("policy-only", arbitrarySkSL.descriptorStatus)
+        assertEquals("expected-unsupported", arbitrarySkSL.supportState)
+        assertEquals(null, arbitrarySkSL.cpuImplementationId)
+        assertEquals(null, arbitrarySkSL.wgslImplementationId)
+        assertTrue(arbitrarySkSL.pmNote.contains("does not dynamically compile SkSL"))
+
+        val missingDescriptor = entries.single { it.fallbackReason == "runtime-effect.wgsl-descriptor-missing" }
+        assertEquals("expected-unsupported", missingDescriptor.supportState)
+        assertTrue(missingDescriptor.pmNote.contains("registered WGSL descriptor"))
+    }
+
+    @Test
+    fun `V2 JSON and Markdown exports are deterministic and expose PM non claims`() {
+        registerRuntimeEffectsV2SupportMatrixBuiltins()
+
+        val firstJson = SkRuntimeEffectDescriptorRegistry.exportSupportMatrixV2Json()
+        val secondJson = SkRuntimeEffectDescriptorRegistry.exportSupportMatrixV2Json()
+        val firstMarkdown = SkRuntimeEffectDescriptorRegistry.exportSupportMatrixV2Markdown()
+        val secondMarkdown = SkRuntimeEffectDescriptorRegistry.exportSupportMatrixV2Markdown()
+
+        assertEquals(firstJson, secondJson)
+        assertEquals(firstMarkdown, secondMarkdown)
+
+        assertTrue(firstJson.contains("\"schemaVersion\":\"kanvas.runtime-effects.v2.support-matrix\""))
+        assertTrue(firstJson.contains("\"supportState\":\"gpu-backed\""))
+        assertTrue(firstJson.contains("\"fallbackReason\":\"runtime-effect.arbitrary-sksl-unsupported\""))
+        assertTrue(firstJson.contains("\"fallbackReason\":\"runtime-effect.wgsl-descriptor-missing\""))
+        assertTrue(firstJson.contains("\"descriptorBacked\":3"))
+        assertTrue(firstJson.contains("\"expectedUnsupported\":2"))
+        assertTrue(firstJson.contains("No dynamic SkSL compilation"))
+
+        assertTrue(firstMarkdown.contains("# Runtime Effects V2 Support Matrix"))
+        assertTrue(firstMarkdown.contains("Status counts: total=5; descriptor-backed=3; CPU-only=0; GPU-backed=3; dependency-gated=0; expected-unsupported=2."))
+        assertTrue(firstMarkdown.contains("| Stable id | Kind | Descriptor status | Support state | CPU implementation | WGSL implementation | Fallback reason | PM note |"))
+        assertTrue(firstMarkdown.contains("| runtime.simple_rt | kShader | descriptor-backed | gpu-backed | kotlin/simple_rt | wgsl/runtime_simple_rt | none |"))
+        assertTrue(firstMarkdown.contains("runtime-effect.arbitrary-sksl-unsupported"))
+        assertTrue(firstMarkdown.contains("No dynamic SkSL compilation"))
+    }
+
+    @Test
+    fun `V2 support matrix writer materializes JSON and Markdown files`(@TempDir tempDir: Path) {
+        writeRuntimeEffectsV2SupportMatrix(tempDir)
+
+        val json = Files.readString(tempDir.resolve("support-matrix.json"))
+        val markdown = Files.readString(tempDir.resolve("support-matrix.md"))
+
+        assertTrue(json.contains("\"schemaVersion\":\"kanvas.runtime-effects.v2.support-matrix\""))
+        assertTrue(json.contains("\"fallbackReason\":\"runtime-effect.arbitrary-sksl-unsupported\""))
+        assertTrue(markdown.contains("# Runtime Effects V2 Support Matrix"))
+        assertTrue(markdown.contains("runtime-effect.wgsl-descriptor-missing"))
     }
 
     @Test
