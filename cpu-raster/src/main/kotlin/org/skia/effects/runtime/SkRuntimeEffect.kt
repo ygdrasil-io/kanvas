@@ -248,6 +248,7 @@ public class SkRuntimeEffect private constructor(
         }
         return SkRuntimeColorFilter(
             impl = impl,
+            runtimeEffectDescriptor = descriptor(),
             uniformsBuffer = SkRuntimeShader.makeUniformsBuffer(uniforms),
             childResolvers = resolvers,
         )

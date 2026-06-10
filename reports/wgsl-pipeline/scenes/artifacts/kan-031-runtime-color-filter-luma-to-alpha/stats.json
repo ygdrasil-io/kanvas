@@ -1,0 +1,75 @@
+        {
+          "sceneId": "runtime.color-filter.luma-to-alpha.rect.v1",
+          "scopeId": "runtime.color-filter.luma-to-alpha.direct-rect.v1",
+          "status": "pass",
+          "supportScope": "runtime-color-filter-luma-to-alpha-direct-rect",
+          "supportClaim": true,
+          "stableId": "runtime.color_filter_luma_to_alpha",
+          "wgslImplementationId": "wgsl/runtime_color_filter_luma_to_alpha",
+          "cpuRouteIdentifier": "cpu.runtime-color-filter.luma-to-alpha.direct-rect",
+          "webGpuRouteIdentifier": "webgpu.runtime-color-filter.luma-to-alpha.direct-rect",
+          "paintBlendMode": "kSrcOver",
+          "paintSourceColor": "0xFF336699",
+          "lumaAlpha": 92,
+          "filteredDisplayColor": "0xFFA3A3A3",
+          "stageOrder": "solid-color shader -> runtime color filter -> fixed-function kSrcOver blend -> store",
+          "colorSpacePolicy": "srgb-unmanaged-runtime-color-filter-oracle",
+          "fallbackPolicy": "supported-via-runtime-color-filter-luma-to-alpha-direct-rect-wgsl",
+          "wgslValidated": true,
+          "wgslSha256": "32dd05b45f0040d4825c73211646cd43bd74fad041c4448125c03e87e2493dc5",
+          "wgslEntryPoints": ["vertex:vs_main", "fragment:fs_main"],
+          "wgslDiagnostics": [],
+          "tolerance": 2,
+          "threshold": 99.00,
+          "cpuSimilarity": 100.000000,
+          "webGpuSimilarity": 100.000000,
+          "cpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "webGpuComparison": {
+  "similarity": 100.000000,
+  "totalPixels": 15360,
+  "matchingPixels": 15360,
+  "mismatchingPixels": 0,
+  "tolerance": 2,
+  "maxChannelDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "meanMismatchDiff": {
+    "a": 0,
+    "r": 0,
+    "g": 0,
+    "b": 0
+  }
+},
+          "globalThresholdChanged": false,
+          "globalColorPolicyChanged": false,
+          "webGpuAdapter": "Apple M2 Max",
+          "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/reference.png",
+          "cpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/cpu.png",
+          "webGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/webgpu.png",
+          "cpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/cpu-diff.png",
+          "webGpuDiffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/webgpu-diff.png",
+          "routeCpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/route-cpu.json",
+          "routeWebGpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/route-webgpu.json",
+          "nonClaims": ["no-broad-runtime-color-filter-claim", "no-runtime-color-filter-child-claim", "no-runtime-color-filter-uniform-claim", "no-runtime-color-filter-shader-input-claim", "no-color-management-breadth-claim", "no-lut-color-filter-claim", "no-color-filter-chain-claim", "no-global-threshold-change"]
+        }

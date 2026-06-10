@@ -1,18 +1,24 @@
 # Runtime Effects Layout V2
 
 Derived evidence. `SkRuntimeEffectDescriptorRegistry` and WGSL lowered reflection are the sources.
-Status counts: total=3; layout-matched=3; layout-mismatched=0.
+Status counts: total=4; layout-matched=4; layout-mismatched=0.
 
 Mismatch diagnostic: `runtime-effect.layout-reflection-mismatch`; missing reflection diagnostic: `wgsl.reflection.uniform-member-missing`.
 No uniform values enter runtime-effect pipeline cache keys.
 
 | Stable id | WGSL implementation | Status | Uniform block bytes | Diagnostics |
 |---|---|---|---:|---|
+| runtime.color_filter_luma_to_alpha | wgsl/runtime_color_filter_luma_to_alpha | layout-matched | 0 | none |
 | runtime.linear_gradient_rt | wgsl/runtime_linear_gradient_rt | layout-matched | 32 | none |
 | runtime.simple_rt | wgsl/runtime_simple_rt | layout-matched | 16 | none |
 | runtime.spiral_rt | wgsl/runtime_spiral_rt | layout-matched | 48 | none |
 
 ## Uniforms
+
+### runtime.color_filter_luma_to_alpha
+
+| Name | Descriptor type | Descriptor offset | Descriptor size | WGSL offset | WGSL size | WGSL alignment | Status | Diagnostic |
+|---|---|---:|---:|---:|---:|---:|---|---|
 
 ### runtime.linear_gradient_rt
 

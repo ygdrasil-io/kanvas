@@ -1,6 +1,7 @@
 package org.skia.effects.runtime
 
 private val acceptedWgslImplementationIds: Set<String> = setOf(
+    "wgsl/runtime_color_filter_luma_to_alpha",
     "wgsl/runtime_linear_gradient_rt",
     "wgsl/runtime_simple_rt",
     "wgsl/runtime_spiral_rt",

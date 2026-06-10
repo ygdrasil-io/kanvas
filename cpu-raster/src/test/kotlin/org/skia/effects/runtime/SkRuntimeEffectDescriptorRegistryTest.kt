@@ -149,10 +149,10 @@ class SkRuntimeEffectDescriptorRegistryTest {
 
         assertEquals(
             SkRuntimeEffectSupportMatrixV2StatusCounts(
-                total = 6,
-                descriptorBacked = 4,
+                total = 7,
+                descriptorBacked = 5,
                 cpuOnly = 1,
-                gpuBacked = 3,
+                gpuBacked = 4,
                 dependencyGated = 0,
                 expectedUnsupported = 2,
             ),
@@ -177,6 +177,13 @@ class SkRuntimeEffectDescriptorRegistryTest {
         val missingDescriptor = entries.single { it.stableId == "policy.unregistered_wgsl_descriptor" }
         assertEquals("expected-unsupported", missingDescriptor.supportState)
         assertTrue(missingDescriptor.pmNote.contains("registered WGSL descriptor"))
+
+        val lumaToAlpha = entries.single { it.stableId == "runtime.color_filter_luma_to_alpha" }
+        assertEquals("descriptor-backed", lumaToAlpha.descriptorStatus)
+        assertEquals("gpu-backed", lumaToAlpha.supportState)
+        assertEquals("kotlin/color_filter_luma_to_alpha", lumaToAlpha.cpuImplementationId)
+        assertEquals("wgsl/runtime_color_filter_luma_to_alpha", lumaToAlpha.wgslImplementationId)
+        assertEquals("none", lumaToAlpha.fallbackReason)
     }
 
     @Test
@@ -212,14 +219,16 @@ class SkRuntimeEffectDescriptorRegistryTest {
         assertTrue(firstJson.contains("\"supportState\":\"cpu-only\""))
         assertTrue(firstJson.contains("\"fallbackReason\":\"runtime-effect.arbitrary-sksl-unsupported\""))
         assertTrue(firstJson.contains("\"fallbackReason\":\"runtime-effect.wgsl-descriptor-missing\""))
-        assertTrue(firstJson.contains("\"descriptorBacked\":4"))
+        assertTrue(firstJson.contains("\"descriptorBacked\":5"))
         assertTrue(firstJson.contains("\"cpuOnly\":1"))
+        assertTrue(firstJson.contains("\"gpuBacked\":4"))
         assertTrue(firstJson.contains("\"expectedUnsupported\":2"))
         assertTrue(firstJson.contains("No dynamic SkSL compilation"))
 
         assertTrue(firstMarkdown.contains("# Runtime Effects V2 Support Matrix"))
-        assertTrue(firstMarkdown.contains("Status counts: total=6; descriptor-backed=4; CPU-only=1; GPU-backed=3; dependency-gated=0; expected-unsupported=2."))
+        assertTrue(firstMarkdown.contains("Status counts: total=7; descriptor-backed=5; CPU-only=1; GPU-backed=4; dependency-gated=0; expected-unsupported=2."))
         assertTrue(firstMarkdown.contains("| Stable id | Kind | Descriptor status | Support state | CPU implementation | WGSL implementation | Fallback reason | PM note |"))
+        assertTrue(firstMarkdown.contains("| runtime.color_filter_luma_to_alpha | kColorFilter | descriptor-backed | gpu-backed | kotlin/color_filter_luma_to_alpha | wgsl/runtime_color_filter_luma_to_alpha | none |"))
         assertTrue(firstMarkdown.contains("| runtime.simple_rt | kShader | descriptor-backed | gpu-backed | kotlin/simple_rt | wgsl/runtime_simple_rt | none |"))
         assertTrue(firstMarkdown.contains("| runtime.unsharp_rt | kShader | descriptor-backed | cpu-only | kotlin/unsharp_rt | - | runtime-effect.wgsl-descriptor-missing |"))
         assertTrue(firstMarkdown.contains("runtime-effect.arbitrary-sksl-unsupported"))

@@ -21,9 +21,17 @@ import java.nio.ByteOrder
  */
 public class SkRuntimeColorFilter internal constructor(
     private val impl: SkRuntimeImpl,
+    public val runtimeEffectDescriptor: SkRuntimeEffectDescriptor?,
     private val uniformsBuffer: ByteBuffer,
     private val childResolvers: Array<ChildResolver>,
 ) : SkColorFilter() {
+    public fun runtimeEffectUniformBytes(): ByteArray {
+        val dup = uniformsBuffer.duplicate()
+        dup.position(0)
+        val out = ByteArray(dup.capacity())
+        dup.get(out)
+        return out
+    }
 
     override fun filterColor4f(src: SkColor4f): SkColor4f {
         val u = uniformsBuffer.duplicate().order(ByteOrder.nativeOrder())

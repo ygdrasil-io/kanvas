@@ -85,14 +85,22 @@ object WgslStrictValidationReport {
         expectedBindings = setOf("uniforms@group=0,binding=0"),
         expectedUniformVariables = setOf("uniforms"),
     )
+    private val runtimeColorFilterLumaToAlphaSpec = WgslStrictModuleSpec(
+        label = "registered/runtime_color_filter_luma_to_alpha.wgsl",
+        expectedEntryPoints = setOf("vertex:vs_main", "fragment:fs_main"),
+        expectedBindings = setOf("uniforms@group=0,binding=0"),
+        expectedUniformVariables = setOf("uniforms"),
+    )
 
     fun run(shaderRoot: Path = Path.of("src/main/resources/shaders")): WgslStrictValidationSummary {
+        val runtimeColorFilterLumaToAlpha = shaderRoot.resolve("runtime_color_filter_luma_to_alpha.wgsl")
         val runtimeLinearGradientRt = shaderRoot.resolve("runtime_linear_gradient_rt.wgsl")
         val runtimeSimpleRt = shaderRoot.resolve("runtime_simple_rt.wgsl")
         val runtimeSpiralRt = shaderRoot.resolve("runtime_spiral_rt.wgsl")
         val modules = listOf(
             validate(generatedSolidSpec, GeneratedSolidRectWgsl.generateDeterministic()),
             validate(generatedLinearGradientSpec, GeneratedLinearGradientWgsl.generateDeterministic()),
+            validate(runtimeColorFilterLumaToAlphaSpec, Files.readString(runtimeColorFilterLumaToAlpha)),
             validate(runtimeLinearGradientRtSpec, Files.readString(runtimeLinearGradientRt)),
             validate(runtimeSimpleRtSpec, Files.readString(runtimeSimpleRt)),
             validate(runtimeSpiralRtSpec, Files.readString(runtimeSpiralRt)),

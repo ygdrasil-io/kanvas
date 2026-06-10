@@ -68,6 +68,7 @@ import org.skia.gpu.webgpu.tools.GeneratedLinearGradientWgsl
 import org.skia.gpu.webgpu.tools.GeneratedSolidRectWgsl
 import org.skia.core.SkClipShape
 import org.skia.core.SkDevice
+import org.skia.effects.runtime.SkRuntimeColorFilter
 import org.skia.effects.runtime.SkRuntimeShader
 import org.skia.core.SrcRectConstraint
 import org.skia.foundation.SkBitmapShader
@@ -7158,6 +7159,8 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
             ),
         )
 
+    private val runtimeColorFilterLumaToAlphaShader: GPUShaderModule =
+        loadShader("shaders/runtime_color_filter_luma_to_alpha.wgsl")
     private val runtimeLinearGradientShader: GPUShaderModule = loadShader("shaders/runtime_linear_gradient_rt.wgsl")
     private val runtimeSimpleShader: GPUShaderModule = loadShader("shaders/runtime_simple_rt.wgsl")
     private val runtimeSpiralShader: GPUShaderModule = loadShader("shaders/runtime_spiral_rt.wgsl")
@@ -7187,6 +7190,7 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
 
     private fun runtimeEffectShaderFor(wgslImplementationId: String): GPUShaderModule =
         when (wgslImplementationId) {
+            "wgsl/runtime_color_filter_luma_to_alpha" -> runtimeColorFilterLumaToAlphaShader
             "wgsl/runtime_linear_gradient_rt" -> runtimeLinearGradientShader
             "wgsl/runtime_simple_rt" -> runtimeSimpleShader
             "wgsl/runtime_spiral_rt" -> runtimeSpiralShader
@@ -15102,6 +15106,17 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         // aligned coverage (and is redundant with the integer scissor
         // anyway -- we skip emitting CLIP_KIND_RRECT in that case).
         val (clipKind, clipBounds, clipRx, clipRy) = packClipShape(activeClipShape)
+        val runtimeColorFilter = paint.colorFilter as? SkRuntimeColorFilter
+        if (runtimeColorFilter != null) {
+            if (drawRuntimeColorFilterFillRect(rect, clip, paint, runtimeColorFilter)) {
+                return
+            }
+            if (lastRuntimeEffectFallbackReason == null) {
+                lastRuntimeEffectFallbackReason =
+                    "runtime-effect.color-filter-cpu-only: runtime color filter requires bounded direct-rect route"
+            }
+            error("SkWebGpuDevice: ${lastRuntimeEffectFallbackReason}")
+        }
         // Phase G-direct-colorFilter -- detect `paint.colorFilter` and
         // pack it into the 6-vec4f payload consumed by
         // `solid_color.wgsl`. Reuses [packLayerCompositeColorFilter]
@@ -15402,8 +15417,99 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         return true
     }
 
+    private fun drawRuntimeColorFilterFillRect(
+        devRect: SkRect,
+        clip: SkIRect,
+        paint: SkPaint,
+        colorFilter: SkRuntimeColorFilter,
+    ): Boolean {
+        val descriptor = colorFilter.runtimeEffectDescriptor ?: run {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.color-filter-wgsl-missing: runtime color filter descriptor missing"
+            return false
+        }
+        if (descriptor.kind != org.skia.effects.runtime.SkRuntimeEffect.Kind.kColorFilter) {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.color-filter-cpu-only: runtime effect ${descriptor.stableId} is not a color filter"
+            return false
+        }
+        if (descriptor.children.isNotEmpty()) {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.color-filter-cpu-only: runtime color filter ${descriptor.stableId} child bindings are not supported on WebGPU"
+            return false
+        }
+        val wgslImplementationId = descriptor.wgslImplementationId ?: run {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.color-filter-wgsl-missing: runtime color filter ${descriptor.stableId} has no supported WGSL implementation"
+            return false
+        }
+        if (wgslImplementationId != "wgsl/runtime_color_filter_luma_to_alpha" ||
+            wgslImplementationId !in SUPPORTED_RUNTIME_EFFECT_WGSL_IDS
+        ) {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.color-filter-wgsl-missing: runtime color filter ${descriptor.stableId} has no supported WGSL implementation"
+            return false
+        }
+        if (paint.shader != null) {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.color-filter-cpu-only: runtime color filter ${descriptor.stableId} requires solid-color input on WebGPU"
+            return false
+        }
+        if (paint.blendMode != SkBlendMode.kSrcOver || !blendPlanFor(paint.blendMode).isFixedFunction) {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.color-filter-cpu-only: runtime color filter ${descriptor.stableId} requires kSrcOver fixed-function BlendPlan"
+            return false
+        }
+        if (paint.isAntiAlias) {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.color-filter-cpu-only: runtime color filter ${descriptor.stableId} currently requires non-AA rect fill"
+            return false
+        }
+        if (activeClipShape != null) {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.color-filter-cpu-only: runtime color filter ${descriptor.stableId} currently requires scissor-only clipping"
+            return false
+        }
+        if (colorFilter.runtimeEffectUniformBytes().isNotEmpty()) {
+            lastRuntimeEffectFallbackReason =
+                "runtime-effect.color-filter-cpu-only: runtime color filter ${descriptor.stableId} uniforms are not supported by the bounded WebGPU route"
+            return false
+        }
+
+        val l = pixelEdge(devRect.left).coerceAtLeast(clip.left).coerceAtLeast(0)
+        val t = pixelEdge(devRect.top).coerceAtLeast(clip.top).coerceAtLeast(0)
+        val r = pixelEdge(devRect.right).coerceAtMost(clip.right).coerceAtMost(width)
+        val b = pixelEdge(devRect.bottom).coerceAtMost(clip.bottom).coerceAtMost(height)
+        if (l >= r || t >= b) {
+            lastRuntimeEffectFallbackReason = null
+            return true
+        }
+
+        val color = paint.color
+        pending.add(
+            RuntimeEffectRectDraw(
+                scissor = intArrayOf(l, t, r - l, b - t),
+                wgslImplementationId = wgslImplementationId,
+                uniformFloats = floatArrayOf(
+                    SkColorGetR(color) / 255f,
+                    SkColorGetG(color) / 255f,
+                    SkColorGetB(color) / 255f,
+                    SkColorGetA(color) / 255f,
+                ),
+                r = SkColorGetR(color) / 255f,
+                g = SkColorGetG(color) / 255f,
+                b = SkColorGetB(color) / 255f,
+                a = SkColorGetA(color) / 255f,
+                mode = paint.blendMode,
+            ),
+        )
+        lastRuntimeEffectFallbackReason = null
+        return true
+    }
+
     private fun runtimeEffectUniformBytesFor(wgslImplementationId: String): Int =
         when (wgslImplementationId) {
+            "wgsl/runtime_color_filter_luma_to_alpha" -> 16
             "wgsl/runtime_linear_gradient_rt" -> 32
             "wgsl/runtime_simple_rt" -> 16
             "wgsl/runtime_spiral_rt" -> 48
@@ -16226,6 +16332,22 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             if (lastRuntimeEffectFallbackReason == null) {
                 lastRuntimeEffectFallbackReason =
                     "runtime effect requires descriptor-backed identity-CTM rect fill path"
+            }
+            error("SkWebGpuDevice: ${lastRuntimeEffectFallbackReason}")
+        }
+        val runtimeColorFilter = paint.colorFilter as? SkRuntimeColorFilter
+        if (runtimeColorFilter != null) {
+            val srcRect = path.isRect()
+            if (srcRect != null &&
+                paint.style == SkPaint.Style.kFill_Style &&
+                ctm.isIdentity &&
+                drawRuntimeColorFilterFillRect(srcRect, clip, paint, runtimeColorFilter)
+            ) {
+                return
+            }
+            if (lastRuntimeEffectFallbackReason == null) {
+                lastRuntimeEffectFallbackReason =
+                    "runtime-effect.color-filter-cpu-only: runtime color filter requires solid-color identity-CTM non-AA rect fill path"
             }
             error("SkWebGpuDevice: ${lastRuntimeEffectFallbackReason}")
         }
@@ -24570,6 +24692,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         )
 
         private val SUPPORTED_RUNTIME_EFFECT_WGSL_IDS = setOf(
+            "wgsl/runtime_color_filter_luma_to_alpha",
             "wgsl/runtime_linear_gradient_rt",
             "wgsl/runtime_simple_rt",
             "wgsl/runtime_spiral_rt",
