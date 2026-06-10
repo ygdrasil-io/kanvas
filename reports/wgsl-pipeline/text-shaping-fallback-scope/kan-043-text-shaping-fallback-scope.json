@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-043",
+  "packId": "kan-043-text-shaping-fallback-scope",
+  "status": "pass",
+  "closureDecision": "text-shaping-fallback-scope",
+  "claimLevel": "pm-text-scope-existing-evidence-only",
+  "supportClaim": "no-new-rendering-support",
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "externalFontEngineAdded": false,
+  "implicitSystemFallbackAllowed": false,
+  "readinessDelta": 0,
+  "summary": {
+    "totalRows": 4,
+    "supportRows": 2,
+    "refusalRows": 2,
+    "rowsMissingFontHash": 0,
+    "rowsMissingShapingRoute": 0,
+    "rowsMissingClusters": 0,
+    "rowsMissingGlyphIds": 0,
+    "implicitFallbackRows": 0
+  },
+  "textScopeRows": [
+    {
+      "rowId": "text.simple-latin.line.v1",
+      "pmCategory": "simple-latin-support",
+      "status": "pass",
+      "sourceEvidence": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
+      "textInput": "Kanvas Latin 0123456789 ABC xyz.",
+      "font": {
+        "face": "Liberation Sans",
+        "source": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+        "sha256": "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+        "sourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8"
+      },
+      "shapingRoute": {
+        "mode": "simple-codepoint-order",
+        "direction": "ltr",
+        "script": "Latin",
+        "language": "und",
+        "featureSet": "default-simple",
+        "fallbackPolicy": "none-for-supported-simple-latin-line",
+        "diagnostics": [
+          "drawString remains simple; no implicit complex shaper"
+        ]
+      },
+      "clusters": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ],
+      "glyphIds": [
+        46,
+        68,
+        81,
+        89,
+        68,
+        86,
+        3,
+        47,
+        68,
+        87,
+        76,
+        81,
+        3,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        3,
+        36,
+        37,
+        38,
+        3,
+        91,
+        92,
+        93,
+        17
+      ],
+      "route": {
+        "cpu": "cpu.text.outline-path.simple-latin",
+        "gpu": "webgpu.text.outline-path.simple-latin",
+        "glyph": "font.glyph.outline-path",
+        "referenceKind": "cpu-atlas-alpha-mask-oracle"
+      },
+      "fallbackPolicy": {
+        "policy": "no-fallback-for-bundled-simple-latin",
+        "reasonCode": "none",
+        "legacyReasonCode": "none",
+        "implicitSystemFallback": false
+      },
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+        "webgpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+        "cpu_diff": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+        "webgpu_diff": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png",
+        "route_cpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+        "route_webgpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
+        "atlas": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json"
+      },
+      "nonClaims": [
+        "no-complex-shaping-claim",
+        "no-fallback-font-claim",
+        "no-emoji-or-color-font-claim",
+        "no-bidi-paragraph-claim",
+        "no-broad-text-claim"
+      ]
+    },
+    {
+      "rowId": "font-kerning-style-fixture",
+      "pmCategory": "bounded-shaping-support",
+      "status": "pass",
+      "sourceEvidence": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/font-diagnostics.json",
+      "textInput": "AVATAR",
+      "font": {
+        "face": "Liberation Sans Bold",
+        "source": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Bold.ttf",
+        "sha256": "788abee4c806d660e8aee46689dd8540cd4bb98da03dcc9d171ce3efd99a9173",
+        "sourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Bold.ttf#sha256=788abee4c806d660e8aee46689dd8540cd4bb98da03dcc9d171ce3efd99a9173"
+      },
+      "shapingRoute": {
+        "mode": "simple-kerning-fixture",
+        "direction": "ltr",
+        "script": "Latin",
+        "language": "und",
+        "featureSet": "bounded-pair-positioning",
+        "fallbackPolicy": "none",
+        "diagnostics": [
+          "bounded kerning-style fixture only; no broad shaping claim"
+        ]
+      },
+      "clusters": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "glyphIds": [
+        65,
+        87,
+        67,
+        87,
+        69,
+        87
+      ],
+      "route": {
+        "cpu": "cpu.text.outline.kerning-style",
+        "gpu": "webgpu.text.outline.kerning-style-fixture",
+        "glyph": "outline-path",
+        "referenceKind": "cpu-oracle"
+      },
+      "fallbackPolicy": {
+        "policy": "no-fallback-for-bundled-kerning-fixture",
+        "reasonCode": "none",
+        "legacyReasonCode": "none",
+        "implicitSystemFallback": false
+      },
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "artifacts": {
+        "skia": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/gpu.png",
+        "cpu_diff": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/cpu-diff.png",
+        "gpu_diff": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/gpu-diff.png",
+        "route_cpu": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/route-cpu.json",
+        "route_gpu": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/stats.json",
+        "font_diagnostics": "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/font-diagnostics.json"
+      },
+      "nonClaims": [
+        "no-full-gsub-claim",
+        "no-full-gpos-claim",
+        "no-fallback-font-claim",
+        "no-arabic-indic-emoji-claim",
+        "no-broad-text-claim"
+      ]
+    },
+    {
+      "rowId": "font-complex-shaping-refusal",
+      "pmCategory": "bounded-shaping-refusal",
+      "status": "expected-unsupported",
+      "sourceEvidence": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/font-diagnostics.json",
+      "textInput": "SHAPE",
+      "font": {
+        "face": "Liberation Serif Italic",
+        "source": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Italic.ttf",
+        "sha256": "0e3dea9f8d613e006ccfa62201f33e265d19167bd0907725c3e145368b04fc2e",
+        "sourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Italic.ttf#sha256=0e3dea9f8d613e006ccfa62201f33e265d19167bd0907725c3e145368b04fc2e"
+      },
+      "shapingRoute": {
+        "mode": "unsupported",
+        "requestedMode": "complex-shaping",
+        "direction": "ltr",
+        "script": "Latin",
+        "language": "und",
+        "featureSet": "complex-shaping",
+        "fallbackPolicy": "explicit-refusal",
+        "diagnostics": [
+          "complex shaping requires explicit supported shaper evidence before promotion"
+        ]
+      },
+      "clusters": [],
+      "glyphIds": [],
+      "route": {
+        "cpu": "cpu.text.refusal-oracle.complex-shaping",
+        "gpu": "webgpu.text.refuse",
+        "glyph": "unsupported",
+        "referenceKind": "cpu-oracle"
+      },
+      "fallbackPolicy": {
+        "policy": "refuse-without-native-shaper",
+        "reasonCode": "font.shaping-feature-unsupported",
+        "legacyReasonCode": "font.complex-shaping-requires-explicit-shaper",
+        "implicitSystemFallback": false
+      },
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "artifacts": {
+        "skia": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/cpu.png",
+        "cpu_diff": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/cpu-diff.png",
+        "route_cpu": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/route-cpu.json",
+        "route_gpu": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/stats.json",
+        "font_diagnostics": "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/font-diagnostics.json"
+      },
+      "nonClaims": [
+        "no-complex-shaping-support-claim",
+        "no-native-shaper-engine-claim",
+        "no-fallback-font-claim",
+        "no-arabic-indic-emoji-claim",
+        "no-broad-text-claim"
+      ]
+    },
+    {
+      "rowId": "m62-missing-glyph-fallback-refusal",
+      "pmCategory": "fallback-missing-glyph-refusal",
+      "status": "expected-unsupported",
+      "sourceEvidence": "reports/wgsl-pipeline/scenes/generated/m62-font-fallback-evidence.json",
+      "textInput": "KANVAS U+10FFFF",
+      "font": {
+        "face": "Liberation Sans",
+        "source": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+        "sha256": "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+        "sourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8"
+      },
+      "shapingRoute": {
+        "mode": "simple-glyph-id-map-missing-glyph",
+        "direction": "ltr",
+        "script": "Latin + missing code point",
+        "language": "und",
+        "featureSet": "missing-glyph-fallback",
+        "fallbackPolicy": "fallback-family-selection-unsupported",
+        "diagnostics": [
+          "missing code point is represented by glyph id 0 (.notdef) and refused without fallback family selection"
+        ]
+      },
+      "clusters": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7
+      ],
+      "glyphIds": [
+        75,
+        66,
+        80,
+        89,
+        69,
+        88,
+        0
+      ],
+      "route": {
+        "cpu": "cpu.text.outline.missing-glyph-oracle",
+        "gpu": "webgpu.text.refuse.missing-glyph-fallback",
+        "glyph": "unsupported",
+        "referenceKind": "cpu-oracle"
+      },
+      "fallbackPolicy": {
+        "policy": "refuse-without-system-font-fallback",
+        "reasonCode": "font.shaping-fallback-missing",
+        "legacyReasonCode": "font.missing-glyph-fallback-unsupported",
+        "implicitSystemFallback": false,
+        "notdefGlyphId": 0
+      },
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "artifacts": {
+        "m62_evidence": "reports/wgsl-pipeline/scenes/generated/m62-font-fallback-evidence.json",
+        "base_font_diagnostics": "reports/wgsl-pipeline/scenes/artifacts/font-latin-outline-drawstring/font-diagnostics.json"
+      },
+      "nonClaims": [
+        "no-fallback-family-selection-claim",
+        "no-system-font-policy-claim",
+        "no-emoji-or-color-font-claim",
+        "no-broad-text-claim"
+      ]
+    }
+  ],
+  "claimGuard": {
+    "rowsMissingFontHash": [],
+    "rowsMissingShapingRoute": [],
+    "rowsMissingClusters": [],
+    "rowsMissingGlyphIds": [],
+    "supportRowsMissingProofs": [],
+    "refusalRowsMissingReason": [],
+    "implicitSystemFallbackRows": [],
+    "hiddenBroadShapingClaims": [],
+    "externalFontEngineClaims": []
+  },
+  "requiredValidation": [
+    "validateKan043TextShapingFallbackScope",
+    ":gpu-raster:pipelineConformanceTest -- includes SimpleLatinLineSceneEvidenceTest",
+    ":kanvas-skia:pipelineConformanceTest -- includes font/shaper contract tests in the standard suite",
+    "pipelinePmBundle"
+  ],
+  "validationRows": [
+    {
+      "id": "font-identity-visible",
+      "status": "pass",
+      "evidence": "Every row records font face, source path, and SHA-256 hash."
+    },
+    {
+      "id": "glyphs-and-clusters-visible",
+      "status": "pass",
+      "evidence": "Rows expose explicit clusters and glyph id arrays; missing glyph uses glyph id 0 (.notdef)."
+    },
+    {
+      "id": "support-refusal-separated",
+      "status": "pass",
+      "evidence": "Simple Latin and bounded kerning support remain separate from complex shaping and fallback refusals."
+    },
+    {
+      "id": "no-implicit-system-fallback",
+      "status": "pass",
+      "evidence": "Every fallback policy records implicitSystemFallback=false."
+    }
+  ],
+  "nonClaims": [
+    "KAN-043 does not add renderer, shader, selector, PipelineKey, threshold, or budget changes.",
+    "KAN-043 does not claim broad text, broad shaping, broad font fallback, full GSUB/GPOS, Arabic/Indic shaping, emoji ZWJ, or color-font support.",
+    "KAN-043 does not add or require HarfBuzz, FreeType, Fontations, CoreText, DirectWrite, fontconfig, AWT, JNI, Ganesh, Graphite, SkSL compiler, SkSL IR, or SkSL VM.",
+    "KAN-043 does not convert missing glyph fallback or complex shaping refusal into support."
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 30,
+    "missingCommittedArtifacts": 0,
+    "missing": []
+  },
+  "artifactPaths": [
+    ".upstream/specs/font/03-shaping-and-layout-boundary.md",
+    ".upstream/specs/font/06-validation-and-conformance.md",
+    ".upstream/specs/font/README.md",
+    ".upstream/specs/geometry-coverage/02-lowering-rules.md",
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    "docs/opentype-font-backend.md",
+    "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/font-diagnostics.json",
+    "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/font-diagnostics.json",
+    "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/gpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/gpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/font-latin-outline-drawstring/font-diagnostics.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+    "reports/wgsl-pipeline/scenes/generated/m62-font-fallback-evidence.json"
+  ]
+}
