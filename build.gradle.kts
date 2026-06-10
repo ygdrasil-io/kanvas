@@ -389,6 +389,7 @@ fun renderPipelineConformanceReport(
         |KAN-040 coverage/stroke/clip closeout matrix with support/refusal proof guards,
         |KAN-041 image-filter DAG bounded V3 evidence with two support rows and stable residual refusals,
         |KAN-042 image-filter residual refusal matrix with PM support/gap/dependency categories,
+        |KAN-043 text shaping/fallback scope with explicit font identity, glyph clusters, glyph ids, and stable fallback refusals,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -434,6 +435,7 @@ fun renderPipelineConformanceReport(
         |${row("KAN-040 coverage/stroke/clip closeout matrix", "passed", "`validateKan040CoverageCloseoutMatrix` aggregates HairlinesGM, butt stroke, caps/joins, dashes, AA clip, and nested clip rows into supportable-bounded, visible-non-supportable, expected-unsupported, and dependency-gated categories; it fails support claims without reference/CPU/GPU/diff/stat/route plus `fallbackReason=none` and refuses unsupported rows without stable fallbacks.")}
         |${row("KAN-041 image-filter DAG bounded V3", "passed", "`validateKan041ImageFilterDagBoundedV3` records two bounded support scenes (`crop-image-filter-nonnull-prepass`, `m61-compose-cf-matrix-transform-dag-v2`) with reference/CPU/GPU/diff/stat/route and `fallbackReason=none`, keeps BigTile/ImageFiltersGraph/out-of-scope Crop rows refused with stable reasons, and makes no renderer, shader, threshold, readback, picture-prepass, or broad DAG claim.")}
         |${row("KAN-042 image-filter residual refusal matrix", "passed", "`validateKan042ImageFilterResidualRefusalMatrix` aggregates 15 image-filter rows into `supportable-bounded`, `implementation-gap`, and `dependency-gated` PM categories, keeps every unsupported row on a stable reason code, verifies dashboard `fail=0` and `tracked-gap=0`, and makes no renderer, shader, threshold, budget, or new support claim.")}
+        |${row("KAN-043 text shaping/fallback scope", "passed", "`validateKan043TextShapingFallbackScope` records simple Latin support, bounded kerning-style shaping support, complex shaping refusal, and missing glyph/fallback refusal with font face/source/hash, shaping route, clusters, glyph ids, CPU/GPU route or refusal, and guards against implicit system font fallback or broad shaping claims.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -812,6 +814,7 @@ tasks.register("pipelineConformance") {
         "validateKan040CoverageCloseoutMatrix",
         "validateKan041ImageFilterDagBoundedV3",
         "validateKan042ImageFilterResidualRefusalMatrix",
+        "validateKan043TextShapingFallbackScope",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -839,6 +842,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-040 coverage/stroke/clip closeout matrix and claim guards: validateKan040CoverageCloseoutMatrix
             |- REQUIRED KAN-041 image-filter DAG bounded V3 support/refusal evidence: validateKan041ImageFilterDagBoundedV3
             |- REQUIRED KAN-042 image-filter residual refusal matrix and PM category guards: validateKan042ImageFilterResidualRefusalMatrix
+            |- REQUIRED KAN-043 text shaping/fallback scope and font fallback guards: validateKan043TextShapingFallbackScope
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5385,6 +5389,43 @@ tasks.register<Exec>("validateKan042ImageFilterResidualRefusalMatrix") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan043TextShapingFallbackScope") {
+    group = "verification"
+    description = "Materializes and validates the KAN-043 text shaping and fallback scope evidence."
+    dependsOn(
+        "validateKan042ImageFilterResidualRefusalMatrix",
+        ":gpu-raster:pipelineConformanceTest",
+        ":kanvas-skia:pipelineConformanceTest",
+    )
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/text-shaping-fallback-scope")
+    commandLine(
+        "python3",
+        "scripts/validate_kan043_text_shaping_fallback_scope.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan043_text_shaping_fallback_scope.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/font-complex-shaping-refusal"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/font-latin-outline-drawstring/font-diagnostics.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/generated/m62-font-fallback-evidence.json"))
+    inputs.file(layout.projectDirectory.file("kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf"))
+    inputs.file(layout.projectDirectory.file("kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Bold.ttf"))
+    inputs.file(layout.projectDirectory.file("kanvas-skia/src/main/resources/fonts/liberation/LiberationSerif-Italic.ttf"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
+    inputs.file(layout.projectDirectory.file("docs/opentype-font-backend.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/font/README.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/font/03-shaping-and-layout-boundary.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/font/06-validation-and-conformance.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/geometry-coverage/02-lowering-rules.md"))
+    outputs.file(outputDir.file("kan-043-text-shaping-fallback-scope.json"))
+    outputs.file(outputDir.file("kan-043-text-shaping-fallback-scope.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -5542,6 +5583,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan040CoverageCloseoutMatrix",
         "validateKan041ImageFilterDagBoundedV3",
         "validateKan042ImageFilterResidualRefusalMatrix",
+        "validateKan043TextShapingFallbackScope",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
