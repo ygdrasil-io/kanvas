@@ -134,6 +134,18 @@ tasks.register<JavaExec>("wgslValidateStrict") {
     args(file("src/main/resources/shaders").absolutePath)
 }
 
+tasks.register<JavaExec>("pipelineRuntimeEffectsLayoutV2Report") {
+    group = "verification"
+    description = "Materializes the KAN-028 Runtime Effects V2 reflected layout JSON and Markdown artifacts."
+    dependsOn("classes")
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("org.skia.gpu.webgpu.tools.RuntimeEffectsLayoutV2ReportKt")
+    args(
+        rootProject.layout.projectDirectory.dir("reports/wgsl-pipeline/runtime-effects-layout-v2").asFile.absolutePath,
+        file("src/main/resources/shaders").absolutePath,
+    )
+}
+
 tasks.register<JavaExec>("gpuInventoryFailureReport") {
     group = "verification"
     description = "Classifies full GPU inventory failures from JUnit XML and emits markdown/json artifacts."

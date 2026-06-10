@@ -43,6 +43,8 @@ enum class UniformReflectionSource {
 data class UniformMemberOffset(
     val name: String,
     val offset: Int,
+    val size: Int? = null,
+    val alignment: Int? = null,
 )
 
 data class WgslValidationSummary(
@@ -184,7 +186,12 @@ object WgslValidationReport {
                 inner.members.map { member ->
                     val layout = layouter[member.type]
                     cursor = layout.alignment.roundUp(cursor)
-                    val reflected = UniformMemberOffset(member.name, cursor)
+                    val reflected = UniformMemberOffset(
+                        name = member.name,
+                        offset = cursor,
+                        size = layout.size,
+                        alignment = layout.alignment.roundUp(1),
+                    )
                     cursor += layout.size
                     reflected
                 }
