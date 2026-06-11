@@ -392,6 +392,7 @@ fun renderPipelineConformanceReport(
         |KAN-043 text shaping/fallback scope with explicit font identity, glyph clusters, glyph ids, and stable fallback refusals,
         |KAN-044 glyph mask/atlas ownership boundary with text-owned atlas route, CPU mask oracle, coverage handoff, and stable WebGPU alpha-mask refusal,
         |KAN-045 color pipeline bounded policy with selected sRGB/premul support rows, wide-gamut/F16 refusals, semantic CPU/GPU op parity, and threshold guards,
+        |KAN-046 tile modes/mipmap boundary with two bounded tile-mode support rows, structured sampling/local-matrix/tile-mode/mipmap diagnostics, and stable mipmap refusals,
         |kanvas-skia production descriptor routing through shared analytic rect coverage execution, WebGPU selector routing, and geometry oracle checks.
         |
         |## Status Matrix
@@ -440,6 +441,7 @@ fun renderPipelineConformanceReport(
         |${row("KAN-043 text shaping/fallback scope", "passed", "`validateKan043TextShapingFallbackScope` records simple Latin support, bounded kerning-style shaping support, complex shaping refusal, and missing glyph/fallback refusal with font face/source/hash, shaping route, clusters, glyph ids, CPU/GPU route or refusal, and guards against implicit system font fallback or broad shaping claims.")}
         |${row("KAN-044 glyph mask/atlas ownership", "passed", "`validateKan044GlyphMaskAtlasOwnership` records the text-owned simple Latin glyph atlas upload plan, CPU glyph-mask oracle, geometry `CoveragePlan.AlphaMask` handoff, and WebGPU standalone alpha-mask refusal `coverage.alpha-mask-unsupported`, with guards against missing glyph keys/generation/upload bytes/cache ids, coverage ownership drift, LCD/SDF, dynamic eviction, and Ganesh/Graphite claims.")}
         |${row("KAN-045 color pipeline bounded policy", "passed", "`validateKan045ColorPipelineBoundedPolicy` records bounded sRGB/premul SrcOver and Blend(kPlus) ColorFilter support rows, visible wide-gamut and F16 policy refusals, matching CPU/GPU semantic ops, generated/handwritten WGSL validation facts, and guards against threshold weakening, silent approximation, broad color management, HDR/gainmap, all-blend-mode, Ganesh/Graphite, or SkSL compiler claims.")}
+        |${row("KAN-046 tile modes/mipmap boundary", "passed", "`validateKan046TileModesMipmapBoundary` records two bounded tile-mode support rows (`bitmap-shader-repeat-tile`, `bitmap-subset-local-matrix-repeat`) with reference/CPU/GPU/diff/stat/routes plus structured sampling/localMatrix/tileMode/mipmapMode diagnostics, keeps mipmap requests expected-unsupported via `image-sampling.mipmap-unsupported`, and guards against arbitrary texture, codec decode, perspective sampling, color-managed decode, broad tile-mode, mipmap, renderer, shader, threshold, or budget claims.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -821,6 +823,7 @@ tasks.register("pipelineConformance") {
         "validateKan043TextShapingFallbackScope",
         "validateKan044GlyphMaskAtlasOwnership",
         "validateKan045ColorPipelineBoundedPolicy",
+        "validateKan046TileModesMipmapBoundary",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -851,6 +854,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-043 text shaping/fallback scope and font fallback guards: validateKan043TextShapingFallbackScope
             |- REQUIRED KAN-044 glyph mask/atlas ownership boundary and coverage ownership guards: validateKan044GlyphMaskAtlasOwnership
             |- REQUIRED KAN-045 color pipeline bounded policy and color/refusal guards: validateKan045ColorPipelineBoundedPolicy
+            |- REQUIRED KAN-046 tile modes/mipmap boundary and sampling route guards: validateKan046TileModesMipmapBoundary
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5499,6 +5503,29 @@ tasks.register<Exec>("validateKan045ColorPipelineBoundedPolicy") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan046TileModesMipmapBoundary") {
+    group = "verification"
+    description = "Materializes and validates the KAN-046 tile modes and mipmap boundary evidence."
+    dependsOn("validateKan045ColorPipelineBoundedPolicy")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/tile-modes-mipmap-boundary")
+    commandLine(
+        "python3",
+        "scripts/validate_kan046_tile_modes_mipmap_boundary.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan046_tile_modes_mipmap_boundary.py"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m79-bitmap-replay/evidence.json"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/wgsl-pipeline/08-bitmap-image-rect-sampling.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md"))
+    outputs.file(outputDir.file("kan-046-tile-modes-mipmap-boundary.json"))
+    outputs.file(outputDir.file("kan-046-tile-modes-mipmap-boundary.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -5659,6 +5686,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan043TextShapingFallbackScope",
         "validateKan044GlyphMaskAtlasOwnership",
         "validateKan045ColorPipelineBoundedPolicy",
+        "validateKan046TileModesMipmapBoundary",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",
@@ -5697,6 +5725,7 @@ tasks.register("pipelinePmBundle") {
     val m90RuntimeInteractiveDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m90-runtime-interactive")
     val m91MepRcScenePackDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m91-mep-rc-scene-pack")
     val m92KadreRuntimeRcDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m92-kadre-runtime-rc")
+    val kan046TileModesMipmapDir = layout.projectDirectory.dir("reports/wgsl-pipeline/tile-modes-mipmap-boundary")
     val inventoryDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory")
     val inventoryGateDir = layout.buildDirectory.dir("reports/wgsl-pipeline-skia-gm-inventory-gate")
     val m65RuntimeDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m65-runtime-smoke")
@@ -5732,6 +5761,7 @@ tasks.register("pipelinePmBundle") {
     inputs.dir(m90RuntimeInteractiveDir)
     inputs.dir(m91MepRcScenePackDir)
     inputs.dir(m92KadreRuntimeRcDir)
+    inputs.dir(kan046TileModesMipmapDir)
     inputs.dir(inventoryDir)
     inputs.dir(inventoryGateDir)
     inputs.dir(m65RuntimeDir)
@@ -5806,6 +5836,7 @@ tasks.register("pipelinePmBundle") {
         val m90RuntimeInteractiveRoot = m90RuntimeInteractiveDir.asFile
         val m91MepRcScenePackRoot = m91MepRcScenePackDir.asFile
         val m92KadreRuntimeRcRoot = m92KadreRuntimeRcDir.asFile
+        val kan046TileModesMipmapRoot = kan046TileModesMipmapDir.asFile
         val inventoryRoot = inventoryDir.get().asFile
         val inventoryGateRoot = inventoryGateDir.get().asFile
         val m65RuntimeRoot = m65RuntimeDir.asFile
@@ -5920,6 +5951,9 @@ tasks.register("pipelinePmBundle") {
         }
         if (m92KadreRuntimeRcRoot.isDirectory) {
             m92KadreRuntimeRcRoot.copyRecursively(targetRoot.resolve("runtime/m92-kadre-runtime-rc"), overwrite = true)
+        }
+        if (kan046TileModesMipmapRoot.isDirectory) {
+            kan046TileModesMipmapRoot.copyRecursively(targetRoot.resolve("release/kan-046-tile-modes-mipmap-boundary"), overwrite = true)
         }
         if (inventoryRoot.isDirectory) {
             inventoryRoot.copyRecursively(targetRoot.resolve("inventory"), overwrite = true)

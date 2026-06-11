@@ -5,6 +5,20 @@
   "selectedRoute": "cpu.shader.bitmap.repeat-tile-oracle",
   "fallbackReason": "none",
   "referenceKind": "test-oracle",
+  "sampling": {
+    "filterMode": "nearest",
+    "filter": "nearest",
+    "mipmap": "none"
+  },
+  "localMatrix": {
+    "kind": "identity",
+    "matrix": [1, 0, 0, 0, 1, 0]
+  },
+  "tileMode": {
+    "x": "kRepeat",
+    "y": "kRepeat"
+  },
+  "mipmapMode": "none",
   "test": "org.skia.gpu.webgpu.BitmapShaderPaintRectTest#paint shader kRepeat on oversized rect tiles the image",
   "note": "M48 generated dashboard evidence aligned to owner test oracle; no broad family support claim."
 }

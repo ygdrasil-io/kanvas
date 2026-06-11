@@ -1,0 +1,337 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-046",
+  "packId": "kan-046-tile-modes-mipmap-boundary",
+  "status": "pass",
+  "closureDecision": "tile-modes-mipmap-boundary",
+  "claimLevel": "pm-bounded-bitmap-sampling-evidence",
+  "supportClaim": "bounded-bitmap-sampling-evidence",
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "arbitraryTextureSupportClaim": false,
+  "readinessDelta": 0,
+  "summary": {
+    "totalRows": 4,
+    "tileModeSupportRows": 2,
+    "mipmapExpectedUnsupportedRows": 2,
+    "supportRowsMissingArtifacts": 0,
+    "routesMissingSampling": 0,
+    "routesMissingLocalMatrix": 0,
+    "routesMissingTileMode": 0,
+    "routesMissingMipmapMode": 0,
+    "broadTextureClaims": 0
+  },
+  "samplingRows": [
+    {
+      "rowId": "bitmap-shader-repeat-tile",
+      "pmCategory": "tile-mode-support",
+      "status": "pass",
+      "sourceEvidence": "org.skia.gpu.webgpu.BitmapShaderPaintRectTest#paint shader kRepeat on oversized rect tiles the image",
+      "referenceKind": "test-oracle",
+      "sampling": {
+        "filterMode": "nearest",
+        "filter": "nearest",
+        "mipmap": "none"
+      },
+      "localMatrix": {
+        "kind": "identity",
+        "matrix": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0
+        ]
+      },
+      "tileMode": {
+        "x": "kRepeat",
+        "y": "kRepeat"
+      },
+      "mipmapMode": "none",
+      "route": {
+        "cpu": "cpu.shader.bitmap.repeat-tile-oracle",
+        "gpu": "webgpu.shader.bitmap.repeat-tile",
+        "fallbackReason": "none",
+        "cpuFallbackReason": "none",
+        "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat localMatrix=identity state=[blendMode=kSrcOver]",
+        "routeCpuJson": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
+        "routeGpuJson": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json"
+      },
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "stats": {
+        "pixels": 4096,
+        "matchingPixels": 4096,
+        "gpuMatchingPixels": 4096,
+        "threshold": 99.95,
+        "gpuStatus": "pass",
+        "adapter": "Apple M2 Max"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json"
+      },
+      "nonClaims": [
+        "no-arbitrary-texture-claim",
+        "no-codec-decode-claim",
+        "no-perspective-sampling-claim",
+        "no-color-managed-decode-claim",
+        "no-mipmap-support-claim",
+        "no-broad-tile-mode-claim"
+      ]
+    },
+    {
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "pmCategory": "tile-mode-support",
+      "status": "pass",
+      "sourceEvidence": "org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest#BitmapSubsetShaderGM matches reference on raster and GPU backends",
+      "referenceKind": "skia-upstream",
+      "sampling": {
+        "filterMode": "nearest",
+        "filter": "nearest",
+        "mipmap": "none"
+      },
+      "localMatrix": {
+        "kind": "affine-scale-rotate",
+        "matrix": "scale(0.75) * rotate(30deg)"
+      },
+      "tileMode": {
+        "x": "kRepeat",
+        "y": "kRepeat"
+      },
+      "mipmapMode": "none",
+      "route": {
+        "cpu": "cpu.shader.bitmap.subset-local-matrix-repeat",
+        "gpu": "webgpu.shader.bitmap.subset-local-matrix-repeat",
+        "fallbackReason": "none",
+        "cpuFallbackReason": "none",
+        "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat subset=true localMatrix=scaleRotate state=[blendMode=kSrcOver]",
+        "routeCpuJson": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+        "routeGpuJson": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json"
+      },
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "diff": true,
+        "stats": true,
+        "route": true
+      },
+      "stats": {
+        "pixels": 65536,
+        "matchingPixels": 65536,
+        "gpuMatchingPixels": 65536,
+        "threshold": 99.94,
+        "gpuStatus": "pass",
+        "adapter": "Apple M2 Max"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
+      },
+      "nonClaims": [
+        "no-arbitrary-texture-claim",
+        "no-codec-decode-claim",
+        "no-perspective-sampling-claim",
+        "no-color-managed-decode-claim",
+        "no-mipmap-support-claim",
+        "no-broad-tile-mode-claim"
+      ]
+    },
+    {
+      "rowId": "bitmap-mipmap-sampler-refusal",
+      "pmCategory": "mipmap-boundary-refusal",
+      "status": "expected-unsupported",
+      "reasonCode": "image-sampling.mipmap-unsupported",
+      "legacyReasonCode": "m79.bitmap.unsupported-sampler.mipmap",
+      "sourceEvidence": "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json",
+      "sourceSceneId": "m79-bitmap-mipmap-sampler-refusal-v1",
+      "sampling": {
+        "filterMode": "nearest-with-mipmap-request",
+        "filter": "nearest",
+        "mipmap": "nearest"
+      },
+      "localMatrix": {
+        "kind": "identity",
+        "matrix": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0
+        ]
+      },
+      "tileMode": {
+        "x": "kClamp",
+        "y": "kClamp"
+      },
+      "mipmapMode": "required-but-no-chain",
+      "mipmapChainPresent": false,
+      "route": {
+        "cpu": "cpu.image-sampling.mipmap-chain-not-materialized",
+        "gpu": "webgpu.image-sampling.mipmap.expected-unsupported",
+        "fallbackReason": "image-sampling.mipmap-unsupported",
+        "pipelineKey": "bitmapSampler=mipmap status=expected-unsupported source=m79"
+      },
+      "proofs": {
+        "reference": false,
+        "cpu": false,
+        "gpu": false,
+        "diff": false,
+        "stats": true,
+        "route": true
+      },
+      "nonClaims": [
+        "no-arbitrary-texture-claim",
+        "no-codec-decode-claim",
+        "no-perspective-sampling-claim",
+        "no-color-managed-decode-claim",
+        "no-mipmap-support-claim",
+        "no-broad-tile-mode-claim"
+      ]
+    },
+    {
+      "rowId": "bitmap-npot-mipmap-sampler-refusal",
+      "pmCategory": "mipmap-boundary-refusal",
+      "status": "expected-unsupported",
+      "reasonCode": "image-sampling.mipmap-unsupported",
+      "legacyReasonCode": "m79.bitmap.unsupported-sampler.mipmap",
+      "sourceEvidence": "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json",
+      "sourceSceneId": "m79-bitmap-mipmap-sampler-refusal-v1",
+      "sampling": {
+        "filterMode": "linear-with-mipmap-request",
+        "filter": "linear",
+        "mipmap": "linear"
+      },
+      "localMatrix": {
+        "kind": "affine-scale",
+        "matrix": [
+          0.5,
+          0,
+          0,
+          0,
+          0.5,
+          0
+        ]
+      },
+      "tileMode": {
+        "x": "kRepeat",
+        "y": "kRepeat"
+      },
+      "mipmapMode": "required-but-no-chain",
+      "mipmapChainPresent": false,
+      "route": {
+        "cpu": "cpu.image-sampling.mipmap-chain-not-materialized",
+        "gpu": "webgpu.image-sampling.mipmap.expected-unsupported",
+        "fallbackReason": "image-sampling.mipmap-unsupported",
+        "pipelineKey": "bitmapSampler=mipmap tile=kRepeat/kRepeat localMatrix=affine-scale status=expected-unsupported source=kan-046"
+      },
+      "proofs": {
+        "reference": false,
+        "cpu": false,
+        "gpu": false,
+        "diff": false,
+        "stats": true,
+        "route": true
+      },
+      "nonClaims": [
+        "no-arbitrary-texture-claim",
+        "no-codec-decode-claim",
+        "no-perspective-sampling-claim",
+        "no-color-managed-decode-claim",
+        "no-mipmap-support-claim",
+        "no-broad-tile-mode-claim"
+      ]
+    }
+  ],
+  "claimGuard": {
+    "supportRowsMissingArtifacts": [],
+    "supportRowsWithFallback": [],
+    "unsupportedRowsMissingReason": [],
+    "routesMissingSampling": [],
+    "routesMissingLocalMatrix": [],
+    "routesMissingTileMode": [],
+    "routesMissingMipmapMode": [],
+    "hiddenArbitraryTextureClaims": [],
+    "hiddenCodecDecodeClaims": [],
+    "hiddenPerspectiveClaims": [],
+    "hiddenMipmapSupportClaims": []
+  },
+  "requiredValidation": [
+    "validateKan046TileModesMipmapBoundary",
+    "pipelineSceneDashboardGate",
+    "pipelinePmBundle"
+  ],
+  "validationRows": [
+    {
+      "id": "tile-mode-repeat-visible",
+      "status": "pass",
+      "evidence": "Two selected pass rows expose sampling, local matrix, tile mode, mipmap mode, reference/CPU/GPU/diff/stat, route, and fallbackReason=none."
+    },
+    {
+      "id": "mipmap-boundary-visible",
+      "status": "pass",
+      "evidence": "Two mipmap request rows remain expected-unsupported with image-sampling.mipmap-unsupported and no materialized mipmap chain."
+    },
+    {
+      "id": "bitmap-sampling-non-claims",
+      "status": "pass",
+      "evidence": "Rows keep non-claims for arbitrary textures, codec decode, perspective sampling, color-managed decode, broad tile modes, and mipmap support."
+    }
+  ],
+  "nonClaims": [
+    "KAN-046 does not add renderer, shader, selector, PipelineKey, threshold, or budget changes.",
+    "KAN-046 supports only selected fixture-backed tile-mode rows with existing reference/CPU/GPU/diff/stat/routes.",
+    "KAN-046 keeps mipmap requests without a real mipmap chain as expected-unsupported via image-sampling.mipmap-unsupported.",
+    "KAN-046 does not claim arbitrary texture support, codec decode, perspective sampling, color-managed decode, or broad tile-mode parity.",
+    "KAN-046 does not port Ganesh, Graphite, SkSL compiler, SkSL IR, or SkSL VM."
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 20,
+    "missingCommittedArtifacts": 0,
+    "missing": []
+  },
+  "artifactPaths": [
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    ".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md",
+    ".upstream/specs/wgsl-pipeline/08-bitmap-image-rect-sampling.md",
+    "reports/wgsl-pipeline/m79-bitmap-replay/evidence.json",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/skia.png",
+    "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
+  ]
+}

@@ -6,6 +6,20 @@
   "selectedRoute": "webgpu.shader.bitmap.subset-local-matrix-repeat",
   "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat subset=true localMatrix=scaleRotate state=[blendMode=kSrcOver]",
   "fallbackReason": "none",
+  "sampling": {
+    "filterMode": "nearest",
+    "filter": "nearest",
+    "mipmap": "none"
+  },
+  "localMatrix": {
+    "kind": "affine-scale-rotate",
+    "matrix": "scale(0.75) * rotate(30deg)"
+  },
+  "tileMode": {
+    "x": "kRepeat",
+    "y": "kRepeat"
+  },
+  "mipmapMode": "none",
   "test": "org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest#BitmapSubsetShaderGM matches reference on raster and GPU backends",
   "nonClaim": "Does not claim every subset sampling, perspective, all filtering modes, or codec-backed bitmap coverage.",
   "adapter": "Apple M2 Max",
