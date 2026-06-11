@@ -1,0 +1,12 @@
+{
+  "backend": "CPU",
+  "coveragePlan": "clipRect(kDifference) + clipRRect(kDifference) CPU coverage oracle",
+  "cpuSharedAcrossPhases": true,
+  "drawKind": "Skbug9319GM",
+  "fallbackReason": "none",
+  "phase": "after",
+  "rendererPath": "TestUtils.runGmTest(Skbug9319GM)",
+  "sceneId": "clip-rect-difference",
+  "selectedRoute": "cpu.coverage.clip-rect-difference",
+  "status": "pass"
+}

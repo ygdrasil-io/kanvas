@@ -1,0 +1,16 @@
+{
+  "backend": "WebGPU",
+  "coverageStrategy": "webgpu.coverage.clip-rect-difference",
+  "drawKind": "Skbug9319GM",
+  "fallbackReason": "none",
+  "maskFilterKernelProfile": "point-sampled Gaussian half-kernel",
+  "nonSelectedPolicy": "non-selected AA clip variants may remain expected-unsupported with stable fallback reasons",
+  "phase": "before",
+  "pipelineKey": "clipOp=kDifference shape=rect+rrect maskFilter=blur",
+  "rendererPath": "SkWebGpuDevice.drawPathWithBlurMaskFilterIfApplicable",
+  "routeDiagnostic": "small-sigma filled rect maskFilter blur underestimates one-pixel halo",
+  "sceneId": "clip-rect-difference",
+  "selectedRoute": "webgpu.coverage.clip-difference.analytic-rrect-mask",
+  "status": "pass",
+  "test": "org.skia.gpu.webgpu.ClipDifferenceCrossTest#Skbug9319GM survives clipRect_kDifference and clipRRect_kDifference on GPU"
+}

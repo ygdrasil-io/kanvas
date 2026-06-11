@@ -14620,10 +14620,12 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                 // dimensions takes this branch).
                 ceil(3.0 * sigma).toInt().coerceAtLeast(1).coerceAtMost(MAX_BLUR_RADIUS)
             }
-        val finalKernel = buildSymmetricGaussianHalfKernel(
-            if (effectiveN > 0) finalSigmaStep else sigma,
-            finalRadius,
-        )
+        val finalKernelSigma = if (effectiveN > 0) finalSigmaStep else sigma
+        val finalKernel = if (usesRectMaskFilterProfile(path, ctm, paint)) {
+            buildPixelIntegratedGaussianHalfKernel(finalKernelSigma, finalRadius)
+        } else {
+            buildSymmetricGaussianHalfKernel(finalKernelSigma, finalRadius)
+        }
 
         // Render the shape into a child layer device. The white-tint
         // paint produces a premul (1, 1, 1, coverage) mask in the
@@ -14887,7 +14889,11 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         // the clamp -- same shape as the solid variant.
         val unboundedRadius = ceil(3.0 * sigma).toInt().coerceAtLeast(1)
         val radius = unboundedRadius.coerceAtMost(MAX_BLUR_RADIUS)
-        val kernel = buildSymmetricGaussianHalfKernel(sigma, radius)
+        val kernel = if (usesRectMaskFilterProfile(path, ctm, paint)) {
+            buildPixelIntegratedGaussianHalfKernel(sigma, radius)
+        } else {
+            buildSymmetricGaussianHalfKernel(sigma, radius)
+        }
 
         // Compute device-space bounds of the path under the CTM,
         // expand by radius + 1 px safety, intersect with clip + viewport.
@@ -15023,6 +15029,52 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         val inv = if (mass > 0.0) (1.0 / mass).toFloat() else 1f
         for (k in 0..radius) half[k] = half[k] * inv
         return half
+    }
+
+    private fun usesRectMaskFilterProfile(path: SkPath, ctm: SkMatrix, paint: SkPaint): Boolean =
+        paint.style == SkPaint.Style.kFill_Style &&
+            ctm.isAxisAligned &&
+            path.isRect() != null
+
+    /**
+     * Rect maskFilter blur kernel with per-pixel integrated Gaussian weights.
+     *
+     * The image-filter blur paths keep [buildSymmetricGaussianHalfKernel]'s
+     * point-sampled coefficients for historical parity. This profile is
+     * selected only by [usesRectMaskFilterProfile], where Skia's A8 mask
+     * blur profile integrates coverage over destination pixels. The
+     * difference matters most for small sigmas such as `Skbug9319GM`'s
+     * `sigma = 0.5`: a point-sampled kernel underestimates the one-pixel
+     * halo and produces visibly lighter pixels at kDifference clip
+     * boundaries.
+     */
+    private fun buildPixelIntegratedGaussianHalfKernel(sigma: Float, radius: Int): FloatArray {
+        val half = FloatArray(1 + radius)
+        if (!sigma.isFinite() || sigma <= 0f) {
+            half[0] = 1f
+            return half
+        }
+        val invSigmaSqrt2 = 1.0 / (sigma.toDouble() * SQRT_2)
+        var mass = 0.0
+        for (k in 0..radius) {
+            val left = (k.toDouble() - 0.5) * invSigmaSqrt2
+            val right = (k.toDouble() + 0.5) * invSigmaSqrt2
+            val v = 0.5 * (erfApprox(right) - erfApprox(left))
+            half[k] = v.toFloat()
+            mass += if (k == 0) v else 2.0 * v
+        }
+        val inv = if (mass > 0.0) (1.0 / mass).toFloat() else 1f
+        for (k in 0..radius) half[k] = half[k] * inv
+        return half
+    }
+
+    private fun erfApprox(x: Double): Double {
+        val sign = if (x < 0.0) -1.0 else 1.0
+        val ax = abs(x)
+        val t = 1.0 / (1.0 + 0.3275911 * ax)
+        val y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t -
+            0.284496736) * t + 0.254829592) * t * exp(-(ax * ax))
+        return sign * y
     }
 
     private fun refuseRuntimeBlenderIfPresent(paint: SkPaint?) {
@@ -25032,6 +25084,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
          * trailing 3).
          */
         const val MAX_BLUR_RADIUS: Int = 32
+        const val SQRT_2: Double = 1.4142135623730951
 
         /**
          * Phase MaskFilter-blur-cascade -- the upper sigma the single-

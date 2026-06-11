@@ -1,6 +1,9 @@
 package org.skia.gpu.webgpu
 
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.skia.foundation.SkBitmap
+import org.skia.gpu.webgpu.testing.CrossTestHarness
 import org.skia.gpu.webgpu.testing.runGpuCrossTest
 import org.skia.tests.BlurredClippedCircleGM
 import org.skia.tests.Skbug9319GM
@@ -42,12 +45,18 @@ class ClipDifferenceCrossTest {
 
     @Test
     fun `Skbug9319GM survives clipRect_kDifference and clipRRect_kDifference on GPU`() {
-        // Measured at M4 land : GPU 84.44 % (110672 / 131072 matching px,
-        // maxDiff 255 on the halo edge where the blur-mask composite's
-        // sub-pixel coverage drifts from the CPU reference). Floor sits
-        // 4 points below the measurement to allow Apple M-series WGPU
-        // jitter.
+        // The historical floor stays deliberately loose so this test
+        // guards route availability. The KAN-051 halo-intensity test
+        // below owns the small-sigma rect-blur fidelity regression.
         runGpuCrossTest(Skbug9319GM(), floor = 80.0)
+    }
+
+    @Test
+    fun `Skbug9319GM preserves small-sigma kDifference halo intensity on GPU`() {
+        val gpu = CrossTestHarness.renderGpu(Skbug9319GM())
+
+        assertDarkHalo(gpu, x = 60, y = 9, label = "clipRect top halo")
+        assertDarkHalo(gpu, x = 9, y = 60, label = "clipRect left halo")
     }
 
     @Test
@@ -60,5 +69,16 @@ class ClipDifferenceCrossTest {
         // for ULP jitter on the analytic distance test while still
         // catching real regressions.
         runGpuCrossTest(BlurredClippedCircleGM(), floor = 67.0)
+    }
+
+    private fun assertDarkHalo(bitmap: SkBitmap, x: Int, y: Int, label: String) {
+        val argb = bitmap.getPixel(x, y)
+        val r = (argb ushr 16) and 0xFF
+        val g = (argb ushr 8) and 0xFF
+        val b = argb and 0xFF
+        assertTrue(
+            r <= 216 && g <= 216 && b <= 216,
+            "$label at ($x,$y) expected Skia-like dark halo RGB <= 216 but was ($r,$g,$b)",
+        )
     }
 }
