@@ -1,0 +1,365 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-045",
+  "packId": "kan-045-color-pipeline-bounded-policy",
+  "status": "pass",
+  "closureDecision": "bounded-color-pipeline-policy",
+  "claimLevel": "existing-evidence-only",
+  "supportClaim": "bounded-srgb-premul-only",
+  "rendererChanged": false,
+  "sharedShadersChanged": false,
+  "thresholdsWeakened": false,
+  "wideGamutSupportClaim": false,
+  "f16GlobalPolicyClaim": false,
+  "readinessDelta": 0,
+  "summary": {
+    "totalRows": 4,
+    "supportRows": 2,
+    "expectedUnsupportedRows": 2,
+    "rowsMissingReferenceCpuGpuDiffStatsRoute": 0,
+    "rowsWithSemanticOpMismatch": 0,
+    "rowsWithThresholdChanges": 0,
+    "rowsWithSilentApproximation": 0
+  },
+  "policyRows": [
+    {
+      "rowId": "paint.src-over-alpha.rect-stack.v1",
+      "pmCategory": "supportable-bounded",
+      "status": "pass",
+      "sourceEvidence": "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/stats.json",
+      "supportScope": "simple-bounded-src-over-partial-alpha-rect-stack",
+      "route": {
+        "cpu": "cpu.paint.src-over.partial-alpha.rect-stack",
+        "webGpu": "webgpu.blend.src-over.partial-alpha.fixed-function",
+        "fallbackReason": "none"
+      },
+      "colorPolicy": "srgb-unmanaged-src-over-oracle",
+      "semanticOps": {
+        "shaderOrColor": "constantColor",
+        "colorFilterKind": "none",
+        "blendMode": "kSrcOver",
+        "blendPlan": "FixedFunction",
+        "alphaPolicy": "partial",
+        "colorSpacePolicy": "srgb-unmanaged-src-over-oracle",
+        "stageOrder": "shader/color -> alpha modulation -> blender -> color-space/store"
+      },
+      "cpuSemanticOps": {
+        "shaderOrColor": "constantColor",
+        "colorFilterKind": "none",
+        "blendMode": "kSrcOver",
+        "blendPlan": "FixedFunction",
+        "alphaPolicy": "partial",
+        "colorSpacePolicy": "srgb-unmanaged-src-over-oracle",
+        "stageOrder": "shader/color -> alpha modulation -> blender -> color-space/store"
+      },
+      "gpuSemanticOps": {
+        "shaderOrColor": "constantColor",
+        "colorFilterKind": "none",
+        "blendMode": "kSrcOver",
+        "blendPlan": "FixedFunction",
+        "alphaPolicy": "partial",
+        "colorSpacePolicy": "srgb-unmanaged-src-over-oracle",
+        "stageOrder": "shader/color -> alpha modulation -> blender -> color-space/store"
+      },
+      "wgslValidation": {
+        "validated": true,
+        "sha256": "2a15aeab075d4d88b4a8583cccbae008abb67c71a6f5d232f438a158b4cc249d",
+        "diagnostics": []
+      },
+      "thresholds": {
+        "cpu": 99.0,
+        "webGpu": 99.0,
+        "globalThresholdChanged": false,
+        "globalColorPolicyChanged": false,
+        "globalBlendPolicyChanged": false
+      },
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "cpuDiff": true,
+        "webGpuDiff": true,
+        "diffStats": true,
+        "route": true
+      },
+      "nonClaims": [
+        "no-advanced-blend-chain-claim",
+        "no-all-blend-modes-claim",
+        "no-arbitrary-blend-mode-claim",
+        "no-broad-color-management-claim",
+        "no-broad-layer-compositing-claim",
+        "no-color-managed-blend-claim",
+        "no-ganesh-graphite-claim",
+        "no-global-threshold-change",
+        "no-hdr-or-gainmap-claim",
+        "no-saveLayer-blend-composition-claim",
+        "no-shader-destination-read-claim",
+        "no-silent-approximation",
+        "no-sksl-compiler-ir-vm-claim",
+        "no-wide-color-pipeline-claim",
+        "no-wide-gamut-general-claim"
+      ]
+    },
+    {
+      "rowId": "paint.color-filter.blend-kplus.rect.v1",
+      "pmCategory": "supportable-bounded",
+      "status": "pass",
+      "sourceEvidence": "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/stats.json",
+      "supportScope": "simple-direct-rect-blend-kplus-color-filter",
+      "route": {
+        "cpu": "cpu.paint.color-filter.blend-kplus.direct-rect",
+        "webGpu": "webgpu.paint.color-filter.blend-kplus.solid-color",
+        "fallbackReason": "none",
+        "generatedSolidRectFallbackReason": "generated solid rect does not support colorFilter"
+      },
+      "colorPolicy": "srgb-unmanaged-color-filter-oracle",
+      "semanticOps": {
+        "shaderOrColor": "solidColor",
+        "colorFilterKind": "Blend",
+        "colorFilterBlendMode": "kPlus",
+        "paintBlendMode": "kSrcOver",
+        "colorSpacePolicy": "srgb-unmanaged-color-filter-oracle",
+        "stageOrder": "shader/color -> colorFilter -> alpha modulation -> blender -> color-space/store"
+      },
+      "cpuSemanticOps": {
+        "shaderOrColor": "solidColor",
+        "colorFilterKind": "Blend",
+        "colorFilterBlendMode": "kPlus",
+        "paintBlendMode": "kSrcOver",
+        "colorSpacePolicy": "srgb-unmanaged-color-filter-oracle",
+        "stageOrder": "shader/color -> colorFilter -> alpha modulation -> blender -> color-space/store"
+      },
+      "gpuSemanticOps": {
+        "shaderOrColor": "solidColor",
+        "colorFilterKind": "Blend",
+        "colorFilterBlendMode": "kPlus",
+        "paintBlendMode": "kSrcOver",
+        "colorSpacePolicy": "srgb-unmanaged-color-filter-oracle",
+        "stageOrder": "shader/color -> colorFilter -> alpha modulation -> blender -> color-space/store"
+      },
+      "wgslValidation": {
+        "validated": true,
+        "sha256": "8134be03d74f41168210b4100b3477e76d513b66de960999c6e59038de9c2224",
+        "entryPoints": [
+          "vertex:vs_main",
+          "fragment:fs_main"
+        ],
+        "diagnostics": []
+      },
+      "thresholds": {
+        "cpu": 99.0,
+        "webGpu": 99.0,
+        "globalThresholdChanged": false,
+        "globalColorPolicyChanged": false,
+        "globalBlendPolicyChanged": false
+      },
+      "proofs": {
+        "reference": true,
+        "cpu": true,
+        "gpu": true,
+        "cpuDiff": true,
+        "webGpuDiff": true,
+        "diffStats": true,
+        "route": true
+      },
+      "nonClaims": [
+        "no-all-blend-modes-claim",
+        "no-bitmap-color-filter-claim",
+        "no-broad-color-filter-claim",
+        "no-broad-color-management-claim",
+        "no-color-filter-chain-claim",
+        "no-color-managed-pipeline-claim",
+        "no-ganesh-graphite-claim",
+        "no-global-threshold-change",
+        "no-gradient-color-filter-claim",
+        "no-hdr-or-gainmap-claim",
+        "no-runtime-color-filter-claim",
+        "no-saveLayer-color-filter-claim",
+        "no-silent-approximation",
+        "no-sksl-compiler-ir-vm-claim",
+        "no-table-color-filter-claim",
+        "no-wide-color-pipeline-claim",
+        "no-wide-gamut-general-claim",
+        "no-working-color-space-color-filter-claim"
+      ]
+    },
+    {
+      "rowId": "m63-wide-gamut-color-space-refusal",
+      "pmCategory": "wide-gamut-color-space",
+      "status": "expected-unsupported",
+      "sourceEvidence": "reports/wgsl-pipeline/scenes/generated/m63-color-blend-parity-pack.json",
+      "referenceKind": "test-oracle",
+      "route": {
+        "cpu": "cpu.paint.draw-paint.full-clip-oracle",
+        "webGpu": "webgpu.color.refuse.wide-gamut-color-space",
+        "fallbackReason": "color.color-space-wide-gamut-unsupported"
+      },
+      "reasonCode": "color.color-space-wide-gamut-unsupported",
+      "pipelineKey": "colorSpace=display-p3 transfer=srgb-linear conversion=required milestone=M63",
+      "colorSpace": "Display-P3/wide-gamut",
+      "colorType": "destination-policy-required",
+      "semanticOps": {
+        "shaderOrColor": "paintColor",
+        "colorSpacePolicy": "wide-gamut-conversion-required",
+        "blendMode": "kSrcOver"
+      },
+      "thresholds": {
+        "threshold": 0,
+        "thresholdsWeakened": false,
+        "globalColorPolicyChanged": false
+      },
+      "proofs": {
+        "m63Pack": true,
+        "stableReason": true,
+        "visibleUnsupportedRow": true
+      },
+      "nonClaims": [
+        "Documents that wide-gamut color-space conversion remains unsupported; it does not claim Display-P3, HDR, transfer-function, or ICC parity.",
+        "no-all-blend-modes-claim",
+        "no-broad-color-management-claim",
+        "no-ganesh-graphite-claim",
+        "no-global-threshold-change",
+        "no-hdr-or-gainmap-claim",
+        "no-silent-approximation",
+        "no-sksl-compiler-ir-vm-claim",
+        "no-wide-gamut-general-claim"
+      ]
+    },
+    {
+      "rowId": "non-arc-rec2020-f16-src-over-rect",
+      "pmCategory": "f16-policy-candidate-refusal",
+      "status": "expected-unsupported",
+      "sourceEvidence": "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+      "referenceKind": "isolated-skia-current-kanvas-candidate",
+      "route": {
+        "cpu": "current-kanvas-kotlin-cpu-rec2020-f16-src-over-samples",
+        "webGpu": "not-promoted-policy-evidence-only",
+        "fallbackReason": "color.f16-policy-candidate-worsens-reference"
+      },
+      "reasonCode": "color.f16-policy-candidate-worsens-reference",
+      "decision": "F16_NON_ARC_REC2020_REFERENCE_ROW_REJECTS_CANDIDATE",
+      "decisionReason": "FOR-345 captured a genuine non-arc Rec.2020 kRGBA_F16Norm SrcOver row. The current Kanvas CPU F16 samples match the isolated Skia reference on the selected pixels, while the straight_srgb_quantized_alpha_src_over_white candidate worsens all covered rect samples.",
+      "colorType": "kRGBA_F16Norm",
+      "colorSpace": "Rec.2020",
+      "semanticOps": {
+        "drawOp": "drawRect",
+        "blendMode": "kSrcOver",
+        "colorPolicy": "rec2020-f16-current-vs-straight-srgb-candidate"
+      },
+      "residuals": {
+        "sampleCount": 4,
+        "coveredSampleCount": 3,
+        "currentResidual": 0,
+        "candidateResidual": 111,
+        "candidateMinusCurrentResidual": 111,
+        "residualReduction": -111,
+        "worsenedSampleCount": 3,
+        "improvedSampleCount": 0,
+        "unchangedSampleCount": 1,
+        "maxCurrentSampleResidual": 0,
+        "maxCandidateSampleResidual": 37
+      },
+      "implementation": {
+        "rendererBehaviorChanged": false,
+        "thresholdsChanged": false,
+        "gpuOrWgslChanged": false,
+        "fallbackChanged": false,
+        "globalF16RendererChangeAllowedNow": false
+      },
+      "proofs": {
+        "skiaReference": true,
+        "referenceSamples": true,
+        "currentSamples": true,
+        "sourceCode": true
+      },
+      "nonClaims": [
+        "no-all-blend-modes-claim",
+        "no-broad-color-management-claim",
+        "no-f16-renderer-promotion-claim",
+        "no-ganesh-graphite-claim",
+        "no-global-f16-policy-change",
+        "no-global-threshold-change",
+        "no-hdr-or-gainmap-claim",
+        "no-silent-approximation",
+        "no-sksl-compiler-ir-vm-claim",
+        "no-wide-gamut-general-claim"
+      ]
+    }
+  ],
+  "claimGuard": {
+    "rowsMissingReferenceCpuGpuDiffStatsRoute": [],
+    "rowsWithSemanticOpMismatch": [],
+    "rowsWithThresholdChanges": [],
+    "rowsWithColorPolicyChanges": [],
+    "rowsWithSilentApproximation": [],
+    "wideGamutRowsClaimingSupport": [],
+    "f16RowsClaimingGlobalPolicyChange": [],
+    "broadBlendOrColorClaims": [],
+    "ganeshGraphiteClaims": [],
+    "skslCompilerClaims": []
+  },
+  "requiredValidation": [
+    "validateKan045ColorPipelineBoundedPolicy",
+    ":gpu-raster:pipelineConformanceTest -- includes SimpleSrcOverAlphaSceneEvidenceTest and SimpleColorFilterSceneEvidenceTest",
+    ":gpu-raster:wgslValidateStrict -- generated/registered WGSL parser validation",
+    "pipelinePmBundle"
+  ],
+  "validationRows": [
+    {
+      "id": "bounded-srgb-premul-support",
+      "status": "pass",
+      "evidence": "KAN-015 and KAN-016 have reference/CPU/GPU/diff/stat/routes, matching semantic ops, and no fallback."
+    },
+    {
+      "id": "wide-gamut-refusal-visible",
+      "status": "pass",
+      "evidence": "M63 wide-gamut color-space row remains expected-unsupported via color.color-space-wide-gamut-unsupported."
+    },
+    {
+      "id": "f16-policy-candidate-refusal-visible",
+      "status": "pass",
+      "evidence": "FOR-345 Rec.2020 kRGBA_F16Norm row rejects the straight-sRGB candidate because it worsens covered samples."
+    },
+    {
+      "id": "no-threshold-or-policy-weakening",
+      "status": "pass",
+      "evidence": "All guards report no threshold, color policy, renderer, shader, or fallback change."
+    }
+  ],
+  "nonClaims": [
+    "KAN-045 does not add renderer, shader, selector, PipelineKey, threshold, or budget changes.",
+    "KAN-045 does not claim wide-gamut general support, HDR, gainmap, all blend modes, or broad color management.",
+    "KAN-045 does not silently approximate unsupported color-space or F16 policy rows.",
+    "KAN-045 does not port Ganesh, Graphite, SkSL compiler, SkSL IR, or SkSL VM."
+  ],
+  "artifactAudit": {
+    "checkedCommittedArtifacts": 23,
+    "missingCommittedArtifacts": 0,
+    "missing": []
+  },
+  "artifactPaths": [
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    ".upstream/specs/skia-like-realtime/README.md",
+    ".upstream/specs/wgsl-pipeline/01-pipeline-ir-contracts.md",
+    ".upstream/target/high-performance-wgsl-pipeline-target.md",
+    ".upstream/target/skia-like-realtime-renderer-target.md",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/reference.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/route-webgpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/webgpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/webgpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/cpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/cpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/reference.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/route-cpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/route-webgpu.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/stats.json",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/webgpu-diff.png",
+    "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/webgpu.png",
+    "reports/wgsl-pipeline/scenes/artifacts/non-arc-rec2020-f16-reference-row-for345/non-arc-rec2020-f16-reference-row-for345.json",
+    "reports/wgsl-pipeline/scenes/generated/m63-color-blend-parity-pack.json"
+  ]
+}
