@@ -5,6 +5,20 @@
   "selectedRoute": "cpu.shader.bitmap.subset-local-matrix-repeat",
   "fallbackReason": "none",
   "referenceKind": "skia-upstream",
+  "sampling": {
+    "filterMode": "nearest",
+    "filter": "nearest",
+    "mipmap": "none"
+  },
+  "localMatrix": {
+    "kind": "affine-scale-rotate",
+    "matrix": "scale(0.75) * rotate(30deg)"
+  },
+  "tileMode": {
+    "x": "kRepeat",
+    "y": "kRepeat"
+  },
+  "mipmapMode": "none",
   "test": "org.skia.gpu.webgpu.crossbackend.BitmapSubsetShaderCrossBackendTest#BitmapSubsetShaderGM matches reference on raster and GPU backends",
   "note": "M48 generated dashboard evidence aligned to owner test oracle; no broad family support claim."
 }
