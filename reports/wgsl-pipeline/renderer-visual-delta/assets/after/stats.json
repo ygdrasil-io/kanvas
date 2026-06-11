@@ -1,0 +1,125 @@
+{
+  "artifacts": {
+    "cpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/cpu.png",
+    "cpuDiff": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/cpu-diff.png",
+    "gpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/gpu.png",
+    "gpuDiff": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/gpu-diff.png",
+    "reference": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/skia.png",
+    "routeCpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/route-cpu.json",
+    "routeGpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/route-gpu.json",
+    "stats": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/stats.json"
+  },
+  "cpuMatchingPixels": 131072,
+  "cpuMaxChannelDelta": {
+    "a": 0,
+    "b": 0,
+    "g": 0,
+    "r": 0
+  },
+  "cpuSimilarity": 100.0,
+  "dimensions": {
+    "height": 512,
+    "width": 256
+  },
+  "drawKind": "Skbug9319GM",
+  "evidenceCommand": "rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest",
+  "gpuMatchingPixels": 131064,
+  "gpuMaxChannelDelta": {
+    "a": 0,
+    "b": 10,
+    "g": 10,
+    "r": 10
+  },
+  "gpuMeanMismatchDelta": {
+    "a": 0,
+    "b": 10,
+    "g": 10,
+    "r": 10
+  },
+  "gpuMismatchingPixels": 8,
+  "gpuSimilarity": 99.9939,
+  "haloSamples": {
+    "clipRectLeft": {
+      "gpu": {
+        "rgba": {
+          "a": 255,
+          "b": 210,
+          "g": 210,
+          "r": 210
+        },
+        "x": 9,
+        "y": 60
+      },
+      "reference": {
+        "rgba": {
+          "a": 255,
+          "b": 207,
+          "g": 207,
+          "r": 207
+        },
+        "x": 9,
+        "y": 60
+      },
+      "rgbAbsError": 3
+    },
+    "clipRectTop": {
+      "gpu": {
+        "rgba": {
+          "a": 255,
+          "b": 210,
+          "g": 210,
+          "r": 210
+        },
+        "x": 60,
+        "y": 9
+      },
+      "reference": {
+        "rgba": {
+          "a": 255,
+          "b": 207,
+          "g": 207,
+          "r": 207
+        },
+        "x": 60,
+        "y": 9
+      },
+      "rgbAbsError": 3
+    },
+    "rrectTop": {
+      "gpu": {
+        "rgba": {
+          "a": 255,
+          "b": 224,
+          "g": 224,
+          "r": 224
+        },
+        "x": 60,
+        "y": 129
+      },
+      "reference": {
+        "rgba": {
+          "a": 255,
+          "b": 227,
+          "g": 227,
+          "r": 227
+        },
+        "x": 60,
+        "y": 129
+      },
+      "rgbAbsError": 3
+    }
+  },
+  "matchingPixels": 131064,
+  "maxChannelDelta": {
+    "a": 0,
+    "b": 10,
+    "g": 10,
+    "r": 10
+  },
+  "phase": "after",
+  "pixels": 131072,
+  "sceneId": "clip-rect-difference",
+  "threshold": 80.0,
+  "ticket": "KAN-051",
+  "tolerance": 8
+}

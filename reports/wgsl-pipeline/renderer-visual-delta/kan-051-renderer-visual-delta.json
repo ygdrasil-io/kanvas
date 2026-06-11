@@ -1,0 +1,484 @@
+{
+  "after": {
+    "artifacts": {
+      "cpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/cpu-diff.png",
+      "gpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/gpu.png",
+      "gpuDiff": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/gpu-diff.png",
+      "reference": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/skia.png",
+      "routeCpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/route-cpu.json",
+      "routeGpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/route-gpu.json",
+      "stats": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/stats.json"
+    },
+    "phase": "after",
+    "routeCpu": {
+      "backend": "CPU",
+      "coveragePlan": "clipRect(kDifference) + clipRRect(kDifference) CPU coverage oracle",
+      "cpuSharedAcrossPhases": true,
+      "drawKind": "Skbug9319GM",
+      "fallbackReason": "none",
+      "phase": "after",
+      "rendererPath": "TestUtils.runGmTest(Skbug9319GM)",
+      "sceneId": "clip-rect-difference",
+      "selectedRoute": "cpu.coverage.clip-rect-difference",
+      "status": "pass"
+    },
+    "routeGpu": {
+      "backend": "WebGPU",
+      "coverageStrategy": "webgpu.coverage.clip-rect-difference",
+      "drawKind": "Skbug9319GM",
+      "fallbackReason": "none",
+      "maskFilterKernelProfile": "per-pixel integrated Gaussian half-kernel for axis-aligned filled rect maskFilter blur",
+      "nonSelectedPolicy": "non-selected AA clip variants may remain expected-unsupported with stable fallback reasons",
+      "phase": "after",
+      "pipelineKey": "clipOp=kDifference shape=rect+rrect maskFilter=blur",
+      "rendererPath": "SkWebGpuDevice.drawPathWithBlurMaskFilterIfApplicable",
+      "routeDiagnostic": "rect halo follows Skia-like A8 blur profile; rrect remains on historical point-sampled kernel",
+      "sceneId": "clip-rect-difference",
+      "selectedRoute": "webgpu.coverage.clip-difference.analytic-rrect-mask",
+      "status": "pass",
+      "test": "org.skia.gpu.webgpu.ClipDifferenceCrossTest#Skbug9319GM survives clipRect_kDifference and clipRRect_kDifference on GPU"
+    },
+    "stats": {
+      "artifacts": {
+        "cpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/cpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/cpu-diff.png",
+        "gpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/gpu.png",
+        "gpuDiff": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/gpu-diff.png",
+        "reference": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/skia.png",
+        "routeCpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/renderer-visual-delta/assets/after/stats.json"
+      },
+      "cpuMatchingPixels": 131072,
+      "cpuMaxChannelDelta": {
+        "a": 0,
+        "b": 0,
+        "g": 0,
+        "r": 0
+      },
+      "cpuSimilarity": 100.0,
+      "dimensions": {
+        "height": 512,
+        "width": 256
+      },
+      "drawKind": "Skbug9319GM",
+      "evidenceCommand": "rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest",
+      "gpuMatchingPixels": 131064,
+      "gpuMaxChannelDelta": {
+        "a": 0,
+        "b": 10,
+        "g": 10,
+        "r": 10
+      },
+      "gpuMeanMismatchDelta": {
+        "a": 0,
+        "b": 10,
+        "g": 10,
+        "r": 10
+      },
+      "gpuMismatchingPixels": 8,
+      "gpuSimilarity": 99.9939,
+      "haloSamples": {
+        "clipRectLeft": {
+          "gpu": {
+            "rgba": {
+              "a": 255,
+              "b": 210,
+              "g": 210,
+              "r": 210
+            },
+            "x": 9,
+            "y": 60
+          },
+          "reference": {
+            "rgba": {
+              "a": 255,
+              "b": 207,
+              "g": 207,
+              "r": 207
+            },
+            "x": 9,
+            "y": 60
+          },
+          "rgbAbsError": 3
+        },
+        "clipRectTop": {
+          "gpu": {
+            "rgba": {
+              "a": 255,
+              "b": 210,
+              "g": 210,
+              "r": 210
+            },
+            "x": 60,
+            "y": 9
+          },
+          "reference": {
+            "rgba": {
+              "a": 255,
+              "b": 207,
+              "g": 207,
+              "r": 207
+            },
+            "x": 60,
+            "y": 9
+          },
+          "rgbAbsError": 3
+        },
+        "rrectTop": {
+          "gpu": {
+            "rgba": {
+              "a": 255,
+              "b": 224,
+              "g": 224,
+              "r": 224
+            },
+            "x": 60,
+            "y": 129
+          },
+          "reference": {
+            "rgba": {
+              "a": 255,
+              "b": 227,
+              "g": 227,
+              "r": 227
+            },
+            "x": 60,
+            "y": 129
+          },
+          "rgbAbsError": 3
+        }
+      },
+      "matchingPixels": 131064,
+      "maxChannelDelta": {
+        "a": 0,
+        "b": 10,
+        "g": 10,
+        "r": 10
+      },
+      "phase": "after",
+      "pixels": 131072,
+      "sceneId": "clip-rect-difference",
+      "threshold": 80.0,
+      "ticket": "KAN-051",
+      "tolerance": 8
+    }
+  },
+  "artifactAudit": [
+    {
+      "missing": [],
+      "phase": "before"
+    },
+    {
+      "missing": [],
+      "phase": "after"
+    }
+  ],
+  "before": {
+    "artifacts": {
+      "cpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/cpu-diff.png",
+      "gpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/gpu.png",
+      "gpuDiff": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/gpu-diff.png",
+      "reference": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/skia.png",
+      "routeCpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/route-cpu.json",
+      "routeGpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/route-gpu.json",
+      "stats": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/stats.json"
+    },
+    "phase": "before",
+    "routeCpu": {
+      "backend": "CPU",
+      "coveragePlan": "clipRect(kDifference) + clipRRect(kDifference) CPU coverage oracle",
+      "cpuSharedAcrossPhases": true,
+      "drawKind": "Skbug9319GM",
+      "fallbackReason": "none",
+      "phase": "before",
+      "rendererPath": "TestUtils.runGmTest(Skbug9319GM)",
+      "sceneId": "clip-rect-difference",
+      "selectedRoute": "cpu.coverage.clip-rect-difference",
+      "status": "pass"
+    },
+    "routeGpu": {
+      "backend": "WebGPU",
+      "coverageStrategy": "webgpu.coverage.clip-rect-difference",
+      "drawKind": "Skbug9319GM",
+      "fallbackReason": "none",
+      "maskFilterKernelProfile": "point-sampled Gaussian half-kernel",
+      "nonSelectedPolicy": "non-selected AA clip variants may remain expected-unsupported with stable fallback reasons",
+      "phase": "before",
+      "pipelineKey": "clipOp=kDifference shape=rect+rrect maskFilter=blur",
+      "rendererPath": "SkWebGpuDevice.drawPathWithBlurMaskFilterIfApplicable",
+      "routeDiagnostic": "small-sigma filled rect maskFilter blur underestimates one-pixel halo",
+      "sceneId": "clip-rect-difference",
+      "selectedRoute": "webgpu.coverage.clip-difference.analytic-rrect-mask",
+      "status": "pass",
+      "test": "org.skia.gpu.webgpu.ClipDifferenceCrossTest#Skbug9319GM survives clipRect_kDifference and clipRRect_kDifference on GPU"
+    },
+    "stats": {
+      "artifacts": {
+        "cpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/cpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/cpu-diff.png",
+        "gpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/gpu.png",
+        "gpuDiff": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/gpu-diff.png",
+        "reference": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/skia.png",
+        "routeCpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/renderer-visual-delta/assets/before/stats.json"
+      },
+      "cpuMatchingPixels": 131072,
+      "cpuMaxChannelDelta": {
+        "a": 0,
+        "b": 0,
+        "g": 0,
+        "r": 0
+      },
+      "cpuSimilarity": 100.0,
+      "dimensions": {
+        "height": 512,
+        "width": 256
+      },
+      "drawKind": "Skbug9319GM",
+      "evidenceCommand": "rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest",
+      "gpuMatchingPixels": 130672,
+      "gpuMaxChannelDelta": {
+        "a": 0,
+        "b": 21,
+        "g": 21,
+        "r": 21
+      },
+      "gpuMeanMismatchDelta": {
+        "a": 0,
+        "b": 17,
+        "g": 17,
+        "r": 17
+      },
+      "gpuMismatchingPixels": 400,
+      "gpuSimilarity": 99.6948,
+      "haloSamples": {
+        "clipRectLeft": {
+          "gpu": {
+            "rgba": {
+              "a": 255,
+              "b": 224,
+              "g": 224,
+              "r": 224
+            },
+            "x": 9,
+            "y": 60
+          },
+          "reference": {
+            "rgba": {
+              "a": 255,
+              "b": 207,
+              "g": 207,
+              "r": 207
+            },
+            "x": 9,
+            "y": 60
+          },
+          "rgbAbsError": 17
+        },
+        "clipRectTop": {
+          "gpu": {
+            "rgba": {
+              "a": 255,
+              "b": 224,
+              "g": 224,
+              "r": 224
+            },
+            "x": 60,
+            "y": 9
+          },
+          "reference": {
+            "rgba": {
+              "a": 255,
+              "b": 207,
+              "g": 207,
+              "r": 207
+            },
+            "x": 60,
+            "y": 9
+          },
+          "rgbAbsError": 17
+        },
+        "rrectTop": {
+          "gpu": {
+            "rgba": {
+              "a": 255,
+              "b": 224,
+              "g": 224,
+              "r": 224
+            },
+            "x": 60,
+            "y": 129
+          },
+          "reference": {
+            "rgba": {
+              "a": 255,
+              "b": 227,
+              "g": 227,
+              "r": 227
+            },
+            "x": 60,
+            "y": 129
+          },
+          "rgbAbsError": 3
+        }
+      },
+      "matchingPixels": 130672,
+      "maxChannelDelta": {
+        "a": 0,
+        "b": 21,
+        "g": 21,
+        "r": 21
+      },
+      "phase": "before",
+      "pixels": 131072,
+      "sceneId": "clip-rect-difference",
+      "threshold": 80.0,
+      "ticket": "KAN-051",
+      "tolerance": 8
+    }
+  },
+  "blocked": false,
+  "closureDecision": "renderer-visual-delta",
+  "evidenceOnlyClosure": false,
+  "existingRefusals": [
+    {
+      "path": "reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json",
+      "requiredSnippets": [
+        "image-filter.dag-or-picture-prepass-required",
+        "image-filter.crop-input-nonnull-prepass-required"
+      ],
+      "status": "visible",
+      "ticket": "KAN-041",
+      "ticketField": "KAN-041"
+    },
+    {
+      "path": "reports/wgsl-pipeline/image-filter-residual-refusal-matrix/kan-042-image-filter-residual-refusal-matrix.json",
+      "requiredSnippets": [
+        "image-filter.blur-large-sigma-unsupported",
+        "image-filter.runtime-descriptor-scope-dependency-gated"
+      ],
+      "status": "visible",
+      "ticket": "KAN-042",
+      "ticketField": "KAN-042"
+    },
+    {
+      "path": "reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json",
+      "requiredSnippets": [
+        "font.shaping-feature-unsupported",
+        "font.shaping-fallback-missing"
+      ],
+      "status": "visible",
+      "ticket": "KAN-043",
+      "ticketField": "KAN-043"
+    },
+    {
+      "path": "reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json",
+      "requiredSnippets": [
+        "coverage.alpha-mask-unsupported"
+      ],
+      "status": "visible",
+      "ticket": "KAN-044",
+      "ticketField": "KAN-044"
+    },
+    {
+      "path": "reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json",
+      "requiredSnippets": [
+        "color.color-space-wide-gamut-unsupported",
+        "color.f16-policy-candidate-worsens-reference"
+      ],
+      "status": "visible",
+      "ticket": "KAN-045",
+      "ticketField": "KAN-045"
+    },
+    {
+      "path": "reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json",
+      "requiredSnippets": [
+        "image-sampling.mipmap-unsupported"
+      ],
+      "status": "visible",
+      "ticket": "KAN-046",
+      "ticketField": "KAN-046"
+    }
+  ],
+  "improvements": {
+    "clipRectTopHaloRgbAbsError": {
+      "after": 3,
+      "before": 17,
+      "delta": -14,
+      "improved": true
+    },
+    "gpuMatchingPixels": {
+      "after": 131064,
+      "before": 130672,
+      "delta": 392,
+      "improved": true
+    },
+    "gpuMaxChannelDelta": {
+      "after": 10,
+      "before": 21,
+      "delta": -11,
+      "improved": true
+    },
+    "gpuMismatchingPixels": {
+      "after": 8,
+      "before": 400,
+      "delta": -392,
+      "improved": true
+    },
+    "gpuSimilarity": {
+      "after": 99.9939,
+      "before": 99.6948,
+      "delta": 0.2991,
+      "improved": true
+    }
+  },
+  "nonClaims": [
+    "no-threshold-change",
+    "no-broad-Skia-parity-claim",
+    "no-multi-family-correction-claim",
+    "no-Ganesh-or-Graphite-port",
+    "no-SkSL-compiler-IR-or-VM"
+  ],
+  "packId": "kan-051-renderer-visual-delta",
+  "rendererChanged": true,
+  "rendererSourceFiles": [
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/ClipDifferenceCrossTest.kt"
+  ],
+  "requiredValidation": [
+    "rtk python3 scripts/test_validate_kan051_renderer_visual_delta.py",
+    "rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon validateKan051RendererVisualDelta",
+    "rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.ClipDifferenceCrossTest",
+    "rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon pipelineConformance",
+    "rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/7442/kanvas/.gradle-codex ./gradlew --no-daemon pipelinePmBundle"
+  ],
+  "rootCause": {
+    "beforeDivergence": "The clipRect(kDifference) halo at (60,9) and (9,60) was RGB 224 against reference RGB 207, leaving a one-pixel halo too light by 17.",
+    "fixedPath": "SkWebGpuDevice.drawPathWithBlurMaskFilterIfApplicable now uses a per-pixel integrated Gaussian profile only for axis-aligned filled rect maskFilter blur.",
+    "regressionGuard": "Non-rect maskFilter blur, including the tiny RRect half of Skbug9319GM, keeps the historical point-sampled profile.",
+    "summary": "The WebGPU maskFilter blur path used point-sampled Gaussian weights for small-sigma filled rect masks, while the Skia-like A8 blur profile integrates coverage over destination pixels."
+  },
+  "schemaVersion": 1,
+  "selectedScene": {
+    "drawKind": "Skbug9319GM",
+    "reason": "Priority clip/maskFilter scene already had reference, CPU, GPU, diff, stats, and route diagnostics from the current PM bundle.",
+    "sceneId": "clip-rect-difference"
+  },
+  "status": "passed",
+  "targetDocs": [
+    ".upstream/target/skia-like-realtime-renderer-target.md",
+    ".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md",
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"
+  ],
+  "thresholdPolicy": {
+    "after": 80.0,
+    "before": 80.0,
+    "changed": false
+  },
+  "thresholdsWeakened": false,
+  "ticket": "KAN-051"
+}
