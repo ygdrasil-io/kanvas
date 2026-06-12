@@ -1,0 +1,397 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-048",
+  "packId": "kan-048-performance-family-budgets",
+  "status": "pass",
+  "closureDecision": "performance-family-budgets-reporting",
+  "claimLevel": "pm-performance-family-budget-evidence",
+  "releaseBlockingChange": false,
+  "slowBenchmarkCiRequired": false,
+  "readinessDelta": 0,
+  "familyRows": [
+    {
+      "familyId": "image-filter",
+      "family": "filters",
+      "status": "unavailable",
+      "measured": false,
+      "payloadClass": "unavailable-with-root-cause",
+      "measurementType": "image-filter intermediate texture benchmark",
+      "lane": "family.image-filter",
+      "reason": "performance.image-filter.intermediate-benchmark-unavailable",
+      "source": "reports/wgsl-pipeline/image-filter-visual-delta/kan-052-image-filter-visual-delta.json",
+      "sourceBlocker": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+      "rawPayloads": [],
+      "gate": {
+        "phase": "reporting-only",
+        "releaseBlocking": false,
+        "reason": "No isolated filter-family timing payload exists after the KAN-052 root-cause blocker."
+      },
+      "releaseBlocking": false,
+      "countedAsMeasuredGate": false,
+      "quarantineRationale": [
+        "missing_whole_scene_intermediate_rgba8_candidate_evidence_for_exact_and_precision_sensitive_routes",
+        "root-cause blocker must be solved before filter timing can be promoted"
+      ]
+    },
+    {
+      "familyId": "text-glyph",
+      "family": "text",
+      "status": "unavailable",
+      "measured": false,
+      "payloadClass": "unavailable-with-root-cause",
+      "measurementType": "glyph atlas upload benchmark",
+      "lane": "family.text-glyph",
+      "reason": "performance.text-glyph.production-sampling-route-unavailable",
+      "source": "reports/wgsl-pipeline/text-glyph-visual-delta/kan-053-text-glyph-visual-delta.json",
+      "sourceBlocker": "text-atlas-alpha-mask-draw-route-not-materialized",
+      "rawPayloads": [],
+      "gate": {
+        "phase": "reporting-only",
+        "releaseBlocking": false,
+        "reason": "No production glyph atlas sampling route timing exists after the KAN-053 root-cause blocker."
+      },
+      "releaseBlocking": false,
+      "countedAsMeasuredGate": false,
+      "quarantineRationale": [
+        "requires-production-glyph-atlas-sampling-route",
+        "outline-path text evidence is not a glyph atlas sampling performance payload"
+      ]
+    },
+    {
+      "familyId": "bitmap-color",
+      "family": "bitmap/color",
+      "status": "measured",
+      "measured": true,
+      "payloadClass": "selected-raw-benchmark-payloads",
+      "measurementType": "CPU scalar and WebGPU cache/timing dashboard benchmarks",
+      "lane": "family.bitmap-color",
+      "sourceFamilies": [
+        "bitmap sampling",
+        "gradient/color",
+        "blend/color-filter"
+      ],
+      "rawPayloads": [
+        {
+          "sceneId": "bitmap-shader-local-matrix",
+          "lane": "CPU",
+          "status": "measured",
+          "artifactPath": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-local-matrix/cpu-performance.json",
+          "command": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.015667,
+            "p95Ms": 0.015958
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "CPU scalar Kotlin dashboard benchmark",
+            "adapter": null
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pixels": 1024,
+            "bitmapSamples": 16,
+            "coveragePlanCount": 1
+          },
+          "baseline": {
+            "name": "m43-cpu-measured-local",
+            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae",
+            "owner": "Kanvas rendering release owner"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "sourceGate": {
+            "mode": "warning-only",
+            "owner": "Kanvas rendering release owner",
+            "reason": null,
+            "quarantinePolicy": "adapter or variance mismatch remains visible and non-blocking"
+          },
+          "rawMetrics": "artifacts/bitmap-shader-local-matrix/cpu-performance.json"
+        },
+        {
+          "sceneId": "bitmap-shader-local-matrix",
+          "lane": "GPU",
+          "status": "measured",
+          "artifactPath": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-local-matrix/gpu-performance.json",
+          "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.006417,
+            "p95Ms": 0.007666
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "WebGPU cache/timing dashboard benchmark",
+            "adapter": "Apple M2 Max"
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pipelineCacheHits": 29,
+            "pipelineCacheMisses": 1,
+            "bindGroupCount": 1,
+            "resourceBytes": 1024
+          },
+          "baseline": {
+            "name": "m43-gpu-cache-measured-local",
+            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae",
+            "owner": "Kanvas rendering release owner"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "sourceGate": {
+            "mode": "warning-only",
+            "owner": "Kanvas rendering release owner",
+            "reason": null,
+            "quarantinePolicy": "adapter or variance mismatch remains visible and non-blocking"
+          },
+          "rawMetrics": "artifacts/bitmap-shader-local-matrix/gpu-performance.json"
+        },
+        {
+          "sceneId": "linear-gradient-rect",
+          "lane": "CPU",
+          "status": "measured",
+          "artifactPath": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/cpu-performance.json",
+          "command": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.015875,
+            "p95Ms": 0.168417
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "CPU scalar Kotlin dashboard benchmark",
+            "adapter": null
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pixels": 4096,
+            "shaderStages": 1,
+            "coveragePlanCount": 1
+          },
+          "baseline": {
+            "name": "m59-cpu-measured-local",
+            "commit": "7378c5989d257a82a38f34256d5b8e10c2186a4e",
+            "owner": "Kanvas rendering release owner"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "sourceGate": {
+            "mode": "reporting-only",
+            "owner": "Kanvas rendering release owner",
+            "reason": "M43 measured CPU metrics do not gate CI until budget and rollback policy exist",
+            "quarantinePolicy": null
+          },
+          "rawMetrics": "artifacts/linear-gradient-rect/cpu-performance.json"
+        },
+        {
+          "sceneId": "linear-gradient-rect",
+          "lane": "GPU",
+          "status": "measured",
+          "artifactPath": "reports/wgsl-pipeline/scenes/artifacts/linear-gradient-rect/gpu-performance.json",
+          "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.004875,
+            "p95Ms": 0.005375
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "WebGPU cache/timing dashboard benchmark",
+            "adapter": "Apple M2 Max"
+          },
+          "counters": {
+            "routeInvocations": 1,
+            "pipelineCacheHits": 29,
+            "pipelineCacheMisses": 1,
+            "bindGroupCount": 1,
+            "resourceBytes": 4096
+          },
+          "baseline": {
+            "name": "m59-gpu-cache-measured-local",
+            "commit": "7378c5989d257a82a38f34256d5b8e10c2186a4e",
+            "owner": "Kanvas rendering release owner"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "sourceGate": {
+            "mode": "reporting-only",
+            "owner": "Kanvas rendering release owner",
+            "reason": "M43 measured GPU/cache metrics do not gate CI until budget and rollback policy exist",
+            "quarantinePolicy": null
+          },
+          "rawMetrics": "artifacts/linear-gradient-rect/gpu-performance.json"
+        },
+        {
+          "sceneId": "src-over-stack",
+          "lane": "CPU",
+          "status": "measured",
+          "artifactPath": "reports/wgsl-pipeline/scenes/artifacts/src-over-stack/cpu-performance.json",
+          "command": "rtk ./gradlew --no-daemon pipelineMeasuredCpuPerformance",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.023334,
+            "p95Ms": 0.099208
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "CPU scalar Kotlin dashboard benchmark",
+            "adapter": null
+          },
+          "counters": {
+            "routeInvocations": 2,
+            "pixels": 4096,
+            "blendOps": 2,
+            "coveragePlanCount": 2
+          },
+          "baseline": {
+            "name": "m43-cpu-measured-local",
+            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae",
+            "owner": "Kanvas rendering release owner"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "sourceGate": {
+            "mode": "warning-only",
+            "owner": "Kanvas rendering release owner",
+            "reason": null,
+            "quarantinePolicy": "adapter or variance mismatch remains visible and non-blocking"
+          },
+          "rawMetrics": "artifacts/src-over-stack/cpu-performance.json"
+        },
+        {
+          "sceneId": "src-over-stack",
+          "lane": "GPU",
+          "status": "measured",
+          "artifactPath": "reports/wgsl-pipeline/scenes/artifacts/src-over-stack/gpu-performance.json",
+          "command": "rtk ./gradlew --no-daemon -Pkanvas.gpu.performance.adapter=\"Apple M2 Max\" pipelineMeasuredGpuPerformance",
+          "sampleCount": 30,
+          "timing": {
+            "medianMs": 0.026083,
+            "p95Ms": 0.037041
+          },
+          "environment": {
+            "host": "Omega",
+            "os": "Mac OS X 26.5 aarch64",
+            "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+            "backend": "WebGPU cache/timing dashboard benchmark",
+            "adapter": "Apple M2 Max"
+          },
+          "counters": {
+            "routeInvocations": 2,
+            "pipelineCacheHits": 58,
+            "pipelineCacheMisses": 2,
+            "bindGroupCount": 2,
+            "resourceBytes": 4096
+          },
+          "baseline": {
+            "name": "m43-gpu-cache-measured-local",
+            "commit": "698a8c8e7554fad0d33271765f0442f038e2cbae",
+            "owner": "Kanvas rendering release owner"
+          },
+          "regression": {
+            "label": "unknown"
+          },
+          "sourceGate": {
+            "mode": "warning-only",
+            "owner": "Kanvas rendering release owner",
+            "reason": null,
+            "quarantinePolicy": "adapter or variance mismatch remains visible and non-blocking"
+          },
+          "rawMetrics": "artifacts/src-over-stack/gpu-performance.json"
+        }
+      ],
+      "timing": {
+        "p50Ms": 0.015771,
+        "p95Ms": 0.168417,
+        "maxMedianMs": 0.026083,
+        "maxP95Ms": 0.168417
+      },
+      "environment": {
+        "host": "Omega",
+        "jdk": "25.0.1+8-LTS (Eclipse Adoptium)",
+        "backends": [
+          "CPU scalar Kotlin dashboard benchmark",
+          "WebGPU cache/timing dashboard benchmark"
+        ],
+        "adapters": [
+          "Apple M2 Max"
+        ]
+      },
+      "gate": {
+        "phase": "reporting-only",
+        "releaseBlocking": false,
+        "reason": "KAN-048 aggregates existing local M43/M59 payloads; no CI-owned baseline, variance policy, owner matrix, and negative fixture are promoted here."
+      },
+      "releaseBlocking": false,
+      "countedAsMeasuredGate": false,
+      "quarantineRationale": [
+        "local measured payloads are PM trend evidence, not release gates",
+        "family-level baseline/variance/owner/negative fixture is not complete",
+        "adapter-specific GPU rows stay reporting-only and cannot be compared without eligibility policy"
+      ]
+    }
+  ],
+  "gatePolicy": {
+    "phase": "reporting-only",
+    "releaseBlocking": false,
+    "promotionRequires": [
+      "CI-owned baseline",
+      "host/JDK/backend/adapter eligibility",
+      "variance policy",
+      "negative fixture",
+      "baseline owner"
+    ]
+  },
+  "sourceAudit": {
+    "performanceSpec": ".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md",
+    "benchmarkSpec": ".upstream/specs/wgsl-pipeline/12-benchmark-harness-and-performance-gates.md",
+    "targetRenderer": ".upstream/target/skia-like-realtime-renderer-target.md",
+    "kan020Policy": "reports/wgsl-pipeline/performance/kan-020-slice-performance-minimum.json",
+    "m67FamilyBudgets": "reports/wgsl-pipeline/performance/m67-performance-tiering/m67-family-budgets.json"
+  },
+  "nonClaims": [
+    "KAN-048 does not add a release-blocking performance threshold.",
+    "KAN-048 does not run slow benchmarks as required CI gates.",
+    "KAN-048 does not count estimated, missing, derived, or unavailable payloads as measured.",
+    "KAN-048 does not claim GPU timing when adapter identity is missing.",
+    "KAN-048 does not change renderer, shader, cache runtime, or correctness thresholds."
+  ],
+  "requiredValidation": [
+    "validateKan048PerformanceFamilyBudgets",
+    "pipelineConformance",
+    "pipelinePmBundle"
+  ],
+  "claimGuard": {
+    "missingFamilies": [],
+    "unavailableRowsMissingReason": [],
+    "estimatedPayloadsCountedAsMeasured": [],
+    "releaseBlockingRows": [],
+    "measuredRowsMissingMetadata": [],
+    "measuredRowsMissingRawPayloads": [],
+    "nonReportingOnlyGates": []
+  },
+  "summary": {
+    "familyRows": 3,
+    "measuredFamilies": 1,
+    "unavailableFamilies": 2,
+    "estimatedPayloadsCountedAsMeasured": 0,
+    "releaseBlockingRows": 0,
+    "unavailableRowsMissingReason": 0,
+    "measuredRowsMissingMetadata": 0
+  }
+}
