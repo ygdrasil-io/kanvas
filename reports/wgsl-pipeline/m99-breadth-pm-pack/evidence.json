@@ -1,0 +1,743 @@
+{
+  "categoryRows": [
+    {
+      "category": "supported",
+      "count": 16,
+      "meaning": "Selected rows with complete reference, CPU/GPU, diff/stat, route diagnostics and fallbackReason=none."
+    },
+    {
+      "category": "expected-unsupported",
+      "count": 5,
+      "meaning": "Known limitations with stable fallback reasons; not hidden failures."
+    },
+    {
+      "category": "dependency-gated",
+      "count": 3,
+      "meaning": "Real dependency required; no short-lived font/codec substitute is added."
+    },
+    {
+      "category": "reporting-only",
+      "count": 35,
+      "meaning": "Useful PM evidence that is not a release-blocking gate."
+    },
+    {
+      "category": "implementation-gap",
+      "count": 6,
+      "meaning": "Feature-family gap with explicit next-step evidence requirements."
+    },
+    {
+      "category": "root-cause-blocked",
+      "count": 2,
+      "meaning": "Post-breadth visual-delta root causes are visible as blockers, not support claims."
+    }
+  ],
+  "claimGuard": {
+    "missingFamilies": [],
+    "nativeKadreCiClaims": [],
+    "nonClaimsMissing": [],
+    "pmBundleManifestMissingFields": [],
+    "releaseBlockingChanges": [],
+    "rendererOrThresholdChanges": [],
+    "requiredCategoriesMissing": [],
+    "supportRowsMissingProofs": [],
+    "supportRowsWithFallback": []
+  },
+  "claimLevel": "pm-breadth-support-refusal-release-readiness-pack",
+  "familyRows": [
+    {
+      "expectedUnsupportedRows": 2,
+      "id": "runtime-effects-v2",
+      "reportingOnlyRows": 0,
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/runtime-effects-v2/evidence.json"
+      ],
+      "summary": "Registered descriptors with Kotlin/CPU behavior and parser-validated WGSL stay visible; arbitrary Skia/SkSL input remains refused.",
+      "supportedRows": 4,
+      "theme": "Runtime effects WGSL"
+    },
+    {
+      "dependencyGatedRows": 1,
+      "expectedUnsupportedRows": 5,
+      "id": "coverage-strokes-clips",
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/coverage-closeout-matrix/kan-040-coverage-closeout-matrix.json"
+      ],
+      "summary": "Only bounded AA clip support is claimed; hairlines, caps/joins, dashes and nested clips keep stable refusal categories.",
+      "supportedRows": 1,
+      "theme": "Coverage, strokes and clips"
+    },
+    {
+      "dependencyGatedRows": 4,
+      "id": "filters-layers",
+      "implementationGapRows": 6,
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json",
+        "reports/wgsl-pipeline/image-filter-residual-refusal-matrix/kan-042-image-filter-residual-refusal-matrix.json"
+      ],
+      "summary": "Bounded DAG rows remain separated from arbitrary DAG, picture-prepass and large-sigma gaps.",
+      "supportedRows": 2,
+      "theme": "Image filters and layers"
+    },
+    {
+      "atlasUploadPlanRows": 1,
+      "expectedUnsupportedRows": 2,
+      "id": "text-glyphs",
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json",
+        "reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json"
+      ],
+      "summary": "Simple Latin and bounded shaping evidence remain separate from broad shaping, font fallback, SDF/LCD and alpha-mask support.",
+      "supportedRows": 2,
+      "theme": "Text and glyphs",
+      "webGpuRefusalRows": 1
+    },
+    {
+      "bitmapSupportRows": 2,
+      "colorSupportRows": 2,
+      "dependencyGatedRows": 2,
+      "id": "color-bitmap-codec",
+      "realCodecDecodeSceneRows": 1,
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json",
+        "reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json",
+        "reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json"
+      ],
+      "summary": "Bounded color/bitmap rows and one real PNG source stay visible without broad codec, mipmap or color-managed decode claims.",
+      "theme": "Color, bitmap and codec provenance"
+    },
+    {
+      "id": "performance-cache",
+      "measuredFamilies": 1,
+      "observedCacheCounters": 10,
+      "reportingOnlyRows": 35,
+      "sourceArtifacts": [
+        "reports/wgsl-pipeline/performance-family-budgets/kan-048-performance-family-budgets.json",
+        "reports/wgsl-pipeline/cache-telemetry-release-gate/kan-049-cache-telemetry-release-gate.json"
+      ],
+      "summary": "Measured bitmap/color budgets and cache telemetry classifications remain reporting-only unless accepted release-gate policy exists.",
+      "theme": "Performance and cache",
+      "unavailableFamilies": 2
+    }
+  ],
+  "nativeKadreCiRequired": false,
+  "nonClaims": [
+    {
+      "id": "no-broad-skia-parity",
+      "text": "No broad Skia parity or arbitrary GM support is claimed from selected rows."
+    },
+    {
+      "id": "no-broad-codecs-fonts",
+      "text": "No broad codec, font fallback, complex shaping, emoji, LCD, SDF, animated image, AVIF, JPEG XL, RAW, or video support is claimed."
+    },
+    {
+      "id": "no-estimated-performance-measured",
+      "text": "Estimated, unavailable, derived, or observed-partial performance/cache data is not counted as measured release evidence."
+    },
+    {
+      "id": "no-native-kadre-ci-requirement",
+      "text": "Headless validation and pipelinePmBundle do not require native Kadre window execution or an initialized external/poc-koreos submodule."
+    },
+    {
+      "id": "no-dynamic-sksl-compilation",
+      "text": "SkSL remains a Skia compatibility/refusal surface; WGSL remains the Kanvas shader implementation target."
+    },
+    {
+      "id": "no-renderer-threshold-readiness-change",
+      "text": "KAN-050 does not modify renderer code, shader code, thresholds, performance gates, cache gates, or readiness denominators."
+    }
+  ],
+  "packId": "kan-050-pm-breadth-support-refusal-pack",
+  "pmBundleManifestEntry": {
+    "categories": [
+      "supported",
+      "expected-unsupported",
+      "dependency-gated",
+      "reporting-only",
+      "implementation-gap",
+      "root-cause-blocked"
+    ],
+    "claimLevel": "pm-breadth-support-refusal-release-readiness-pack",
+    "evidenceJson": "release/m99-breadth-pm-pack/evidence.json",
+    "evidenceMarkdown": "release/m99-breadth-pm-pack/evidence.md",
+    "familyIds": [
+      "runtime-effects-v2",
+      "coverage-strokes-clips",
+      "filters-layers",
+      "text-glyphs",
+      "color-bitmap-codec",
+      "performance-cache"
+    ],
+    "generationCommand": "rtk ./gradlew --no-daemon validateKan050PmBreadthSupportRefusalPack",
+    "key": "kan050PmBreadthSupportRefusalPack",
+    "manifestEntryJson": "release/m99-breadth-pm-pack/pm-bundle-manifest-entry.json",
+    "nativeKadreCiRequired": false,
+    "notice": "KAN-050 aggregates PM release-readiness support/refusal evidence from existing KAN-027..KAN-049 artifacts. It does not add renderer code, broaden support claims, weaken thresholds, require native Kadre CI, or promote reporting-only performance/cache data.",
+    "pmPackageCommand": "rtk ./gradlew --no-daemon pipelinePmBundle",
+    "readinessDelta": 0.0,
+    "releaseBlocking": false,
+    "sourceTickets": [
+      "KAN-027",
+      "KAN-028",
+      "KAN-029",
+      "KAN-030",
+      "KAN-031",
+      "KAN-032",
+      "KAN-033",
+      "KAN-034",
+      "KAN-035..KAN-040",
+      "KAN-041..KAN-042",
+      "KAN-043..KAN-044",
+      "KAN-045..KAN-047",
+      "KAN-048..KAN-049"
+    ],
+    "status": "pass",
+    "supportRows": 16
+  },
+  "readinessDelta": 0.0,
+  "releaseBlockingChange": false,
+  "rendererChanged": false,
+  "requiredValidation": [
+    "validateKan050PmBreadthSupportRefusalPack",
+    "pipelinePmBundle",
+    "pipelineConformance",
+    "git diff --check"
+  ],
+  "rootCauseBlockers": [
+    {
+      "blocked": true,
+      "blocker": {
+        "admissibleNextStep": "Add whole-scene intermediate-format candidate evidence or a policy-level renderer change that covers exact and precision-sensitive routes; do not claim an image-filter crop fix from representative-sample diagnostics only.",
+        "missingCondition": "missing_whole_scene_intermediate_rgba8_candidate_evidence_for_exact_and_precision_sensitive_routes",
+        "reasonCode": "not-bounded-to-image-filter-crop-prepass",
+        "rootCause": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+        "summary": "The selected row has complete reference/CPU/GPU/diff/stat/route evidence, but the remaining byte residual is not local to the Crop(input=Offset(null)) image-filter route. Existing diagnostics reproduce the residual on non-image-filter draw and bitmap routes, then narrow it to the RGBA16Float intermediate store-to-present byte quantization policy. A crop-only renderer change would be a hidden workaround.",
+        "supportingDiagnostics": [
+          "FOR-252",
+          "FOR-259",
+          "FOR-260"
+        ]
+      },
+      "nonClaim": "Visible root-cause blocker only; not a support or renderer-fix claim.",
+      "rendererChanged": false,
+      "sourceArtifact": "reports/wgsl-pipeline/image-filter-visual-delta/kan-052-image-filter-visual-delta.json",
+      "status": "blocked",
+      "thresholdsWeakened": false,
+      "ticket": "KAN-052"
+    },
+    {
+      "blocked": true,
+      "blocker": {
+        "admissibleNextStep": "Implement the text-owned atlas sampling draw path or explicitly keep standalone alpha-mask WebGPU unsupported via coverage.alpha-mask-unsupported; do not move glyph atlas ownership into coverage.",
+        "reasonCode": "requires-production-glyph-atlas-sampling-route",
+        "rootCause": "text-atlas-alpha-mask-draw-route-not-materialized",
+        "summary": "The selected simple Latin text scene has existing reference/CPU/WebGPU/diff/stat/route artifacts, but its actual CPU and WebGPU draw routes are outline-path text routes. The glyph atlas route is proven as a text-owned R8/A8 upload plan and CPU mask oracle, not as a production WebGPU text draw route. Closing the visible delta requires a real glyph atlas alpha-mask sampling route with after artifacts, not a local outline-path threshold or AA tweak.",
+        "supportingEvidence": [
+          "KAN-043",
+          "KAN-044",
+          "KAN-012"
+        ]
+      },
+      "nonClaim": "Visible root-cause blocker only; not a support or renderer-fix claim.",
+      "rendererChanged": false,
+      "sourceArtifact": "reports/wgsl-pipeline/text-glyph-visual-delta/kan-053-text-glyph-visual-delta.json",
+      "status": "blocked",
+      "thresholdsWeakened": false,
+      "ticket": "KAN-053"
+    }
+  ],
+  "schemaVersion": 1,
+  "sourceAudit": {
+    "dashboardGenerationSpec": ".upstream/specs/wgsl-pipeline/11-conformance-dashboard-generation.md",
+    "pmReleaseSpec": ".upstream/specs/skia-like-realtime/05-pm-demo-and-release-candidate.md",
+    "rendererTarget": ".upstream/target/skia-like-realtime-renderer-target.md"
+  },
+  "sourceTicketLinks": [
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "theme": "Runtime effects V2 matrix",
+      "ticket": "KAN-027"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "theme": "Runtime effects layout V2",
+      "ticket": "KAN-028"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "theme": "Runtime shader promotions",
+      "ticket": "KAN-029"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "theme": "Runtime child shader boundary",
+      "ticket": "KAN-030"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "theme": "Runtime color filter",
+      "ticket": "KAN-031"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "theme": "Runtime blender boundary",
+      "ticket": "KAN-032"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "theme": "Runtime uniform preview",
+      "ticket": "KAN-033"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "theme": "Runtime effects V2 bundle",
+      "ticket": "KAN-034"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/coverage-closeout-matrix/kan-040-coverage-closeout-matrix.json",
+      "theme": "Coverage, strokes, dashes and clips",
+      "ticket": "KAN-035..KAN-040"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/image-filter-residual-refusal-matrix/kan-042-image-filter-residual-refusal-matrix.json",
+      "theme": "Image filters and layer refusals",
+      "ticket": "KAN-041..KAN-042"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json",
+      "theme": "Text, glyph shaping and atlas ownership",
+      "ticket": "KAN-043..KAN-044"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json",
+      "theme": "Color, bitmap sampling and codec provenance",
+      "ticket": "KAN-045..KAN-047"
+    },
+    {
+      "sourceArtifact": "reports/wgsl-pipeline/cache-telemetry-release-gate/kan-049-cache-telemetry-release-gate.json",
+      "theme": "Performance family budgets and cache telemetry",
+      "ticket": "KAN-048..KAN-049"
+    }
+  ],
+  "status": "pass",
+  "summary": {
+    "dependencyGatedVisible": true,
+    "expectedUnsupportedVisible": true,
+    "families": 6,
+    "nativeKadreCiRequired": false,
+    "nonClaims": 6,
+    "readinessDelta": 0.0,
+    "rendererChanged": false,
+    "reportingOnlyVisible": true,
+    "supportRows": 16,
+    "thresholdsWeakened": false
+  },
+  "supportRows": [
+    {
+      "claimScope": true,
+      "fallbackReason": "none",
+      "family": "runtime-effects-v2",
+      "id": "kan034.runtime.color_filter_luma_to_alpha",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/cpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/reference.png",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/route-webgpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/stats.json",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/webgpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-031-runtime-color-filter-luma-to-alpha/webgpu.png"
+      ],
+      "sourceTicket": "KAN-034",
+      "status": "pass"
+    },
+    {
+      "claimScope": true,
+      "fallbackReason": "none",
+      "family": "runtime-effects-v2",
+      "id": "kan034.runtime.linear_gradient_rt",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/cpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/skia.png",
+        "reports/wgsl-pipeline/scenes/artifacts/runtime-effect-linear-gradient/stats.json"
+      ],
+      "sourceTicket": "KAN-034",
+      "status": "pass"
+    },
+    {
+      "claimScope": true,
+      "fallbackReason": "none",
+      "family": "runtime-effects-v2",
+      "id": "kan034.runtime.simple_rt",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/cpu.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/diff.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/gpu.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/route-cpu.json",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/route-gpu.json",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-high/stats.json",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/cpu.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/diff.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/gpu.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/route-cpu.json",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/route-gpu.json",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-simple-rt-blue-low/stats.json"
+      ],
+      "sourceTicket": "KAN-034",
+      "status": "pass"
+    },
+    {
+      "claimScope": true,
+      "fallbackReason": "none",
+      "family": "runtime-effects-v2",
+      "id": "kan034.runtime.spiral_rt",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/runtime-effects-v2/evidence.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/cpu.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/diff.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/gpu.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/route-cpu.json",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/route-gpu.json",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-high/stats.json",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/cpu.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/diff.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/gpu.png",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/route-cpu.json",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/route-gpu.json",
+        "reports/wgsl-pipeline/runtime-effect-uniform-preview/states/kan-033-spiral-rt-rad-low/stats.json"
+      ],
+      "sourceTicket": "KAN-034",
+      "status": "pass"
+    },
+    {
+      "claimScope": true,
+      "fallbackReason": "none",
+      "family": "coverage-strokes-clips",
+      "id": "kan040.m57-aaclip-bounded-grid",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/coverage-closeout-matrix/kan-040-coverage-closeout-matrix.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/kan-004-clips-aa/kan-004-clips-aa.json"
+      ],
+      "sourceTicket": "KAN-004",
+      "status": "pass"
+    },
+    {
+      "claimScope": "bounded-selected-row",
+      "fallbackReason": "none",
+      "family": "filters-layers",
+      "id": "kan041.crop-image-filter-nonnull-prepass",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-prepass.json",
+        "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/skia.png",
+        "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json"
+      ],
+      "sourceTicket": "KAN-041",
+      "status": "pass"
+    },
+    {
+      "claimScope": "bounded-selected-row",
+      "fallbackReason": "none",
+      "family": "filters-layers",
+      "id": "kan041.m61-compose-cf-matrix-transform-dag-v2",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/cpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/route-prepass.json",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/skia.png",
+        "reports/wgsl-pipeline/scenes/artifacts/image-filter-compose-cf-matrix-transform/stats.json"
+      ],
+      "sourceTicket": "KAN-041",
+      "status": "pass"
+    },
+    {
+      "claimScope": "simple-latin-support",
+      "fallbackReason": "none",
+      "family": "text-glyphs",
+      "id": "kan043.text.simple-latin.line.v1",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png"
+      ],
+      "sourceTicket": "KAN-043",
+      "status": "pass"
+    },
+    {
+      "claimScope": "bounded-shaping-support",
+      "fallbackReason": "none",
+      "family": "text-glyphs",
+      "id": "kan043.font-kerning-style-fixture",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/cpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/font-diagnostics.json",
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/skia.png",
+        "reports/wgsl-pipeline/scenes/artifacts/font-kerning-style-fixture/stats.json"
+      ],
+      "sourceTicket": "KAN-043",
+      "status": "pass"
+    },
+    {
+      "claimScope": "simple-bounded-src-over-partial-alpha-rect-stack",
+      "fallbackReason": "none",
+      "family": "color-bitmap-codec",
+      "id": "kan045.paint.src-over-alpha.rect-stack.v1",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/kan-015-srcover-alpha/stats.json"
+      ],
+      "sourceTicket": "KAN-045",
+      "status": "pass"
+    },
+    {
+      "claimScope": "simple-direct-rect-blend-kplus-color-filter",
+      "fallbackReason": "none",
+      "family": "color-bitmap-codec",
+      "id": "kan045.paint.color-filter.blend-kplus.rect.v1",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/kan-016-color-filter-blend-kplus/stats.json"
+      ],
+      "sourceTicket": "KAN-045",
+      "status": "pass"
+    },
+    {
+      "claimScope": "tile-mode-support",
+      "fallbackReason": "none",
+      "family": "color-bitmap-codec",
+      "id": "kan046.bitmap-shader-repeat-tile",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/skia.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json"
+      ],
+      "sourceTicket": "KAN-046",
+      "status": "pass"
+    },
+    {
+      "claimScope": "tile-mode-support",
+      "fallbackReason": "none",
+      "family": "color-bitmap-codec",
+      "id": "kan046.bitmap-subset-local-matrix-repeat",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/skia.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
+      ],
+      "sourceTicket": "KAN-046",
+      "status": "pass"
+    },
+    {
+      "claimScope": "simple-fixture-backed-bitmap-rect-nearest",
+      "fallbackReason": "none",
+      "family": "color-bitmap-codec",
+      "id": "kan047.paint.bitmap-rect.nearest.fixture.v1",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/reference.png",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-webgpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/stats.json",
+        "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/webgpu.png"
+      ],
+      "sourceTicket": "KAN-047",
+      "status": "pass"
+    },
+    {
+      "claimScope": "bounded-bitmap-sampling-only",
+      "fallbackReason": "none",
+      "family": "color-bitmap-codec",
+      "id": "kan047.bitmap-shader-repeat-tile",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/skia.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json"
+      ],
+      "sourceTicket": "KAN-047",
+      "status": "pass"
+    },
+    {
+      "claimScope": "bounded-bitmap-sampling-only",
+      "fallbackReason": "none",
+      "family": "color-bitmap-codec",
+      "id": "kan047.bitmap-subset-local-matrix-repeat",
+      "proof": {
+        "cpuGpu": true,
+        "diffStat": true,
+        "fallbackStable": true,
+        "reference": true,
+        "routeDiagnostics": true
+      },
+      "sourceArtifact": "reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json",
+      "sourcePaths": [
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/skia.png",
+        "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
+      ],
+      "sourceTicket": "KAN-047",
+      "status": "pass"
+    }
+  ],
+  "thresholdsWeakened": false,
+  "ticket": "KAN-050"
+}

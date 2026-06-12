@@ -1,0 +1,46 @@
+{
+  "categories": [
+    "supported",
+    "expected-unsupported",
+    "dependency-gated",
+    "reporting-only",
+    "implementation-gap",
+    "root-cause-blocked"
+  ],
+  "claimLevel": "pm-breadth-support-refusal-release-readiness-pack",
+  "evidenceJson": "release/m99-breadth-pm-pack/evidence.json",
+  "evidenceMarkdown": "release/m99-breadth-pm-pack/evidence.md",
+  "familyIds": [
+    "runtime-effects-v2",
+    "coverage-strokes-clips",
+    "filters-layers",
+    "text-glyphs",
+    "color-bitmap-codec",
+    "performance-cache"
+  ],
+  "generationCommand": "rtk ./gradlew --no-daemon validateKan050PmBreadthSupportRefusalPack",
+  "key": "kan050PmBreadthSupportRefusalPack",
+  "manifestEntryJson": "release/m99-breadth-pm-pack/pm-bundle-manifest-entry.json",
+  "nativeKadreCiRequired": false,
+  "notice": "KAN-050 aggregates PM release-readiness support/refusal evidence from existing KAN-027..KAN-049 artifacts. It does not add renderer code, broaden support claims, weaken thresholds, require native Kadre CI, or promote reporting-only performance/cache data.",
+  "pmPackageCommand": "rtk ./gradlew --no-daemon pipelinePmBundle",
+  "readinessDelta": 0.0,
+  "releaseBlocking": false,
+  "sourceTickets": [
+    "KAN-027",
+    "KAN-028",
+    "KAN-029",
+    "KAN-030",
+    "KAN-031",
+    "KAN-032",
+    "KAN-033",
+    "KAN-034",
+    "KAN-035..KAN-040",
+    "KAN-041..KAN-042",
+    "KAN-043..KAN-044",
+    "KAN-045..KAN-047",
+    "KAN-048..KAN-049"
+  ],
+  "status": "pass",
+  "supportRows": 16
+}
