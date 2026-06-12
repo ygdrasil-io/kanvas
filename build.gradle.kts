@@ -445,6 +445,7 @@ fun renderPipelineConformanceReport(
         |${row("KAN-047 codec provenance matrix", "passed", "`validateKan047CodecProvenanceMatrix` records 6 image-scene provenance rows with format, decoder, color info, origin, and decode result; separates fixture/surface rows from the real PNG codec decode source in `bitmap-subset-local-matrix-repeat`; keeps animated WebP/GIF scene rows dependency-gated via `codec.animated-frame-unsupported`; and keeps AVIF, JPEG XL, RAW, and video stubs dependency-gated via `codec.decoder-unavailable`.")}
         |${row("KAN-048 performance family budgets", "passed", "`validateKan048PerformanceFamilyBudgets` records filters, text, and bitmap/color family performance payloads: bitmap/color aggregates checked-in measured CPU/WebGPU raw metrics, filters and text remain `unavailable` with stable root-cause reasons, and all family gates stay `reporting-only` with no release-blocking or slow-CI benchmark claim.")}
         |${row("KAN-049 cache telemetry release-gate criteria", "passed", "`validateKan049CacheTelemetryReleaseGateCriteria` classifies observed/partial/derived/unavailable counters, names promotion criteria, and keeps M85 ledgers non-observed/non-gating.")}
+        |${row("KAN-050 PM breadth support/refusal pack", "passed", "`validateKan050PmBreadthSupportRefusalPack` aggregates runtime effects V2, coverage/strokes/clips, filters, text/glyphs, color/bitmap/codec, performance/cache, categories, support proofs, non-claims, and the PM bundle manifest entry without adding renderer code, thresholds, readiness movement, native Kadre CI requirements, or release-blocking performance/cache gates.")}
         |${row("KAN-051 renderer visual delta", "passed", "`validateKan051RendererVisualDelta` records a real WebGPU renderer change for `clip-rect-difference` / `Skbug9319GM`, keeps threshold/tolerance constant, packages before/after reference/CPU/GPU/diff/stat/route evidence, improves GPU matching pixels `130672 -> 131064`, and guards against rendererChanged=false, missing before/after, evidence-only closure, or hidden refusal loss.")}
         |${row("KAN-052 image-filter visual delta", "blocked", "`validateKan052ImageFilterVisualDelta` selects `crop-image-filter-nonnull-prepass`, preserves reference/CPU/GPU/diff/stat/route evidence, and records a machine-checked root-cause blocker: the remaining residual is an RGBA16Float intermediate store-to-present byte-quantization policy issue that reproduces outside image-filter routing, so no crop-only renderer fix is claimed.")}
         |${row("KAN-053 text glyph visual delta", "blocked", "`validateKan053TextGlyphVisualDelta` selects `text.simple-latin.line.v1`, preserves KAN-012 reference/CPU/WebGPU/diff/stat/route evidence plus KAN-043 font/glyph facts and KAN-044 atlas ownership, and records a machine-checked root-cause blocker: the glyph atlas route is an upload-plan/CPU-mask oracle, while production text drawing still uses outline-path routes, so no atlas sampling renderer fix is claimed.")}
@@ -833,6 +834,7 @@ tasks.register("pipelineConformance") {
         "validateKan047CodecProvenanceMatrix",
         "validateKan048PerformanceFamilyBudgets",
         "validateKan049CacheTelemetryReleaseGateCriteria",
+        "validateKan050PmBreadthSupportRefusalPack",
         "validateKan051RendererVisualDelta",
         "validateKan052ImageFilterVisualDelta",
         "validateKan053TextGlyphVisualDelta",
@@ -870,6 +872,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-047 codec provenance matrix and stub/fixture claim guards: validateKan047CodecProvenanceMatrix
             |- REQUIRED KAN-048 performance family budgets and reporting-only gate guards: validateKan048PerformanceFamilyBudgets
             |- REQUIRED KAN-049 cache telemetry classification and release-gate criteria guards: validateKan049CacheTelemetryReleaseGateCriteria
+            |- REQUIRED KAN-050 PM breadth support/refusal pack and manifest-entry guard: validateKan050PmBreadthSupportRefusalPack
             |- REQUIRED KAN-051 renderer visual delta and before/after metric guards: validateKan051RendererVisualDelta
             |- REQUIRED KAN-052 image-filter visual delta blocker guard: validateKan052ImageFilterVisualDelta
             |- REQUIRED KAN-053 text glyph visual delta blocker guard: validateKan053TextGlyphVisualDelta
@@ -5749,6 +5752,56 @@ tasks.register<Exec>("validateKan049CacheTelemetryReleaseGateCriteria") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan050PmBreadthSupportRefusalPack") {
+    group = "verification"
+    description = "Materializes and validates the KAN-050 PM breadth support/refusal release-readiness pack."
+    dependsOn(
+        "pipelineRuntimeEffectsV2EvidenceBundleReport",
+        "validateM88ReleaseCandidate2",
+        "validateKan040CoverageCloseoutMatrix",
+        "validateKan041ImageFilterDagBoundedV3",
+        "validateKan042ImageFilterResidualRefusalMatrix",
+        "validateKan043TextShapingFallbackScope",
+        "validateKan044GlyphMaskAtlasOwnership",
+        "validateKan045ColorPipelineBoundedPolicy",
+        "validateKan046TileModesMipmapBoundary",
+        "validateKan047CodecProvenanceMatrix",
+        "validateKan048PerformanceFamilyBudgets",
+        "validateKan049CacheTelemetryReleaseGateCriteria",
+        "validateKan052ImageFilterVisualDelta",
+        "validateKan053TextGlyphVisualDelta",
+    )
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m99-breadth-pm-pack")
+    commandLine(
+        "python3",
+        "scripts/validate_kan050_pm_breadth_support_refusal_pack.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan050_pm_breadth_support_refusal_pack.py"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/05-pm-demo-and-release-candidate.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/wgsl-pipeline/11-conformance-dashboard-generation.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/target/skia-like-realtime-renderer-target.md"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/runtime-effects-v2/evidence.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/coverage-closeout-matrix/kan-040-coverage-closeout-matrix.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-residual-refusal-matrix/kan-042-image-filter-residual-refusal-matrix.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-shaping-fallback-scope/kan-043-text-shaping-fallback-scope.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/color-pipeline-bounded-policy/kan-045-color-pipeline-bounded-policy.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/tile-modes-mipmap-boundary/kan-046-tile-modes-mipmap-boundary.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/codec-provenance-matrix/kan-047-codec-provenance-matrix.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/performance-family-budgets/kan-048-performance-family-budgets.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/cache-telemetry-release-gate/kan-049-cache-telemetry-release-gate.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-visual-delta/kan-052-image-filter-visual-delta.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/text-glyph-visual-delta/kan-053-text-glyph-visual-delta.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/m88-realtime-rc2/support-refusal-matrix.json"))
+    outputs.file(outputDir.file("evidence.json"))
+    outputs.file(outputDir.file("evidence.md"))
+    outputs.file(outputDir.file("pm-bundle-manifest-entry.json"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -8518,4 +8571,32 @@ tasks.register("pipelinePmBundle") {
         logger.lifecycle("Wrote WGSL PM bundle: ${targetRoot.relativeTo(rootDir)}")
         logger.lifecycle("Serve with: $serveCommand")
     }
+}
+
+tasks.register<Exec>("injectKan050PmBreadthSupportRefusalPackIntoPmBundle") {
+    group = "verification"
+    description = "Injects the KAN-050 PM breadth pack into the generated pipelinePmBundle manifest."
+    dependsOn("validateKan050PmBreadthSupportRefusalPack")
+    mustRunAfter("pipelinePmBundle")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/m99-breadth-pm-pack")
+    val bundleDir = layout.buildDirectory.dir("reports/wgsl-pipeline-pm-bundle")
+    commandLine(
+        "python3",
+        "scripts/validate_kan050_pm_breadth_support_refusal_pack.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+        "--inject-pm-bundle",
+        bundleDir.get().asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan050_pm_breadth_support_refusal_pack.py"))
+    inputs.dir(outputDir)
+    inputs.file(bundleDir.map { it.file("manifest.json") })
+    outputs.file(bundleDir.map { it.file("manifest.json") })
+    outputs.dir(bundleDir.map { it.dir("release/m99-breadth-pm-pack") })
+    outputs.upToDateWhen { false }
+}
+
+tasks.named("pipelinePmBundle") {
+    dependsOn("validateKan050PmBreadthSupportRefusalPack")
+    finalizedBy("injectKan050PmBreadthSupportRefusalPackIntoPmBundle")
 }
