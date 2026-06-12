@@ -443,6 +443,7 @@ fun renderPipelineConformanceReport(
         |${row("KAN-045 color pipeline bounded policy", "passed", "`validateKan045ColorPipelineBoundedPolicy` records bounded sRGB/premul SrcOver and Blend(kPlus) ColorFilter support rows, visible wide-gamut and F16 policy refusals, matching CPU/GPU semantic ops, generated/handwritten WGSL validation facts, and guards against threshold weakening, silent approximation, broad color management, HDR/gainmap, all-blend-mode, Ganesh/Graphite, or SkSL compiler claims.")}
         |${row("KAN-046 tile modes/mipmap boundary", "passed", "`validateKan046TileModesMipmapBoundary` records two bounded tile-mode support rows (`bitmap-shader-repeat-tile`, `bitmap-subset-local-matrix-repeat`) with reference/CPU/GPU/diff/stat/routes plus structured sampling/localMatrix/tileMode/mipmapMode diagnostics, keeps mipmap requests expected-unsupported via `image-sampling.mipmap-unsupported`, and guards against arbitrary texture, codec decode, perspective sampling, color-managed decode, broad tile-mode, mipmap, renderer, shader, threshold, or budget claims.")}
         |${row("KAN-051 renderer visual delta", "passed", "`validateKan051RendererVisualDelta` records a real WebGPU renderer change for `clip-rect-difference` / `Skbug9319GM`, keeps threshold/tolerance constant, packages before/after reference/CPU/GPU/diff/stat/route evidence, improves GPU matching pixels `130672 -> 131064`, and guards against rendererChanged=false, missing before/after, evidence-only closure, or hidden refusal loss.")}
+        |${row("KAN-052 image-filter visual delta", "blocked", "`validateKan052ImageFilterVisualDelta` selects `crop-image-filter-nonnull-prepass`, preserves reference/CPU/GPU/diff/stat/route evidence, and records a machine-checked root-cause blocker: the remaining residual is an RGBA16Float intermediate store-to-present byte-quantization policy issue that reproduces outside image-filter routing, so no crop-only renderer fix is claimed.")}
         |${row("Vector decision", vectorStatus, vectorDecision)}
         |${row("Skipped checks", if (totalSkipped == 0) "passed" else "skipped", "$totalSkipped JUnit skipped checks in local report; GPU CI skip remains residual adapter risk")}
         |
@@ -826,6 +827,7 @@ tasks.register("pipelineConformance") {
         "validateKan045ColorPipelineBoundedPolicy",
         "validateKan046TileModesMipmapBoundary",
         "validateKan051RendererVisualDelta",
+        "validateKan052ImageFilterVisualDelta",
         ":gpu-raster:wgslValidateStrict",
         ":gpu-raster:wgslValidateAll",
         ":gpu-raster:pipelineConformanceTest",
@@ -858,6 +860,7 @@ tasks.register("pipelineConformance") {
             |- REQUIRED KAN-045 color pipeline bounded policy and color/refusal guards: validateKan045ColorPipelineBoundedPolicy
             |- REQUIRED KAN-046 tile modes/mipmap boundary and sampling route guards: validateKan046TileModesMipmapBoundary
             |- REQUIRED KAN-051 renderer visual delta and before/after metric guards: validateKan051RendererVisualDelta
+            |- REQUIRED KAN-052 image-filter visual delta blocker guard: validateKan052ImageFilterVisualDelta
             |- REQUIRED strict generated/registered WGSL validation: :gpu-raster:wgslValidateStrict
             |- REQUIRED legacy WGSL diagnostic inventory: :gpu-raster:wgslValidateAll
             |- REQUIRED generated WGSL, PipelineKey, BlendPlan, runtime descriptor, WebGPU glyph atlas, simple Latin line, simple linear gradient, simple bitmap rect, simple SrcOver alpha, simple ColorFilter, runtime ColorFilter, simple SimpleRT runtime effect, and selector tests: :gpu-raster:pipelineConformanceTest
@@ -5558,6 +5561,33 @@ tasks.register<Exec>("validateKan051RendererVisualDelta") {
     outputs.upToDateWhen { false }
 }
 
+tasks.register<Exec>("validateKan052ImageFilterVisualDelta") {
+    group = "verification"
+    description = "Materializes and validates the KAN-052 image-filter visual delta root-cause blocker."
+    dependsOn("validateKan051RendererVisualDelta")
+    val outputDir = layout.projectDirectory.dir("reports/wgsl-pipeline/image-filter-visual-delta")
+    commandLine(
+        "python3",
+        "scripts/validate_kan052_image_filter_visual_delta.py",
+        rootDir.absolutePath,
+        outputDir.asFile.absolutePath,
+    )
+    inputs.file(layout.projectDirectory.file("scripts/validate_kan052_image_filter_visual_delta.py"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-dag-bounded-v3/kan-041-image-filter-dag-bounded-v3.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/image-filter-residual-refusal-matrix/kan-042-image-filter-residual-refusal-matrix.json"))
+    inputs.dir(layout.projectDirectory.dir("reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/color-reference-bias-audit-for252/color-reference-bias-audit-for252.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/intermediate-store-present-audit-for259/intermediate-store-present-audit-for259.json"))
+    inputs.file(layout.projectDirectory.file("reports/wgsl-pipeline/scenes/artifacts/intermediate-quantization-candidate-audit-for260/intermediate-quantization-candidate-audit-for260.json"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/target/skia-like-realtime-renderer-target.md"))
+    inputs.file(layout.projectDirectory.file(".upstream/target/high-performance-wgsl-pipeline-target.md"))
+    outputs.file(outputDir.file("kan-052-image-filter-visual-delta.json"))
+    outputs.file(outputDir.file("kan-052-image-filter-visual-delta.md"))
+    outputs.upToDateWhen { false }
+}
+
 tasks.register<Exec>("validateKan006IntermediateTextureOwnership") {
     group = "verification"
     description = "Validates KAN-006 bounded image-filter intermediate texture ownership evidence."
@@ -5720,6 +5750,7 @@ tasks.register("pipelinePmBundle") {
         "validateKan045ColorPipelineBoundedPolicy",
         "validateKan046TileModesMipmapBoundary",
         "validateKan051RendererVisualDelta",
+        "validateKan052ImageFilterVisualDelta",
         "validateKan006IntermediateTextureOwnership",
         "validateKan007SaveLayerSimpleFilter",
         "validateKan008ImageFilterDagRefusals",

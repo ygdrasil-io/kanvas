@@ -1,0 +1,440 @@
+{
+  "artifactAudit": [
+    {
+      "exists": true,
+      "key": "reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/skia.png"
+    },
+    {
+      "exists": true,
+      "key": "cpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu.png"
+    },
+    {
+      "exists": true,
+      "key": "gpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu.png"
+    },
+    {
+      "exists": true,
+      "key": "cpuDiff",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png"
+    },
+    {
+      "exists": true,
+      "key": "gpuDiff",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png"
+    },
+    {
+      "exists": true,
+      "key": "routeCpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-cpu.json"
+    },
+    {
+      "exists": true,
+      "key": "routeGpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json"
+    },
+    {
+      "exists": true,
+      "key": "routePrepass",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-prepass.json"
+    },
+    {
+      "exists": true,
+      "key": "stats",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json"
+    },
+    {
+      "exists": true,
+      "key": "highDeltaScan",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/high-delta-scan-for250.json"
+    },
+    {
+      "exists": true,
+      "key": "colorPremulAudit",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/color-premul-audit-for251.json"
+    }
+  ],
+  "blocked": true,
+  "blocker": {
+    "admissibleNextStep": "Add whole-scene intermediate-format candidate evidence or a policy-level renderer change that covers exact and precision-sensitive routes; do not claim an image-filter crop fix from representative-sample diagnostics only.",
+    "missingCondition": "missing_whole_scene_intermediate_rgba8_candidate_evidence_for_exact_and_precision_sensitive_routes",
+    "reasonCode": "not-bounded-to-image-filter-crop-prepass",
+    "rootCause": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+    "summary": "The selected row has complete reference/CPU/GPU/diff/stat/route evidence, but the remaining byte residual is not local to the Crop(input=Offset(null)) image-filter route. Existing diagnostics reproduce the residual on non-image-filter draw and bitmap routes, then narrow it to the RGBA16Float intermediate store-to-present byte quantization policy. A crop-only renderer change would be a hidden workaround.",
+    "supportingDiagnostics": [
+      "FOR-252",
+      "FOR-259",
+      "FOR-260"
+    ]
+  },
+  "broadDagClaim": false,
+  "closureDecision": "blocked-root-cause",
+  "current": {
+    "artifacts": {
+      "colorPremulAudit": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/color-premul-audit-for251.json",
+      "cpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+      "gpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+      "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+      "highDeltaScan": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/high-delta-scan-for250.json",
+      "reference": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/skia.png",
+      "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-cpu.json",
+      "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+      "routePrepass": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-prepass.json",
+      "stats": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json"
+    },
+    "phase": "current",
+    "residual": {
+      "alphaDeltaNonZeroPixels": 0,
+      "colorAuditMaxChannelDelta": 1,
+      "highDeltaMaxChannelDelta": 1,
+      "highDeltaTotalPixels": 6622,
+      "rgbOnlyResidualPixels": 6622,
+      "strictHighDeltaPixels": 0
+    },
+    "routeCpu": {
+      "backend": "CPU",
+      "compatibilityFallbackRoute": "kanvas-skia.current.image-filter-raster",
+      "drawKind": "SimpleOffsetImageFilterGM",
+      "fallbackReason": "none",
+      "imageFilterGraph": "Crop(kDecal, rect=20,10,60,40, input=Offset(dx=16, dy=16, input=null))",
+      "sceneId": "crop-image-filter-nonnull-prepass",
+      "selectedRoute": "cpu.image-filter.crop-nonnull.offset-oracle",
+      "sourceReport": "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
+      "test": "org.skia.gpu.webgpu.crossbackend.SimpleOffsetImageFilterCrossBackendTest"
+    },
+    "routeGpu": {
+      "backend": "WebGPU",
+      "coverageStrategy": "webgpu.image-filter.crop-nonnull-offset-prepass",
+      "drawKind": "SimpleOffsetImageFilterGM",
+      "fallbackReason": "none",
+      "intermediateTexture": "SkWebGpuDevice.cropNonNullOffsetChildPrePassScratch",
+      "pipelineKey": "layerComposite.materializeChildPrePass + imageFilterCropUvRemap",
+      "sceneId": "crop-image-filter-nonnull-prepass",
+      "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+      "sourceReport": "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
+      "status": "pass",
+      "test": "org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest"
+    },
+    "routePrepass": {
+      "backend": "WebGPU",
+      "destination": "SkWebGpuDevice.cropNonNullOffsetChildPrePassScratch",
+      "fallbackReason": "none",
+      "finalComposite": "Crop(kDecal) UV remap against scratch texture",
+      "for247ProbeResult": "scratchPixel(45,5) == sourceLocal(5,5) == rgba(202,59,19,255)",
+      "for247ScratchProbe": "scratch-probe-for247.json",
+      "for248FinalCropCompositeProbe": "final-crop-composite-probe-for248.json",
+      "for248ProbeResult": "final Crop composite sentinel reads scratchPixel(45,5) as rgba(202,59,19,102); normal final GM fragment observes rgba(220,153,145,255)",
+      "for249ProbeResult": "normal WebGPU fragment window around (385,125) matches Skia reference within maxChannelDelta=1; remaining score residual is outside this local Crop composite target window",
+      "for249ReferenceGpuResidualProbe": "reference-gpu-residual-window-for249.json",
+      "for250HighDeltaScanProbe": "high-delta-scan-for250.json",
+      "for250ProbeResult": "no pixel exceeds maxChannelDelta>8; all non-identical pixels are byte-level maxChannelDelta=1, concentrated in row1-col0, row1-col1, and row2-col3",
+      "for251ColorPremulAuditProbe": "color-premul-audit-for251.json",
+      "for251ProbeResult": "6622 residual pixels remain RGB-only byte deltas with alphaDeltaNonZeroPixels=0; dominant cells include row1-col0 no-filter, so no bounded Crop renderer correction is justified",
+      "materializeRoute": "LayerCompositeDraw.materializeToIntermediate",
+      "sampleRemap": "scratchPixel(p) samples childSource(p - offset)",
+      "sceneId": "crop-image-filter-nonnull-prepass",
+      "scratchExtentPolicy": "existing bounded child pre-pass; FOR-243 source-output layer-bounds cleanup did not move strict fidelity",
+      "source": "gpuSrc.intermediateView",
+      "stage": "child-pre-pass",
+      "supportDecision": "risk.fidelity-gap; no strict promotion",
+      "unsupportedReasonRemoved": "image-filter.crop-input-nonnull-prepass-required"
+    },
+    "stats": {
+      "cpuMatchingPixels": 108644,
+      "cpuSimilarity": 84.88,
+      "dimensions": {
+        "height": 200,
+        "width": 640
+      },
+      "gpuMatchingPixels": 126000,
+      "gpuSimilarity": 98.44,
+      "maxChannelDelta": {
+        "a": 0,
+        "b": 110,
+        "g": 107,
+        "r": 38
+      },
+      "pixels": 128000,
+      "sceneId": "crop-image-filter-nonnull-prepass",
+      "threshold": 50.0,
+      "unsupportedImageFilterAfter": 0,
+      "unsupportedImageFilterBefore": 2
+    }
+  },
+  "diagnostics": {
+    "FOR-252": {
+      "correctionApplied": false,
+      "maxChannelDelta": 1,
+      "nonImageFilterResidualSamples": [
+        {
+          "id": "simple-offsetimagefilter.row1-col0-no-filter",
+          "imageFilterInPath": false,
+          "maxChannelDelta": 1,
+          "residualPixels": 1600,
+          "route": "webgpu.canvas.draw-rect.src-over"
+        },
+        {
+          "id": "bitmap-rect-nearest.whole-scene",
+          "imageFilterInPath": false,
+          "maxChannelDelta": 1,
+          "residualPixels": 304,
+          "route": "webgpu.image-rect.strict-nearest"
+        },
+        {
+          "id": "linear-gradient-rect.whole-scene",
+          "imageFilterInPath": false,
+          "maxChannelDelta": 0,
+          "residualPixels": 0,
+          "route": "webgpu.generated.linear-gradient.rect"
+        }
+      ],
+      "path": "reports/wgsl-pipeline/scenes/artifacts/color-reference-bias-audit-for252/color-reference-bias-audit-for252.json",
+      "supportDecision": "KEEP_DIAGNOSTIC"
+    },
+    "FOR-259": {
+      "correctionApplied": false,
+      "cropPolicyChanged": false,
+      "formatStoreFinding": "rgba8_store_before_present_simulation_matches_reference_for_both_cases; current_rgba16float_store_present_matches_gpu_readback",
+      "normalRenderingChanged": false,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/intermediate-store-present-audit-for259/intermediate-store-present-audit-for259.json",
+      "remainingBoundary": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+      "supportDecision": "KEEP_DIAGNOSTIC"
+    },
+    "FOR-260": {
+      "caseCount": 5,
+      "correctionApplied": false,
+      "cropPolicyChanged": false,
+      "missingCondition": "missing_whole_scene_intermediate_rgba8_candidate_evidence_for_exact_and_precision_sensitive_routes",
+      "normalRenderingChanged": false,
+      "path": "reports/wgsl-pipeline/scenes/artifacts/intermediate-quantization-candidate-audit-for260/intermediate-quantization-candidate-audit-for260.json",
+      "remainingBoundary": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+      "residualRepresentativeRoutes": [
+        "webgpu.canvas.draw-rect.src-over",
+        "webgpu.image-rect.strict-nearest"
+      ],
+      "supportDecision": "KEEP_DIAGNOSTIC"
+    }
+  },
+  "implicitCpuReadbackFallback": false,
+  "kan042Matrix": {
+    "dependencyGatedRows": [
+      {
+        "gpuRoute": null,
+        "pmCategory": "dependency-gated",
+        "proofComplete": false,
+        "reasonCode": "image-filter.animated-image-decode-dependency-gated",
+        "rowId": "skia-gm-animatedimageblurs",
+        "status": "dependency-gated"
+      },
+      {
+        "gpuRoute": null,
+        "pmCategory": "dependency-gated",
+        "proofComplete": false,
+        "reasonCode": "image-filter.animated-codec-backdrop-dependency-gated",
+        "rowId": "skia-gm-animatedbackdropblur",
+        "status": "dependency-gated"
+      },
+      {
+        "gpuRoute": null,
+        "pmCategory": "dependency-gated",
+        "proofComplete": false,
+        "reasonCode": "image-filter.path-aa-stroke-dependency-gated",
+        "rowId": "skia-gm-imagefiltersstroked",
+        "status": "dependency-gated"
+      },
+      {
+        "gpuRoute": null,
+        "pmCategory": "dependency-gated",
+        "proofComplete": false,
+        "reasonCode": "image-filter.runtime-descriptor-scope-dependency-gated",
+        "rowId": "skia-gm-runtimeimagefilter",
+        "status": "dependency-gated"
+      }
+    ],
+    "implementationGapRows": [
+      {
+        "gpuRoute": "webgpu.image-filter.refuse",
+        "pmCategory": "implementation-gap",
+        "proofComplete": false,
+        "reasonCode": "image-filter.crop-input-nonnull-prepass-required",
+        "rowId": "image-filter-crop-nonnull-prepass-required",
+        "status": "expected-unsupported"
+      },
+      {
+        "gpuRoute": "webgpu.image-filter.refuse",
+        "pmCategory": "implementation-gap",
+        "proofComplete": false,
+        "reasonCode": "image-filter.dag-or-picture-prepass-required",
+        "rowId": "m52-big-tile-image-filter-dag-refusal",
+        "status": "expected-unsupported"
+      },
+      {
+        "gpuRoute": "webgpu.image-filter.graph.expected-unsupported",
+        "pmCategory": "implementation-gap",
+        "proofComplete": false,
+        "reasonCode": "image-filter.dag-or-picture-prepass-required",
+        "rowId": "m54-imagefilters-graph-boundary",
+        "status": "expected-unsupported"
+      },
+      {
+        "gpuRoute": null,
+        "pmCategory": "implementation-gap",
+        "proofComplete": false,
+        "reasonCode": "image-filter.blur-large-sigma-unsupported",
+        "rowId": "skia-gm-blurbigsigma",
+        "status": "expected-unsupported"
+      },
+      {
+        "gpuRoute": null,
+        "pmCategory": "implementation-gap",
+        "proofComplete": false,
+        "reasonCode": "image-filter.perspective-clip-unsupported",
+        "rowId": "skia-gm-perspectiveclip",
+        "status": "expected-unsupported"
+      },
+      {
+        "gpuRoute": null,
+        "pmCategory": "implementation-gap",
+        "proofComplete": false,
+        "reasonCode": "image-filter.xfermode-dag-unsupported",
+        "rowId": "skia-gm-xfermodeimagefilter",
+        "status": "expected-unsupported"
+      }
+    ],
+    "path": "reports/wgsl-pipeline/image-filter-residual-refusal-matrix/kan-042-image-filter-residual-refusal-matrix.json",
+    "supportableBoundedRows": [
+      {
+        "gpuRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+        "pmCategory": "supportable-bounded",
+        "proofComplete": true,
+        "reasonCode": "none",
+        "rowId": "crop-image-filter-nonnull-prepass",
+        "status": "pass"
+      },
+      {
+        "gpuRoute": "webgpu.image-filter.compose.cf-matrix-transform.final-color-filter-composite",
+        "pmCategory": "supportable-bounded",
+        "proofComplete": true,
+        "reasonCode": "none",
+        "rowId": "m61-compose-cf-matrix-transform-dag-v2",
+        "status": "pass"
+      },
+      {
+        "gpuRoute": "webgpu.image-filter.blur-bounded-prepass",
+        "pmCategory": "supportable-bounded",
+        "proofComplete": true,
+        "reasonCode": "none",
+        "rowId": "m53-imageblur-bounded-prepass",
+        "status": "pass"
+      },
+      {
+        "gpuRoute": "webgpu.image-filter.transformed-affine.materialize-final-composite",
+        "pmCategory": "supportable-bounded",
+        "proofComplete": true,
+        "reasonCode": "none",
+        "rowId": "m54-imagefilter-transformed-affine",
+        "status": "pass"
+      },
+      {
+        "gpuRoute": "webgpu.image-filter.matrix-affine.prepass",
+        "pmCategory": "supportable-bounded",
+        "proofComplete": true,
+        "reasonCode": "none",
+        "rowId": "m54-matrix-imagefilter-affine",
+        "status": "pass"
+      }
+    ]
+  },
+  "packId": "kan-052-image-filter-visual-delta",
+  "rendererChanged": false,
+  "schemaVersion": 1,
+  "selectedRow": {
+    "baseArtifactScene": "crop-image-filter-nonnull-prepass",
+    "fallbackReason": "none",
+    "gpuRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+    "intermediateTextureCount": 1,
+    "nodeCount": 2,
+    "referenceKind": "skia-upstream",
+    "rowId": "crop-image-filter-nonnull-prepass",
+    "sourceTicket": "KAN-041",
+    "status": "pass"
+  },
+  "status": "blocked",
+  "targetDocs": [
+    ".upstream/specs/wgsl-pipeline/09-image-filter-mvp-lane.md",
+    ".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md",
+    ".upstream/target/skia-like-realtime-renderer-target.md",
+    ".upstream/target/high-performance-wgsl-pipeline-target.md"
+  ],
+  "thresholdsWeakened": false,
+  "ticket": "KAN-052",
+  "validations": [
+    "rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/kan-052-image-filter-visual-delta/.gradle-codex ./gradlew --no-daemon :gpu-raster:test --tests org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest",
+    "rtk python3 scripts/test_validate_kan052_image_filter_visual_delta.py",
+    "rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/kan-052-image-filter-visual-delta/.gradle-codex ./gradlew --no-daemon validateKan052ImageFilterVisualDelta"
+  ],
+  "visualDeltaEvidence": {
+    "after": {
+      "blocked": true,
+      "blockedBy": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+      "phase": "not-materialized",
+      "reasonCode": "not-bounded-to-image-filter-crop-prepass",
+      "rendererChanged": false,
+      "requiredForAfter": "A policy-level renderer change with whole-scene candidate evidence must materialize new PNG/stat/route artifacts before this can become a renderer visual-delta pass."
+    },
+    "before": {
+      "artifacts": {
+        "colorPremulAudit": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/color-premul-audit-for251.json",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/cpu-diff.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/gpu-diff.png",
+        "highDeltaScan": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/high-delta-scan-for250.json",
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/skia.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-gpu.json",
+        "routePrepass": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/route-prepass.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/crop-image-filter-nonnull-prepass/stats.json"
+      },
+      "phase": "selected-row-existing-evidence",
+      "routeGpu": {
+        "backend": "WebGPU",
+        "coverageStrategy": "webgpu.image-filter.crop-nonnull-offset-prepass",
+        "drawKind": "SimpleOffsetImageFilterGM",
+        "fallbackReason": "none",
+        "intermediateTexture": "SkWebGpuDevice.cropNonNullOffsetChildPrePassScratch",
+        "pipelineKey": "layerComposite.materializeChildPrePass + imageFilterCropUvRemap",
+        "sceneId": "crop-image-filter-nonnull-prepass",
+        "selectedRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+        "sourceReport": "reports/wgsl-pipeline/2026-05-28-m38-crop-nonnull-prepass-implementation.md",
+        "status": "pass",
+        "test": "org.skia.gpu.webgpu.SimpleOffsetImageFilterWebGpuTest"
+      },
+      "stats": {
+        "cpuMatchingPixels": 108644,
+        "cpuSimilarity": 84.88,
+        "dimensions": {
+          "height": 200,
+          "width": 640
+        },
+        "gpuMatchingPixels": 126000,
+        "gpuSimilarity": 98.44,
+        "maxChannelDelta": {
+          "a": 0,
+          "b": 110,
+          "g": 107,
+          "r": 38
+        },
+        "pixels": 128000,
+        "sceneId": "crop-image-filter-nonnull-prepass",
+        "threshold": 50.0,
+        "unsupportedImageFilterAfter": 0,
+        "unsupportedImageFilterBefore": 2
+      }
+    },
+    "mode": "blocked-root-cause-no-renderer-after"
+  }
+}
