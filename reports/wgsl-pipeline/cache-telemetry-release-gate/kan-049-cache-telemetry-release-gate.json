@@ -1,0 +1,956 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-049",
+  "packId": "kan-049-cache-telemetry-release-gate-criteria",
+  "status": "pass",
+  "claimLevel": "cache-telemetry-release-gate-criteria",
+  "releaseBlockingChange": false,
+  "readinessDelta": 0,
+  "counterRows": [
+    {
+      "id": "headless-webgpu.shaderModuleCacheHits",
+      "counterName": "shaderModuleCacheHits",
+      "sourceClass": "observed",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "adapter": "Apple M2 Max"
+      },
+      "value": 0,
+      "coldValue": 0,
+      "lane": "frame.headless-webgpu",
+      "scope": "one generated solid-rect warm-cache snapshot",
+      "countsAsObservedWebGpuCacheTelemetry": true,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; eligible for a future candidate only through cacheTelemetry.observed-counter.candidate criteria",
+      "quarantineRationale": [
+        "single checked-in headless WebGPU snapshot is not a CI-owned baseline",
+        "variance, host/JDK/backend/adapter eligibility, owner, and negative fixture are not accepted as a release gate here"
+      ]
+    },
+    {
+      "id": "headless-webgpu.shaderModuleCacheMisses",
+      "counterName": "shaderModuleCacheMisses",
+      "sourceClass": "observed",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "adapter": "Apple M2 Max"
+      },
+      "value": 28,
+      "coldValue": 28,
+      "lane": "frame.headless-webgpu",
+      "scope": "one generated solid-rect warm-cache snapshot",
+      "countsAsObservedWebGpuCacheTelemetry": true,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; eligible for a future candidate only through cacheTelemetry.observed-counter.candidate criteria",
+      "quarantineRationale": [
+        "single checked-in headless WebGPU snapshot is not a CI-owned baseline",
+        "variance, host/JDK/backend/adapter eligibility, owner, and negative fixture are not accepted as a release gate here"
+      ]
+    },
+    {
+      "id": "headless-webgpu.pipelineCacheHits",
+      "counterName": "pipelineCacheHits",
+      "sourceClass": "observed",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "adapter": "Apple M2 Max"
+      },
+      "value": 1,
+      "coldValue": 0,
+      "lane": "frame.headless-webgpu",
+      "scope": "one generated solid-rect warm-cache snapshot",
+      "countsAsObservedWebGpuCacheTelemetry": true,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; eligible for a future candidate only through cacheTelemetry.observed-counter.candidate criteria",
+      "quarantineRationale": [
+        "single checked-in headless WebGPU snapshot is not a CI-owned baseline",
+        "variance, host/JDK/backend/adapter eligibility, owner, and negative fixture are not accepted as a release gate here"
+      ]
+    },
+    {
+      "id": "headless-webgpu.pipelineCacheMisses",
+      "counterName": "pipelineCacheMisses",
+      "sourceClass": "observed",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "adapter": "Apple M2 Max"
+      },
+      "value": 1,
+      "coldValue": 1,
+      "lane": "frame.headless-webgpu",
+      "scope": "one generated solid-rect warm-cache snapshot",
+      "countsAsObservedWebGpuCacheTelemetry": true,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; eligible for a future candidate only through cacheTelemetry.observed-counter.candidate criteria",
+      "quarantineRationale": [
+        "single checked-in headless WebGPU snapshot is not a CI-owned baseline",
+        "variance, host/JDK/backend/adapter eligibility, owner, and negative fixture are not accepted as a release gate here"
+      ]
+    },
+    {
+      "id": "headless-webgpu.resourceCacheHits",
+      "counterName": "resourceCacheHits",
+      "sourceClass": "observed",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "adapter": "Apple M2 Max"
+      },
+      "value": 0,
+      "coldValue": 0,
+      "lane": "frame.headless-webgpu",
+      "scope": "one generated solid-rect warm-cache snapshot",
+      "countsAsObservedWebGpuCacheTelemetry": true,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; eligible for a future candidate only through cacheTelemetry.observed-counter.candidate criteria",
+      "quarantineRationale": [
+        "single checked-in headless WebGPU snapshot is not a CI-owned baseline",
+        "variance, host/JDK/backend/adapter eligibility, owner, and negative fixture are not accepted as a release gate here"
+      ]
+    },
+    {
+      "id": "headless-webgpu.resourceCacheMisses",
+      "counterName": "resourceCacheMisses",
+      "sourceClass": "observed",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "adapter": "Apple M2 Max"
+      },
+      "value": 0,
+      "coldValue": 0,
+      "lane": "frame.headless-webgpu",
+      "scope": "one generated solid-rect warm-cache snapshot",
+      "countsAsObservedWebGpuCacheTelemetry": true,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; eligible for a future candidate only through cacheTelemetry.observed-counter.candidate criteria",
+      "quarantineRationale": [
+        "single checked-in headless WebGPU snapshot is not a CI-owned baseline",
+        "variance, host/JDK/backend/adapter eligibility, owner, and negative fixture are not accepted as a release gate here"
+      ]
+    },
+    {
+      "id": "headless-webgpu.pipelineCreations",
+      "counterName": "pipelineCreations",
+      "sourceClass": "observed",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "adapter": "Apple M2 Max"
+      },
+      "value": 1,
+      "coldValue": 1,
+      "lane": "frame.headless-webgpu",
+      "scope": "one generated solid-rect warm-cache snapshot",
+      "countsAsObservedWebGpuCacheTelemetry": true,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; eligible for a future candidate only through cacheTelemetry.observed-counter.candidate criteria",
+      "quarantineRationale": [
+        "single checked-in headless WebGPU snapshot is not a CI-owned baseline",
+        "variance, host/JDK/backend/adapter eligibility, owner, and negative fixture are not accepted as a release gate here"
+      ]
+    },
+    {
+      "id": "headless-webgpu.shaderModuleCount",
+      "counterName": "shaderModuleCount",
+      "sourceClass": "observed",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "adapter": "Apple M2 Max"
+      },
+      "value": 30,
+      "coldValue": 30,
+      "lane": "frame.headless-webgpu",
+      "scope": "one generated solid-rect warm-cache snapshot",
+      "countsAsObservedWebGpuCacheTelemetry": true,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; eligible for a future candidate only through cacheTelemetry.observed-counter.candidate criteria",
+      "quarantineRationale": [
+        "single checked-in headless WebGPU snapshot is not a CI-owned baseline",
+        "variance, host/JDK/backend/adapter eligibility, owner, and negative fixture are not accepted as a release gate here"
+      ]
+    },
+    {
+      "id": "headless-webgpu.pipelineCacheEntryCount",
+      "counterName": "pipelineCacheEntryCount",
+      "sourceClass": "observed",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "adapter": "Apple M2 Max"
+      },
+      "value": 1,
+      "coldValue": 1,
+      "lane": "frame.headless-webgpu",
+      "scope": "one generated solid-rect warm-cache snapshot",
+      "countsAsObservedWebGpuCacheTelemetry": true,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; eligible for a future candidate only through cacheTelemetry.observed-counter.candidate criteria",
+      "quarantineRationale": [
+        "single checked-in headless WebGPU snapshot is not a CI-owned baseline",
+        "variance, host/JDK/backend/adapter eligibility, owner, and negative fixture are not accepted as a release gate here"
+      ]
+    },
+    {
+      "id": "headless-webgpu.resourceCacheEntryCount",
+      "counterName": "resourceCacheEntryCount",
+      "sourceClass": "observed",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/headless-webgpu-cache-counters-for315.json",
+        "sourceApi": "SkWebGpuDevice.cacheTelemetrySnapshot()",
+        "sourceTest": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/GeneratedSolidRectMigrationTest.kt",
+        "backend": "WebGPU",
+        "executionMode": "headless",
+        "adapter": "Apple M2 Max"
+      },
+      "value": 0,
+      "coldValue": 0,
+      "lane": "frame.headless-webgpu",
+      "scope": "one generated solid-rect warm-cache snapshot",
+      "countsAsObservedWebGpuCacheTelemetry": true,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; eligible for a future candidate only through cacheTelemetry.observed-counter.candidate criteria",
+      "quarantineRationale": [
+        "single checked-in headless WebGPU snapshot is not a CI-owned baseline",
+        "variance, host/JDK/backend/adapter eligibility, owner, and negative fixture are not accepted as a release gate here"
+      ]
+    },
+    {
+      "id": "native-route.pipelineCacheHits",
+      "counterName": "pipelineCacheHits",
+      "sourceClass": "observed-partial",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+        "source": "mep-next.cache-observed-partial-native-route",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 0,
+      "lane": "frame.kadre-windowed",
+      "scope": "selected native route creation/churn only",
+      "missingCounterFamilies": [
+        "shaderModule",
+        "pipeline",
+        "bindGroup",
+        "resource-cache-hit-miss"
+      ],
+      "stableMissingCounterReason": "mep-next.native-cache-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; not eligible until full observed cache hit/miss counters exist"
+    },
+    {
+      "id": "native-route.pipelineCacheMisses",
+      "counterName": "pipelineCacheMisses",
+      "sourceClass": "observed-partial",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+        "source": "mep-next.cache-observed-partial-native-route",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 180,
+      "lane": "frame.kadre-windowed",
+      "scope": "selected native route creation/churn only",
+      "missingCounterFamilies": [
+        "shaderModule",
+        "pipeline",
+        "bindGroup",
+        "resource-cache-hit-miss"
+      ],
+      "stableMissingCounterReason": "mep-next.native-cache-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; not eligible until full observed cache hit/miss counters exist"
+    },
+    {
+      "id": "native-route.shaderModuleCreates",
+      "counterName": "shaderModuleCreates",
+      "sourceClass": "observed-partial",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+        "source": "mep-next.cache-observed-partial-native-route",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 180,
+      "lane": "frame.kadre-windowed",
+      "scope": "selected native route creation/churn only",
+      "missingCounterFamilies": [
+        "shaderModule",
+        "pipeline",
+        "bindGroup",
+        "resource-cache-hit-miss"
+      ],
+      "stableMissingCounterReason": "mep-next.native-cache-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; not eligible until full observed cache hit/miss counters exist"
+    },
+    {
+      "id": "native-route.pipelineCreates",
+      "counterName": "pipelineCreates",
+      "sourceClass": "observed-partial",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+        "source": "mep-next.cache-observed-partial-native-route",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 180,
+      "lane": "frame.kadre-windowed",
+      "scope": "selected native route creation/churn only",
+      "missingCounterFamilies": [
+        "shaderModule",
+        "pipeline",
+        "bindGroup",
+        "resource-cache-hit-miss"
+      ],
+      "stableMissingCounterReason": "mep-next.native-cache-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; not eligible until full observed cache hit/miss counters exist"
+    },
+    {
+      "id": "native-route.bindGroupCreates",
+      "counterName": "bindGroupCreates",
+      "sourceClass": "observed-partial",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+        "source": "mep-next.cache-observed-partial-native-route",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 0,
+      "lane": "frame.kadre-windowed",
+      "scope": "selected native route creation/churn only",
+      "missingCounterFamilies": [
+        "shaderModule",
+        "pipeline",
+        "bindGroup",
+        "resource-cache-hit-miss"
+      ],
+      "stableMissingCounterReason": "mep-next.native-cache-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; not eligible until full observed cache hit/miss counters exist"
+    },
+    {
+      "id": "native-route.textureUploads",
+      "counterName": "textureUploads",
+      "sourceClass": "observed-partial",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+        "source": "mep-next.cache-observed-partial-native-route",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 0,
+      "lane": "frame.kadre-windowed",
+      "scope": "selected native route creation/churn only",
+      "missingCounterFamilies": [
+        "shaderModule",
+        "pipeline",
+        "bindGroup",
+        "resource-cache-hit-miss"
+      ],
+      "stableMissingCounterReason": "mep-next.native-cache-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; not eligible until full observed cache hit/miss counters exist"
+    },
+    {
+      "id": "native-route.intermediateTextureBytes",
+      "counterName": "intermediateTextureBytes",
+      "sourceClass": "observed-partial",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m90-runtime-interactive/telemetry-live.json",
+        "source": "mep-next.cache-observed-partial-native-route",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 0,
+      "lane": "frame.kadre-windowed",
+      "scope": "selected native route creation/churn only",
+      "missingCounterFamilies": [
+        "shaderModule",
+        "pipeline",
+        "bindGroup",
+        "resource-cache-hit-miss"
+      ],
+      "stableMissingCounterReason": "mep-next.native-cache-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "reporting-only; not eligible until full observed cache hit/miss counters exist"
+    },
+    {
+      "id": "m85-derived.frameCount",
+      "counterName": "frameCount",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 180,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.pipelineCacheHits",
+      "counterName": "pipelineCacheHits",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 179,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.pipelineCacheMisses",
+      "counterName": "pipelineCacheMisses",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 1,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.shaderModuleCount",
+      "counterName": "shaderModuleCount",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 1,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.pipelineCount",
+      "counterName": "pipelineCount",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 1,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.bindGroupCount",
+      "counterName": "bindGroupCount",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 1,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.textureCount",
+      "counterName": "textureCount",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 2,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.textureUploadBytes",
+      "counterName": "textureUploadBytes",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 1075200,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.intermediateTextureBytes",
+      "counterName": "intermediateTextureBytes",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 0,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.bindGroupChurn",
+      "counterName": "bindGroupChurn",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 0,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.resourceGenerationCount",
+      "counterName": "resourceGenerationCount",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 3,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "m85-derived.invalidResourceReuseCount",
+      "counterName": "invalidResourceReuseCount",
+      "sourceClass": "derived",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m85-resource-lifetime-cache/evidence.json",
+        "counterSource": "derived-selected-scene-resource-ledger",
+        "sceneContractId": "m83-display-list-pm-scene-v1",
+        "lane": "frame.kadre-windowed"
+      },
+      "value": 0,
+      "lane": "frame.kadre-windowed",
+      "scope": "deterministic selected-scene resource/cache ledger",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "PM diagnostics only; cannot count as observed cache readiness"
+    },
+    {
+      "id": "native-callbacks.broadWebGpuCacheHitCallbacks",
+      "counterName": "broad-webgpu-cache-hit-callbacks",
+      "sourceClass": "unavailable",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+        "sourceRowId": "broad-webgpu-cache-hit-callbacks",
+        "blockerOwner": "external Kadre/wgpu4k integration",
+        "unblockCondition": "Expose observed shader, pipeline, bind-group, and cache hit/miss callbacks from the native route."
+      },
+      "lane": "frame.kadre-windowed",
+      "scope": "broad native route cache/resource callbacks",
+      "stableMissingCounterReason": "kadre-runtime.native-cache-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "blocked until the missing counter is observable from a named source artifact"
+    },
+    {
+      "id": "native-callbacks.bindGroupCacheCallbacks",
+      "counterName": "bind-group-cache-callbacks",
+      "sourceClass": "unavailable",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+        "sourceRowId": "bind-group-cache-callbacks",
+        "blockerOwner": "external Kadre/wgpu4k integration",
+        "unblockCondition": "Expose observed shader, pipeline, bind-group, and cache hit/miss callbacks from the native route."
+      },
+      "lane": "frame.kadre-windowed",
+      "scope": "broad native route cache/resource callbacks",
+      "stableMissingCounterReason": "kadre-runtime.native-cache-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "blocked until the missing counter is observable from a named source artifact"
+    },
+    {
+      "id": "native-callbacks.nativeResourceFreeCallbacks",
+      "counterName": "native-resource-free-callbacks",
+      "sourceClass": "unavailable",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+        "sourceRowId": "native-resource-free-callbacks",
+        "blockerOwner": "external Kadre/wgpu4k integration",
+        "unblockCondition": "Expose allocation/free/resource lifetime snapshots for surface resize and scene switch transitions."
+      },
+      "lane": "frame.kadre-windowed",
+      "scope": "broad native route cache/resource callbacks",
+      "stableMissingCounterReason": "kadre-runtime.resource-lifetime-observation-partial",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "blocked until the missing counter is observable from a named source artifact"
+    },
+    {
+      "id": "native-callbacks.adapterOwnedMemorySnapshots",
+      "counterName": "adapter-owned-memory-snapshots",
+      "sourceClass": "unavailable",
+      "provenance": {
+        "sourceArtifact": "reports/wgsl-pipeline/m92-kadre-runtime-rc/telemetry-classification.json",
+        "sourceRowId": "adapter-owned-memory-snapshots",
+        "blockerOwner": "external Kadre/wgpu4k integration",
+        "unblockCondition": "Expose allocation/free/resource lifetime snapshots for surface resize and scene switch transitions."
+      },
+      "lane": "frame.kadre-windowed",
+      "scope": "broad native route cache/resource callbacks",
+      "stableMissingCounterReason": "kadre-runtime.resource-lifetime-observation-partial",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "blocked until the missing counter is observable from a named source artifact"
+    },
+    {
+      "id": "native-route.commandEncoderCount",
+      "counterName": "commandEncoderCount",
+      "sourceClass": "unavailable",
+      "provenance": {
+        "sourceArtifact": ".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md",
+        "sourceRequirement": "Resource telemetry per frame: command encoder/pass count.",
+        "blockerOwner": "Kanvas WebGPU instrumentation",
+        "unblockCondition": "Serialize command encoder and render-pass counts from the runtime frame telemetry artifact."
+      },
+      "lane": "frame.headless-webgpu-or-frame.kadre-windowed",
+      "scope": "runtime frame telemetry schema",
+      "stableMissingCounterReason": "kan049.command-pass-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "unavailable; must not be synthesized from code comments or render-pass diagnostics"
+    },
+    {
+      "id": "native-route.renderPassCount",
+      "counterName": "renderPassCount",
+      "sourceClass": "unavailable",
+      "provenance": {
+        "sourceArtifact": ".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md",
+        "sourceRequirement": "Resource telemetry per frame: command encoder/pass count.",
+        "blockerOwner": "Kanvas WebGPU instrumentation",
+        "unblockCondition": "Serialize command encoder and render-pass counts from the runtime frame telemetry artifact."
+      },
+      "lane": "frame.headless-webgpu-or-frame.kadre-windowed",
+      "scope": "runtime frame telemetry schema",
+      "stableMissingCounterReason": "kan049.command-pass-counter-unavailable",
+      "countsAsObservedWebGpuCacheTelemetry": false,
+      "countedAsCacheReadinessGate": false,
+      "countedAsMeasuredGate": false,
+      "releaseBlocking": false,
+      "gateTreatment": "unavailable; must not be synthesized from code comments or render-pass diagnostics"
+    }
+  ],
+  "gateCriteria": {
+    "candidate": {
+      "name": "cacheTelemetry.observed-counter.candidate",
+      "allowedSourceClass": "observed",
+      "requires": [
+        "named observed source artifact from headless/native runtime execution",
+        "host/JDK/backend/adapter metadata",
+        "CI-owned baseline and eligible adapter policy",
+        "variance policy with quarantine owner",
+        "negative fixture proving the failure path",
+        "explicit exclusion of derived M85 ledgers and observed-partial native churn"
+      ],
+      "forbidden": [
+        "derived selected-scene ledgers counted as observed telemetry",
+        "observed-partial native route creation/churn counted as cache hit/miss telemetry",
+        "unavailable counters filled by estimates"
+      ]
+    },
+    "releaseBlocking": {
+      "name": "cacheTelemetry.observed-counter.release-blocking",
+      "allowedSourceClass": "observed",
+      "requires": [
+        "candidate gate accepted by release owner",
+        "threshold, baseline commit, owner, and rollback policy",
+        "negative fixture in CI that fails without mutating checked-in baselines",
+        "quarantine/rebaseline policy for host, JDK, backend, and adapter mismatch",
+        "metadata violation fails the selected gate"
+      ],
+      "forbidden": [
+        "skipping reporting-only or candidate phases",
+        "promoting frame.kadre-windowed without owned hardware and accepted variance",
+        "moving readiness from cache telemetry with derived or unavailable counters"
+      ]
+    }
+  },
+  "gateCandidates": [
+    {
+      "id": "headless-webgpu-cacheTelemetrySnapshot",
+      "sourceClass": "observed",
+      "phase": "reporting-only",
+      "candidateCriteriaName": "cacheTelemetry.observed-counter.candidate",
+      "releaseBlockingCriteriaName": "cacheTelemetry.observed-counter.release-blocking",
+      "negativeFixture": "reports/wgsl-pipeline/cache-telemetry-release-gate/kan-049-cache-telemetry-negative-fixture.json",
+      "quarantineRationale": [
+        "FOR-315 is a checked-in single-scenario snapshot, not a CI-owned baseline.",
+        "Adapter eligibility, variance, threshold, owner, and rollback policy are not accepted here."
+      ],
+      "releaseBlocking": false
+    }
+  ],
+  "negativeFixture": {
+    "schemaVersion": 1,
+    "id": "kan049-cache-telemetry-promotion-negative-fixture",
+    "status": "expected-fail",
+    "mutatesBaseline": false,
+    "cases": [
+      {
+        "id": "m85-derived-ledger-promoted-as-observed",
+        "sourceClass": "derived",
+        "attemptedPromotion": "observed",
+        "expectedFailureReason": "kan049.derived-ledger-not-observed-webgpu-cache-telemetry"
+      },
+      {
+        "id": "m90-observed-partial-native-route-promoted",
+        "sourceClass": "observed-partial",
+        "attemptedPromotion": "release-blocking",
+        "expectedFailureReason": "kan049.observed-partial-missing-full-cache-counter-family"
+      },
+      {
+        "id": "native-callback-unavailable-promoted",
+        "sourceClass": "unavailable",
+        "attemptedPromotion": "candidate",
+        "expectedFailureReason": "kan049.unavailable-counter-missing-observed-source"
+      },
+      {
+        "id": "headless-observed-snapshot-release-blocking-without-policy",
+        "sourceClass": "observed",
+        "attemptedPromotion": "release-blocking",
+        "expectedFailureReason": "kan049.observed-counter-missing-release-gate-policy"
+      }
+    ],
+    "assertion": "Counters that are derived, observed-partial, unavailable, or observed without an accepted gate policy fail promotion without rewriting baselines."
+  },
+  "gateFreezeDelta": {
+    "schemaVersion": 1,
+    "id": "kan049-cache-telemetry-gate-freeze-delta",
+    "status": "pass",
+    "sourceArtifact": "reports/wgsl-pipeline/m88-realtime-rc2/gate-freeze.json",
+    "baselinePerformanceGates": [
+      "pipelinePerformanceReleaseGate",
+      "m67 frame.headless-webgpu",
+      "m84 frame.kadre-windowed",
+      "m85 resource/cache ledger"
+    ],
+    "addedValidationOnlyGates": [
+      "validateKan049CacheTelemetryReleaseGateCriteria"
+    ],
+    "changedReleaseBlockingGates": [],
+    "promotedCacheTelemetryGates": [],
+    "phaseDeltas": [
+      {
+        "gate": "m85 resource/cache ledger",
+        "before": "reporting-only",
+        "after": "reporting-only",
+        "reason": "M85 remains a derived selected-scene ledger, not observed WebGPU runtime cache telemetry."
+      },
+      {
+        "gate": "headless WebGPU cacheTelemetrySnapshot",
+        "before": "not-listed-as-release-gate",
+        "after": "reporting-only-classification-only",
+        "reason": "FOR-315 is observed evidence but lacks accepted baseline, variance, owner, and release-gate negative fixture policy."
+      }
+    ],
+    "nonClaims": [
+      "KAN-049 does not add a release-blocking cache telemetry gate.",
+      "KAN-049 does not promote frame.kadre-windowed timing to release-grade FPS.",
+      "KAN-049 does not count M85 derived ledgers as observed WebGPU cache telemetry."
+    ]
+  },
+  "sourceAudit": {
+    "runtimeSpec": ".upstream/specs/skia-like-realtime/02-realtime-runtime-architecture.md",
+    "performanceSpec": ".upstream/specs/skia-like-realtime/04-performance-tiering-and-release-gates.md",
+    "targetRenderer": ".upstream/target/skia-like-realtime-renderer-target.md",
+    "targetWgsl": ".upstream/target/high-performance-wgsl-pipeline-target.md",
+    "kan020Policy": "reports/wgsl-pipeline/performance/kan-020-slice-performance-minimum.json",
+    "kan021SelectedTelemetry": "reports/wgsl-pipeline/m85-resource-lifetime-cache/kan-021-selected-telemetry.json",
+    "kan048PerformanceFamilyBudgets": "reports/wgsl-pipeline/performance-family-budgets/kan-048-performance-family-budgets.json",
+    "for314SourceMap": "reports/wgsl-pipeline/runtime-cache-counter-source-map-for314.json",
+    "for317Closeout": "reports/wgsl-pipeline/runtime-cache-telemetry-closeout-for317.json"
+  },
+  "nonClaims": [
+    "KAN-049 does not add a release-blocking cache telemetry gate.",
+    "KAN-049 does not claim arbitrary scene cache readiness.",
+    "KAN-049 does not claim device-lost recovery.",
+    "KAN-049 does not promote frame.kadre-windowed FPS to release-grade.",
+    "KAN-049 does not count M85 derived ledgers as observed WebGPU cache telemetry.",
+    "KAN-049 does not count observed-partial native route creation/churn as broad cache hit/miss telemetry."
+  ],
+  "requiredValidation": [
+    "validateKan049CacheTelemetryReleaseGateCriteria",
+    "pipelineConformance",
+    "pipelinePmBundle"
+  ],
+  "claimGuard": {
+    "invalidSourceClasses": [],
+    "missingSourceClasses": [],
+    "rowsMissingProvenance": [],
+    "observedRowsMissingArtifact": [],
+    "unavailableRowsMissingReason": [],
+    "derivedRowsCountedObserved": [],
+    "m85DerivedLedgerCountedObserved": [],
+    "observedPartialRowsPromoted": [],
+    "releaseBlockingRows": [],
+    "cacheReadinessGateRows": [],
+    "candidateRowsMissingFixtureOrQuarantine": [],
+    "gateFreezeReleaseBlockingDelta": [],
+    "missingRequiredRows": []
+  },
+  "summary": {
+    "counterRows": 35,
+    "observedRows": 10,
+    "observedPartialRows": 7,
+    "derivedRows": 12,
+    "unavailableRows": 6,
+    "releaseBlockingRows": 0,
+    "m85DerivedLedgerCountedObserved": 0,
+    "unavailableRowsMissingReason": 0
+  }
+}

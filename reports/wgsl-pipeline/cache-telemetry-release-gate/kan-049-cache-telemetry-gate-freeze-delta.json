@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "kan049-cache-telemetry-gate-freeze-delta",
+  "status": "pass",
+  "sourceArtifact": "reports/wgsl-pipeline/m88-realtime-rc2/gate-freeze.json",
+  "baselinePerformanceGates": [
+    "pipelinePerformanceReleaseGate",
+    "m67 frame.headless-webgpu",
+    "m84 frame.kadre-windowed",
+    "m85 resource/cache ledger"
+  ],
+  "addedValidationOnlyGates": [
+    "validateKan049CacheTelemetryReleaseGateCriteria"
+  ],
+  "changedReleaseBlockingGates": [],
+  "promotedCacheTelemetryGates": [],
+  "phaseDeltas": [
+    {
+      "gate": "m85 resource/cache ledger",
+      "before": "reporting-only",
+      "after": "reporting-only",
+      "reason": "M85 remains a derived selected-scene ledger, not observed WebGPU runtime cache telemetry."
+    },
+    {
+      "gate": "headless WebGPU cacheTelemetrySnapshot",
+      "before": "not-listed-as-release-gate",
+      "after": "reporting-only-classification-only",
+      "reason": "FOR-315 is observed evidence but lacks accepted baseline, variance, owner, and release-gate negative fixture policy."
+    }
+  ],
+  "nonClaims": [
+    "KAN-049 does not add a release-blocking cache telemetry gate.",
+    "KAN-049 does not promote frame.kadre-windowed timing to release-grade FPS.",
+    "KAN-049 does not count M85 derived ledgers as observed WebGPU cache telemetry."
+  ]
+}
