@@ -1,0 +1,692 @@
+{
+  "schemaVersion": 1,
+  "ticket": "KAN-047",
+  "packId": "kan-047-codec-provenance-matrix",
+  "status": "pass",
+  "closureDecision": "codec-provenance-matrix",
+  "claimLevel": "pm-codec-provenance-evidence",
+  "rendererChanged": false,
+  "codecRuntimeChanged": false,
+  "thresholdsWeakened": false,
+  "nativeJniBridgeClaim": false,
+  "animatedRendererSupportClaim": false,
+  "sceneRows": [
+    {
+      "rowId": "paint.bitmap-rect.nearest.fixture.v1",
+      "pmCategory": "deterministic-fixture-scene",
+      "status": "pass",
+      "format": "raw-rgba8888-fixture",
+      "decoder": {
+        "name": "none",
+        "kind": "deterministic-fixture",
+        "module": null
+      },
+      "colorInfo": {
+        "colorType": "RGBA_8888",
+        "colorSpace": "sRGB",
+        "alphaType": "unpremul",
+        "policy": "srgb-unmanaged-fixture-oracle"
+      },
+      "origin": {
+        "kind": "in-repo-deterministic-fixture",
+        "fixtureId": "kanvas-fixture-checker-8x6-rgba8888-v1",
+        "fixtureSha256": "bdd9a379cdc796aa06e09414cb757cb60490b01ad99e94bd929aa3951681ec3d",
+        "sourceEvidence": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-webgpu.json"
+      },
+      "decodeResult": {
+        "status": "fixture-no-codec-decode",
+        "result": "not-applicable"
+      },
+      "supportClaim": "simple-fixture-backed-bitmap-rect-nearest",
+      "reasonCode": "none",
+      "route": {
+        "cpu": "cpu.paint.bitmap-rect.nearest.fixture",
+        "gpu": "webgpu.image.bitmap-rect.nearest.fixture",
+        "fallbackReason": "none",
+        "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kClamp state=[blendMode=kSrcOver]"
+      },
+      "stats": {
+        "matchingPixels": 15360,
+        "gpuMatchingPixels": 15360,
+        "globalThresholdChanged": false
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/reference.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/webgpu.png",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/stats.json",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-webgpu.json"
+      },
+      "nonClaims": [
+        "no-broad-image-claim",
+        "no-codec-decode-claim",
+        "no-arbitrary-texture-claim",
+        "no-mipmap-claim",
+        "no-tile-mode-claim",
+        "no-color-managed-decode-claim",
+        "no-texture-atlas-claim",
+        "no-perspective-transform-claim",
+        "no-broad-codec-support-claim",
+        "no-native-jni-bridge-claim",
+        "no-animated-renderer-support-claim"
+      ]
+    },
+    {
+      "rowId": "bitmap-shader-repeat-tile",
+      "pmCategory": "deterministic-fixture-scene",
+      "status": "pass",
+      "format": "raw-rgba8-programmatic-image",
+      "decoder": {
+        "name": "none",
+        "kind": "deterministic-fixture",
+        "module": null
+      },
+      "colorInfo": {
+        "colorType": "RGBA_8888",
+        "colorSpace": "sRGB",
+        "alphaType": "opaque",
+        "policy": "in-test quadrant image, unmanaged sRGB byte oracle"
+      },
+      "origin": {
+        "kind": "in-test-programmatic-image",
+        "sourceEvidence": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/BitmapShaderPaintRectTest.kt#makeQuadrantImage"
+      },
+      "decodeResult": {
+        "status": "fixture-no-codec-decode",
+        "result": "not-applicable"
+      },
+      "supportClaim": "bounded-bitmap-sampling-only",
+      "reasonCode": "none",
+      "route": {
+        "cpu": "cpu.shader.bitmap.repeat-tile-oracle",
+        "gpu": "webgpu.shader.bitmap.repeat-tile",
+        "fallbackReason": "none",
+        "cpuFallbackReason": "none",
+        "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat localMatrix=identity state=[blendMode=kSrcOver]",
+        "routeCpuJson": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
+        "routeGpuJson": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 4096,
+        "matchingPixels": 4096,
+        "gpuMatchingPixels": 4096,
+        "threshold": 99.95,
+        "gpuStatus": "pass",
+        "adapter": "Apple M2 Max"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json"
+      },
+      "nonClaims": [
+        "no-arbitrary-texture-claim",
+        "no-codec-decode-claim",
+        "no-perspective-sampling-claim",
+        "no-color-managed-decode-claim",
+        "no-mipmap-support-claim",
+        "no-broad-tile-mode-claim",
+        "no-broad-codec-support-claim",
+        "no-native-jni-bridge-claim",
+        "no-animated-renderer-support-claim"
+      ]
+    },
+    {
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "pmCategory": "real-codec-decoded-scene-source",
+      "status": "pass",
+      "format": "PNG",
+      "decoder": {
+        "name": "png",
+        "kind": "portable-codec",
+        "module": "codec-png-kotlin",
+        "dispatch": "ToolUtils.GetResourceAsImage -> SkCodec.MakeFromData -> SkCodec.getImage"
+      },
+      "colorInfo": {
+        "colorType": "codec-natural RGBA_8888",
+        "colorSpace": "codec reported color space, sampled as selected bitmap shader source",
+        "alphaType": "codec natural alpha",
+        "policy": "codec decode is source material only; KAN-046 support claim remains bitmap sampling, not broad codec or color-managed decode"
+      },
+      "origin": {
+        "kind": "skia-resource-encoded-image",
+        "resource": "images/color_wheel.png",
+        "sourceEvidence": "skia-integration-tests/src/main/kotlin/org/skia/tests/BitmapSubsetShaderGM.kt"
+      },
+      "decodeResult": {
+        "status": "kSuccess",
+        "result": "ToolUtils.GetResourceAsImage returns decoded SkImage before subset copy"
+      },
+      "supportClaim": "bounded-bitmap-sampling-only",
+      "reasonCode": "none",
+      "route": {
+        "cpu": "cpu.shader.bitmap.subset-local-matrix-repeat",
+        "gpu": "webgpu.shader.bitmap.subset-local-matrix-repeat",
+        "fallbackReason": "none",
+        "cpuFallbackReason": "none",
+        "pipelineKey": "shaderFamily=bitmapShader sampling=nearest tile=kRepeat/kRepeat subset=true localMatrix=scaleRotate state=[blendMode=kSrcOver]",
+        "routeCpuJson": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+        "routeGpuJson": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json"
+      },
+      "stats": {
+        "pixels": 65536,
+        "matchingPixels": 65536,
+        "gpuMatchingPixels": 65536,
+        "threshold": 99.94,
+        "gpuStatus": "pass",
+        "adapter": "Apple M2 Max"
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+        "gpuDiff": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json"
+      },
+      "nonClaims": [
+        "no-arbitrary-texture-claim",
+        "no-codec-decode-claim",
+        "no-perspective-sampling-claim",
+        "no-color-managed-decode-claim",
+        "no-mipmap-support-claim",
+        "no-broad-tile-mode-claim",
+        "no-broad-codec-support-claim",
+        "no-native-jni-bridge-claim",
+        "no-animated-renderer-support-claim"
+      ]
+    },
+    {
+      "rowId": "d54-skia-gm-image",
+      "pmCategory": "deterministic-surface-snapshot-reference",
+      "status": "expected-unsupported",
+      "format": "surface-snapshot-with-png-reference-artifact",
+      "decoder": {
+        "name": "none",
+        "kind": "surface-snapshot",
+        "module": null
+      },
+      "colorInfo": {
+        "colorType": "SkSurface.MakeRaster N32",
+        "colorSpace": "default sRGB raster surface",
+        "alphaType": "premul",
+        "policy": "reference PNG is comparison evidence, not scene codec support"
+      },
+      "origin": {
+        "kind": "generated-skia-gm-surface-snapshot",
+        "referencePath": "skia-integration-tests/src/test/resources/original-888/image-surface.png",
+        "sourceEvidence": "skia-integration-tests/src/main/kotlin/org/skia/tests/ImageGM.kt"
+      },
+      "decodeResult": {
+        "status": "generated-surface-no-codec-decode",
+        "result": "GM creates raster surface snapshots; PNG reference is evidence-only"
+      },
+      "supportClaim": false,
+      "reasonCode": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required",
+      "route": {
+        "cpu": "cpu.raster.dm-reference-colorspace.imagegm-surface-snapshot",
+        "gpu": "webgpu.refusal.imagegm.surface-snapshot-drawimage",
+        "fallbackReason": "image.imagegm.surface-snapshot-drawimage-webgpu-artifacts-required",
+        "pipelineKey": "not-promoted-by-D54-1"
+      },
+      "stats": {
+        "cpuSimilarity": 98.4826,
+        "gpuSimilarity": 98.5962,
+        "globalThresholdChanged": false,
+        "broadImageDecodeClaim": false
+      },
+      "artifacts": {
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/skia.png",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/cpu.png",
+        "gpu": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/gpu.png",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/stats.json",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/route-cpu.json",
+        "routeGpu": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/route-gpu.json"
+      },
+      "nonClaims": [
+        "no-broad-codec-support-claim",
+        "no-arbitrary-texture-claim",
+        "no-color-managed-decode-claim",
+        "no-native-jni-bridge-claim",
+        "no-animated-renderer-support-claim",
+        "no-codec-decode-claim",
+        "no-webgpu-imagegm-support-claim"
+      ]
+    },
+    {
+      "rowId": "animated-image-gm-stoplight-webp",
+      "pmCategory": "animated-image-scene-dependency-gated",
+      "status": "dependency-gated",
+      "format": "WebP",
+      "decoder": {
+        "name": "webp",
+        "kind": "portable-codec-plus-missing-scene-pipeline",
+        "module": "codec-webp-kotlin"
+      },
+      "colorInfo": {
+        "colorType": "RGBA_8888 for supported WebP frame encodings",
+        "colorSpace": "sRGB output; VP8X ICC parsed when parseable",
+        "alphaType": "codec frame alpha when supported",
+        "policy": "SkAnimatedImage scene pipeline is disabled; no animated renderer support"
+      },
+      "origin": {
+        "kind": "skia-resource-encoded-animation",
+        "resource": "images/stoplight_h.webp",
+        "sourceEvidence": "skia-integration-tests/src/main/kotlin/org/skia/tests/AnimatedImageGM.kt"
+      },
+      "decodeResult": {
+        "status": "scene-pipeline-disabled",
+        "result": "AnimatedImage WebGPU/CrossBackend tests are @Disabled(STUB.ANIMATED_IMAGE)"
+      },
+      "supportClaim": false,
+      "reasonCode": "codec.animated-frame-unsupported",
+      "nonClaims": [
+        "no-broad-codec-support-claim",
+        "no-arbitrary-texture-claim",
+        "no-color-managed-decode-claim",
+        "no-native-jni-bridge-claim",
+        "no-animated-renderer-support-claim",
+        "no-scene-pass-from-animated-codec-metadata"
+      ]
+    },
+    {
+      "rowId": "animated-image-gm-flight-gif",
+      "pmCategory": "animated-image-scene-dependency-gated",
+      "status": "dependency-gated",
+      "format": "GIF",
+      "decoder": {
+        "name": "gif",
+        "kind": "portable-codec-plus-missing-scene-pipeline",
+        "module": "codec-gif-kotlin"
+      },
+      "colorInfo": {
+        "colorType": "RGBA_8888 indexed-frame output",
+        "colorSpace": "sRGB output",
+        "alphaType": "transparent color index when present",
+        "policy": "SkAnimatedImage scene pipeline is disabled; no animated renderer support"
+      },
+      "origin": {
+        "kind": "skia-resource-encoded-animation",
+        "resource": "images/flightAnim.gif",
+        "sourceEvidence": "skia-integration-tests/src/main/kotlin/org/skia/tests/AnimatedImageGM.kt"
+      },
+      "decodeResult": {
+        "status": "scene-pipeline-disabled",
+        "result": "AnimatedImage WebGPU/CrossBackend tests are @Disabled(STUB.ANIMATED_IMAGE)"
+      },
+      "supportClaim": false,
+      "reasonCode": "codec.animated-frame-unsupported",
+      "nonClaims": [
+        "no-broad-codec-support-claim",
+        "no-arbitrary-texture-claim",
+        "no-color-managed-decode-claim",
+        "no-native-jni-bridge-claim",
+        "no-animated-renderer-support-claim",
+        "no-scene-pass-from-animated-codec-metadata"
+      ]
+    }
+  ],
+  "codecFormatRows": [
+    {
+      "format": "PNG",
+      "status": "supported",
+      "decoder": {
+        "name": "png",
+        "kind": "portable-codec",
+        "module": "codec-png-kotlin"
+      },
+      "colorInfo": "iCCP best effort; sRGB/gAMA/cHRM structurally validated; 16 bpc PNG decodes to RGBA_F16Norm where covered",
+      "origin": "codec-real-image-tests/FIXTURES.md plus format-specific unit tests",
+      "decodeResult": "kSuccess-for-covered-real-fixtures",
+      "reasonCode": "none"
+    },
+    {
+      "format": "JPEG",
+      "status": "supported",
+      "decoder": {
+        "name": "jpeg",
+        "kind": "portable-codec",
+        "module": "codec-jpeg-kotlin"
+      },
+      "colorInfo": "APP2 ICC parsed when complete; EXIF orientation 1 through 8 parsed and applied",
+      "origin": "codec-real-image-tests/FIXTURES.md plus format-specific unit tests",
+      "decodeResult": "kSuccess-for-covered-real-fixtures",
+      "reasonCode": "none"
+    },
+    {
+      "format": "GIF",
+      "status": "supported",
+      "decoder": {
+        "name": "gif",
+        "kind": "portable-codec",
+        "module": "codec-gif-kotlin"
+      },
+      "colorInfo": "indexed GIF frames and tested frame metadata decode; not a renderer animated-image support claim",
+      "origin": "codec-real-image-tests/FIXTURES.md plus format-specific unit tests",
+      "decodeResult": "kSuccess-for-covered-real-fixtures",
+      "reasonCode": "none"
+    },
+    {
+      "format": "BMP",
+      "status": "supported",
+      "decoder": {
+        "name": "bmp",
+        "kind": "portable-codec",
+        "module": "codec-bmp-kotlin"
+      },
+      "colorInfo": "V4/V5 ICC accepted but ignored; output uses sRGB",
+      "origin": "codec-real-image-tests/FIXTURES.md plus format-specific unit tests",
+      "decodeResult": "kSuccess-for-covered-real-fixtures",
+      "reasonCode": "none"
+    },
+    {
+      "format": "WBMP",
+      "status": "supported",
+      "decoder": {
+        "name": "wbmp",
+        "kind": "portable-codec",
+        "module": "codec-wbmp-kotlin"
+      },
+      "colorInfo": "type-0 monochrome WBMP output as opaque black/white RGBA",
+      "origin": "codec-real-image-tests/FIXTURES.md plus format-specific unit tests",
+      "decodeResult": "kSuccess-for-covered-real-fixtures",
+      "reasonCode": "none"
+    },
+    {
+      "format": "ICO / CUR",
+      "status": "supported",
+      "decoder": {
+        "name": "ico",
+        "kind": "portable-codec",
+        "module": "codec-ico-kotlin"
+      },
+      "colorInfo": "container selects largest entry and delegates PNG/BMP payload color/origin behavior",
+      "origin": "codec-real-image-tests/FIXTURES.md plus format-specific unit tests",
+      "decodeResult": "delegates-to-selected-payload-decoder",
+      "reasonCode": "none"
+    },
+    {
+      "format": "WebP",
+      "status": "supported",
+      "decoder": {
+        "name": "webp",
+        "kind": "portable-codec",
+        "module": "codec-webp-kotlin"
+      },
+      "colorInfo": "VP8L lossless and selected VP8 paths covered; unsupported frame encodings return kUnimplemented",
+      "origin": "codec-real-image-tests/FIXTURES.md plus format-specific unit tests",
+      "decodeResult": "kSuccess-or-kUnimplemented-by-covered-encoding",
+      "reasonCode": "none"
+    },
+    {
+      "format": "AVIF",
+      "status": "dependency-gated",
+      "decoder": {
+        "name": "avif",
+        "kind": "stub",
+        "module": "codec-extended"
+      },
+      "colorInfo": "out of scope until real AVIF dependency lands",
+      "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkAvifDecoder.kt",
+      "decodeResult": "stub-returns-null",
+      "reasonCode": "codec.decoder-unavailable"
+    },
+    {
+      "format": "JPEG XL",
+      "status": "dependency-gated",
+      "decoder": {
+        "name": "jpegxl",
+        "kind": "stub",
+        "module": "codec-extended"
+      },
+      "colorInfo": "out of scope until real JPEG XL dependency lands",
+      "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkJpegxlDecoder.kt",
+      "decodeResult": "stub-returns-null",
+      "reasonCode": "codec.decoder-unavailable"
+    },
+    {
+      "format": "RAW",
+      "status": "dependency-gated",
+      "decoder": {
+        "name": "raw",
+        "kind": "stub",
+        "module": "codec-extended"
+      },
+      "colorInfo": "out of scope until real RAW dependency lands",
+      "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkRawDecoder.kt",
+      "decodeResult": "stub-returns-null",
+      "reasonCode": "codec.decoder-unavailable"
+    },
+    {
+      "format": "video",
+      "status": "dependency-gated",
+      "decoder": {
+        "name": "ffmpeg-video",
+        "kind": "stub",
+        "module": "codec-extended"
+      },
+      "colorInfo": "out of scope until FFmpeg-backed dependency lands outside portable runtime",
+      "origin": "codec-extended/src/main/kotlin/org/skia/codec/SkVideoDecoder.kt",
+      "decodeResult": "throws-STUB.FFMPEG",
+      "reasonCode": "codec.decoder-unavailable"
+    }
+  ],
+  "sourceAudit": {
+    "supportedCodecs": "SUPPORTED_CODECS.md",
+    "fixtureProvenance": "codec-real-image-tests/FIXTURES.md",
+    "targetRenderer": ".upstream/target/skia-like-realtime-renderer-target.md",
+    "renderingFeatureSpec": ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md"
+  },
+  "artifactAudit": [
+    {
+      "rowId": "paint.bitmap-rect.nearest.fixture.v1",
+      "key": "reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/reference.png",
+      "exists": true
+    },
+    {
+      "rowId": "paint.bitmap-rect.nearest.fixture.v1",
+      "key": "cpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/cpu.png",
+      "exists": true
+    },
+    {
+      "rowId": "paint.bitmap-rect.nearest.fixture.v1",
+      "key": "gpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/webgpu.png",
+      "exists": true
+    },
+    {
+      "rowId": "paint.bitmap-rect.nearest.fixture.v1",
+      "key": "stats",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/stats.json",
+      "exists": true
+    },
+    {
+      "rowId": "paint.bitmap-rect.nearest.fixture.v1",
+      "key": "routeCpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-cpu.json",
+      "exists": true
+    },
+    {
+      "rowId": "paint.bitmap-rect.nearest.fixture.v1",
+      "key": "routeGpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-014-bitmap-rect/route-webgpu.json",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-shader-repeat-tile",
+      "key": "reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/skia.png",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-shader-repeat-tile",
+      "key": "cpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu.png",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-shader-repeat-tile",
+      "key": "gpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu.png",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-shader-repeat-tile",
+      "key": "cpuDiff",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/cpu-diff.png",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-shader-repeat-tile",
+      "key": "gpuDiff",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/gpu-diff.png",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-shader-repeat-tile",
+      "key": "routeCpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-cpu.json",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-shader-repeat-tile",
+      "key": "routeGpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/route-gpu.json",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-shader-repeat-tile",
+      "key": "stats",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-shader-repeat-tile/stats.json",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "key": "reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/skia.png",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "key": "cpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu.png",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "key": "gpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu.png",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "key": "cpuDiff",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/cpu-diff.png",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "key": "gpuDiff",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/gpu-diff.png",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "key": "routeCpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-cpu.json",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "key": "routeGpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/route-gpu.json",
+      "exists": true
+    },
+    {
+      "rowId": "bitmap-subset-local-matrix-repeat",
+      "key": "stats",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/bitmap-subset-local-matrix-repeat/stats.json",
+      "exists": true
+    },
+    {
+      "rowId": "d54-skia-gm-image",
+      "key": "reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/skia.png",
+      "exists": true
+    },
+    {
+      "rowId": "d54-skia-gm-image",
+      "key": "cpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/cpu.png",
+      "exists": true
+    },
+    {
+      "rowId": "d54-skia-gm-image",
+      "key": "gpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/gpu.png",
+      "exists": true
+    },
+    {
+      "rowId": "d54-skia-gm-image",
+      "key": "stats",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/stats.json",
+      "exists": true
+    },
+    {
+      "rowId": "d54-skia-gm-image",
+      "key": "routeCpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/route-cpu.json",
+      "exists": true
+    },
+    {
+      "rowId": "d54-skia-gm-image",
+      "key": "routeGpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/d54-skia-gm-image/route-gpu.json",
+      "exists": true
+    }
+  ],
+  "requiredValidation": [
+    "validateKan047CodecProvenanceMatrix",
+    "checkCodecImageComplete",
+    "pipelineConformance",
+    "pipelinePmBundle"
+  ],
+  "nonClaims": [
+    "KAN-047 does not add renderer, shader, threshold, codec runtime, JNI, ImageIO/AWT, or animated scene support.",
+    "Fixture-backed bitmap scene passes remain renderer/sampling evidence, not broad codec decode support.",
+    "Real codec decode evidence stays tied to the documented pure Kotlin codec matrix and real-image fixture corpus.",
+    "Extended AVIF, JPEG XL, RAW, and video surfaces remain dependency-gated stubs with codec.decoder-unavailable."
+  ],
+  "claimGuard": {
+    "sceneRowsMissingProvenance": [],
+    "stubCodecPassRows": [],
+    "fixtureRowsClaimingCodecDecode": [],
+    "unsupportedSceneRowsMissingReason": [],
+    "dependencyGatedFormatRowsMissingReason": [],
+    "formatRowsWithStubSuccess": [],
+    "artifactPathsMissing": [],
+    "hiddenCodecDecodeClaims": []
+  },
+  "summary": {
+    "sceneRows": 6,
+    "deterministicFixtureSceneRows": 3,
+    "realCodecDecodeSceneRows": 1,
+    "dependencyGatedSceneRows": 2,
+    "portableCodecDecodeFormats": 7,
+    "dependencyGatedFormatRows": 4,
+    "stubCodecPassRows": 0,
+    "fixtureRowsClaimingCodecDecode": 0,
+    "sceneRowsMissingProvenance": 0,
+    "unsupportedRowsMissingReason": 0
+  }
+}
