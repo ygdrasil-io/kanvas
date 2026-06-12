@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "kan049-cache-telemetry-promotion-negative-fixture",
+  "status": "expected-fail",
+  "mutatesBaseline": false,
+  "cases": [
+    {
+      "id": "m85-derived-ledger-promoted-as-observed",
+      "sourceClass": "derived",
+      "attemptedPromotion": "observed",
+      "expectedFailureReason": "kan049.derived-ledger-not-observed-webgpu-cache-telemetry"
+    },
+    {
+      "id": "m90-observed-partial-native-route-promoted",
+      "sourceClass": "observed-partial",
+      "attemptedPromotion": "release-blocking",
+      "expectedFailureReason": "kan049.observed-partial-missing-full-cache-counter-family"
+    },
+    {
+      "id": "native-callback-unavailable-promoted",
+      "sourceClass": "unavailable",
+      "attemptedPromotion": "candidate",
+      "expectedFailureReason": "kan049.unavailable-counter-missing-observed-source"
+    },
+    {
+      "id": "headless-observed-snapshot-release-blocking-without-policy",
+      "sourceClass": "observed",
+      "attemptedPromotion": "release-blocking",
+      "expectedFailureReason": "kan049.observed-counter-missing-release-gate-policy"
+    }
+  ],
+  "assertion": "Counters that are derived, observed-partial, unavailable, or observed without an accepted gate policy fail promotion without rewriting baselines."
+}
