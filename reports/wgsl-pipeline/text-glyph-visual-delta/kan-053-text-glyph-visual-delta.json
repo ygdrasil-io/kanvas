@@ -1,0 +1,689 @@
+{
+  "artifactAudit": [
+    {
+      "exists": true,
+      "key": "reference",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png"
+    },
+    {
+      "exists": true,
+      "key": "cpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png"
+    },
+    {
+      "exists": true,
+      "key": "webGpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png"
+    },
+    {
+      "exists": true,
+      "key": "cpuDiff",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png"
+    },
+    {
+      "exists": true,
+      "key": "webGpuDiff",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png"
+    },
+    {
+      "exists": true,
+      "key": "routeCpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json"
+    },
+    {
+      "exists": true,
+      "key": "routeWebGpu",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json"
+    },
+    {
+      "exists": true,
+      "key": "stats",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json"
+    },
+    {
+      "exists": true,
+      "key": "atlas",
+      "path": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json"
+    }
+  ],
+  "blocked": true,
+  "blocker": {
+    "admissibleNextStep": "Implement the text-owned atlas sampling draw path or explicitly keep standalone alpha-mask WebGPU unsupported via coverage.alpha-mask-unsupported; do not move glyph atlas ownership into coverage.",
+    "reasonCode": "requires-production-glyph-atlas-sampling-route",
+    "rootCause": "text-atlas-alpha-mask-draw-route-not-materialized",
+    "summary": "The selected simple Latin text scene has existing reference/CPU/WebGPU/diff/stat/route artifacts, but its actual CPU and WebGPU draw routes are outline-path text routes. The glyph atlas route is proven as a text-owned R8/A8 upload plan and CPU mask oracle, not as a production WebGPU text draw route. Closing the visible delta requires a real glyph atlas alpha-mask sampling route with after artifacts, not a local outline-path threshold or AA tweak.",
+    "supportingEvidence": [
+      "KAN-043",
+      "KAN-044",
+      "KAN-012"
+    ]
+  },
+  "broadShapingClaim": false,
+  "closureDecision": "blocked-root-cause",
+  "coverageOwnsGlyphAtlasClaim": false,
+  "current": {
+    "artifacts": {
+      "atlas": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+      "cpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+      "reference": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+      "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+      "routeWebGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+      "stats": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
+      "webGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+      "webGpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png"
+    },
+    "atlas": {
+      "emptyGlyphCount": 1,
+      "generation": 1,
+      "glyphEntryCount": 26,
+      "height": 101,
+      "maskFormat": "A8",
+      "nonEmptyGlyphCount": 25,
+      "resourceKind": "webgpu.texture-upload-plan",
+      "routeIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+      "rowStrideBytes": 128,
+      "sampler": "nearest-clamp-to-edge",
+      "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+      "textureFormat": "R8Unorm",
+      "textureLabel": "kan-011.text.simple-latin.liberation-sans-regular.v1.glyph-atlas.generation-1",
+      "textureUsage": "TextureBinding|CopyDst",
+      "uploadByteCount": 12928,
+      "uploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+      "width": 128
+    },
+    "phase": "current",
+    "routeCpu": {
+      "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+      "atlasUploadByteCount": 12928,
+      "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+      "backend": "CPU",
+      "comparison": {
+        "matchingPixels": 60859,
+        "maxChannelDiff": {
+          "a": 0,
+          "b": 255,
+          "g": 255,
+          "r": 255
+        },
+        "meanMismatchDiff": {
+          "a": 0,
+          "b": 40,
+          "g": 40,
+          "r": 40
+        },
+        "mismatchingPixels": 581,
+        "similarity": 99.054362,
+        "tolerance": 8,
+        "totalPixels": 61440
+      },
+      "dedupedGlyphCount": 26,
+      "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+      "drawKind": "SkTextBlob.simple-positioned-run",
+      "fallbackReason": "none",
+      "fontFamily": "Liberation Sans",
+      "fontSize": 32.0,
+      "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+      "globalThresholdChanged": false,
+      "glyphInventoryCount": 32,
+      "glyphRoute": "font.glyph.outline-path",
+      "nonClaims": [
+        "no-shaping-claim",
+        "no-fallback-font-claim",
+        "no-emoji-or-color-font-claim",
+        "no-sdf-or-lcd-claim",
+        "no-rtl-or-bidi-claim",
+        "no-ligature-claim",
+        "no-broad-text-claim"
+      ],
+      "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+      "referenceKind": "cpu-atlas-alpha-mask-oracle",
+      "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+      "sceneId": "text.simple-latin.line.v1",
+      "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+      "selectedRoute": "cpu.text.outline-path.simple-latin",
+      "shapingMode": "simple-codepoint-order",
+      "similarityThreshold": 95.0,
+      "status": "pass",
+      "supportClaim": true,
+      "supportScope": "simple-latin-line-visible",
+      "text": "Kanvas Latin 0123456789 ABC xyz."
+    },
+    "routeWebGpu": {
+      "adapter": "Apple M2 Max",
+      "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+      "atlasUploadByteCount": 12928,
+      "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+      "backend": "WebGPU",
+      "comparison": {
+        "matchingPixels": 60832,
+        "maxChannelDiff": {
+          "a": 0,
+          "b": 255,
+          "g": 255,
+          "r": 255
+        },
+        "meanMismatchDiff": {
+          "a": 0,
+          "b": 41,
+          "g": 41,
+          "r": 41
+        },
+        "mismatchingPixels": 608,
+        "similarity": 99.010417,
+        "tolerance": 8,
+        "totalPixels": 61440
+      },
+      "dedupedGlyphCount": 26,
+      "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png",
+      "drawKind": "SkTextBlob.simple-positioned-run",
+      "fallbackReason": "none",
+      "fontFamily": "Liberation Sans",
+      "fontSize": 32.0,
+      "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+      "globalThresholdChanged": false,
+      "glyphInventoryCount": 32,
+      "glyphRoute": "font.glyph.outline-path",
+      "nonClaims": [
+        "no-shaping-claim",
+        "no-fallback-font-claim",
+        "no-emoji-or-color-font-claim",
+        "no-sdf-or-lcd-claim",
+        "no-rtl-or-bidi-claim",
+        "no-ligature-claim",
+        "no-broad-text-claim"
+      ],
+      "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+      "referenceKind": "cpu-atlas-alpha-mask-oracle",
+      "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+      "sceneId": "text.simple-latin.line.v1",
+      "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+      "selectedRoute": "webgpu.text.outline-path.simple-latin",
+      "shapingMode": "simple-codepoint-order",
+      "similarityThreshold": 95.0,
+      "status": "pass",
+      "supportClaim": true,
+      "supportScope": "simple-latin-line-visible",
+      "text": "Kanvas Latin 0123456789 ABC xyz."
+    },
+    "stats": {
+      "atlasUploadByteCount": 12928,
+      "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+      "cpuMatchingPixels": 60859,
+      "cpuMaxChannelDiff": {
+        "a": 0,
+        "b": 255,
+        "g": 255,
+        "r": 255
+      },
+      "cpuMismatchingPixels": 581,
+      "cpuNonWhitePixels": 4392,
+      "cpuSimilarity": 99.054362,
+      "cpuSimilarityThreshold": 95.0,
+      "dedupedGlyphCount": 26,
+      "fallbackPolicy": "none-for-supported-simple-latin-line",
+      "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+      "globalThresholdChanged": false,
+      "glyphInventoryCount": 32,
+      "sceneId": "text.simple-latin.line.v1",
+      "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+      "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+      "text": "Kanvas Latin 0123456789 ABC xyz.",
+      "tolerance": 8,
+      "webGpuAdapter": "Apple M2 Max",
+      "webGpuMatchingPixels": 60832,
+      "webGpuMaxChannelDiff": {
+        "a": 0,
+        "b": 255,
+        "g": 255,
+        "r": 255
+      },
+      "webGpuMinusCpuReferenceMismatches": 27,
+      "webGpuMismatchingPixels": 608,
+      "webGpuNonWhitePixels": 4396,
+      "webGpuSimilarity": 99.010417,
+      "webGpuSimilarityThreshold": 95.0
+    }
+  },
+  "dynamicAtlasEvictionClaim": false,
+  "implicitSystemFontFallback": false,
+  "kan044Ownership": {
+    "atlasUploadPlan": {
+      "atlas": {
+        "emptyGlyphCount": 1,
+        "generation": 1,
+        "glyphEntryCount": 26,
+        "height": 101,
+        "maskFormat": "A8",
+        "nonEmptyGlyphCount": 25,
+        "rowStrideBytes": 128,
+        "textureFormat": "R8Unorm",
+        "textureLabel": "kan-011.text.simple-latin.liberation-sans-regular.v1.glyph-atlas.generation-1",
+        "textureUsage": "TextureBinding|CopyDst",
+        "uploadByteCount": 12928,
+        "uploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+        "width": 128
+      },
+      "cacheIds": {
+        "dumpSha256": "6cc963c317f851cbb1b1fd9c8d462c5bcada73c848097af9f71772f98e1fad86",
+        "routeIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+        "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+        "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+        "textureLabel": "kan-011.text.simple-latin.liberation-sans-regular.v1.glyph-atlas.generation-1",
+        "uploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5"
+      },
+      "coverageModel": null,
+      "coverageOwnsAtlas": null,
+      "coveragePlan": null,
+      "nonClaims": [
+        "no-broad-glyph-atlas-claim",
+        "no-lcd-or-sdf-claim",
+        "no-dynamic-atlas-eviction-claim",
+        "no-ganesh-graphite-text-ops-claim",
+        "no-coverage-owned-atlas-claim"
+      ],
+      "ownership": {
+        "atlasLifetimeOwner": "text-glyph-infrastructure",
+        "discoveryOwner": "text-glyph-infrastructure",
+        "invalidationOwner": "text-glyph-infrastructure",
+        "rasterizationOwner": "text-glyph-infrastructure"
+      },
+      "pmCategory": "atlas-upload-plan",
+      "reasonCode": null,
+      "route": {
+        "coverage": "not-owned-by-coverage",
+        "cpu": "cpu.text.glyph-mask.simple-latin",
+        "webGpu": "webgpu.text.glyph-atlas.simple-latin"
+      },
+      "rowId": "text.simple-latin.glyph-atlas.upload-plan",
+      "sourceEvidence": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+      "status": "pass"
+    },
+    "claimGuard": {
+      "coverageOwnershipViolations": [],
+      "cpuMaskOracleMissing": [],
+      "ganeshGraphiteClaims": [],
+      "hiddenAtlasEvictionClaims": [],
+      "lcdOrSdfClaims": [],
+      "rowsMissingAtlasGeneration": [],
+      "rowsMissingCacheIds": [],
+      "rowsMissingGlyphKeys": [],
+      "rowsMissingUploadBytes": [],
+      "thresholdOrRendererChanges": [],
+      "webGpuRouteMissingDecision": []
+    },
+    "coverageHandoff": {
+      "atlas": null,
+      "cacheIds": null,
+      "coverageModel": "CoverageModel.AlphaMask",
+      "coverageOwnsAtlas": false,
+      "coveragePlan": "CoveragePlan.AlphaMask",
+      "nonClaims": [
+        "no-broad-glyph-atlas-claim",
+        "no-lcd-or-sdf-claim",
+        "no-dynamic-atlas-eviction-claim",
+        "no-ganesh-graphite-text-ops-claim",
+        "no-coverage-owned-atlas-claim"
+      ],
+      "ownership": {
+        "atlasLifetimeOwner": "text-glyph-infrastructure",
+        "discoveryOwner": "text-glyph-infrastructure",
+        "invalidationOwner": "text-glyph-infrastructure",
+        "rasterizationOwner": "text-glyph-infrastructure"
+      },
+      "pmCategory": "coverage-handoff",
+      "reasonCode": null,
+      "route": {
+        "coverage": "geometry.glyph-mask.alpha-mask-handoff",
+        "cpu": "CoveragePlanAdapter.lower(CoveragePlan.AlphaMask)",
+        "webGpu": "deferred-to-backend-decision"
+      },
+      "rowId": "geometry.glyph-mask.alpha-mask-handoff",
+      "sourceEvidence": "render-pipeline/src/test/kotlin/org/skia/pipeline/GeometryCoverageContractsTest.kt",
+      "status": "pass"
+    },
+    "cpuMaskOracle": {
+      "atlas": null,
+      "cacheIds": {
+        "dumpSha256": "6cc963c317f851cbb1b1fd9c8d462c5bcada73c848097af9f71772f98e1fad86",
+        "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+        "uploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5"
+      },
+      "coverageModel": null,
+      "coverageOwnsAtlas": null,
+      "coveragePlan": null,
+      "nonClaims": [
+        "no-broad-glyph-atlas-claim",
+        "no-lcd-or-sdf-claim",
+        "no-dynamic-atlas-eviction-claim",
+        "no-ganesh-graphite-text-ops-claim",
+        "no-coverage-owned-atlas-claim"
+      ],
+      "ownership": {
+        "atlasLifetimeOwner": "text-glyph-infrastructure",
+        "discoveryOwner": "text-glyph-infrastructure",
+        "invalidationOwner": "text-glyph-infrastructure",
+        "rasterizationOwner": "text-glyph-infrastructure"
+      },
+      "pmCategory": "cpu-mask-oracle",
+      "reasonCode": null,
+      "route": {
+        "coverage": "not-owned-by-coverage",
+        "cpu": "cpu.text.glyph-mask.simple-latin",
+        "webGpu": "webgpu.text.glyph-atlas.simple-latin"
+      },
+      "rowId": "text.simple-latin.cpu-mask-oracle",
+      "sourceEvidence": "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlasTest.kt",
+      "status": "pass"
+    },
+    "path": "reports/wgsl-pipeline/glyph-mask-atlas-ownership/kan-044-glyph-mask-atlas-ownership.json",
+    "standaloneAlphaMaskRefusal": {
+      "atlas": null,
+      "cacheIds": null,
+      "coverageModel": null,
+      "coverageOwnsAtlas": false,
+      "coveragePlan": null,
+      "nonClaims": [
+        "no-broad-glyph-atlas-claim",
+        "no-lcd-or-sdf-claim",
+        "no-dynamic-atlas-eviction-claim",
+        "no-ganesh-graphite-text-ops-claim",
+        "no-coverage-owned-atlas-claim"
+      ],
+      "ownership": {
+        "atlasLifetimeOwner": "text-glyph-infrastructure",
+        "discoveryOwner": "text-glyph-infrastructure",
+        "invalidationOwner": "text-glyph-infrastructure",
+        "rasterizationOwner": "text-glyph-infrastructure"
+      },
+      "pmCategory": "webgpu-alpha-mask-refusal",
+      "reasonCode": "coverage.alpha-mask-unsupported",
+      "route": {
+        "coverage": "CoveragePlan.AlphaMask",
+        "cpu": "CoverageModel.AlphaMask",
+        "webGpu": "webgpu.refuse.standalone-alpha-mask"
+      },
+      "rowId": "webgpu.standalone-alpha-mask-refusal",
+      "sourceEvidence": "kanvas-skia/src/test/kotlin/org/skia/core/SkBitmapDescriptorCoverageOracleTest.kt",
+      "status": "expected-unsupported"
+    }
+  },
+  "lcdSdfColorFontClaim": false,
+  "packId": "kan-053-text-glyph-visual-delta",
+  "rendererChanged": false,
+  "rendererSourceAudit": [
+    "kanvas-skia/src/main/kotlin/org/skia/core/SkCanvas.kt",
+    "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuGlyphAtlas.kt",
+    "gpu-raster/src/test/kotlin/org/skia/gpu/webgpu/SimpleLatinLineSceneEvidence.kt"
+  ],
+  "schemaVersion": 1,
+  "selectedRow": {
+    "artifacts": {
+      "atlas": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+      "cpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+      "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+      "reference": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+      "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+      "routeWebGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+      "stats": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
+      "webGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+      "webGpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png"
+    },
+    "atlasRoute": "webgpu.text.glyph-atlas.simple-latin",
+    "clusters": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31
+    ],
+    "cpuRoute": "cpu.text.outline-path.simple-latin",
+    "fallbackReason": "none",
+    "font": {
+      "face": "Liberation Sans",
+      "sha256": "76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+      "source": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf",
+      "sourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8"
+    },
+    "glyphIds": [
+      46,
+      68,
+      81,
+      89,
+      68,
+      86,
+      3,
+      47,
+      68,
+      87,
+      76,
+      81,
+      3,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      3,
+      36,
+      37,
+      38,
+      3,
+      91,
+      92,
+      93,
+      17
+    ],
+    "glyphRoute": "font.glyph.outline-path",
+    "nonClaims": [
+      "no-complex-shaping-claim",
+      "no-fallback-font-claim",
+      "no-emoji-or-color-font-claim",
+      "no-bidi-paragraph-claim",
+      "no-broad-text-claim"
+    ],
+    "pmCategory": "simple-latin-support",
+    "referenceKind": "cpu-atlas-alpha-mask-oracle",
+    "rowId": "text.simple-latin.line.v1",
+    "shapingRoute": {
+      "diagnostics": [
+        "drawString remains simple; no implicit complex shaper"
+      ],
+      "direction": "ltr",
+      "fallbackPolicy": "none-for-supported-simple-latin-line",
+      "featureSet": "default-simple",
+      "language": "und",
+      "mode": "simple-codepoint-order",
+      "script": "Latin"
+    },
+    "sourceTicket": "KAN-043",
+    "status": "pass",
+    "textInput": "Kanvas Latin 0123456789 ABC xyz.",
+    "webGpuRoute": "webgpu.text.outline-path.simple-latin"
+  },
+  "status": "blocked",
+  "targetDocs": [
+    ".upstream/specs/skia-like-realtime/01-rendering-feature-expansion.md",
+    ".upstream/specs/skia-like-realtime/03-skia-fidelity-and-gm-promotion.md",
+    ".upstream/target/high-performance-wgsl-pipeline-target.md",
+    ".upstream/specs/geometry-coverage/02-lowering-rules.md",
+    ".upstream/specs/geometry-coverage/adr/0006-mask-ownership-boundary.md"
+  ],
+  "thresholdsWeakened": false,
+  "ticket": "KAN-053",
+  "validations": [
+    "rtk python3 scripts/test_validate_kan053_text_glyph_visual_delta.py",
+    "rtk env GRADLE_USER_HOME=/Users/chaos/.codex/worktrees/kan-053-text-glyph-visual-delta/.gradle-codex ./gradlew --no-daemon validateKan053TextGlyphVisualDelta"
+  ],
+  "visualDeltaEvidence": {
+    "after": {
+      "blocked": true,
+      "blockedBy": "text-atlas-alpha-mask-draw-route-not-materialized",
+      "phase": "not-materialized",
+      "reasonCode": "requires-production-glyph-atlas-sampling-route",
+      "rendererChanged": false,
+      "requiredForAfter": "A production WebGPU glyph atlas alpha-mask sampling draw route must be materialized with new PNG/stat/route evidence before the selected text row can become a renderer visual-delta pass."
+    },
+    "before": {
+      "artifacts": {
+        "atlas": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
+        "cpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",
+        "cpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu-diff.png",
+        "reference": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+        "routeCpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-cpu.json",
+        "routeWebGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/route-webgpu.json",
+        "stats": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
+        "webGpu": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+        "webGpuDiff": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png"
+      },
+      "atlas": {
+        "emptyGlyphCount": 1,
+        "generation": 1,
+        "glyphEntryCount": 26,
+        "height": 101,
+        "maskFormat": "A8",
+        "nonEmptyGlyphCount": 25,
+        "resourceKind": "webgpu.texture-upload-plan",
+        "routeIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+        "rowStrideBytes": 128,
+        "sampler": "nearest-clamp-to-edge",
+        "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+        "textureFormat": "R8Unorm",
+        "textureLabel": "kan-011.text.simple-latin.liberation-sans-regular.v1.glyph-atlas.generation-1",
+        "textureUsage": "TextureBinding|CopyDst",
+        "uploadByteCount": 12928,
+        "uploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+        "width": 128
+      },
+      "phase": "selected-row-existing-evidence",
+      "routeWebGpu": {
+        "adapter": "Apple M2 Max",
+        "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
+        "atlasUploadByteCount": 12928,
+        "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+        "backend": "WebGPU",
+        "comparison": {
+          "matchingPixels": 60832,
+          "maxChannelDiff": {
+            "a": 0,
+            "b": 255,
+            "g": 255,
+            "r": 255
+          },
+          "meanMismatchDiff": {
+            "a": 0,
+            "b": 41,
+            "g": 41,
+            "r": 41
+          },
+          "mismatchingPixels": 608,
+          "similarity": 99.010417,
+          "tolerance": 8,
+          "totalPixels": 61440
+        },
+        "dedupedGlyphCount": 26,
+        "diffArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu-diff.png",
+        "drawKind": "SkTextBlob.simple-positioned-run",
+        "fallbackReason": "none",
+        "fontFamily": "Liberation Sans",
+        "fontSize": 32.0,
+        "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+        "globalThresholdChanged": false,
+        "glyphInventoryCount": 32,
+        "glyphRoute": "font.glyph.outline-path",
+        "nonClaims": [
+          "no-shaping-claim",
+          "no-fallback-font-claim",
+          "no-emoji-or-color-font-claim",
+          "no-sdf-or-lcd-claim",
+          "no-rtl-or-bidi-claim",
+          "no-ligature-claim",
+          "no-broad-text-claim"
+        ],
+        "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
+        "referenceKind": "cpu-atlas-alpha-mask-oracle",
+        "renderArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/webgpu.png",
+        "sceneId": "text.simple-latin.line.v1",
+        "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+        "selectedRoute": "webgpu.text.outline-path.simple-latin",
+        "shapingMode": "simple-codepoint-order",
+        "similarityThreshold": 95.0,
+        "status": "pass",
+        "supportClaim": true,
+        "supportScope": "simple-latin-line-visible",
+        "text": "Kanvas Latin 0123456789 ABC xyz."
+      },
+      "stats": {
+        "atlasUploadByteCount": 12928,
+        "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
+        "cpuMatchingPixels": 60859,
+        "cpuMaxChannelDiff": {
+          "a": 0,
+          "b": 255,
+          "g": 255,
+          "r": 255
+        },
+        "cpuMismatchingPixels": 581,
+        "cpuNonWhitePixels": 4392,
+        "cpuSimilarity": 99.054362,
+        "cpuSimilarityThreshold": 95.0,
+        "dedupedGlyphCount": 26,
+        "fallbackPolicy": "none-for-supported-simple-latin-line",
+        "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
+        "globalThresholdChanged": false,
+        "glyphInventoryCount": 32,
+        "sceneId": "text.simple-latin.line.v1",
+        "scopeId": "text.simple-latin.liberation-sans-regular.v1",
+        "sourceCacheSha256": "f85ddf1dd6b62ecb46df77559ef78b9ad0e1f51cea70b90932fe2550b398d433",
+        "text": "Kanvas Latin 0123456789 ABC xyz.",
+        "tolerance": 8,
+        "webGpuAdapter": "Apple M2 Max",
+        "webGpuMatchingPixels": 60832,
+        "webGpuMaxChannelDiff": {
+          "a": 0,
+          "b": 255,
+          "g": 255,
+          "r": 255
+        },
+        "webGpuMinusCpuReferenceMismatches": 27,
+        "webGpuMismatchingPixels": 608,
+        "webGpuNonWhitePixels": 4396,
+        "webGpuSimilarity": 99.010417,
+        "webGpuSimilarityThreshold": 95.0
+      }
+    },
+    "mode": "blocked-root-cause-no-renderer-after"
+  }
+}
