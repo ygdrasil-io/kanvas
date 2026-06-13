@@ -372,3 +372,44 @@ private fun floatToken(value: Float): String =
     String.format(Locale.US, "%.8f", value)
         .trimEnd('0')
         .trimEnd('.')
+
+public data class SkWebGpuGlyphAtlasQuad(
+    val glyphKey: String,
+    val glyphId: Int,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val u0: Float,
+    val v0: Float,
+    val u1: Float,
+    val v1: Float,
+)
+
+public fun SkWebGpuGlyphAtlas.quadsForPositionedGlyphs(
+    glyphKeysInDrawOrder: List<String>,
+    glyphDeviceX: List<Float>,
+    baselineY: Float,
+): List<SkWebGpuGlyphAtlasQuad> {
+    require(glyphKeysInDrawOrder.size == glyphDeviceX.size) {
+        "glyph key count ${glyphKeysInDrawOrder.size} must match x count ${glyphDeviceX.size}"
+    }
+    return glyphKeysInDrawOrder.mapIndexedNotNull { index, key ->
+        val entry = entryForKey(key)
+        if (entry.maskWidth == 0 || entry.maskHeight == 0) return@mapIndexedNotNull null
+        val left = glyphDeviceX[index] + entry.maskLeft
+        val top = baselineY + entry.maskTop
+        SkWebGpuGlyphAtlasQuad(
+            glyphKey = key,
+            glyphId = entry.glyphId,
+            left = left,
+            top = top,
+            right = left + entry.maskWidth,
+            bottom = top + entry.maskHeight,
+            u0 = entry.u0,
+            v0 = entry.v0,
+            u1 = entry.u1,
+            v1 = entry.v1,
+        )
+    }
+}

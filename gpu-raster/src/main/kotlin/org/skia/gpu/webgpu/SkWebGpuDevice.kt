@@ -77,6 +77,7 @@ import org.skia.foundation.SkBlendMode
 import org.skia.foundation.SkClipOp
 import org.skia.foundation.SkComposePathEffect
 import org.skia.foundation.SkCornerPathEffect
+import org.skia.foundation.SkCpuGlyphCache
 import org.skia.foundation.SkDashPathEffect
 import org.skia.foundation.SkPath1DPathEffect
 import org.skia.foundation.SkPath2DPathEffect
@@ -4615,6 +4616,17 @@ public class SkWebGpuDevice(
         val colorFilterPacked: FloatArray = ZERO_COLOR_FILTER_24,
     ) : PendingDraw
 
+    private data class SimpleLatinGlyphAtlasDraw(
+        val atlas: SkWebGpuGlyphAtlas,
+        val quads: List<SkWebGpuGlyphAtlasQuad>,
+        val scissor: IntArray,
+        override val r: Float,
+        override val g: Float,
+        override val b: Float,
+        override val a: Float,
+        override val mode: SkBlendMode,
+    ) : PendingDraw
+
     /**
      * G3.3b.2b — multi-contour / concave path via stencil-and-cover.
      *  - `stencilVerts` : concatenated fan tessellations of each contour
@@ -6011,6 +6023,7 @@ public class SkWebGpuDevice(
     private fun PendingDraw.producesEmptyVertexBuffer(): Boolean = when (this) {
         is PolygonDraw -> verts.isEmpty()
         is AaPolygonDraw -> verts.isEmpty()
+        is SimpleLatinGlyphAtlasDraw -> quads.isEmpty()
         is StencilCoverPolygonDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
         is StencilCoverAaPolygonDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
         is StencilCoverAaGradientDraw -> stencilVerts.isEmpty() || coverVerts.isEmpty()
@@ -7330,6 +7343,84 @@ fn m60_f16_record_fragment_lane(pixel: vec2f, side: u32) {
                 ),
             )
         }
+
+    private val simpleLatinGlyphAtlasShader: GPUShaderModule = loadShader("shaders/text_glyph_atlas.wgsl")
+
+    private val SIMPLE_LATIN_GLYPH_ATLAS_VERTEX_LAYOUT: VertexBufferLayout = VertexBufferLayout(
+        arrayStride = 16uL,
+        attributes = listOf(
+            VertexAttribute(
+                shaderLocation = 0u,
+                offset = 0uL,
+                format = GPUVertexFormat.Float32x2,
+            ),
+            VertexAttribute(
+                shaderLocation = 1u,
+                offset = 8uL,
+                format = GPUVertexFormat.Float32x2,
+            ),
+        ),
+    )
+
+    private val simpleLatinGlyphAtlasBindGroupLayout: GPUBindGroupLayout = context.device.createBindGroupLayout(
+        BindGroupLayoutDescriptor(
+            entries = listOf(
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                ),
+                BindGroupLayoutEntry(
+                    binding = 1u,
+                    visibility = GPUShaderStage.Fragment,
+                    texture = TextureBindingLayout(
+                        sampleType = GPUTextureSampleType.Float,
+                        viewDimension = GPUTextureViewDimension.TwoD,
+                        multisampled = false,
+                    ),
+                ),
+                BindGroupLayoutEntry(
+                    binding = 2u,
+                    visibility = GPUShaderStage.Fragment,
+                    sampler = SamplerBindingLayout(type = GPUSamplerBindingType.Filtering),
+                ),
+            ),
+        ),
+    )
+
+    private val simpleLatinGlyphAtlasPipelineLayout = context.device.createPipelineLayout(
+        PipelineLayoutDescriptor(bindGroupLayouts = listOf(simpleLatinGlyphAtlasBindGroupLayout)),
+    )
+
+    private val simpleLatinGlyphAtlasSampler: GPUSampler = context.device.createSampler(
+        SamplerDescriptor(
+            addressModeU = GPUAddressMode.ClampToEdge,
+            addressModeV = GPUAddressMode.ClampToEdge,
+            magFilter = GPUFilterMode.Nearest,
+            minFilter = GPUFilterMode.Nearest,
+        ),
+    )
+
+    private val simpleLatinGlyphAtlasPipeline: GPURenderPipeline = context.device.createRenderPipeline(
+        RenderPipelineDescriptor(
+            layout = simpleLatinGlyphAtlasPipelineLayout,
+            vertex = VertexState(
+                module = simpleLatinGlyphAtlasShader,
+                entryPoint = "vs_main",
+                buffers = listOf(SIMPLE_LATIN_GLYPH_ATLAS_VERTEX_LAYOUT),
+            ),
+            fragment = FragmentState(
+                module = simpleLatinGlyphAtlasShader,
+                entryPoint = "fs_main",
+                targets = listOf(
+                    ColorTargetState(
+                        format = intermediateFormat,
+                        blend = blendStateFor(SkBlendMode.kSrcOver),
+                    ),
+                ),
+            ),
+        ),
+    )
 
     // ─── Stencil & cover (G3.3b.2b) — multi-contour / concave paths ────────
 
@@ -18143,6 +18234,31 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         )
     }
 
+    internal fun drawSimpleLatinGlyphAtlasForKan054(
+        cache: SkCpuGlyphCache,
+        atlas: SkWebGpuGlyphAtlas,
+        originX: Float,
+        baselineY: Float,
+        color: Int,
+    ) {
+        val glyphKeys = cache.inventory.map { it.key }
+        val glyphX = cache.inventory.map { originX + it.x }
+        val quads = atlas.quadsForPositionedGlyphs(glyphKeys, glyphX, baselineY)
+        if (quads.isEmpty()) return
+        pending.add(
+            SimpleLatinGlyphAtlasDraw(
+                atlas = atlas,
+                quads = quads,
+                scissor = intArrayOf(0, 0, width, height),
+                r = SkColorGetR(color) / 255f,
+                g = SkColorGetG(color) / 255f,
+                b = SkColorGetB(color) / 255f,
+                a = SkColorGetA(color) / 255f,
+                mode = SkBlendMode.kSrcOver,
+            ),
+        )
+    }
+
     /**
      * Submit the pending draws, read the colour texture back, and return
      * its raw bytes. Layout: row-major RGBA, `width * height * 4` bytes,
@@ -18294,6 +18410,7 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             when (d) {
                 is RectDraw -> buildRectDrawResources(d)
                 is PolygonDraw -> buildPolygonDrawResources(d)
+                is SimpleLatinGlyphAtlasDraw -> buildSimpleLatinGlyphAtlasDrawResources(d)
                 is AaPolygonDraw -> buildAaPolygonDrawResources(d)
                 is StencilCoverPolygonDraw -> buildStencilCoverDrawResources(d)
                 is StencilCoverAaPolygonDraw -> buildStencilCoverAaDrawResources(d)
@@ -20791,6 +20908,18 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
                         setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
                         draw((d.verts.size / 2).toUInt())
                     }
+                    is SimpleLatinGlyphAtlasDraw -> {
+                        setPipeline(simpleLatinGlyphAtlasPipeline)
+                        setBindGroup(0u, res.bindGroup)
+                        setScissorRect(
+                            x = d.scissor[0].toUInt(),
+                            y = d.scissor[1].toUInt(),
+                            width = d.scissor[2].toUInt(),
+                            height = d.scissor[3].toUInt(),
+                        )
+                        setVertexBuffer(slot = 0u, buffer = res.vertexBuffer!!)
+                        draw((d.quads.size * 6).toUInt())
+                    }
                     is AaPolygonDraw -> {
                         setPipeline(aaPolygonPipelineFor(d.mode))
                         setBindGroup(0u, res.bindGroup)
@@ -20943,6 +21072,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
             it.uniform.close()
             it.vertexBuffer?.close()
             it.coverVertexBuffer?.close()
+            it.glyphAtlasTextureView?.close()
+            it.glyphAtlasTexture?.close()
             it.secondaryUniform?.close()
             // Phase MaskFilter-blur -- release the H-pass scratch
             // texture + view, then the child layer device that rendered
@@ -21134,6 +21265,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         val bindGroup: io.ygdrasil.webgpu.GPUBindGroup,
         val vertexBuffer: GPUBuffer? = null,
         val coverVertexBuffer: GPUBuffer? = null,
+        val glyphAtlasTexture: GPUTexture? = null,
+        val glyphAtlasTextureView: GPUTextureView? = null,
         val secondaryUniform: GPUBuffer? = null,
         val secondaryBindGroup: io.ygdrasil.webgpu.GPUBindGroup? = null,
         // Phase MaskFilter-blur -- transient GPU objects to release
@@ -21469,6 +21602,90 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         )
         context.queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(d.verts))
         return DrawResources(uniform = uniform, bindGroup = bindGroup, vertexBuffer = vertexBuffer)
+    }
+
+    private fun buildSimpleLatinGlyphAtlasDrawResources(d: SimpleLatinGlyphAtlasDraw): DrawResources {
+        val uniform = context.device.createBuffer(
+            BufferDescriptor(
+                size = 32uL,
+                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.simpleLatinGlyphAtlasDraw",
+            ),
+        )
+        val packed = floatArrayOf(
+            width.toFloat(), height.toFloat(), 0f, 0f,
+            d.r, d.g, d.b, d.a,
+        )
+        context.queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(packed))
+
+        val atlasTexture = uploadSimpleLatinGlyphAtlasTexture(d.atlas)
+        val atlasView = atlasTexture.createView()
+        val bindGroup = context.device.createBindGroup(
+            BindGroupDescriptor(
+                layout = simpleLatinGlyphAtlasBindGroupLayout,
+                entries = listOf(
+                    BindGroupEntry(binding = 0u, resource = BufferBinding(buffer = uniform)),
+                    BindGroupEntry(binding = 1u, resource = atlasView),
+                    BindGroupEntry(binding = 2u, resource = simpleLatinGlyphAtlasSampler),
+                ),
+            ),
+        )
+        val vertices = FloatArray(d.quads.size * 6 * 4)
+        var out = 0
+        fun emit(x: Float, y: Float, u: Float, v: Float) {
+            vertices[out++] = x
+            vertices[out++] = y
+            vertices[out++] = u
+            vertices[out++] = v
+        }
+        d.quads.forEach { q ->
+            emit(q.left, q.top, q.u0, q.v0)
+            emit(q.right, q.top, q.u1, q.v0)
+            emit(q.left, q.bottom, q.u0, q.v1)
+            emit(q.left, q.bottom, q.u0, q.v1)
+            emit(q.right, q.top, q.u1, q.v0)
+            emit(q.right, q.bottom, q.u1, q.v1)
+        }
+        val vertexBuffer = context.device.createBuffer(
+            BufferDescriptor(
+                size = (vertices.size * Float.SIZE_BYTES).toULong(),
+                usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                label = "SkWebGpuDevice.simpleLatinGlyphAtlasVerts",
+            ),
+        )
+        context.queue.writeBuffer(vertexBuffer, 0uL, ArrayBuffer.of(vertices))
+        return DrawResources(
+            uniform = uniform,
+            bindGroup = bindGroup,
+            vertexBuffer = vertexBuffer,
+            glyphAtlasTexture = atlasTexture,
+            glyphAtlasTextureView = atlasView,
+        )
+    }
+
+    private fun uploadSimpleLatinGlyphAtlasTexture(atlas: SkWebGpuGlyphAtlas): GPUTexture {
+        require(atlas.textureFormat == SkWebGpuGlyphAtlas.TextureFormat) {
+            "KAN-054 glyph atlas route requires ${SkWebGpuGlyphAtlas.TextureFormat}, got ${atlas.textureFormat}"
+        }
+        val texture = context.device.createTexture(
+            TextureDescriptor(
+                size = Extent3D(width = atlas.width.toUInt(), height = atlas.height.toUInt()),
+                format = GPUTextureFormat.R8Unorm,
+                usage = GPUTextureUsage.TextureBinding or GPUTextureUsage.CopyDst,
+                label = atlas.textureLabel,
+            ),
+        )
+        context.queue.writeTexture(
+            destination = TexelCopyTextureInfo(texture = texture),
+            data = ArrayBuffer.of(atlas.uploadBytes),
+            dataLayout = TexelCopyBufferLayout(
+                offset = 0uL,
+                bytesPerRow = atlas.rowStrideBytes.toUInt(),
+                rowsPerImage = atlas.height.toUInt(),
+            ),
+            size = Extent3D(width = atlas.width.toUInt(), height = atlas.height.toUInt()),
+        )
+        return texture
     }
 
     private fun buildRuntimeEffectRectDrawResources(d: RuntimeEffectRectDraw): DrawResources {
@@ -24413,6 +24630,9 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
         generatedRectPipelineCache.clear()
         polygonPipelineCache.values.forEach { it.close() }
         polygonPipelineCache.clear()
+        simpleLatinGlyphAtlasPipeline.close()
+        simpleLatinGlyphAtlasSampler.close()
+        simpleLatinGlyphAtlasShader.close()
         aaPolygonPipelineCache.values.forEach { it.close() }
         aaPolygonPipelineCache.clear()
         coverPipelineCache.values.forEach { it.close() }

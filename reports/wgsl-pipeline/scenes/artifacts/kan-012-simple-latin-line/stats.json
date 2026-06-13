@@ -6,8 +6,8 @@
           "fontSourceId": "kanvas-skia/src/main/resources/fonts/liberation/LiberationSans-Regular.ttf#sha256=76d04c18ea243f426b7de1f3ad208e927008f961dc5945e5aad352d0dfde8ee8",
           "fontSize": 32.0,
           "shapingMode": "simple-codepoint-order",
-          "glyphRoute": "font.glyph.outline-path",
-          "webGpuRouteIdentifier": "webgpu.text.outline-path.simple-latin",
+          "glyphSourceRoute": "font.glyph.outline-path",
+          "webGpuRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
           "atlasRouteIdentifier": "webgpu.text.glyph-atlas.simple-latin",
           "atlasUploadByteCount": 12928,
           "atlasUploadSha256": "2742ea75141eae272665d42b426c080633f86a6d8f49b45ac06a08b568423cf5",
@@ -15,7 +15,7 @@
           "glyphInventoryCount": 32,
           "dedupedGlyphCount": 26,
           "cpuNonWhitePixels": 4392,
-          "webGpuNonWhitePixels": 4396,
+          "webGpuNonWhitePixels": 4400,
           "tolerance": 8,
           "cpuSimilarityThreshold": 95.00,
           "webGpuSimilarityThreshold": 95.00,
@@ -39,10 +39,10 @@
   }
 },
           "webGpuComparison": {
-  "similarity": 99.010417,
+  "similarity": 99.801432,
   "totalPixels": 61440,
-  "matchingPixels": 60832,
-  "mismatchingPixels": 608,
+  "matchingPixels": 61318,
+  "mismatchingPixels": 122,
   "tolerance": 8,
   "maxChannelDiff": {
     "a": 0,
@@ -52,13 +52,13 @@
   },
   "meanMismatchDiff": {
     "a": 0,
-    "r": 41,
-    "g": 41,
-    "b": 41
+    "r": 107,
+    "g": 107,
+    "b": 107
   }
 },
           "globalThresholdChanged": false,
-          "fallbackPolicy": "none-for-supported-simple-latin-line",
+          "fallbackPolicy": "none",
           "webGpuAdapter": "Apple M2 Max",
           "referenceArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/reference.png",
           "cpuArtifact": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/cpu.png",

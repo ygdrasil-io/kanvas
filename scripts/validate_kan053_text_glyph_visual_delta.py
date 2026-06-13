@@ -29,6 +29,7 @@ CURRENT_ARTIFACTS = {
     "stats": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/stats.json",
     "atlas": "reports/wgsl-pipeline/scenes/artifacts/kan-012-simple-latin-line/atlas.json",
 }
+HISTORICAL_EVIDENCE_JSON = f"{DEFAULT_OUTPUT_DIR}/{OUTPUT_JSON}"
 
 
 class ValidationError(RuntimeError):
@@ -99,7 +100,7 @@ def selected_row_from_kan043(root: Path) -> dict[str, Any]:
         "clusters": row.get("clusters"),
         "cpuRoute": route.get("cpu"),
         "webGpuRoute": route.get("gpu"),
-        "glyphRoute": route.get("glyph"),
+        "glyphSourceRoute": route.get("glyphSource"),
         "atlasRoute": ATLAS_ROUTE,
         "referenceKind": route.get("referenceKind"),
         "fallbackReason": fallback.get("reasonCode"),
@@ -208,7 +209,25 @@ def current_bundle(root: Path) -> dict[str, Any]:
     }
 
 
+def historical_evidence(root: Path) -> dict[str, Any]:
+    evidence = load_json(root / HISTORICAL_EVIDENCE_JSON)
+    require(isinstance(evidence, dict), "historical KAN-053 evidence must be a JSON object")
+    evidence = json.loads(json.dumps(evidence))
+    current = evidence.get("current")
+    require(isinstance(current, dict), "historical current bundle missing")
+    current_artifacts = current.get("artifacts")
+    require(isinstance(current_artifacts, dict), "historical current artifacts missing")
+    evidence["artifactAudit"] = artifact_audit(root, current_artifacts)
+    return evidence
+
+
 def build_evidence(root: Path) -> dict[str, Any]:
+    historical_path = root / HISTORICAL_EVIDENCE_JSON
+    if historical_path.is_file():
+        evidence = historical_evidence(root)
+        validate_evidence(evidence, root)
+        return evidence
+
     selected = selected_row_from_kan043(root)
     current = current_bundle(root)
     ownership = ownership_rows_from_kan044(root)

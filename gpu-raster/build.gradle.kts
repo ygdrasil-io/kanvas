@@ -478,6 +478,43 @@ tasks.register<Test>("gpuSmokeTest") {
     )
 }
 
+tasks.register<Test>("kan054WebGpuGlyphAtlasSamplingRouteTest") {
+    group = "verification"
+    description = "Runs the focused KAN-054 glyph atlas sampling route tests and fails if adapter evidence skips."
+
+    val inventoryTask = tasks.named<Test>("test").get()
+    testClassesDirs = inventoryTask.testClassesDirs
+    classpath = inventoryTask.classpath
+    shouldRunAfter(tasks.named("test"))
+
+    filter {
+        includeTestsMatching("org.skia.gpu.webgpu.SkWebGpuGlyphAtlasTest")
+        includeTestsMatching("org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest")
+    }
+
+    addTestListener(
+        object : TestListener {
+            override fun beforeSuite(suite: TestDescriptor) = Unit
+
+            override fun afterSuite(suite: TestDescriptor, result: TestResult) = Unit
+
+            override fun beforeTest(testDescriptor: TestDescriptor) = Unit
+
+            override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {
+                if (
+                    testDescriptor.className == "org.skia.gpu.webgpu.SimpleLatinLineSceneEvidenceTest" &&
+                    result.resultType == TestResult.ResultType.SKIPPED
+                ) {
+                    throw GradleException(
+                        "kan054WebGpuGlyphAtlasSamplingRouteTest rejected skipped SimpleLatinLineSceneEvidenceTest. " +
+                            "KAN-054 requires adapter-backed WebGPU glyph atlas route evidence.",
+                    )
+                }
+            }
+        },
+    )
+}
+
 tasks.register("gpuInventoryTest") {
     group = "verification"
     description =

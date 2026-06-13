@@ -16,8 +16,8 @@ class SimpleLatinLineSceneEvidenceTest {
         assertEquals("text.simple-latin.liberation-sans-regular.v1", evidence.scopeId)
         assertEquals("Liberation Sans", evidence.fontFamily)
         assertEquals(SimpleLatinLineSceneEvidence.LineText, evidence.text)
-        assertEquals("font.glyph.outline-path", evidence.glyphRoute)
-        assertEquals("webgpu.text.outline-path.simple-latin", evidence.webGpuRouteIdentifier)
+        assertEquals("font.glyph.outline-path", evidence.glyphSourceRoute)
+        assertEquals("webgpu.text.glyph-atlas.simple-latin", evidence.webGpuRouteIdentifier)
         assertEquals("webgpu.text.glyph-atlas.simple-latin", evidence.atlas.routeIdentifier)
         assertEquals(12_928, evidence.atlas.uploadByteCount)
         assertEquals("none", evidence.cpuFallbackReason)
@@ -38,7 +38,11 @@ class SimpleLatinLineSceneEvidenceTest {
         assertTrue(evidence.artifacts.atlasJson.isFile)
 
         val routeGpu = evidence.artifacts.routeWebGpuJson.readText()
-        assertTrue(routeGpu.contains("\"selectedRoute\": \"webgpu.text.outline-path.simple-latin\""))
+        assertTrue(routeGpu.contains("\"supportClaim\": true"))
+        assertTrue(routeGpu.contains("\"selectedRoute\": \"webgpu.text.glyph-atlas.simple-latin\""))
+        assertTrue(routeGpu.contains("\"legacyRoute\": \"webgpu.text.outline-path.simple-latin\""))
+        assertTrue(routeGpu.contains("\"glyphSourceRoute\": \"font.glyph.outline-path\""))
+        assertFalse(routeGpu.contains("\"glyphRoute\""))
         assertTrue(routeGpu.contains("\"fallbackReason\": \"none\""))
         assertTrue(routeGpu.contains("\"atlasRouteIdentifier\": \"webgpu.text.glyph-atlas.simple-latin\""))
         assertTrue(routeGpu.contains("no-shaping-claim"))
@@ -53,6 +57,8 @@ class SimpleLatinLineSceneEvidenceTest {
         assertTrue(stats.contains("\"webGpuArtifact\""))
         assertTrue(stats.contains("\"globalThresholdChanged\": false"))
         assertTrue(stats.contains("\"shapingMode\": \"simple-codepoint-order\""))
+        assertTrue(stats.contains("\"glyphSourceRoute\": \"font.glyph.outline-path\""))
+        assertFalse(stats.contains("\"glyphRoute\""))
         assertNotNull(evidence.webGpuAdapter)
     }
 }
