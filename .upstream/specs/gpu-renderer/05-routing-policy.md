@@ -75,12 +75,19 @@ select `CPUPreparedGPU(GlyphAtlasArtifact)`,
 only when artifact keys, text atlas/page generation, upload plans, instance
 buffer plans, WGSL text render steps, and GPU consumers are all accepted.
 
+Image and bitmap routes are governed by
+`22-image-bitmap-codec-pipeline.md`. A route may select
+`CPUPreparedGPU(UploadedTextureArtifact)` for encoded images, animated image
+frames, or already-decoded CPU image pixels only when codec selection, decode
+request, frame selection, color/profile conversion, orientation, pixel layout,
+mip policy, upload artifact key, budget, and GPU consumer are all accepted.
+
 GPU-native textures, render targets, swapchain/surface textures, and imported
 GPU handles remain normal `GPUResourceProvider` resources. Their ownership,
 view, sampler, usage, and generation policy is defined in
 `18-texture-image-ownership.md`. A texture is an `UploadedTextureArtifact` only
-when CPU work decodes, converts, repacks, color-converts, tiles, or
-mip-prepares pixels before upload.
+when CPU work decodes, converts, repacks, color-converts, composes animation
+frames, tiles, or mip-prepares pixels before upload.
 
 ### `CPUReferenceOnly`
 
@@ -216,6 +223,12 @@ Stable reason-code examples:
 - `unsupported.texture.ownership_missing`
 - `unsupported.texture.import_unvalidated`
 - `unsupported.texture.active_attachment_sampled`
+- `unsupported.image.codec.unregistered`
+- `unsupported.image.codec.selection_nondeterministic`
+- `unsupported.image.decode.invalid_input`
+- `unsupported.image.animation.required_frame_missing`
+- `unsupported.image.color.conversion_unvalidated`
+- `unsupported.image.upload.budget_exceeded`
 - `unsupported.destination_read.strategy_unaccepted`
 - `unsupported.destination_read.active_attachment_sampled`
 - `unsupported.destination_read.pass_split_illegal`

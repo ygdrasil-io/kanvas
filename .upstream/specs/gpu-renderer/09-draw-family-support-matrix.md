@@ -53,8 +53,9 @@ target contracts.
 | Path stroke | `TargetPrepared` plus future native | `CPUPreparedGPU` initially, `GPUNative` when proven | Render pass with prepared geometry/mask or future stencil/cover | `MaterialKey` | `PrecomputedGeometryArtifact`, `PathAtlasArtifact`, `CoverageMaskArtifact`; atlas routes governed by `19-path-coverage-atlas-strategy.md`. |
 | Clip rect | `TargetNative` | `GPUNative` | Scissor, depth/stencil, or analytic clip facts | none or `GPULayerPlan` context | Captured clip facts in `NormalizedDrawCommand`; no CPU artifact. |
 | Clip rrect/path | `TargetPrepared` | `CPUPreparedGPU` or `GPUNative` by strategy | Stencil/depth, coverage mask, or path atlas | none or `GPULayerPlan` context | `CoverageMaskArtifact` or `PathAtlasArtifact` governed by `19-path-coverage-atlas-strategy.md`; stable refusal for unsupported stack interactions. |
-| Image rect | `TargetNative` plus prepared upload | `GPUNative` or `CPUPreparedGPU` upload | Texture sampling render pass | `MaterialKey` image source | GPU-native texture resource, or `UploadedTextureArtifact` when CPU prepares pixels. |
-| Bitmap/image decode | `DependencyGated` | `CPUPreparedGPU` upload when accepted | Upload then texture sampling | `MaterialKey` image source | `UploadedTextureArtifact`; codec/color conversion policy must be accepted separately. |
+| Image rect | `TargetNative` plus prepared upload | `GPUNative` or `CPUPreparedGPU` upload | Texture sampling render pass | `MaterialKey` image source with `GPUImageSourceDescriptor` and, for encoded/CPU pixels, `GPUImagePipelinePlan` | GPU-native texture resource, or `UploadedTextureArtifact` from `22-image-bitmap-codec-pipeline.md` when CPU prepares pixels. |
+| Bitmap/image decode | `TargetPrepared` with codec dependency gates | `CPUPreparedGPU` upload when accepted | Decode/prepare, upload, then texture sampling | `GPUImageDecodePlan`, `GPUImageColorDecodePlan`, `GPUImageOrientationPlan`, `GPUImageUploadPlan`, and `MaterialKey` image source | `UploadedTextureArtifact`; codec/color/animation policy governed by `22-image-bitmap-codec-pipeline.md`. |
+| Animated image frame | `TargetPrepared` with codec dependency gates | `CPUPreparedGPU` per selected frame | Frame select/compose, upload, then texture sampling | `GPUAnimatedImagePlan`, `GPUImageFrameSelection`, `GPUImageFrameInfo`, `GPUImageUploadPlan`, and `MaterialKey` image source | Per-frame or composed-frame `UploadedTextureArtifact`; loop, disposal, blend, dirty rect, required-frame, cache, and upload scheduling governed by `22-image-bitmap-codec-pipeline.md`. |
 | Text/glyph run | `DependencyGated` until pure Kotlin text artifacts and GPU evidence are promoted | `GPUNative` or `CPUPreparedGPU` by representation | Text render steps, atlas sampling, path/coverage route, texture sampling, or glyph composite route | `GPUTextRunPlan`, `GPUTextSubRunPlan`, `GPUTextBinding`, `MaterialKey` text/glyph material when needed | `GlyphAtlasArtifact`, `SDFGlyphAtlasArtifact`, `GlyphUploadPlan`, `OutlineGlyphPlan`, `ColorGlyphPlan`, `BitmapGlyphPlan`, `SVGGlyphPlan`; routes governed by `21-text-glyph-pipeline.md`. |
 | Vertices | `FutureResearch` | `GPUNative` expected | Render pass with vertex/index buffers | `MaterialKey` or per-vertex color material | GPU buffers; possible `PrecomputedGeometryArtifact` for CPU-packed vertices. |
 | Layer/saveLayer | `TargetNative` with refusals | `GPUNative` render/composite, sometimes `RefuseDiagnostic` | `GPULayerPlan`, offscreen target, parent composite, `GPUDestinationReadPlan` when parent destination is observed | `GPULayerPlan` with optional `GPUFilterPlan` | Offscreen GPU resources; no untyped CPU fallback. |
@@ -114,10 +115,26 @@ Evidence must include:
 
 Evidence must include:
 
+- `GPUImagePipelinePlan`, `GPUImageCodecRegistry`,
+  `GPUImageCodecDescriptor`, `GPUImageDecodeRequest`,
+  `GPUImageDecodePlan`, `GPUImageDecodeResult`,
+  `GPUImageColorDecodePlan`, `GPUImageOrientationPlan`,
+  `GPUImagePixelPlan`, `GPUImageMipmapPlan`, `GPUImageUploadPlan`,
+  `GPUImageUploadArtifactKey`, and `GPUImageDiagnostic` dumps when encoded or
+  CPU pixel image sources are used;
+- `GPUAnimatedImagePlan`, `GPUImageFrameInfo`, and
+  `GPUImageFrameSelection` dumps when animated inputs are used;
 - texture provenance: GPU-native resource vs `UploadedTextureArtifact`;
 - `GPUImageSourceDescriptor`, `GPUTextureOwnershipPlan`,
   `GPUTextureViewDescriptor`, and `GPUSamplerDescriptor` dumps;
+- codec ID, version, implementation kind, capability, conformance tier, and
+  nondeterminism policy;
 - sampler, tile mode, mip policy, and color conversion facts;
+- ICC/CICP/profile, EXIF/origin, alpha, premul/unpremul, bit depth, HDR,
+  orientation, and tone-map/refusal facts where relevant;
+- animation loop count, frame duration, dirty rect, disposal, blend, required
+  prior frame, first-frame-still policy, frame cache, and upload scheduling
+  facts where relevant;
 - usage flags, resource owner scope, and device/target/surface/upload
   generation facts;
 - upload format and row-stride diagnostics when CPU prepares pixels;
@@ -184,6 +201,13 @@ Examples:
 - `unsupported.stroke.dash_complex`
 - `unsupported.clip.stack_difference_path`
 - `unsupported.image.codec_missing`
+- `unsupported.image.codec.unregistered`
+- `unsupported.image.codec.selection_nondeterministic`
+- `unsupported.image.decode.invalid_input`
+- `unsupported.image.animation.required_frame_missing`
+- `unsupported.image.color.conversion_unvalidated`
+- `unsupported.image.orientation`
+- `unsupported.image.upload.budget_exceeded`
 - `unsupported.image.tile_mode`
 - `unsupported.texture.ownership_missing`
 - `unsupported.texture.import_unvalidated`

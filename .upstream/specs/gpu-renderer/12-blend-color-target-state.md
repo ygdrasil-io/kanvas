@@ -86,6 +86,11 @@ It records:
 The plan must preserve existing Kanvas reference behavior unless an accepted
 target update changes the color contract. Any lossy conversion must be
 diagnosed before promotion.
+For image and bitmap sources, encoded/source profile handling, ICC/CICP
+metadata, bit depth, HDR metadata, orientation-adjacent color facts, and
+premul/unpremul conversion before upload are planned by
+`22-image-bitmap-codec-pipeline.md`. `GPUColorPlan` records how the prepared
+sampled image interacts with the material, layer, and target color contract.
 
 ## Target State
 
@@ -149,7 +154,8 @@ Material descriptors may contribute:
 
 - source color;
 - gradient color stops;
-- image sampling color facts;
+- image sampling color facts, with decode/profile/orientation facts governed
+  by `22-image-bitmap-codec-pipeline.md`;
 - text/glyph fill, coverage, SDF, bitmap, color glyph, and SVG glyph material
   facts when routed through `21-text-glyph-pipeline.md`;
 - color-filter chain identity;

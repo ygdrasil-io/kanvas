@@ -256,6 +256,9 @@ Promoted execution behavior requires:
 - render/compute/copy ordering tests where supported;
 - destination-copy-before-sample and pass-split ordering tests before shader
   destination-read routes are promoted;
+- image upload-before-sample ordering tests for still images, selected
+  animated frames, mip generation, and prepared CPU pixel sources before image
+  routes from `22-image-bitmap-codec-pipeline.md` are promoted;
 - atlas upload-before-sample and compute-write-before-sample ordering tests
   before path/coverage atlas routes are promoted;
 - text atlas upload-before-sample, text instance-buffer upload-before-draw, and

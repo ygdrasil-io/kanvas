@@ -101,8 +101,11 @@ Each binding records:
 Sampled texture bindings use `GPUSampledTextureBinding` records from
 `18-texture-image-ownership.md` during payload gathering. The ABI includes
 sample type, view dimension, multisample/storage facts, and binding layout. It
-does not include texture handles, imported handles, surface leases, pixel
-contents, or uploaded artifact cache keys.
+For image/bitmap routes from `22-image-bitmap-codec-pipeline.md`, the ABI sees
+only the accepted sampled texture/view/sampler contract after decode,
+preparation, upload artifact, and texture ownership planning. It does not
+include codec selection, frame selection, texture handles, imported handles,
+surface leases, pixel contents, or uploaded artifact cache keys.
 Path and coverage atlas bindings use `GPUCoverageAtlasBinding` from
 `19-path-coverage-atlas-strategy.md`; the ABI includes the resource layout and
 access facts, not atlas residency as material identity.

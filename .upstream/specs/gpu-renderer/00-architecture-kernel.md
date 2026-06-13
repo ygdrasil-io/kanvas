@@ -47,6 +47,8 @@ The module owns:
 - texture descriptors, image-source descriptors, texture ownership plans,
   sampled texture bindings, imported texture descriptors, and surface texture
   leases;
+- image pipeline, encoded source, codec registry, decode, animation frame,
+  color/orientation, upload artifact, cache, budget, and diagnostic contracts;
 - path atlas, coverage atlas, atlas entry, atlas budget, atlas mutation, atlas
   upload, and atlas diagnostic contracts;
 - destination-read requirement, strategy, bounds, target snapshot, binding,
@@ -63,7 +65,7 @@ The module must not own:
 - Skia-like public API compatibility;
 - `SkCanvas` state stack interpretation;
 - font shaping;
-- codec loading;
+- arbitrary codec loading outside the accepted Kanvas codec registry;
 - arbitrary SkSL parsing or compilation;
 - native windowing and event loops;
 - broad CPU raster rendering.
@@ -82,6 +84,7 @@ responsibilities:
 - `passes`
 - `layers`
 - `filters`
+- `images`
 - `text`
 - `materials`
 - `pipelines`
@@ -164,6 +167,28 @@ Public concept names in the new renderer use uppercase acronyms:
 - `GPUSurfaceTextureLease`
 - `GPUSampledTextureBinding`
 - `GPUTextureDiagnostic`
+- `GPUImagePipelinePlan`
+- `GPUEncodedImageSource`
+- `GPUCPUImageSource`
+- `GPUImageCodecRegistry`
+- `KanvasImageCodec`
+- `GPUImageCodecDescriptor`
+- `GPUImageDecodeRequest`
+- `GPUImageDecodePlan`
+- `GPUImageDecodeResult`
+- `GPUImageFrameInfo`
+- `GPUAnimatedImagePlan`
+- `GPUImageFrameSelection`
+- `GPUImageColorDecodePlan`
+- `GPUImageOrientationPlan`
+- `GPUImagePixelPlan`
+- `GPUImageMipmapPlan`
+- `GPUImageUploadPlan`
+- `GPUImageUploadArtifactKey`
+- `GPUUploadedImageArtifactDescriptor`
+- `GPUImageCachePlan`
+- `GPUImageBudgetPolicy`
+- `GPUImageDiagnostic`
 - `GPUPathAtlasPlan`
 - `GPUCoverageAtlasPlan`
 - `GPUAtlasPolicy`
@@ -275,6 +300,13 @@ into a narrower GPU renderer value object.
 | `TextureProxyView` | `GPUTextureViewDescriptor` | Texture view facts such as origin, swizzle policy, sample type, and subset; concrete handles stay in resources. |
 | `Texture` | Provider-owned texture resource behind `GPUTextureResourceRef` | Concrete `GPU` facade object owned by `GPUResourceProvider`, not by material keys. |
 | `Image_Graphite` | `GPUImageSourceDescriptor` | Logical image source plus color/sampling facts without leaking `SkImage` or raw handles into the core. |
+| `SkCodec` | `KanvasImageCodec` plus `GPUImageCodecDescriptor` | Codec capability, metadata, decode result, and error behavior are selected through the Kanvas registry; no Skia codec API leaks into renderer core. |
+| `SkAndroidCodec` output policy | `GPUImageDecodeRequest` / `GPUImageColorDecodePlan` / `GPUImagePixelPlan` | Output color type, alpha type, color space, sample size, and profile behavior are explicit plan facts. |
+| `SkCodecAnimation` | `GPUAnimatedImagePlan` / `GPUImageFrameInfo` / `GPUImageFrameSelection` | Frame duration, required prior frame, disposal, blend, loop count, and selected-frame upload are planned explicitly. |
+| `SkPixmapUtils::Orient` | `GPUImageOrientationPlan` | Encoded origin/orientation is either applied during preparation, represented in sampling, or refused. |
+| `SkCodec::queryYUVAInfo()` / `SkYUVAPixmaps` | `GPUImagePixelPlan` plus future multi-plane route | Planar YUV/YUVA sources convert to accepted interleaved texture formats or refuse until a multi-plane WGSL route is specified. |
+| `SkGainmapInfo` / gainmap codec paths | `GPUImageColorDecodePlan` plus `GPUColorPlan` | Gainmap/HDR metadata is preserved, tone-mapped, or refused through explicit color planning; platform codec success alone is not conformance. |
+| `MakeBitmapProxyView()` | `GPUImageDecodePlan` / `GPUImageUploadPlan` / `UploadedTextureArtifact` / `GPUTextureOwnershipPlan` | CPU pixels become an explicit upload artifact, then ordinary texture ownership; no CPU-rendered fallback texture. |
 | `TextureDataBlock` / `TextureDataCache` | `GPUSampledTextureBinding` inside `GPUResourceBindingBlock` / `GPUResourceBindingSlot` | Ordered sampled texture and sampler payloads; no raw handle or pointer identity in durable keys. |
 | `DstUsage` | `GPUDestinationReadRequirement` / `GPUDestinationReadClass` | Destination dependency and planner ordering facts; no Skia bitmask API. |
 | `DstReadStrategy` | `GPUDestinationReadStrategy` / `GPUDestinationReadPlan` | WebGPU-safe destination reads through fixed-function blend, target copy snapshots, existing intermediates, layer isolation, or refusal; no framebuffer-fetch assumption. |
@@ -318,6 +350,7 @@ legacy stateful API
   -> GPUDrawPass
   -> GPURenderStep + MaterialKey
   -> GPUMaterialDictionary + WGSLSnippetNode tree
+  -> GPUImagePipelinePlan + UploadedTextureArtifact when encoded/CPU image pixels are used
   -> GPUImageSourceDescriptor + GPUTextureOwnershipPlan when images/textures are used
   -> GPUTextRunPlan + GPUTextSubRunPlan when text/glyph artifacts are used
   -> GPUBlendPlan + GPUColorPlan + GPUTargetState
@@ -344,9 +377,9 @@ The renderer prefers route selection in this order:
 diffs, diagnostics, and conformance evidence.
 
 `CPUPreparedGPU` is allowed only when CPU work prepares an artifact that the
-GPU consumes, such as a coverage mask, path atlas entry, uploaded texture,
-geometry buffer, or another registered typed artifact. It must not become
-silent full CPU rendering.
+GPU consumes, such as a coverage mask, path atlas entry, uploaded image
+texture, composed animated-image frame, geometry buffer, or another registered
+typed artifact. It must not become silent full CPU rendering.
 
 ## WGSL-Only Shader Implementation
 
@@ -409,6 +442,9 @@ The architecture kernel can be treated as accepted only when:
 - blend/color/target-state plans are explicit for promoted routes;
 - execution-context and device-generation assumptions are tested;
 - telemetry distinguishes correctness support from performance readiness;
+- image/bitmap/codec routes expose codec registry, decode, color, animation,
+  artifact, upload, texture ownership, and stable refusal evidence before
+  support claims;
 - the first promoted route reports `GPUNative`, `CPUPreparedGPU`, or
   `RefuseDiagnostic` deterministically;
 - the old `KanvasPipelineIR` center is not silently reintroduced through

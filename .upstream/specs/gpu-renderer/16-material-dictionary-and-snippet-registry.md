@@ -122,6 +122,9 @@ not pack per-draw payload bytes. The dedicated payload-gathering policy is
 defined in `17-payload-gathering-and-slots.md`. Texture and image ownership,
 imports, surface leases, uploaded CPU pixels, and sampled binding descriptors
 are defined in `18-texture-image-ownership.md`.
+Encoded image decode, codec selection, animated frame selection, color/profile
+conversion, orientation, mip preparation, and uploaded image artifact keys are
+defined in `22-image-bitmap-codec-pipeline.md`.
 Text/glyph artifact routes, text atlas bindings, SDF params, instance layouts,
 and text render-step ABI requirements are defined in
 `21-text-glyph-pipeline.md`.

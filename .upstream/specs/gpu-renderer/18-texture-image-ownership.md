@@ -13,6 +13,13 @@ views, samplers, surface leases, uploaded CPU pixels, imported textures, and
 GPU-resident resources move from normalized commands into payload bindings and
 resource preparation.
 
+Encoded image decode, bitmap preparation, codec registry selection, animated
+frame composition, color/profile conversion, orientation, mip preparation, and
+uploaded image artifact key construction are defined in
+`22-image-bitmap-codec-pipeline.md`. This spec consumes the resulting
+`UploadedTextureArtifact` and owns the generic texture/view/sampler resource
+plan.
+
 The target is Graphite-inspired but Kanvas-owned:
 
 - texture/image facts are explicit descriptors and plans;
@@ -241,6 +248,12 @@ accepted spec defines a bounded dynamic-size resource contract.
 
 `UploadedTextureArtifact` is the only accepted path from CPU pixels to a
 sampled GPU image texture in this target.
+
+For encoded images, animated images, and already-decoded CPU image pixels, the
+artifact descriptor and key are produced by
+`22-image-bitmap-codec-pipeline.md`. This spec validates that the artifact can
+be materialized as a texture with the requested usage, view, sampler, owner
+scope, lifetime, and device generation.
 
 The upload descriptor must include:
 

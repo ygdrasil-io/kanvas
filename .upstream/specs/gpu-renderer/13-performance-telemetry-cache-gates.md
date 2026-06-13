@@ -33,6 +33,10 @@ It records:
 - CPU-prepared artifact counts, bytes, uploads, and refusals;
 - texture descriptor, texture view, sampler, ownership plan, sampled binding,
   imported texture, surface lease, and stale-generation counters when touched;
+- image codec registry, metadata scan, decode request, decoded pixel,
+  animated frame selection, composed frame, color conversion, orientation,
+  mip preparation, image upload artifact, and image refusal counters when
+  touched;
 - path/coverage atlas policy, entry, resident byte, upload/compute byte,
   generation, stale-entry, retry/split, eviction, and budget-pressure counters
   when touched;
@@ -62,6 +66,7 @@ Cache reporting is grouped by domain:
 | Payload cache | uniform payload slots, resource binding slots, scoped fingerprints, hits, misses, bytes uploaded, materialization failures. |
 | Resource cache | textures, buffers, samplers, bind groups, live bytes, evictions. |
 | Texture ownership cache | texture descriptors, view descriptors, sampler descriptors, ownership plans, sampled bindings, imports, uploads, surface leases, stale generations, rebuilds, and refusals. |
+| Image/codec cache | codec registry lookups, metadata scans, decode requests, decoded pixel bytes, animated frame selections, composed frame bytes, color/profile conversions, orientation applications, mip preparations, upload artifact lookups, codec refusals, and budget refusals. |
 | Artifact registry | artifact lookups, hits, misses, uploads, evictions, budget refusals. |
 | Atlas cache | atlas descriptor count, policy version, page count, resident entries, resident bytes, lookup hits/misses, entry creations, page activations, evictions, compactions/resets, upload bytes, compute write bytes, stale entries, retry/split counts, hard capability refusals, and budget refusals. |
 | Destination-read resources | requirements, strategies, target-copy descriptors, existing-intermediate bindings, copied bytes, pass splits, generation checks, active-attachment refusals, and budget refusals. |
@@ -137,6 +142,10 @@ Initial gate families:
 - bind group churn;
 - vertex/index/storage upload bytes;
 - texture upload bytes;
+- image decode bytes;
+- image composed-frame bytes;
+- image upload artifact cache hit rate;
+- image codec refusal count;
 - surface lease churn;
 - imported texture refusal count;
 - stale texture generation rebuild or refusal count;

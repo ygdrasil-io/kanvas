@@ -652,6 +652,10 @@ Rules:
 - texture ownership follows `18-texture-image-ownership.md`;
 - bitmap glyph uploads use `UploadedTextureArtifact` only when the artifact is
   glyph-scoped and typed by the text handoff;
+- general image/bitmap codec behavior from
+  `22-image-bitmap-codec-pipeline.md` is not counted as bitmap glyph support
+  unless a future text spec update explicitly routes embedded glyph images
+  through `GPUImageCodecRegistry`;
 - sampler, scaling, color conversion, and premul facts must be explicit;
 - unsupported non-PNG payloads refuse before GPU route selection.
 

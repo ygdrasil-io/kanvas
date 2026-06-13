@@ -248,6 +248,11 @@ pixels, imported textures, and surface leases are defined in
 `18-texture-image-ownership.md`. `GPUPayloadGatherer` consumes accepted
 `GPUTextureOwnershipPlan` products and writes `GPUSampledTextureBinding`
 records into `GPUResourceBindingBlock`.
+For encoded image or already-decoded CPU pixel sources, codec selection,
+decode, animation frame selection, color/profile conversion, orientation,
+pixel preparation, and upload artifact key construction are defined in
+`22-image-bitmap-codec-pipeline.md`; the gatherer only consumes the accepted
+texture binding that results from those plans.
 
 Rules:
 
@@ -258,7 +263,8 @@ Rules:
   ownership plan, usage flags, and generation facts;
 - sampled texture object identity is never part of `MaterialKey`;
 - image shader routes require accepted texture ownership and lifetime policy;
-- uploaded CPU pixels must use `UploadedTextureArtifact`;
+- uploaded CPU image pixels must use `UploadedTextureArtifact` produced by
+  `22-image-bitmap-codec-pipeline.md`;
 - atlas, mask, glyph, and coverage textures must use their accepted artifact or
   atlas specs, with path/coverage atlas bindings following
   `19-path-coverage-atlas-strategy.md`;
@@ -286,6 +292,10 @@ When a destination-read route is accepted, the gatherer consumes
 `GPUDestinationReadBinding` facts: target generation, copied/read bounds,
 texture/view/sampler descriptors, coordinate mapping, binding layout, and
 resource slot. It does not create the target snapshot or decide pass splits.
+When an image/bitmap route is accepted, the gatherer consumes only the sampled
+texture binding facts produced after `GPUImageUploadPlan` and
+`GPUTextureOwnershipPlan` acceptance. It does not decode images, compose
+animation frames, generate mips, or upload image pixels.
 
 The first rect/rrect solid and linear-gradient slice does not require sampled
 texture payloads except when a later accepted gradient-store route explicitly

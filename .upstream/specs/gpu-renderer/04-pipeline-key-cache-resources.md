@@ -127,7 +127,10 @@ keys must include only the capability facts that affect validity or behavior.
 Execution context, command scopes, and submission behavior are defined in
 `10-gpu-execution-context-submission.md`; this resource contract supplies the
 objects those scopes consume. Texture and image ownership descriptors are
-defined in `18-texture-image-ownership.md`.
+defined in `18-texture-image-ownership.md`. Encoded image decode, bitmap
+preparation, codec registry, animation frame selection, color/orientation
+handling, and uploaded image artifact keys are defined in
+`22-image-bitmap-codec-pipeline.md`.
 
 It is responsible for:
 
@@ -179,6 +182,11 @@ Expected cache layers:
 - texture ownership/materialization cache keyed by `GPUTextureDescriptor`,
   `GPUTextureViewDescriptor`, `GPUSamplerDescriptor`, and accepted ownership
   plan facts;
+- image/codec cache keyed by `GPUEncodedImageSource`,
+  `GPUImageCodecDescriptor`, `GPUImageDecodeRequest`,
+  `GPUAnimatedImagePlan`, `GPUImageColorDecodePlan`,
+  `GPUImageOrientationPlan`, and `GPUImageUploadArtifactKey` facts from
+  `22-image-bitmap-codec-pipeline.md`;
 - atlas caches with explicit ownership and eviction rules;
 - text atlas/resource cache keyed by `GPUTextAtlasDescriptor`,
   `GPUTextAtlasPageDescriptor`, artifact generation, upload plan, and accepted
@@ -206,6 +214,8 @@ Resources must be tied to:
 - execution context generation;
 - target generation when applicable;
 - surface texture lease generation when applicable;
+- encoded image source generation and codec registry generation when an
+  uploaded image artifact is involved;
 - recording lifetime when one-shot;
 - frame scope when frame-local;
 - cache lifetime when reusable;
@@ -256,7 +266,7 @@ Accepted artifact families for this kernel are:
 | `ColorGlyphPlan` | Prepare glyph-scoped COLR/CPAL paint graph facts. | Route through accepted GPU color glyph composite primitives or refuse. |
 | `BitmapGlyphPlan` | Prepare decoded PNG bitmap glyph facts. | Route through glyph-scoped texture ownership and sampling or refuse. |
 | `SVGGlyphPlan` | Prepare bounded pure Kotlin SVG-in-OpenType glyph vector facts. | Route through accepted vector/material primitives or refuse. |
-| `UploadedTextureArtifact` | Decode, convert, repack, color-convert, tile, or mip-prepare CPU pixels before upload. | Bind uploaded texture and sampler for GPU image sampling. |
+| `UploadedTextureArtifact` | Decode, convert, repack, color-convert, tile, compose animated frames, or mip-prepare CPU pixels before upload as defined in `22-image-bitmap-codec-pipeline.md`. | Bind uploaded texture and sampler for GPU image sampling through spec 18 ownership. |
 | `PrecomputedGeometryArtifact` | Flatten, stroke, tessellate, or pack vertex/index/edge data on CPU. | Bind GPU buffers for a render step such as fan, stencil-cover, or edge coverage. |
 | `FilterIntermediateArtifact` | Materialize a validated bounded filter intermediate according to the active filter spec. | Bind intermediate texture/view for a later GPU filter or layer-composite pass. |
 
@@ -298,8 +308,10 @@ Additional key facts are required when they affect contents or validity:
   generation, and glyph-scoped color/bitmap/SVG plan version when text artifacts
   are used;
 - path fill rule, stroke expansion, tolerance, edge budget, and atlas policy;
-- image decode source, codec/configuration, pixel format, row stride, tile mode,
-  mip policy, and upload format for uploaded textures;
+- image decode source, codec descriptor/configuration, still or animated frame
+  selection, color/profile conversion, orientation, pixel format, row stride,
+  tile mode, mip policy, and upload format for uploaded textures as defined in
+  `22-image-bitmap-codec-pipeline.md`;
 - filter graph node identity, input bounds, crop, sample mode, intermediate
   format, and validated filter-spec version for filter intermediates;
 - device capability facts when they change prepared format, layout, usage, or

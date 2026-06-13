@@ -40,6 +40,9 @@ Tests must assert canonical preimages and hashes for:
 - payload gather plan identity;
 - CPU-prepared artifact keys;
 - texture/image descriptors and ownership plans;
+- image pipeline, codec descriptor, decode request, animation plan, color
+  decode plan, orientation plan, upload plan, and upload artifact key
+  preimages;
 - path/coverage atlas plans, content keys, entry refs, and mutation plans;
 - destination-read plans, strategies, bounds, copy plans, bindings, and tokens;
 - route diagnostics.
@@ -117,6 +120,42 @@ Tests must assert:
   route exists;
 - stale device, target, atlas, upload, or surface generations rebuild, discard,
   or refuse deterministically.
+
+### Image Bitmap Codec Pipeline Tests
+
+Tests must assert:
+
+- `GPUImagePipelinePlan`, `GPUEncodedImageSource`, `GPUCPUImageSource`,
+  `GPUImageCodecDescriptor`, `GPUImageDecodeRequest`,
+  `GPUImageDecodePlan`, `GPUImageDecodeResult`, `GPUAnimatedImagePlan`,
+  `GPUImageFrameInfo`, `GPUImageFrameSelection`,
+  `GPUImageColorDecodePlan`, `GPUImageOrientationPlan`,
+  `GPUImagePixelPlan`, `GPUImageMipmapPlan`, `GPUImageUploadPlan`,
+  `GPUImageUploadArtifactKey`, `GPUUploadedImageArtifactDescriptor`,
+  `GPUImageCachePlan`, `GPUImageBudgetPolicy`, and `GPUImageDiagnostic`
+  dumps are deterministic;
+- codec registry selection is deterministic and records codec ID, version,
+  implementation kind, capabilities, conformance tier, and nondeterminism
+  policy;
+- PNG, JPEG, WebP, GIF, BMP, ICO, WBMP, HEIF, and AVIF target fixtures either
+  decode through accepted codec capability or refuse with stable diagnostics;
+- malformed, truncated, invalid-conversion, invalid-scale, invalid-parameter,
+  unimplemented, and out-of-memory decode cases map to stable refusal codes;
+- animated WebP, GIF, and AVIF fixtures cover frame duration, loop count,
+  dirty rect, required prior frame, disposal, blend, first-frame-still policy,
+  and frame-cache invalidation;
+- ICC/CICP/profile, bit-depth, alpha, premul/unpremul, EXIF/origin,
+  orientation, HDR metadata, and tone-map/refusal behavior are explicit and
+  covered before support claims;
+- uploaded image artifact keys exclude object identity, raw platform handles,
+  wall-clock facts, and nondeterministic codec output;
+- image decode, frame composition, mip generation, staging upload, and texture
+  materialization are ordered before any draw samples the image;
+- `MaterialKey` excludes codec versions, upload artifact keys, decoded pixel
+  hashes, frame cache generations, and concrete resource handles unless a fact
+  changes WGSL code or layout;
+- no route CPU-renders a complete unsupported draw, layer, filter, text run, or
+  scene into an image texture.
 
 ### Text And Glyph Pipeline Tests
 
@@ -237,6 +276,10 @@ Evidence must include:
 - payload slot counts, payload fingerprints, and upload bytes;
 - texture provenance, ownership plan counts, sampled binding counts, and upload
   artifact counts when textures/images are used;
+- image/codec registry generation, decode request count, animated frame
+  selection count, image color conversion count, image upload artifact count,
+  codec refusal count, and upload-before-sample evidence when image/bitmap
+  routes are used;
 - atlas policy counts, resident entry counts, upload/compute bytes, generation
   facts, retry/split counts, eviction counts, and atlas refusal counts when
   path or coverage atlases are used;

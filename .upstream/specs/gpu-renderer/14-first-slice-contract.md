@@ -37,8 +37,9 @@ The first slice does not implement:
 - path fill or stroke;
 - glyphs or text, which remain governed by the target contract in
   `21-text-glyph-pipeline.md`;
-- image decoding or bitmap upload;
-- sampled image textures;
+- image decoding, bitmap upload, animated image frames, and sampled image
+  textures, which remain governed by the target contract in
+  `22-image-bitmap-codec-pipeline.md`;
 - runtime effects;
 - image filters;
 - complex saveLayer behavior;

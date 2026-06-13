@@ -263,8 +263,9 @@ Task phases:
 
 1. `prepareResources`: allocate or resolve pipelines, buffers, textures,
    texture views, samplers, imports, surface texture leases, atlases, atlas
-   entry mutations, text atlas pages, text instance buffers, destination
-   copy/intermediate resources, bind groups, and gathered payload uploads.
+   entry mutations, image upload artifacts, animated image frame uploads, text
+   atlas pages, text instance buffers, destination copy/intermediate resources,
+   bind groups, and gathered payload uploads.
 2. `addCommands`: encode commands through the `GPU` facade.
 
 The split exists so route selection, resource failure, and command encoding
@@ -284,6 +285,12 @@ and text artifact resource bindings from `21-text-glyph-pipeline.md` are
 resource preparation and ordering work. A task that samples a text atlas or
 bitmap glyph texture must depend on its accepted `GPUTextUploadPlan`,
 `GPUTextAtlasEntryRef`, `GPUTextBinding`, and `GPUTextOrderingToken`.
+Image decode artifacts, animated frame selection/composition, mip generation,
+and image upload plans from `22-image-bitmap-codec-pipeline.md` are resource
+preparation and ordering work. A task that samples an uploaded image texture
+must depend on its accepted `GPUImageUploadPlan`,
+`GPUImageUploadArtifactKey`, `UploadedTextureArtifact`, and
+`GPUTextureOwnershipPlan`.
 
 Task outcomes:
 

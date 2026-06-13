@@ -80,9 +80,11 @@ stable reason. It must not silently substitute a CPU shader.
 
 For image materials, descriptor lowering may include `GPUImageSourceDescriptor`
 kind, sampling class, tile behavior, sample type, and binding layout facts when
-they affect WGSL code or layout. Texture ownership, concrete handles, upload
-artifact keys, imported handles, surface leases, and pixels are handled by
-`18-texture-image-ownership.md`, not by `MaterialKey`.
+they affect WGSL code or layout. Texture ownership, concrete handles, codec
+selection, decode requests, animation frame selection, upload artifact keys,
+imported handles, surface leases, and pixels are handled by
+`18-texture-image-ownership.md` and
+`22-image-bitmap-codec-pipeline.md`, not by `MaterialKey`.
 
 ## Material Dictionary Boundary
 

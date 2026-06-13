@@ -101,6 +101,10 @@ Geometry payloads are normalized value objects. They may represent:
 Image payloads use `GPUImageSourceDescriptor` and normalized source/destination
 rects. They must not leak `SkImage`, raw `GPU` handles, imported handles,
 mutable pixel storage, or object identity into the core.
+When the payload represents encoded bytes or already-decoded CPU pixels, decode
+and preparation are governed by `22-image-bitmap-codec-pipeline.md`; the
+normalized command carries stable source facts and route diagnostics, not raw
+codec handles or mutable pixel buffers.
 
 Text payloads use `DrawTextRun` with value-object outputs from
 `.upstream/specs/pure-kotlin-text/`: `TextLayoutResult`, `GlyphRunDescriptor`,

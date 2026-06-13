@@ -12,8 +12,9 @@ defines the module shape, naming policy, command boundary, WGSL material model,
 material dictionary, payload gathering, pipeline key split, execution
 context, WGSL layout ABI, blend/color state, route policy, telemetry gates,
 texture/image ownership, path/coverage atlas strategy, destination-read
-strategy, text/glyph pipeline target, legacy cleanup policy, and validation
-expectations that future implementation tickets must follow.
+strategy, text/glyph pipeline target, image/bitmap/codec pipeline target,
+legacy cleanup policy, and validation expectations that future implementation
+tickets must follow.
 
 The current `.upstream/target/high-performance-wgsl-pipeline-target.md` and
 `.upstream/target/skia-like-realtime-renderer-target.md` remain active project
@@ -86,6 +87,22 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
   `GPUImageSourceDescriptor`, and `GPUSampledTextureBinding` contracts.
 - Keep concrete texture handles, imported handles, surface leases, uploaded
   artifact keys, and pixel contents out of `MaterialKey`.
+- Resolve encoded image sources, already-decoded CPU image pixels, codec
+  selection, still/animated decode, color conversion, orientation, mip
+  preparation, upload artifacts, and image diagnostics through
+  `GPUImagePipelinePlan`, `GPUImageCodecRegistry`, `GPUImageDecodePlan`,
+  `GPUAnimatedImagePlan`, `GPUImageUploadPlan`, and
+  `GPUImageDiagnostic`.
+- Prefer pure Kotlin codecs, but allow platform or external codecs only behind
+  dumpable `KanvasImageCodec` descriptors with codec ID, version, capability,
+  conformance-tier, and nondeterminism diagnostics.
+- Treat PNG, JPEG, WebP, GIF, BMP, ICO, WBMP, HEIF, and AVIF as the accepted
+  target image/codec surface, with HEIF and AVIF dependency-gated by accepted
+  codec capabilities.
+- Forbid implicit first-frame animation behavior and unvalidated color/profile
+  conversion. Animation frame selection, disposal, blend, loop count,
+  required-frame dependency, ICC/CICP/profile facts, premul/unpremul,
+  orientation, bit depth, and HDR handling are explicit image-pipeline facts.
 - Resolve path and coverage atlas use through `GPUPathAtlasPlan`,
   `GPUCoverageAtlasPlan`, `GPUAtlasPolicy`, `GPUAtlasBudgetPolicy`,
   `GPUAtlasEntryRef`, and typed `PathAtlasArtifact` or
@@ -170,6 +187,7 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 | `19-path-coverage-atlas-strategy.md` | Graphite-inspired path/coverage atlas strategy: atlas plans, entry keys, generations, budgets, retry/split actions, payload bindings, diagnostics, and validation gates. |
 | `20-destination-read-strategy.md` | Graphite-inspired destination-read strategy: requirements, bounds, target copy snapshots, existing intermediates, layer isolation, bindings, budgets, barriers, diagnostics, and validation gates. |
 | `21-text-glyph-pipeline.md` | Graphite-inspired text/glyph pipeline target: text run plans, subruns, A8/SDF atlas routes, outline/color/bitmap/SVG glyph routes, text bindings, atlas uploads, budgets, diagnostics, and validation gates. |
+| `22-image-bitmap-codec-pipeline.md` | Graphite-inspired image/bitmap/codec pipeline target: codec registry, still/animated decode, color/profile/orientation/HDR handling, pixel preparation, uploaded image artifacts, upload scheduling, caches, diagnostics, and validation gates. |
 
 ## Target Shape
 
@@ -195,6 +213,9 @@ flowchart TD
     command --> text["GPUTextRunPlan / GPUTextSubRunPlan"]
     wgsl --> abi["WGSL layout / binding ABI"]
     abi --> payload["GPUPayloadGatherer / payload slots"]
+    command --> imageprep["GPUImagePipelinePlan / GPUImageDecodePlan"]
+    imageprep --> textureplan
+    imageprep --> resources
     textureplan --> payload
     atlas --> payload
     text --> payload
