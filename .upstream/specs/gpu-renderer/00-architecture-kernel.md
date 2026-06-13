@@ -55,9 +55,10 @@ The module must not own:
 ## Package Policy
 
 Packages in `:gpu-renderer` use Kanvas responsibility names, not
-Graphite-mirrored source names. The expected root is the repo's Kanvas/Skia
-compatibility package style, such as `org.skia.gpu.renderer`, with subpackages
-named for Kanvas responsibilities:
+Graphite-mirrored source names. All implementation packages must use
+`org.graphiks.kanvas` as the base package. The expected renderer module root is
+`org.graphiks.kanvas.gpu.renderer`, with subpackages named for Kanvas
+responsibilities:
 
 - `commands`
 - `recording`
@@ -75,6 +76,10 @@ named for Kanvas responsibilities:
 Specs should document Graphite equivalents in an equivalence table for
 orientation, but implementation packages must not mirror `skgpu::graphite`,
 Graphite file names, or Graphite class ownership as a package taxonomy.
+
+Exact class placement can evolve with implementation evidence, but new package
+roots outside `org.graphiks.kanvas.gpu.renderer` are not allowed for renderer
+core contracts without an explicit spec change.
 
 ## Naming Policy
 

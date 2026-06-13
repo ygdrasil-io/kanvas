@@ -59,6 +59,9 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 
 - Create the new GPU-first renderer module as `:gpu-renderer`.
 - Use public concept names with `GPU`, `CPU`, and `WGSL` in uppercase.
+- Use `org.graphiks.kanvas` as the implementation package base for the new
+  renderer, with `org.graphiks.kanvas.gpu.renderer` as the `:gpu-renderer`
+  root.
 - Interpret `GPU` as the WebGPU-like facade used with `wgpu4k`, not as a browser
   only target and not as a free-form Vulkan/Metal abstraction.
 - Keep `:gpu-renderer` pure: it must not depend directly on `SkPaint`,
@@ -74,9 +77,10 @@ facade used with `wgpu4k`, and WGSL-only for shader implementation.
 - Model high-level layer/saveLayer semantics with `GPULayerPlan` and filter
   graph execution with `GPUFilterPlan`; keep `GPUDrawLayer` as the lower-level
   pass/layer planning structure.
-- Use Kanvas-idiomatic package and class organization. Graphite vocabulary is
-  kept as an equivalence table and source-evidence reference, not mirrored as
-  a package tree, inheritance hierarchy, or API surface.
+- Use Kanvas-idiomatic package and class organization under
+  `org.graphiks.kanvas.gpu.renderer`. Graphite vocabulary is kept as an
+  equivalence table and source-evidence reference, not mirrored as a package
+  tree, inheritance hierarchy, or API surface.
 - Prefer `GPUNative` routes. Allow `CPUPreparedGPU` only when CPU work produces
   an explicit artifact consumed by the GPU. Forbid silent full CPU fallback.
 - Forbid CPU-rendered texture compatibility in this target: the CPU must not
@@ -180,8 +184,9 @@ policy, public command shape, key semantics, or cleanup gates must remain
 
 The kernel does not yet choose:
 
-- final package names inside `:gpu-renderer`, beyond the Kanvas-idiomatic style
-  and Graphite equivalence policy above;
+- exact class-to-subpackage placement inside
+  `org.graphiks.kanvas.gpu.renderer`, beyond the responsibility packages named
+  in `00-architecture-kernel.md`;
 
 These are blocked intentionally. Implementation tickets must not infer answers
 from examples in this pack.
