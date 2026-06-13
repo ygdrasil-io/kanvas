@@ -1,0 +1,170 @@
+{
+  "ticket": "KAN-057",
+  "title": "Graphite image-filter intermediate format audit",
+  "decision": "no-change",
+  "date": "2026-06-13",
+  "sourceRoot": "/Users/chaos/workspace/kanvas-forge/skia-main",
+  "summary": "Direct Skia Graphite source evidence shows that image-filter intermediate devices are created through skif::Backend using a color type derived from the destination/layer color info or saveLayer flags, premultiplied alpha, and the filter context color space. Graphite does not provide one universal F16 image-filter intermediate policy or a standalone rgba16float-to-byte present quantization rule that Kanvas can apply to KAN-052.",
+  "graphiteSources": [
+    {
+      "path": "src/core/SkCanvas.cpp",
+      "lines": "669-680",
+      "symbols": [
+        "image_filter_color_type"
+      ],
+      "finding": "Image filters ideally operate in the destination color type. Destinations with <=4 bytes per pixel and not RGBA_8888/BGRA_8888 are upgraded to kN32; otherwise the destination color type is kept. F16/F32-like destinations therefore remain high precision, but byte destinations generally remain byte/N32."
+    },
+    {
+      "path": "src/core/SkCanvas.cpp",
+      "lines": "714-784",
+      "symbols": [
+        "SkCanvas::internalDrawDeviceWithFilter",
+        "skif::Context"
+      ],
+      "finding": "The image-filter backend is created with filterColorType and filterColorSpace derived from the destination/filter color info. The skif::Context then evaluates filters in that context."
+    },
+    {
+      "path": "src/core/SkCanvas.cpp",
+      "lines": "1009-1027",
+      "symbols": [
+        "SkCanvas::internalSaveLayer",
+        "kF16ColorType"
+      ],
+      "finding": "SaveLayer uses kAlpha_8 for coverage layers, forces kRGBA_F16 when the kF16ColorType flag is set, otherwise uses image_filter_color_type(priorDevice->imageInfo().colorInfo()). Alpha is premul and color space is the layer override or prior device color space."
+    },
+    {
+      "path": "src/core/SkImageFilterTypes.h",
+      "lines": "1099-1192",
+      "symbols": [
+        "skif::Backend",
+        "skif::Context"
+      ],
+      "finding": "skif::Backend owns creation of offscreen intermediate renderable images and records surface props plus SkColorType. skif::Context carries the output device color space so intermediate surfaces match the final consumer and filtering is performed in destination color space."
+    },
+    {
+      "path": "src/core/SkImageFilterTypes.cpp",
+      "lines": "528-630",
+      "symbols": [
+        "FilterResult::AutoSurface"
+      ],
+      "finding": "FilterResult::AutoSurface creates intermediate devices via ctx.backend()->makeDevice(size, ctx.refColorSpace(), props), clears them transparent, then snaps a SkSpecialImage."
+    },
+    {
+      "path": "src/gpu/graphite/TextureUtils.cpp",
+      "lines": "720-753",
+      "symbols": [
+        "GraphiteBackend",
+        "GraphiteBackend::makeDevice",
+        "GraphiteBackend::makeImage"
+      ],
+      "finding": "Graphite image-filter offscreen devices use SkImageInfo::Make(size, this->colorType(), kPremul_SkAlphaType, colorSpace) and Device::Make(..., LoadOp::kDiscard, \"ImageFilterResult\"). Graphite special images are produced through SkSpecialImages::MakeGraphite."
+    },
+    {
+      "path": "src/gpu/graphite/TextureUtils.cpp",
+      "lines": "76-99",
+      "symbols": [
+        "renderable_colortype"
+      ],
+      "finding": "Renderable fallbacks preserve data type where possible: RGB_F16F16F16x and RGBA_F16Norm render through RGBA_F16; RGB_888x renders through RGBA_8888. The comment says Graphite intentionally avoids fallback that changes the underlying data type."
+    },
+    {
+      "path": "src/gpu/graphite/SpecialImage_Graphite.cpp",
+      "lines": "20-84",
+      "symbols": [
+        "skgpu::graphite::SpecialImage",
+        "SkSpecialImages::MakeGraphite"
+      ],
+      "finding": "Graphite SpecialImage wraps a Graphite-backed SkImage and forwards image->imageInfo().colorInfo() to SkSpecialImage; non-Graphite images are converted with GetGraphiteBacked when possible."
+    },
+    {
+      "path": "src/gpu/graphite/TextureFormat.cpp",
+      "lines": "231-237, 480-493",
+      "symbols": [
+        "TextureFormatAutoClamps",
+        "PreferredTextureFormats"
+      ],
+      "finding": "RGBA_8888 maps to RGBA8/BGRA8, RGBA_F16 and RGBA_F16Norm map to RGBA16F. Floating-point formats do not auto-clamp; unsigned normalized formats do."
+    },
+    {
+      "path": "src/gpu/graphite/DrawContext.cpp",
+      "lines": "64-80, 296-310",
+      "symbols": [
+        "DrawContext::Make",
+        "RenderPassDesc::Make"
+      ],
+      "finding": "Graphite rejects unknown/unpremul render targets, requires color-type/format compatibility, and configures render passes from the target texture format plus write swizzle for the color type."
+    },
+    {
+      "path": "src/gpu/graphite/Context.cpp",
+      "lines": "727-748",
+      "symbols": [
+        "Context::transferPixels"
+      ],
+      "finding": "GPU-to-CPU readback builds color-space transform steps from source and destination color info, then creates a TextureFormatXferFn for the source texture format and destination CPU color type."
+    },
+    {
+      "path": "src/gpu/graphite/TextureFormatXferFn.cpp",
+      "lines": "272-328",
+      "symbols": [
+        "TextureFormatXferFn::MakeGpuToCpu",
+        "TextureFormatXferFn::RPOps::Make"
+      ],
+      "finding": "Readback conversion loads from the texture-format base color type, applies swizzles/color-space steps, and stores into the requested destination color type through SkRasterPipeline ops."
+    }
+  ],
+  "kanvasCurrentPolicy": {
+    "intermediateFormat": "GPUTextureFormat.RGBA16Float by default, constructor-scoped RGBA8Unorm fallback only",
+    "intermediateEncoding": "premul sRGB-coded values, not a true linear working space",
+    "presentTarget": "HeadlessTarget RGBA8Unorm",
+    "presentBoundary": "textureLoad from intermediate_texture followed by final RGBA8Unorm output quantization",
+    "imageFilterScratch": "crop and blur image-filter scratch textures use SkWebGpuDevice.intermediateFormat",
+    "sources": [
+      "gpu-raster/README.md",
+      "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/SkWebGpuDevice.kt",
+      "gpu-raster/src/main/kotlin/org/skia/gpu/webgpu/HeadlessTarget.kt",
+      "gpu-raster/src/main/resources/shaders/present_identity.wgsl",
+      "gpu-raster/src/main/resources/shaders/present_pass.wgsl",
+      "gpu-raster/src/main/resources/shaders/layer_composite.wgsl"
+    ]
+  },
+  "cpuReferencePolicy": {
+    "sink": "RasterSinkF16",
+    "colorType": "SkColorType.kRGBA_F16Norm",
+    "alphaType": "premul",
+    "workingSpace": "DM unified Rec.2020 by default",
+    "storePolicy": "float premul storage avoids 8-bit quantization drift until final read/PNG comparison",
+    "sources": [
+      "cpu-raster/src/main/kotlin/org/skia/dm/RasterSinkF16.kt",
+      "kanvas-skia/src/main/kotlin/org/skia/foundation/SkBitmap.kt",
+      "kanvas-skia/src/main/kotlin/org/skia/foundation/SkImageInfo.kt"
+    ]
+  },
+  "kan052Impact": {
+    "status": "remains-blocked",
+    "selectedRow": "crop-image-filter-nonnull-prepass",
+    "gpuRoute": "webgpu.image-filter.crop-nonnull-offset-prepass.final-crop-composite",
+    "rootCause": "rgba16float-intermediate-store-to-present-byte-quantization-policy",
+    "reason": "Graphite chooses image-filter intermediate color type from destination/layer color info rather than exposing a standalone F16-to-byte quantization policy; existing FOR-259/FOR-261/FOR-264/FOR-306 evidence remains diagnostic-only."
+  },
+  "kanvasPolicyDecision": {
+    "decision": "no-change",
+    "description": "Do not change Kanvas intermediate format or present quantization from Graphite evidence alone. Keep KAN-052 blocked until a Kanvas-native policy proof provides reference, CPU/GPU, diff/stat, route diagnostics, fallback stability, and perf/memory impact."
+  },
+  "nonClaims": [
+    "No image-filter support expansion is claimed.",
+    "No renderer, shader, threshold, golden, or fallback policy changed.",
+    "No Ganesh or Graphite implementation is ported.",
+    "No SkSL compiler, IR, or VM is introduced.",
+    "No expected-unsupported or implementation-gap row is promoted to support."
+  ],
+  "nextDecisionOptions": [
+    {
+      "option": "Run a Kanvas-native policy proof ticket",
+      "description": "Build a row-local proof matrix for intermediateFormat/present quantization candidates across KAN-052 residual, exact controls, precision-sensitive controls, route diagnostics, fallback stability, and perf/memory impact."
+    },
+    {
+      "option": "Keep current policy",
+      "description": "Maintain RGBA16Float intermediate plus RGBA8Unorm present output and keep KAN-052 blocked until complete local proof exists."
+    }
+  ]
+}
